@@ -16,6 +16,7 @@ import { handleBrainRoutes } from "./brain.js";
 import { handleAutonomousRoutes } from "./autonomous.js";
 import { handleWalletRoutes } from "./wallet.js";
 import { handleSequenceRoutes } from "./sequences.js";
+import { handleInboxRoutes } from "./inbox.js";
 import {
   verifyAuth, handleAuthSetup, handleAuthLogin,
   handleGetTemplates, handleCreateTemplate, handleUpdateTemplate, handleDeleteTemplate,
@@ -1315,6 +1316,12 @@ export async function handleApiRequest(
     // Autonomous Capabilities (Goals, Agents, Learnings, Enrichment, Landing Pages)
     if (pathOnly.startsWith("/api/goals") || pathOnly.startsWith("/api/agents/") || pathOnly === "/api/learnings" || pathOnly === "/api/enrichment/process" || pathOnly.includes("/landing-page")) {
       const handled = await handleAutonomousRoutes(req, res, db, pathOnly, method);
+      if (handled) return;
+    }
+
+    // Unified Inbox
+    if (pathOnly.startsWith("/api/inbox")) {
+      const handled = await handleInboxRoutes(req, res, db, pathOnly, method, url);
       if (handled) return;
     }
 

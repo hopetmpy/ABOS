@@ -200,6 +200,18 @@ registerPage('email-settings', async (container) => {
       </div>
     </div>
 
+    <!-- Unified Inbox -->
+    <div class="section-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h3>Unified Inbox</h3>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-sm" onclick="pollInbox()">Check for Replies</button>
+          <button class="btn btn-sm" onclick="simulateReply()">Test Reply</button>
+        </div>
+      </div>
+      <div id="inbox-section"><div class="spinner"></div></div>
+    </div>
+
     <!-- SMTP Presets -->
     <div class="section-card">
       <h3>SMTP Provider Presets</h3>
@@ -374,6 +386,75 @@ async function submitAddEmailAccount() {
     await postAPI('email/accounts', { name, emailAddress: email, smtpHost: host, smtpPort: parseInt(document.getElementById('email-port').value) || 587, smtpSecure: document.getElementById('email-secure').checked, smtpUser: user, smtpPass: pass, dailyLimit: parseInt(document.getElementById('email-limit').value) || 50 });
     closeModal('add-email-modal');
     showToast('Email account connected! Warm-up schedule created.', 'success');
+    const main = document.getElementById('main-content');
+    await pageRenderers['email-settings'](main);
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+// ─── Unified Inbox ──────────────────────────────────────────────
+
+const SENTIMENT_LABELS = {
+  interested: { label: 'Interested', color: 'var(--success)' },
+  not_interested: { label: 'Not Interested', color: 'var(--danger)' },
+  out_of_office: { label: 'OOO', color: 'var(--info)' },
+  bounce: { label: 'Bounce', color: 'var(--danger)' },
+  unsubscribe: { label: 'Unsubscribe', color: 'var(--warning)' },
+  neutral: { label: 'Neutral', color: 'var(--text-muted)' },
+};
+
+(async function loadInboxSection() {
+  const el = document.getElementById('inbox-section');
+  if (!el) { setTimeout(loadInboxSection, 500); return; }
+  try {
+    const [inboxData, statsData] = await Promise.all([
+      fetchAPI('inbox?limit=15'),
+      fetchAPI('inbox/stats'),
+    ]);
+    const replies = inboxData.replies || [];
+    el.innerHTML = `
+      <div style="display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;">
+        <span class="report-tag">Total: ${statsData.total}</span>
+        <span class="report-tag" style="color:var(--danger)">Unread: ${statsData.unread}</span>
+        ${Object.entries(statsData.bysentiment || {}).map(([s, c]) => {
+          const info = SENTIMENT_LABELS[s] || { label: s, color: 'var(--text-muted)' };
+          return `<span class="report-tag" style="color:${info.color}">${info.label}: ${c}</span>`;
+        }).join('')}
+      </div>
+      ${replies.length === 0 ? '<div class="empty-state"><p>No replies yet. Use "Test Reply" to simulate, or wait for real campaign replies.</p></div>' :
+        `<div class="history-list">${replies.map(r => {
+          const info = SENTIMENT_LABELS[r.sentiment] || SENTIMENT_LABELS.neutral;
+          return `<div class="history-item" style="${r.is_read ? '' : 'border-left:3px solid var(--accent); padding-left:8px;'}">
+            <div class="activity-dot ${r.sentiment === 'interested' ? 'success' : r.sentiment === 'not_interested' || r.sentiment === 'bounce' ? 'failure' : 'neutral'}"></div>
+            <div class="history-content"><div class="history-task"><strong>${r.from_name || r.from_email}</strong> ${r.prospect_name ? '<span class=\"cell-muted\">→ ' + r.prospect_name + '</span>' : ''} <span class="outcome-badge" style="background:${info.color}20; color:${info.color}">${info.label}</span></div>
+            <div style="font-size:0.8rem; font-weight:500;">${r.subject || '(no subject)'}</div>
+            <div class="cell-muted" style="font-size:0.75rem;">${(r.body_text || '').slice(0, 100)}</div></div>
+            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;"><span class="activity-time">${timeAgo(r.created_at)}</span>
+            <button class="btn-micro" onclick="replyToInbox('${r.id}','${(r.from_email||'').replace(/'/g,'')}','${(r.subject||'').replace(/'/g,'')}')" title="Reply">&#8617;</button></div>
+          </div>`;
+        }).join('')}</div>`}
+    `;
+  } catch { el.innerHTML = '<div class="cell-muted">Inbox not available yet.</div>'; }
+})();
+
+async function replyToInbox(replyId, toEmail, subject) {
+  const body = prompt('Reply to ' + toEmail + ':');
+  if (!body) return;
+  try { const r = await postAPI('inbox/' + replyId + '/reply', { body }); showToast(r.sent ? 'Reply sent to ' + r.to : 'Failed', r.sent ? 'success' : 'error'); } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function pollInbox() {
+  showToast('Checking for replies...', 'info');
+  try { const r = await postAPI('inbox/poll', {}); showToast(r.message || 'Done', 'info'); } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function simulateReply() {
+  const from = prompt('Simulate reply from email:');
+  if (!from) return;
+  const subject = prompt('Subject:') || 'Re: Your outreach';
+  const body = prompt('Reply body:') || 'Sounds great, let us schedule a call!';
+  try {
+    const r = await postAPI('inbox/poll', { fromEmail: from, subject, bodyText: body, toEmail: 'me@company.com', accountId: 'manual' });
+    showToast('Reply: ' + r.sentiment + ' (' + r.action + ')', 'success');
     const main = document.getElementById('main-content');
     await pageRenderers['email-settings'](main);
   } catch (e) { showToast(e.message, 'error'); }

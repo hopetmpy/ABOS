@@ -5,7 +5,7 @@
  * The database IS the automaton's memory.
  */
 
-export const SCHEMA_VERSION = 19;
+export const SCHEMA_VERSION = 20;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -1090,4 +1090,35 @@ export const MIGRATION_V19 = `
   );
   CREATE INDEX IF NOT EXISTS idx_tracking_enrollment ON open_click_tracking(enrollment_id);
   CREATE INDEX IF NOT EXISTS idx_tracking_type ON open_click_tracking(tracking_type);
+`;
+
+// === Phase 3: Reply Detection & Unified Inbox ===
+
+export const MIGRATION_V20 = `
+  -- Schema version: 20
+  -- Email replies table for unified inbox, sentiment classification, prospect linking
+
+  CREATE TABLE IF NOT EXISTS email_replies (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    from_email TEXT NOT NULL,
+    from_name TEXT,
+    to_email TEXT NOT NULL,
+    subject TEXT,
+    body_text TEXT,
+    body_html TEXT,
+    in_reply_to TEXT,
+    message_id TEXT UNIQUE,
+    prospect_id TEXT,
+    enrollment_id TEXT,
+    sentiment TEXT CHECK(sentiment IN ('interested','not_interested','out_of_office','bounce','unsubscribe','neutral')),
+    sentiment_confidence REAL,
+    is_read INTEGER DEFAULT 0,
+    replied_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_replies_prospect ON email_replies(prospect_id);
+  CREATE INDEX IF NOT EXISTS idx_replies_sentiment ON email_replies(sentiment);
+  CREATE INDEX IF NOT EXISTS idx_replies_read ON email_replies(is_read);
+  CREATE INDEX IF NOT EXISTS idx_replies_message_id ON email_replies(message_id);
 `;
