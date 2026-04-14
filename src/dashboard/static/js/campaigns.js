@@ -366,11 +366,74 @@ async function openCampaignDetail(id) {
           </div>
         </div>
       ` : ''}
+
+      <div id="campaign-step-analytics" style="margin-top:20px;"><div class="spinner"></div></div>
     `;
 
     document.getElementById('campaign-detail-modal').style.display = 'flex';
+
+    // Load step analytics async
+    loadStepAnalytics(id);
   } catch (err) {
     showToast(err.message, 'error');
+  }
+}
+
+// ─── Per-Step Analytics in Campaign Detail ──────────────────────
+
+async function loadStepAnalytics(campaignId) {
+  const el = document.getElementById('campaign-step-analytics');
+  if (!el) return;
+
+  try {
+    // Get all sequences and try to find step data
+    const seqData = await fetchAPI('sequences');
+    const sequences = seqData.sequences || [];
+
+    if (sequences.length === 0) {
+      el.innerHTML = '';
+      return;
+    }
+
+    let html = '<h4 style="margin-bottom:8px;">Step-by-Step Funnel</h4>';
+    let hasData = false;
+
+    for (const seq of sequences.slice(0, 3)) {
+      try {
+        const stepData = await fetchAPI(`analytics/steps/${seq.id}`);
+        if (stepData.steps && stepData.steps.length > 0) {
+          hasData = true;
+          html += `
+            <div style="margin-bottom:12px;">
+              <strong style="font-size:0.85rem;">${stepData.sequenceName}</strong>
+              <div class="table-container" style="margin-top:6px;">
+                <table class="data-table">
+                  <thead><tr><th>Step</th><th>Day</th><th>Subject</th><th>Reached</th><th>Opens</th><th>Clicks</th><th>Open Rate</th><th>Dropoff</th></tr></thead>
+                  <tbody>
+                    ${stepData.steps.map(s => `
+                      <tr>
+                        <td class="cell-mono">${s.step + 1}</td>
+                        <td class="cell-mono">${s.day}</td>
+                        <td>${s.subject}</td>
+                        <td class="cell-mono">${s.reached}</td>
+                        <td class="cell-mono">${s.opens}</td>
+                        <td class="cell-mono">${s.clicks}</td>
+                        <td class="${s.openRate > 30 ? 'positive' : ''} cell-mono">${s.openRate}%</td>
+                        <td class="${s.dropoffRate > 50 ? 'danger' : ''} cell-mono">${s.dropoffRate}%</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `;
+        }
+      } catch { /* sequence may not have analytics */ }
+    }
+
+    el.innerHTML = hasData ? html : '';
+  } catch {
+    el.innerHTML = '';
   }
 }
 
