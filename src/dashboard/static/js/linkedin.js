@@ -19,8 +19,9 @@ registerPage('linkedin', async (container) => {
       </div>
       <div style="display:flex; gap:8px;">
         <button class="btn" onclick="openResearchModal()">Research Prospects</button>
-        <button class="btn" onclick="openPipelineModal()">LinkedIn → Email</button>
+        <button class="btn" onclick="openPipelineModal()">LinkedIn &rarr; Email</button>
         <button class="btn" onclick="openWarmLeadsModal()">Add Warm Leads</button>
+        <button class="btn" onclick="openCampaignLaunchModal()">Launch Campaign</button>
         <button class="btn btn-primary" onclick="openBulkGenerateModal()">Generate Messages</button>
       </div>
     </div>
@@ -81,6 +82,11 @@ function renderLinkedInQueue(queue) {
           <button class="btn btn-sm" onclick="skipLinkedInMsg('${item.id}')">Skip</button>
         ` : `
           <span class="msg-sent-at">${item.sent_at ? 'Sent ' + timeAgo(item.sent_at) : ''}</span>
+          ${item.status === 'sent' ? `
+            <button class="btn btn-sm" style="background:var(--color-success);color:#fff" onclick="recordManualSend('${item.id}','accepted')">Accepted</button>
+            <button class="btn btn-sm btn-primary" onclick="recordManualSend('${item.id}','replied')">Got Reply</button>
+            <button class="btn btn-sm" onclick="recordManualSend('${item.id}','ignored')">Ignored</button>
+          ` : ''}
         `}
         ${item.linkedin_url ? `<a href="${item.linkedin_url}" target="_blank" class="btn btn-sm">Open LinkedIn</a>` : ''}
       </div>
@@ -171,6 +177,65 @@ async function filterLinkedInQueue(status, btn) {
   btn.classList.add('active');
   const data = await fetchAPI(`linkedin/queue${status ? '?status=' + status : ''}`);
   document.getElementById('linkedin-queue').innerHTML = renderLinkedInQueue(data.queue);
+}
+
+// ─── Manual Send Learning ──────────────────────────────────
+
+async function recordManualSend(id, action) {
+  try {
+    const result = await postAPI(`linkedin/manual-send/${id}`, { action });
+    showToast(`Recorded: ${action} (DISC: ${result.discType || 'unknown'})`, 'success');
+    const main = document.getElementById('main-content');
+    await pageRenderers.linkedin(main);
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+// ─── Campaign Launch Modal ─────────────────────────────────
+
+function openCampaignLaunchModal() {
+  const html = `
+    <div class="modal-overlay" id="campaign-launch-modal" style="display:flex" onclick="closeModal('campaign-launch-modal')">
+      <div class="modal" style="max-width:500px" onclick="event.stopPropagation()">
+        <div class="modal-header"><h3>Launch LinkedIn Campaign</h3><button class="modal-close" onclick="closeModal('campaign-launch-modal')">&times;</button></div>
+        <div class="modal-body">
+          <p class="section-description">One goal → full autonomous pipeline: research → DISC profile → email discovery → sequence enroll → send → monitor</p>
+          <div class="form-group"><label>Campaign Title *</label><input type="text" id="campaign-title" placeholder="Q2 VP Eng Outreach"></div>
+          <div class="form-group"><label>ICP Job Titles * (comma-separated)</label><input type="text" id="campaign-icp-titles" placeholder="VP Engineering, CTO, Head of Engineering"></div>
+          <div class="form-row">
+            <div class="form-group"><label>Budget ($)</label><input type="number" id="campaign-budget" value="500"></div>
+            <div class="form-group"><label>Target Count</label><input type="number" id="campaign-target" value="50"></div>
+          </div>
+          <div class="form-group" style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="campaign-auto-reply" checked>
+            <label for="campaign-auto-reply" style="margin:0">Auto-reply to responses</label>
+          </div>
+        </div>
+        <div class="modal-footer"><button class="btn" onclick="closeModal('campaign-launch-modal')">Cancel</button><button class="btn btn-primary" onclick="submitCampaignLaunch()">Launch Campaign</button></div>
+      </div>
+    </div>`;
+  if (!document.getElementById('campaign-launch-modal')) { const d = document.createElement('div'); d.innerHTML = html; document.body.appendChild(d.firstElementChild); }
+  else document.getElementById('campaign-launch-modal').style.display = 'flex';
+}
+
+async function submitCampaignLaunch() {
+  const title = document.getElementById('campaign-title').value.trim();
+  const titles = document.getElementById('campaign-icp-titles').value.split(',').map(t => t.trim()).filter(Boolean);
+  if (!title) { showToast('Campaign title required', 'error'); return; }
+  if (titles.length === 0) { showToast('At least one ICP job title required', 'error'); return; }
+  showToast('Launching campaign...', 'info');
+  try {
+    const result = await postAPI('linkedin/campaign/launch', {
+      title,
+      icp: { titles },
+      budget: parseInt(document.getElementById('campaign-budget').value) || 500,
+      targetCount: parseInt(document.getElementById('campaign-target').value) || 50,
+      autoReply: document.getElementById('campaign-auto-reply').checked,
+    });
+    closeModal('campaign-launch-modal');
+    showToast(`Campaign launched! Goal: ${result.goalId?.slice(0, 12) || 'created'}... Campaign: ${result.campaignId?.slice(0, 12) || 'created'}...`, 'success');
+    const main = document.getElementById('main-content');
+    await pageRenderers.linkedin(main);
+  } catch (e) { showToast(e.message, 'error'); }
 }
 
 // ─── Research Modal ─────────────────────────────────────────
@@ -298,6 +363,7 @@ async function submitWarmLeads() {
 
     // DISC Effectiveness section
     if (Object.keys(discData.types || {}).length > 0) {
+      const discEntries = Object.entries(discData.types);
       const section = document.createElement('div');
       section.className = 'section-card';
       section.style.marginTop = '16px';
@@ -305,7 +371,7 @@ async function submitWarmLeads() {
         <h3>DISC Effectiveness (Email Outreach)</h3>
         <p class="section-description">Which personality types respond best to your outreach</p>
         <div class="kpi-grid">
-          ${Object.entries(discData.types).map(([type, data]) => `
+          ${discEntries.map(([type, data]) => `
             <div class="kpi-card">
               <div class="kpi-label"><span class="disc-badge disc-${type}">${type}</span> Type</div>
               <div class="kpi-value">${data.openRate}%</div>
@@ -313,8 +379,24 @@ async function submitWarmLeads() {
             </div>
           `).join('')}
         </div>
+        <div style="max-width:500px;margin:16px auto 0"><canvas id="disc-effectiveness-chart" height="220"></canvas></div>
       `;
       main.appendChild(section);
+
+      // Render Chart.js bar chart
+      if (typeof Chart !== 'undefined') {
+        new Chart(document.getElementById('disc-effectiveness-chart'), {
+          type: 'bar',
+          data: {
+            labels: discEntries.map(([t]) => t + ' Type'),
+            datasets: [
+              { label: 'Open Rate %', data: discEntries.map(([, d]) => d.openRate), backgroundColor: 'rgba(99,102,241,0.7)' },
+              { label: 'Reply Rate %', data: discEntries.map(([, d]) => d.replyRate), backgroundColor: 'rgba(16,185,129,0.7)' },
+            ],
+          },
+          options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } } } },
+        });
+      }
     }
 
     // Attribution section
@@ -330,8 +412,24 @@ async function submitWarmLeads() {
           <tr><td class="cell-name">${s.source}</td><td class="cell-mono">${s.count}</td><td class="cell-mono">${s.sent}</td><td class="cell-mono">${s.opened}</td><td class="cell-mono">${s.replied}</td>
           <td class="${s.openRate > 25 ? 'positive' : ''} cell-mono">${s.openRate}%</td><td class="${s.replyRate > 5 ? 'positive' : ''} cell-mono">${s.replyRate}%</td></tr>
         `).join('')}</tbody></table></div>
+        <div style="max-width:600px;margin:16px auto 0"><canvas id="attribution-chart" height="200"></canvas></div>
       `;
       main.appendChild(section);
+
+      // Render Chart.js horizontal bar chart
+      if (typeof Chart !== 'undefined') {
+        new Chart(document.getElementById('attribution-chart'), {
+          type: 'bar',
+          data: {
+            labels: attrData.sources.map(s => s.source),
+            datasets: [
+              { label: 'Open Rate %', data: attrData.sources.map(s => s.openRate), backgroundColor: 'rgba(99,102,241,0.7)' },
+              { label: 'Reply Rate %', data: attrData.sources.map(s => s.replyRate), backgroundColor: 'rgba(16,185,129,0.7)' },
+            ],
+          },
+          options: { indexAxis: 'y', responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { x: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } } } },
+        });
+      }
     }
   } catch {}
 })();
