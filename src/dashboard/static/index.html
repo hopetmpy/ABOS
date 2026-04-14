@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Automaton Dashboard</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <h1 class="logo">Automaton</h1>
+      <span class="agent-status" id="agent-status-badge">--</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="#/overview" data-page="overview" class="nav-link active">
+        <span class="nav-icon">&#9634;</span> Overview
+      </a></li>
+      <li><a href="#/pipeline" data-page="pipeline" class="nav-link">
+        <span class="nav-icon">&#9783;</span> Pipeline
+      </a></li>
+      <li><a href="#/campaigns" data-page="campaigns" class="nav-link">
+        <span class="nav-icon">&#9993;</span> Campaigns
+      </a></li>
+      <li><a href="#/prospects" data-page="prospects" class="nav-link">
+        <span class="nav-icon">&#9823;</span> Prospects
+      </a></li>
+      <li><a href="#/content" data-page="content" class="nav-link">
+        <span class="nav-icon">&#9997;</span> Content
+      </a></li>
+      <li><a href="#/activity" data-page="activity" class="nav-link">
+        <span class="nav-icon">&#8635;</span> Activity
+      </a></li>
+      <li><a href="#/reports" data-page="reports" class="nav-link">
+        <span class="nav-icon">&#9776;</span> Reports
+      </a></li>
+      <li><a href="#/competitive" data-page="competitive" class="nav-link">
+        <span class="nav-icon">&#9878;</span> Competitive
+      </a></li>
+      <li><a href="#/health" data-page="health" class="nav-link">
+        <span class="nav-icon">&#9829;</span> Health
+      </a></li>
+      <li><a href="#/settings" data-page="settings" class="nav-link">
+        <span class="nav-icon">&#9881;</span> Settings
+      </a></li>
+    </ul>
+    <div class="sidebar-footer">
+      <div class="credit-display" id="credit-display">
+        Credits: <span id="credit-amount">--</span>
+      </div>
+    </div>
+  </nav>
+
+  <main class="content" id="main-content">
+    <div class="page-loading" id="page-loading">
+      <div class="spinner"></div>
+      <p>Loading dashboard...</p>
+    </div>
+  </main>
+
+  <div class="mobile-nav" id="mobile-nav">
+    <button class="mobile-nav-toggle" id="mobile-nav-toggle">&#9776;</button>
+  </div>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="/js/app.js"></script>
+  <script src="/js/overview.js"></script>
+</body>
+</html>
