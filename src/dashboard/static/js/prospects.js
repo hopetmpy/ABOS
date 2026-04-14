@@ -212,7 +212,8 @@ async function openProspectInfo(id) {
     document.getElementById('prospect-info-body').innerHTML = `
       <div class="prospect-detail-actions" style="display:flex; gap:8px; margin-bottom:12px;">
         <button class="btn btn-sm btn-primary" onclick="enrichProspect('${id}')">Enrich via Apollo</button>
-        <button class="btn btn-sm" onclick="generateLinkedInForProspect('${id}')">Generate LinkedIn DM</button>
+        <button class="btn btn-sm" onclick="generateLinkedInForProspect('${id}')">LinkedIn DM</button>
+        <button class="btn btn-sm" onclick="addToSequence('${id}')">Add to Sequence</button>
         ${p.email ? `<button class="btn btn-sm" onclick="sendEmailToProspect('${id}')">Send Email</button>` : ''}
       </div>
 

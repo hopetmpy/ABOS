@@ -229,6 +229,7 @@ async function openProspectDetail(id) {
       <button class="btn btn-sm btn-primary" onclick="pipelineEnrich('${id}')">Enrich</button>
       <button class="btn btn-sm" onclick="pipelineLinkedIn('${id}')">LinkedIn DM</button>
       ${p.email ? `<button class="btn btn-sm" onclick="pipelineEmail('${id}')">Send Email</button>` : ''}
+      <button class="btn btn-sm" onclick="addToSequence('${id}')">Add to Sequence</button>
     </div>
     <div class="detail-grid">
       <div class="detail-item"><span class="detail-label">Company</span><span class="detail-value">${p.company || '--'}</span></div>
@@ -266,6 +267,23 @@ async function pipelineEmail(id) {
   const subject = prompt('Email subject:'); if (!subject) return;
   const body = prompt('Email body:'); if (!body) return;
   try { const d = await postAPI(`email/send/prospect/${id}`, { subject, body }); showToast(d.sent ? 'Email sent!' : 'Failed', d.sent ? 'success' : 'error'); } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function addToSequence(prospectId) {
+  try {
+    const seqData = await fetchAPI('sequences');
+    const sequences = seqData.sequences || [];
+    if (sequences.length === 0) { showToast('No sequences created yet. Create one in Campaigns.', 'error'); return; }
+    const options = sequences.map(s => `${s.name} (${s.status})`).join('\n');
+    const choice = prompt(`Select sequence (enter number):\n${sequences.map((s, i) => `${i + 1}. ${s.name}`).join('\n')}`);
+    if (!choice) return;
+    const idx = parseInt(choice, 10) - 1;
+    if (idx < 0 || idx >= sequences.length) { showToast('Invalid selection', 'error'); return; }
+    const result = await postAPI(`sequences/${sequences[idx].id}/enroll`, { prospectId });
+    if (result.id) {
+      showToast(`Enrolled in "${sequences[idx].name}". First send: ${result.nextSendAt?.slice(0, 16) || 'soon'}`, 'success');
+    }
+  } catch (e) { showToast(e.message, 'error'); }
 }
 
 async function saveProspectChanges(id) {

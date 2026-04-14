@@ -74,7 +74,10 @@ registerPage('ai-generate', async (container) => {
           <label>Prompt / Instructions *</label>
           <textarea id="gen-prompt" rows="4" placeholder="Describe what you want to generate. Be specific about the audience, goal, and key messages.&#10;&#10;Example: Write a cold email to a VP of Engineering at a Series B SaaS company. Focus on how we reduce deployment time by 60%. Include a soft CTA for a 15-minute call."></textarea>
         </div>
-        <button class="btn btn-primary" style="width:100%" onclick="submitGenerate()" id="gen-submit-btn">Generate Content</button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-primary" style="flex:1" onclick="submitGenerate()" id="gen-submit-btn">Generate Content</button>
+          <button class="btn" onclick="previewSpintax()" title="Preview spintax variations">Preview Spintax</button>
+        </div>
       </div>
 
       <div class="section-card">
@@ -172,6 +175,21 @@ async function submitGenerate() {
 async function copyGenerated() {
   const text = document.querySelector('.gen-text')?.textContent;
   if (text) { await navigator.clipboard.writeText(text); showToast('Copied!', 'success'); }
+}
+
+async function previewSpintax() {
+  const text = document.getElementById('gen-prompt').value.trim();
+  if (!text) { showToast('Enter text with spintax like {Hi|Hey|Hello}', 'error'); return; }
+  if (!text.includes('{') || !text.includes('|')) { showToast('No spintax found. Use format: {option1|option2|option3}', 'info'); return; }
+  try {
+    const data = await postAPI('sequences/spintax', { text });
+    const outputDiv = document.getElementById('gen-output');
+    outputDiv.innerHTML = `
+      <h4 style="margin-bottom:8px;">Spintax Preview (5 variants)</h4>
+      ${data.variants.map((v, i) => `<div style="padding:6px 0; border-bottom:1px solid var(--border-color); font-size:0.85rem;"><strong>${i + 1}.</strong> ${v}</div>`).join('')}
+      <div class="gen-meta" style="margin-top:8px;">These are random variations. Each recipient gets a unique version.</div>
+    `;
+  } catch (e) { showToast(e.message, 'error'); }
 }
 
 async function saveAsTemplate(id) {

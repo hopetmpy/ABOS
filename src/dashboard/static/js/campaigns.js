@@ -45,7 +45,85 @@ registerPage('campaigns', async (container) => {
     ${renderCampaignDetailModal()}
     ${renderCreateCampaignModal()}
   `;
+
+  // Load sequence section async
+  loadSequenceSection();
 });
+
+async function loadSequenceSection() {
+  try {
+    const [seqData, enrollData] = await Promise.all([
+      fetchAPI('sequences'),
+      fetchAPI('sequences/enrollments'),
+    ]);
+
+    const main = document.getElementById('main-content');
+    const seqSection = document.createElement('div');
+    seqSection.innerHTML = `
+      <div class="section-card" style="margin-top:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <h3>Email Sequences (${(seqData.sequences || []).length})</h3>
+          <button class="btn btn-sm" onclick="executeSequencesNow()">Process Sequences Now</button>
+        </div>
+        <p class="section-description">Enrollments: ${enrollData.stats.total} total, ${enrollData.stats.active} active, ${enrollData.stats.completed} completed, ${enrollData.stats.replied} replied</p>
+
+        ${(seqData.sequences || []).length === 0 ? '<div class="empty-state"><p>No sequences. Create one via the API or Templates page.</p></div>' :
+          seqData.sequences.map(s => {
+            let steps = []; try { steps = JSON.parse(s.steps || '[]'); } catch {}
+            return `
+              <div class="campaign-card" style="margin-bottom:8px;">
+                <div class="campaign-card-header">
+                  <div>
+                    <span class="campaign-name">${s.name}</span>
+                    <span class="campaign-status-badge status-${s.status}">${s.status}</span>
+                    <span class="cell-muted">${steps.length} steps</span>
+                  </div>
+                  <button class="btn btn-sm btn-primary" onclick="bulkEnrollInSequence('${s.id}', '${s.name}')">Enroll Prospects</button>
+                </div>
+                ${steps.length > 0 ? `<div style="margin-top:8px; font-size:0.75rem; color:var(--text-muted);">${steps.map((st, i) => `Step ${i+1} (Day ${st.day}): ${st.subject || st.action || 'send'}`).join(' → ')}</div>` : ''}
+              </div>
+            `;
+          }).join('')}
+
+        ${enrollData.enrollments.length > 0 ? `
+          <div style="margin-top:12px;">
+            <h4 style="font-size:0.85rem; margin-bottom:8px;">Active Enrollments</h4>
+            <div class="table-container" style="max-height:200px; overflow-y:auto;">
+              <table class="data-table"><thead><tr><th>Prospect</th><th>Sequence</th><th>Step</th><th>Status</th><th>Next Send</th></tr></thead>
+              <tbody>${enrollData.enrollments.slice(0, 20).map(e => `
+                <tr>
+                  <td class="cell-name">${e.prospect_name || '?'}</td>
+                  <td class="cell-muted">${e.sequence_name || '?'}</td>
+                  <td class="cell-mono">${e.current_step}</td>
+                  <td><span class="campaign-status-badge status-${e.status === 'active' ? 'active' : e.status === 'replied' ? 'completed' : 'paused'}">${e.status}</span></td>
+                  <td class="cell-muted">${e.next_send_at ? timeAgo(e.next_send_at) : '--'}</td>
+                </tr>
+              `).join('')}</tbody></table>
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+    main.appendChild(seqSection);
+  } catch { /* sequences table may not exist */ }
+}
+
+async function executeSequencesNow() {
+  try {
+    const result = await postAPI('sequences/execute', {});
+    showToast(`Processed: ${result.processed}, Sent: ${result.sent}, Skipped: ${result.skipped}, Errors: ${result.errors}`, result.errors > 0 ? 'error' : 'success');
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function bulkEnrollInSequence(sequenceId, sequenceName) {
+  const stage = prompt(`Enroll all prospects from which stage into "${sequenceName}"?\n\nEnter: cold, contacted, engaged, qualified`);
+  if (!stage) return;
+  try {
+    const result = await postAPI(`sequences/${sequenceId}/bulk-enroll`, { stage });
+    showToast(`Enrolled ${result.enrolled} prospects (${result.skipped} already enrolled)`, 'success');
+    loadSequenceSection(); // Refresh
+  } catch (e) { showToast(e.message, 'error'); }
+}
 
 function filterCampaigns(status, btn) {
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
