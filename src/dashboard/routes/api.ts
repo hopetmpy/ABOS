@@ -18,6 +18,7 @@ import { handleWalletRoutes } from "./wallet.js";
 import { handleSequenceRoutes } from "./sequences.js";
 import { handleInboxRoutes } from "./inbox.js";
 import { handleAnalyticsRoutes } from "./analytics.js";
+import { handleOutreachRoutes } from "./outreach.js";
 import {
   verifyAuth, handleAuthSetup, handleAuthLogin,
   handleGetTemplates, handleCreateTemplate, handleUpdateTemplate, handleDeleteTemplate,
@@ -1323,6 +1324,12 @@ export async function handleApiRequest(
     // Unified Inbox
     if (pathOnly.startsWith("/api/inbox")) {
       const handled = await handleInboxRoutes(req, res, db, pathOnly, method, url);
+      if (handled) return;
+    }
+
+    // Autonomous Outreach
+    if (pathOnly.startsWith("/api/outreach/")) {
+      const handled = await handleOutreachRoutes(req, res, db, pathOnly, method, url);
       if (handled) return;
     }
 

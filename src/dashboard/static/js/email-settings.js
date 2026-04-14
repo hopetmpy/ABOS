@@ -429,12 +429,31 @@ const SENTIMENT_LABELS = {
             <div style="font-size:0.8rem; font-weight:500;">${r.subject || '(no subject)'}</div>
             <div class="cell-muted" style="font-size:0.75rem;">${(r.body_text || '').slice(0, 100)}</div></div>
             <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;"><span class="activity-time">${timeAgo(r.created_at)}</span>
+            <button class="btn-micro" onclick="suggestAIReply('${r.id}')" title="AI Suggest Reply">&#10024;</button>
             <button class="btn-micro" onclick="replyToInbox('${r.id}','${(r.from_email||'').replace(/'/g,'')}','${(r.subject||'').replace(/'/g,'')}')" title="Reply">&#8617;</button></div>
           </div>`;
         }).join('')}</div>`}
     `;
   } catch { el.innerHTML = '<div class="cell-muted">Inbox not available yet.</div>'; }
 })();
+
+async function suggestAIReply(replyId) {
+  showToast('Generating AI reply suggestion...', 'info');
+  try {
+    const result = await postAPI('outreach/suggest-reply/' + replyId, {});
+    if (result.suggestedReply) {
+      const useIt = confirm('AI Suggested Reply:\n\n' + result.suggestedReply.slice(0, 500) + '\n\n---\n' + result.context + '\n\nSend this reply?');
+      if (useIt) {
+        await postAPI('inbox/' + replyId + '/reply', { body: result.suggestedReply });
+        showToast('AI reply sent!', 'success');
+        const main = document.getElementById('main-content');
+        await pageRenderers['email-settings'](main);
+      }
+    } else {
+      showToast(result.error || 'Could not generate reply', 'error');
+    }
+  } catch (e) { showToast(e.message || 'AI reply failed. Connect an AI provider first.', 'error'); }
+}
 
 async function replyToInbox(replyId, toEmail, subject) {
   const body = prompt('Reply to ' + toEmail + ':');

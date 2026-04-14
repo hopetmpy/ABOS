@@ -28,6 +28,7 @@ registerPage('campaigns', async (container) => {
         <p>${data.summary.total} campaigns &middot; ${data.summary.active} active &middot; ${data.summary.totalSent} emails sent &middot; ${data.summary.totalConverted} converted</p>
       </div>
       <a href="/api/export/campaigns" class="btn" download="campaigns.csv">Export CSV</a>
+      <button class="btn" onclick="launchAutonomousCampaign()">&#129302; Launch Autonomous</button>
       <button class="btn btn-primary" onclick="openCreateCampaignModal()">+ New Campaign</button>
     </div>
 
@@ -496,4 +497,34 @@ async function loadCampaignAnalytics() {
     `;
     main.appendChild(gridSection);
   } catch { /* analytics tables may not exist */ }
+}
+
+// ─── Autonomous Campaign Launch ─────────────────────────────────
+
+async function launchAutonomousCampaign() {
+  const title = prompt('Describe your campaign goal:\n\nExample: "Generate 50 qualified leads from healthcare SaaS companies"\nExample: "Run cold outreach to VP Engineering at Series B startups"');
+  if (!title) return;
+
+  const budgetStr = prompt('Budget in dollars (default $500):', '500');
+  const budget = Math.round((parseFloat(budgetStr) || 500) * 100);
+
+  const targetStr = prompt('Target number of prospects (default 50):', '50');
+  const target = parseInt(targetStr) || 50;
+
+  try {
+    showToast('Launching autonomous campaign...', 'info');
+    const result = await postAPI('outreach/launch', {
+      title,
+      description: title,
+      budgetCents: budget,
+      targetCount: target,
+      autoReply: true,
+      autoOptimize: true,
+    });
+
+    showToast(`Campaign launched! ${result.status.phase}. Auto-executing in 5 min. Track on Goals page.`, 'success');
+
+    const main = document.getElementById('main-content');
+    await pageRenderers.campaigns(main);
+  } catch (e) { showToast(e.message, 'error'); }
 }

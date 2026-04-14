@@ -300,6 +300,18 @@ export async function sendEmail(
     return { success: false, error: `Daily limit reached (${effectiveLimit}, warm-up active)`, queueId: "" };
   }
 
+  // 3b. SPAM SCORE PRE-SEND CHECK
+  try {
+    const { checkSpamScore } = await import("./deliverability-engine.js");
+    const spamResult = checkSpamScore(subject, body);
+    if (spamResult.grade === "spam") {
+      return { success: false, error: `Blocked: spam score ${spamResult.score}/100. Triggers: ${spamResult.triggers.map(t => t.reason).join(", ")}. ${spamResult.recommendations.join(" ")}`, queueId: "" };
+    }
+    if (spamResult.grade === "high_risk") {
+      logger.warn(`High spam risk (${spamResult.score}/100) for email to ${to}: ${spamResult.triggers.map(t => t.reason).join(", ")}`);
+    }
+  } catch { /* deliverability engine may not be available */ }
+
   // Queue the email
   const queueId = genId("eq");
   db.prepare(`INSERT INTO email_send_queue (id, account_id, prospect_id, campaign_id, sequence_id, template_id, to_email, to_name, subject, body, status, scheduled_at)
