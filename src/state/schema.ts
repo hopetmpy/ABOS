@@ -5,7 +5,7 @@
  * The database IS the automaton's memory.
  */
 
-export const SCHEMA_VERSION = 15;
+export const SCHEMA_VERSION = 16;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -914,4 +914,81 @@ export const MIGRATION_V15 = `
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_linkedin_queue_status ON linkedin_outreach_queue(status);
+`;
+
+// === AI Content Generation, Brand Knowledge, A/B Testing ===
+
+export const MIGRATION_V16 = `
+  -- Schema version: 16
+  -- AI providers, brand knowledge base, generated content history, A/B tests
+
+  -- AI provider API keys (OpenAI, Claude, Gemini, Grok)
+  CREATE TABLE IF NOT EXISTS ai_providers (
+    id TEXT PRIMARY KEY,
+    provider TEXT NOT NULL UNIQUE CHECK(provider IN ('openai','anthropic','google','xai')),
+    api_key TEXT NOT NULL,
+    default_model TEXT,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Brand knowledge base
+  CREATE TABLE IF NOT EXISTS brand_knowledge (
+    id TEXT PRIMARY KEY,
+    category TEXT NOT NULL CHECK(category IN ('company','product','pricing','icp','voice','case_study','competitor','faq')),
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    priority INTEGER NOT NULL DEFAULT 50,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_brand_category ON brand_knowledge(category);
+
+  -- Generated content history
+  CREATE TABLE IF NOT EXISTS generated_content (
+    id TEXT PRIMARY KEY,
+    content_type TEXT NOT NULL CHECK(content_type IN ('email_subject','email_body','linkedin_message','whatsapp_message','social_post','ad_copy','landing_page','blog_outline','image','custom')),
+    channel TEXT,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    prompt TEXT NOT NULL,
+    output TEXT NOT NULL,
+    prospect_id TEXT,
+    campaign_id TEXT,
+    ab_test_id TEXT,
+    variant_label TEXT,
+    disc_type TEXT,
+    brand_context_used INTEGER NOT NULL DEFAULT 0,
+    saved_as_template INTEGER NOT NULL DEFAULT 0,
+    rating INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_generated_type ON generated_content(content_type);
+  CREATE INDEX IF NOT EXISTS idx_generated_prospect ON generated_content(prospect_id);
+
+  -- A/B tests
+  CREATE TABLE IF NOT EXISTS ab_tests (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    channel TEXT NOT NULL CHECK(channel IN ('email','linkedin','whatsapp','other')),
+    test_field TEXT NOT NULL CHECK(test_field IN ('subject','body','full_message')),
+    campaign_id TEXT,
+    status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','running','completed','cancelled')),
+    variant_a_content TEXT NOT NULL,
+    variant_a_label TEXT NOT NULL DEFAULT 'A',
+    variant_b_content TEXT NOT NULL,
+    variant_b_label TEXT NOT NULL DEFAULT 'B',
+    variant_a_sent INTEGER NOT NULL DEFAULT 0,
+    variant_a_replies INTEGER NOT NULL DEFAULT 0,
+    variant_b_sent INTEGER NOT NULL DEFAULT 0,
+    variant_b_replies INTEGER NOT NULL DEFAULT 0,
+    min_sample_size INTEGER NOT NULL DEFAULT 200,
+    auto_declare_after_hours INTEGER NOT NULL DEFAULT 48,
+    winner TEXT CHECK(winner IN ('A','B',NULL)),
+    winner_declared_at TEXT,
+    started_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_ab_status ON ab_tests(status);
 `;

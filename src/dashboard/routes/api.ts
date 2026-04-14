@@ -11,6 +11,7 @@ import type BetterSqlite3 from "better-sqlite3";
 import { createLogger } from "../../observability/logger.js";
 import { handleEmailRoutes } from "./email.js";
 import { handleLinkedInRoutes } from "./linkedin.js";
+import { handleAIBrandABRoutes } from "./ai-brand-ab.js";
 import {
   verifyAuth, handleAuthSetup, handleAuthLogin,
   handleGetTemplates, handleCreateTemplate, handleUpdateTemplate, handleDeleteTemplate,
@@ -1286,6 +1287,12 @@ export async function handleApiRequest(
     // LinkedIn routes (outreach + Humantic AI)
     if (pathOnly.startsWith("/api/linkedin/")) {
       const handled = await handleLinkedInRoutes(req, res, db, pathOnly, method, url);
+      if (handled) return;
+    }
+
+    // AI Content Generation, Brand Knowledge, A/B Testing
+    if (pathOnly.startsWith("/api/ai/") || pathOnly.startsWith("/api/brand") || pathOnly.startsWith("/api/ab-tests")) {
+      const handled = await handleAIBrandABRoutes(req, res, db, pathOnly, method, url);
       if (handled) return;
     }
 
