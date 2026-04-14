@@ -14,6 +14,7 @@ import { handleLinkedInRoutes } from "./linkedin.js";
 import { handleAIBrandABRoutes } from "./ai-brand-ab.js";
 import { handleBrainRoutes } from "./brain.js";
 import { handleAutonomousRoutes } from "./autonomous.js";
+import { handleWalletRoutes } from "./wallet.js";
 import {
   verifyAuth, handleAuthSetup, handleAuthLogin,
   handleGetTemplates, handleCreateTemplate, handleUpdateTemplate, handleDeleteTemplate,
@@ -1307,6 +1308,12 @@ export async function handleApiRequest(
     // Autonomous Capabilities (Goals, Agents, Learnings, Enrichment, Landing Pages)
     if (pathOnly.startsWith("/api/goals") || pathOnly.startsWith("/api/agents/") || pathOnly === "/api/learnings" || pathOnly === "/api/enrichment/process" || pathOnly.includes("/landing-page")) {
       const handled = await handleAutonomousRoutes(req, res, db, pathOnly, method);
+      if (handled) return;
+    }
+
+    // Wallet
+    if (pathOnly.startsWith("/api/wallet")) {
+      const handled = await handleWalletRoutes(req, res, db, pathOnly, method);
       if (handled) return;
     }
 

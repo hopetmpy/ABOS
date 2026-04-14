@@ -1493,6 +1493,65 @@ body {
   body { background: white; color: black; }
 }
 
+/* ─── Wallet ──────────────────────────────────────────────── */
+.wallet-hero {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.wallet-chain-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: rgba(99,102,241,0.15);
+  color: var(--accent);
+  display: inline-block;
+  margin-bottom: 8px;
+}
+.wallet-address {
+  font-size: 1.3rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+.wallet-actions { display: flex; gap: 8px; }
+.wallet-balances { display: flex; gap: 16px; }
+.wallet-balance-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  text-align: center;
+  min-width: 140px;
+}
+.wallet-balance-label { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.wallet-balance-value { font-size: 1.5rem; font-weight: 700; font-family: var(--font-mono); color: var(--success); margin: 4px 0; }
+.wallet-balance-network { font-size: 0.65rem; color: var(--text-muted); }
+.wallet-address-code {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  background: var(--bg-primary);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-color);
+  margin-top: 4px;
+  cursor: pointer;
+  word-break: break-all;
+}
+.wallet-address-code:hover { border-color: var(--accent); }
+.funding-instructions { display: flex; flex-direction: column; gap: 16px; }
+.funding-step { display: flex; gap: 12px; align-items: flex-start; }
+.funding-step p { margin: 4px 0 0; }
+
 /* ─── Onboarding ──────────────────────────────────────────── */
 .onboarding-grid {
   display: grid;
