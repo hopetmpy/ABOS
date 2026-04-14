@@ -13,6 +13,7 @@ import { handleEmailRoutes } from "./email.js";
 import { handleLinkedInRoutes } from "./linkedin.js";
 import { handleAIBrandABRoutes } from "./ai-brand-ab.js";
 import { handleBrainRoutes } from "./brain.js";
+import { handleAutonomousRoutes } from "./autonomous.js";
 import {
   verifyAuth, handleAuthSetup, handleAuthLogin,
   handleGetTemplates, handleCreateTemplate, handleUpdateTemplate, handleDeleteTemplate,
@@ -1300,6 +1301,12 @@ export async function handleApiRequest(
     // Agent Brain (Memory, Orchestration, Soul, Tools)
     if (pathOnly.startsWith("/api/memory/") || pathOnly.startsWith("/api/orchestration/") || pathOnly.startsWith("/api/soul") || pathOnly.startsWith("/api/tools/")) {
       const handled = await handleBrainRoutes(req, res, db, pathOnly, method, url);
+      if (handled) return;
+    }
+
+    // Autonomous Capabilities (Goals, Agents, Learnings, Enrichment, Landing Pages)
+    if (pathOnly.startsWith("/api/goals") || pathOnly.startsWith("/api/agents/") || pathOnly === "/api/learnings" || pathOnly === "/api/enrichment/process" || pathOnly.includes("/landing-page")) {
+      const handled = await handleAutonomousRoutes(req, res, db, pathOnly, method);
       if (handled) return;
     }
 

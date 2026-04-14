@@ -5,7 +5,7 @@
  * The database IS the automaton's memory.
  */
 
-export const SCHEMA_VERSION = 16;
+export const SCHEMA_VERSION = 17;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -991,4 +991,20 @@ export const MIGRATION_V16 = `
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_ab_status ON ab_tests(status);
+`;
+
+// === Tier 1: Autonomous Goals, Microsites ===
+
+export const MIGRATION_V17 = `
+  -- Schema version: 17
+  -- Autonomous goal execution + campaign microsites
+
+  -- Add auto-execute and plan fields to goals (ALTER TABLE for existing table)
+  -- These may fail if columns already exist, which is fine
+  ALTER TABLE goals ADD COLUMN auto_execute_at TEXT;
+  ALTER TABLE goals ADD COLUMN plan_json TEXT;
+
+  -- Add landing page fields to campaigns
+  ALTER TABLE campaigns ADD COLUMN landing_page_url TEXT;
+  ALTER TABLE campaigns ADD COLUMN landing_page_html TEXT;
 `;

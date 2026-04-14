@@ -122,6 +122,9 @@ async function renderReportsPage(container) {
     ` : ''}
   `;
 
+  // Load learnings async
+  loadLearnings();
+
   // Render charts after DOM is ready
   setTimeout(() => {
     renderPipelineChart(pipeline);
@@ -323,6 +326,30 @@ function renderCostsChart(data) {
 }
 
 // ─── Period Selector ────────────────────────────────────────────
+
+async function loadLearnings() {
+  try {
+    const data = await fetchAPI('learnings');
+    if (data.totalLearnings > 0 || data.allProcedures?.length > 0) {
+      // Find insertion point — after the last section-card
+      const main = document.getElementById('main-content');
+      const card = document.createElement('div');
+      card.className = 'section-card';
+      card.innerHTML = `
+        <h3>What the Agent Has Learned (${data.totalLearnings} from A/B tests, ${data.allProcedures?.length || 0} total skills)</h3>
+        ${(data.abLearnings || []).slice(0, 5).map(l => {
+          let steps = []; try { steps = JSON.parse(l.steps || '[]'); } catch {}
+          return `<div class="procedure-card" style="margin-bottom:6px;">
+            <div class="procedure-name">${l.name}</div>
+            <div class="procedure-desc">${l.description || ''}</div>
+            ${steps.length > 0 ? `<div class="procedure-steps">${steps.slice(0, 2).map(s => `<div class="procedure-step">${typeof s === 'string' ? s : JSON.stringify(s)}</div>`).join('')}</div>` : ''}
+          </div>`;
+        }).join('') || '<div class="cell-muted">No A/B test learnings yet. Run tests to start learning.</div>'}
+      `;
+      main.appendChild(card);
+    }
+  } catch {}
+}
 
 async function changeReportPeriod(days) {
   reportDays = days;
