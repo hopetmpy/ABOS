@@ -9,6 +9,16 @@ import type http from "node:http";
 import crypto from "node:crypto";
 import type BetterSqlite3 from "better-sqlite3";
 import { createLogger } from "../../observability/logger.js";
+import {
+  verifyAuth, handleAuthSetup, handleAuthLogin,
+  handleGetTemplates, handleCreateTemplate, handleUpdateTemplate, handleDeleteTemplate,
+  handleGetSequences, handleCreateSequence, handleUpdateSequence,
+  handleEnrichProspect, handleGetEnrichmentQueue,
+  handleGetDeliverability,
+  handleGetLeadScoreConfig, handleCreateLeadScoreRule, handleUpdateLeadScoreRule, handleDeleteLeadScoreRule, handleScoreProspect,
+  handleExportProspects, handleExportCampaigns, handleImportProspects,
+  handleGetTimeline, logActivity,
+} from "./tier1.js";
 
 const logger = createLogger("dashboard.api");
 
@@ -282,6 +292,15 @@ function handleUpdateProspect(
   try {
     db.prepare(`UPDATE prospect_pipeline SET ${updates.join(", ")} WHERE id = ?`).run(...values);
     const updated = safeQueryOne<ProspectRow>(db, "SELECT * FROM prospect_pipeline WHERE id = ?", [id]);
+
+    // Log stage change to activity timeline
+    if (body.stage && body.stage !== existing.stage) {
+      logActivity(db, id, "stage_change", `Stage changed from ${existing.stage} to ${body.stage}`, "user");
+    }
+    if (body.notes && body.notes !== existing.notes) {
+      logActivity(db, id, "note_added", "Notes updated from dashboard", "user");
+    }
+
     jsonResponse(res, updated);
   } catch (err: any) {
     errorResponse(res, err.message || "Failed to update prospect", 500);
@@ -1215,7 +1234,32 @@ export async function handleApiRequest(
   const campaignMatch = pathOnly.match(/^\/api\/campaigns\/([^/]+)$/);
   const prospectMatch = pathOnly.match(/^\/api\/prospects\/([^/]+)$/);
 
+  // Extract additional IDs
+  const templateMatch = pathOnly.match(/^\/api\/templates\/([^/]+)$/);
+  const sequenceMatch = pathOnly.match(/^\/api\/sequences\/([^/]+)$/);
+  const scoreRuleMatch = pathOnly.match(/^\/api\/lead-scoring\/rules\/([^/]+)$/);
+  const timelineMatch = pathOnly.match(/^\/api\/prospects\/([^/]+)\/timeline$/);
+  const enrichMatch = pathOnly.match(/^\/api\/prospects\/([^/]+)\/enrich$/);
+  const scoreMatch = pathOnly.match(/^\/api\/prospects\/([^/]+)\/score$/);
+
   try {
+    // ─── Auth endpoints (no auth required) ───
+    if (pathOnly === "/api/auth/setup" && method === "POST") {
+      return handleAuthSetup(db, res);
+    }
+    if (pathOnly === "/api/auth/login" && method === "POST") {
+      const body = await parseBody(req);
+      return handleAuthLogin(db, req, res, body);
+    }
+    if (pathOnly === "/api/auth/check" && method === "GET") {
+      return jsonResponse(res, { authenticated: verifyAuth(db, req), authConfigured: !!safeQueryOne(db, "SELECT id FROM dashboard_auth LIMIT 1") });
+    }
+
+    // ─── Auth middleware for all other endpoints ───
+    if (!verifyAuth(db, req)) {
+      return errorResponse(res, "Unauthorized. Provide a valid Bearer token.", 401);
+    }
+
     // Overview
     if (pathOnly === "/api/overview" && method === "GET") {
       return handleOverview(db, res);
@@ -1324,6 +1368,39 @@ export async function handleApiRequest(
       const body = await parseBody(req);
       return handleUpdateSettings(db, res, body);
     }
+
+    // ─── Tier 1: Email Templates ───
+    if (pathOnly === "/api/templates" && method === "GET") return handleGetTemplates(db, res);
+    if (pathOnly === "/api/templates" && method === "POST") return handleCreateTemplate(db, req, res);
+    if (templateMatch && method === "PATCH") return handleUpdateTemplate(db, templateMatch[1], req, res);
+    if (templateMatch && method === "DELETE") return handleDeleteTemplate(db, templateMatch[1], res);
+
+    // ─── Tier 1: Email Sequences ───
+    if (pathOnly === "/api/sequences" && method === "GET") return handleGetSequences(db, res);
+    if (pathOnly === "/api/sequences" && method === "POST") return handleCreateSequence(db, req, res);
+    if (sequenceMatch && method === "PATCH") return handleUpdateSequence(db, sequenceMatch[1], req, res);
+
+    // ─── Tier 1: Enrichment ───
+    if (enrichMatch && method === "POST") return handleEnrichProspect(db, enrichMatch[1], res);
+    if (pathOnly === "/api/enrichment/queue" && method === "GET") return handleGetEnrichmentQueue(db, res);
+
+    // ─── Tier 1: Deliverability ───
+    if (pathOnly === "/api/deliverability" && method === "GET") return handleGetDeliverability(db, res);
+
+    // ─── Tier 1: Lead Scoring ───
+    if (pathOnly === "/api/lead-scoring/config" && method === "GET") return handleGetLeadScoreConfig(db, res);
+    if (pathOnly === "/api/lead-scoring/rules" && method === "POST") return handleCreateLeadScoreRule(db, req, res);
+    if (scoreRuleMatch && method === "PATCH") return handleUpdateLeadScoreRule(db, scoreRuleMatch[1], req, res);
+    if (scoreRuleMatch && method === "DELETE") return handleDeleteLeadScoreRule(db, scoreRuleMatch[1], res);
+    if (scoreMatch && method === "GET") return handleScoreProspect(db, scoreMatch[1], res);
+
+    // ─── Tier 1: CSV Import/Export ───
+    if (pathOnly === "/api/export/prospects" && method === "GET") return handleExportProspects(db, res);
+    if (pathOnly === "/api/export/campaigns" && method === "GET") return handleExportCampaigns(db, res);
+    if (pathOnly === "/api/import/prospects" && method === "POST") return handleImportProspects(db, req, res);
+
+    // ─── Tier 1: Activity Timeline ───
+    if (timelineMatch && method === "GET") return handleGetTimeline(db, timelineMatch[1], res);
 
     // Not found
     errorResponse(res, "API endpoint not found", 404);

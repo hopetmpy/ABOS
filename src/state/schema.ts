@@ -5,7 +5,7 @@
  * The database IS the automaton's memory.
  */
 
-export const SCHEMA_VERSION = 12;
+export const SCHEMA_VERSION = 13;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -728,4 +728,94 @@ export const MIGRATION_V12 = `
 
   CREATE INDEX IF NOT EXISTS idx_campaign_status ON campaigns(status);
   CREATE INDEX IF NOT EXISTS idx_campaign_type ON campaigns(campaign_type);
+`;
+
+// === Tier 1: Email Sequences, Auth, Enrichment, Lead Scoring, Activity Log ===
+
+export const MIGRATION_V13 = `
+  -- Schema version: 13
+  -- Tier 1 critical gaps: email sequences, auth, enrichment, lead scoring, activity timeline
+
+  -- Email templates (reusable email content with A/B variants)
+  CREATE TABLE IF NOT EXISTS email_templates (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    body TEXT NOT NULL,
+    variant_label TEXT DEFAULT 'A',
+    campaign_id TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Email sequences (multi-step cadences)
+  CREATE TABLE IF NOT EXISTS email_sequences (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    campaign_id TEXT,
+    status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','active','paused','completed')),
+    steps TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Email events (deliverability tracking: sent, delivered, opened, clicked, bounced, replied, complained)
+  CREATE TABLE IF NOT EXISTS email_events (
+    id TEXT PRIMARY KEY,
+    prospect_id TEXT,
+    template_id TEXT,
+    sequence_id TEXT,
+    campaign_id TEXT,
+    event_type TEXT NOT NULL CHECK(event_type IN ('sent','delivered','opened','clicked','bounced','replied','complained','unsubscribed')),
+    metadata TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_email_events_prospect ON email_events(prospect_id);
+  CREATE INDEX IF NOT EXISTS idx_email_events_type ON email_events(event_type);
+  CREATE INDEX IF NOT EXISTS idx_email_events_campaign ON email_events(campaign_id);
+
+  -- Enrichment queue (dashboard queues requests, agent fulfills via Apollo MCP)
+  CREATE TABLE IF NOT EXISTS enrichment_queue (
+    id TEXT PRIMARY KEY,
+    prospect_id TEXT NOT NULL,
+    entity_address TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','processing','completed','failed')),
+    result TEXT,
+    error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    completed_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_enrichment_status ON enrichment_queue(status);
+
+  -- Lead scoring configuration (weighted criteria)
+  CREATE TABLE IF NOT EXISTS lead_score_rules (
+    id TEXT PRIMARY KEY,
+    field TEXT NOT NULL,
+    operator TEXT NOT NULL CHECK(operator IN ('equals','contains','greater_than','less_than','exists','not_empty')),
+    value TEXT,
+    points INTEGER NOT NULL DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  -- Activity log (unified timeline per prospect)
+  CREATE TABLE IF NOT EXISTS activity_log (
+    id TEXT PRIMARY KEY,
+    prospect_id TEXT NOT NULL,
+    action_type TEXT NOT NULL,
+    description TEXT NOT NULL,
+    metadata TEXT,
+    actor TEXT DEFAULT 'agent',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_activity_prospect ON activity_log(prospect_id, created_at);
+
+  -- Dashboard auth tokens
+  CREATE TABLE IF NOT EXISTS dashboard_auth (
+    id TEXT PRIMARY KEY,
+    token_hash TEXT NOT NULL UNIQUE,
+    label TEXT DEFAULT 'default',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_used_at TEXT
+  );
 `;
