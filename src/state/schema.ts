@@ -5,7 +5,7 @@
  * The database IS the automaton's memory.
  */
 
-export const SCHEMA_VERSION = 17;
+export const SCHEMA_VERSION = 18;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -1007,4 +1007,44 @@ export const MIGRATION_V17 = `
   -- Add landing page fields to campaigns
   ALTER TABLE campaigns ADD COLUMN landing_page_url TEXT;
   ALTER TABLE campaigns ADD COLUMN landing_page_html TEXT;
+`;
+
+// === Phase 1: Email Deliverability Infrastructure ===
+
+export const MIGRATION_V18 = `
+  -- Schema version: 18
+  -- Email deliverability: suppression list, warm-up schedules, inbox placement, bounce classification
+
+  CREATE TABLE IF NOT EXISTS email_suppressions (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    reason TEXT NOT NULL CHECK(reason IN ('hard_bounce','complaint','unsubscribed','invalid','manual')),
+    bounce_count INTEGER DEFAULT 1,
+    suppressed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_suppression_email ON email_suppressions(email);
+
+  CREATE TABLE IF NOT EXISTS email_warmup_schedules (
+    account_id TEXT NOT NULL PRIMARY KEY,
+    start_date TEXT NOT NULL,
+    current_day INTEGER NOT NULL DEFAULT 0,
+    target_daily_limit INTEGER NOT NULL DEFAULT 50,
+    config TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','completed','paused')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS email_inbox_tracking (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    recipient_domain TEXT NOT NULL,
+    placement TEXT CHECK(placement IN ('inbox','spam','promotions','other')),
+    spf_pass INTEGER,
+    dkim_pass INTEGER,
+    dmarc_pass INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_inbox_tracking_account ON email_inbox_tracking(account_id);
 `;

@@ -11,6 +11,12 @@ import {
   processEmailQueue,
   renderTemplate,
   SMTP_PRESETS,
+  isEmailSuppressed,
+  addToSuppressionList,
+  createWarmupSchedule,
+  getWarmupDailyLimit,
+  validateMxRecord,
+  classifyBounce,
   type EmailAccount,
   type QueuedEmail,
 } from "../email-engine.js";
@@ -110,7 +116,10 @@ export async function handleCreateAccount(
     );
 
   const account = db.prepare("SELECT * FROM email_accounts WHERE id = ?").get(id) as EmailAccount;
-  json(res, { ...account, smtp_pass: "••••••••", connectionTest: "passed" }, 201);
+  // Auto-create warm-up schedule for new account
+  createWarmupSchedule(db, id, (body.dailyLimit as number) || 50);
+
+  json(res, { ...account, smtp_pass: "••••••••", connectionTest: "passed", warmupCreated: true }, 201);
 }
 
 export async function handleTestAccount(
@@ -306,6 +315,64 @@ export async function handleProcessQueue(
   json(res, result);
 }
 
+// ─── Suppression List ───────────────────────────────────────────
+
+function handleGetSuppressions(db: BetterSqlite3.Database, res: http.ServerResponse): void {
+  try {
+    const suppressions = db.prepare("SELECT * FROM email_suppressions ORDER BY suppressed_at DESC").all();
+    const counts = db.prepare("SELECT reason, COUNT(*) as count FROM email_suppressions GROUP BY reason").all();
+    json(res, { suppressions, counts, total: suppressions.length });
+  } catch {
+    json(res, { suppressions: [], counts: [], total: 0 });
+  }
+}
+
+async function handleAddSuppression(db: BetterSqlite3.Database, req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  const body = await parseBody(req);
+  if (!body.email) return err(res, "email required");
+  addToSuppressionList(db, body.email as string, (body.reason as string) || "manual");
+  json(res, { suppressed: true, email: body.email }, 201);
+}
+
+function handleRemoveSuppression(db: BetterSqlite3.Database, email: string, res: http.ServerResponse): void {
+  try {
+    db.prepare("DELETE FROM email_suppressions WHERE email = ?").run(decodeURIComponent(email));
+    json(res, { removed: true });
+  } catch { err(res, "Failed to remove", 500); }
+}
+
+// ─── Unsubscribe ────────────────────────────────────────────────
+
+function handleUnsubscribe(db: BetterSqlite3.Database, email: string, res: http.ServerResponse): void {
+  addToSuppressionList(db, decodeURIComponent(email), "unsubscribed");
+  res.writeHead(200, { "Content-Type": "text/html" });
+  res.end("<html><body style='font-family:sans-serif;text-align:center;padding:60px;'><h2>You have been unsubscribed</h2><p>You will no longer receive emails from us.</p></body></html>");
+}
+
+// ─── Warm-Up Status ─────────────────────────────────────────────
+
+function handleGetWarmupStatus(db: BetterSqlite3.Database, res: http.ServerResponse): void {
+  try {
+    const schedules = db.prepare(`SELECT ws.*, ea.name as account_name, ea.email_address, ea.daily_limit, ea.sent_today
+      FROM email_warmup_schedules ws LEFT JOIN email_accounts ea ON ws.account_id = ea.id`).all();
+    json(res, { schedules });
+  } catch {
+    json(res, { schedules: [] });
+  }
+}
+
+// ─── Inbox Placement ────────────────────────────────────────────
+
+function handleGetPlacement(db: BetterSqlite3.Database, res: http.ServerResponse): void {
+  try {
+    const byDomain = db.prepare("SELECT recipient_domain, COUNT(*) as total FROM email_inbox_tracking GROUP BY recipient_domain ORDER BY total DESC LIMIT 20").all();
+    const total = db.prepare("SELECT COUNT(*) as count FROM email_inbox_tracking").get() as { count: number };
+    json(res, { byDomain, total: total?.count || 0 });
+  } catch {
+    json(res, { byDomain: [], total: 0 });
+  }
+}
+
 // ─── Route Handler ──────────────────────────────────────────────
 
 export async function handleEmailRoutes(
@@ -336,6 +403,22 @@ export async function handleEmailRoutes(
   // Queue
   if (pathOnly === "/api/email/queue" && method === "GET") { handleGetSendQueue(db, res); return true; }
   if (pathOnly === "/api/email/queue/process" && method === "POST") { await handleProcessQueue(db, res); return true; }
+
+  // Suppressions
+  if (pathOnly === "/api/email/suppressions" && method === "GET") { handleGetSuppressions(db, res); return true; }
+  if (pathOnly === "/api/email/suppressions" && method === "POST") { await handleAddSuppression(db, req, res); return true; }
+  const suppressionMatch = pathOnly.match(/^\/api\/email\/suppressions\/(.+)$/);
+  if (suppressionMatch && method === "DELETE") { handleRemoveSuppression(db, suppressionMatch[1], res); return true; }
+
+  // Unsubscribe (public endpoint — no auth required for one-click unsubscribe)
+  const unsubMatch = pathOnly.match(/^\/api\/email\/unsubscribe\/(.+)$/);
+  if (unsubMatch && method === "GET") { handleUnsubscribe(db, unsubMatch[1], res); return true; }
+
+  // Warm-up
+  if (pathOnly === "/api/email/warmup" && method === "GET") { handleGetWarmupStatus(db, res); return true; }
+
+  // Inbox placement
+  if (pathOnly === "/api/email/placement" && method === "GET") { handleGetPlacement(db, res); return true; }
 
   return false; // Not handled
 }
