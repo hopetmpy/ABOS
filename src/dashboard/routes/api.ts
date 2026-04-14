@@ -535,6 +535,241 @@ function handleGetActivity(
   });
 }
 
+// ─── Prospects (searchable table) ───────────────────────────────
+
+function handleGetProspects(
+  db: BetterSqlite3.Database,
+  res: http.ServerResponse,
+  url: string,
+): void {
+  const params = new URLSearchParams(url.split("?")[1] || "");
+  const search = params.get("search") || "";
+  const stage = params.get("stage") || "";
+  const segment = params.get("segment") || "";
+  const sort = params.get("sort") || "updated_at";
+  const order = params.get("order") === "asc" ? "ASC" : "DESC";
+  const page = Math.max(1, parseInt(params.get("page") || "1", 10));
+  const limit = Math.min(100, Math.max(1, parseInt(params.get("limit") || "50", 10)));
+  const offset = (page - 1) * limit;
+
+  const conditions: string[] = [];
+  const queryParams: unknown[] = [];
+
+  if (search) {
+    conditions.push("(p.prospect_name LIKE ? OR p.company LIKE ? OR p.email LIKE ? OR p.title LIKE ?)");
+    const like = `%${search}%`;
+    queryParams.push(like, like, like, like);
+  }
+  if (stage) {
+    conditions.push("p.stage = ?");
+    queryParams.push(stage);
+  }
+  if (segment) {
+    conditions.push("p.segment = ?");
+    queryParams.push(segment);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  // Allowed sort columns to prevent SQL injection
+  const allowedSorts: Record<string, string> = {
+    updated_at: "p.updated_at",
+    prospect_name: "p.prospect_name",
+    company: "p.company",
+    deal_value_cents: "p.deal_value_cents",
+    stage: "p.stage",
+    trust_score: "r.trust_score",
+    created_at: "p.created_at",
+  };
+  const sortCol = allowedSorts[sort] || "p.updated_at";
+
+  const countRow = safeQueryOne<{ count: number }>(
+    db,
+    `SELECT COUNT(*) as count FROM prospect_pipeline p ${whereClause}`,
+    queryParams,
+  );
+  const total = countRow?.count ?? 0;
+
+  const prospects = safeQuery<ProspectRow & {
+    trust_score: number | null;
+    interaction_count: number | null;
+    last_interaction_at: string | null;
+  }>(
+    db,
+    `SELECT p.*, r.trust_score, r.interaction_count, r.last_interaction_at
+     FROM prospect_pipeline p
+     LEFT JOIN relationship_memory r ON p.entity_address = r.entity_address
+     ${whereClause}
+     ORDER BY ${sortCol} ${order}
+     LIMIT ? OFFSET ?`,
+    [...queryParams, limit, offset],
+  );
+
+  // Get distinct segments for filter dropdown
+  const segments = safeQuery<{ segment: string }>(
+    db,
+    "SELECT DISTINCT segment FROM prospect_pipeline WHERE segment IS NOT NULL AND segment != '' ORDER BY segment",
+  ).map((r) => r.segment);
+
+  jsonResponse(res, {
+    prospects,
+    segments,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      hasMore: offset + limit < total,
+    },
+  });
+}
+
+function handleGetProspectById(
+  db: BetterSqlite3.Database,
+  res: http.ServerResponse,
+  id: string,
+): void {
+  const prospect = safeQueryOne<ProspectRow>(db, "SELECT * FROM prospect_pipeline WHERE id = ?", [id]);
+  if (!prospect) {
+    return errorResponse(res, "Prospect not found", 404);
+  }
+
+  const relationship = safeQueryOne<RelationshipRow>(
+    db,
+    "SELECT * FROM relationship_memory WHERE entity_address = ?",
+    [prospect.entity_address],
+  );
+
+  // Get interaction history from episodic memory
+  const interactions = safeQuery<{
+    id: string; event_type: string; summary: string;
+    outcome: string | null; created_at: string;
+  }>(
+    db,
+    `SELECT id, event_type, summary, outcome, created_at FROM episodic_memory
+     WHERE summary LIKE ? OR detail LIKE ?
+     ORDER BY created_at DESC LIMIT 10`,
+    [`%${prospect.prospect_name || prospect.entity_address}%`, `%${prospect.entity_address}%`],
+  );
+
+  jsonResponse(res, { prospect, relationship, interactions });
+}
+
+// ─── Content Library ────────────────────────────────────────────
+
+interface KnowledgeRow {
+  id: string;
+  category: string;
+  key: string;
+  content: string;
+  source: string;
+  confidence: number;
+  last_verified: string;
+  access_count: number;
+  token_count: number;
+  created_at: string;
+  expires_at: string | null;
+}
+
+function handleGetContent(
+  db: BetterSqlite3.Database,
+  res: http.ServerResponse,
+  url: string,
+): void {
+  const params = new URLSearchParams(url.split("?")[1] || "");
+  const search = params.get("search") || "";
+  const category = params.get("category") || "";
+  const page = Math.max(1, parseInt(params.get("page") || "1", 10));
+  const limit = Math.min(50, Math.max(1, parseInt(params.get("limit") || "20", 10)));
+  const offset = (page - 1) * limit;
+
+  const conditions: string[] = [];
+  const queryParams: unknown[] = [];
+
+  if (search) {
+    conditions.push("(key LIKE ? OR content LIKE ?)");
+    const like = `%${search}%`;
+    queryParams.push(like, like);
+  }
+  if (category) {
+    conditions.push("category = ?");
+    queryParams.push(category);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const countRow = safeQueryOne<{ count: number }>(
+    db,
+    `SELECT COUNT(*) as count FROM knowledge_store ${whereClause}`,
+    queryParams,
+  );
+  const total = countRow?.count ?? 0;
+
+  const items = safeQuery<KnowledgeRow>(
+    db,
+    `SELECT * FROM knowledge_store ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+    [...queryParams, limit, offset],
+  );
+
+  // Get category counts for filter
+  const categories = safeQuery<{ category: string; count: number }>(
+    db,
+    "SELECT category, COUNT(*) as count FROM knowledge_store GROUP BY category ORDER BY count DESC",
+  );
+
+  // Also pull procedural memory items (winning strategies, templates)
+  const procedures = safeQuery<{
+    id: string; name: string; description: string;
+    steps: string; success_count: number; failure_count: number;
+    last_used_at: string | null;
+  }>(
+    db,
+    "SELECT * FROM procedural_memory ORDER BY success_count DESC LIMIT 20",
+  );
+
+  jsonResponse(res, {
+    items,
+    procedures,
+    categories,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      hasMore: offset + limit < total,
+    },
+  });
+}
+
+function handleCreateContent(
+  db: BetterSqlite3.Database,
+  res: http.ServerResponse,
+  body: Record<string, unknown>,
+): void {
+  const category = body.category;
+  const key = body.key;
+  const content = body.content;
+
+  if (!category || typeof category !== "string") return errorResponse(res, "category is required");
+  if (!key || typeof key !== "string") return errorResponse(res, "key is required");
+  if (!content || typeof content !== "string") return errorResponse(res, "content is required");
+
+  const id = `know_${Date.now().toString(36)}_${crypto.randomBytes(6).toString("hex")}`;
+  const now = new Date().toISOString();
+
+  try {
+    db.prepare(`
+      INSERT INTO knowledge_store (id, category, key, content, source, confidence, last_verified, access_count, token_count, created_at)
+      VALUES (?, ?, ?, ?, 'dashboard', 1.0, ?, 0, ?, ?)
+    `).run(id, category, key, content, now, Math.ceil(content.length / 4), now);
+
+    const created = safeQueryOne<KnowledgeRow>(db, "SELECT * FROM knowledge_store WHERE id = ?", [id]);
+    jsonResponse(res, created, 201);
+  } catch (err: any) {
+    errorResponse(res, err.message || "Failed to create content", 500);
+  }
+}
+
 // ─── Route Dispatcher ──────────────────────────────────────────────
 
 export async function handleApiRequest(
@@ -551,6 +786,7 @@ export async function handleApiRequest(
   // Extract IDs from paths like /api/pipeline/abc123
   const pipelineMatch = pathOnly.match(/^\/api\/pipeline\/([^/]+)$/);
   const campaignMatch = pathOnly.match(/^\/api\/campaigns\/([^/]+)$/);
+  const prospectMatch = pathOnly.match(/^\/api\/prospects\/([^/]+)$/);
 
   try {
     // Overview
@@ -593,6 +829,30 @@ export async function handleApiRequest(
     // Activity Feed
     if (pathOnly === "/api/activity" && method === "GET") {
       return handleGetActivity(db, res, url);
+    }
+
+    // Prospects (searchable table view — reuses pipeline data with richer queries)
+    if (pathOnly === "/api/prospects" && method === "GET") {
+      return handleGetProspects(db, res, url);
+    }
+    if (prospectMatch && method === "GET") {
+      return handleGetProspectById(db, res, prospectMatch[1]);
+    }
+    if (prospectMatch && method === "PATCH") {
+      const body = await parseBody(req);
+      return handleUpdateProspect(db, res, prospectMatch[1], body);
+    }
+    if (prospectMatch && method === "DELETE") {
+      return handleDeleteProspect(db, res, prospectMatch[1]);
+    }
+
+    // Content Library
+    if (pathOnly === "/api/content" && method === "GET") {
+      return handleGetContent(db, res, url);
+    }
+    if (pathOnly === "/api/content" && method === "POST") {
+      const body = await parseBody(req);
+      return handleCreateContent(db, res, body);
     }
 
     // Not found
