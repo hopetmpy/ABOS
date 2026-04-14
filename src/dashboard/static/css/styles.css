@@ -1180,6 +1180,203 @@ body {
 
 .weekly-summary { border-color: var(--accent); border-width: 1px; }
 
+/* ─── Health Badges ───────────────────────────────────────── */
+.health-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+}
+.health-healthy { background: rgba(34,197,94,0.15); color: var(--success); }
+.health-failed { background: rgba(239,68,68,0.15); color: var(--danger); }
+.health-disabled { background: rgba(100,116,139,0.15); color: var(--text-muted); }
+
+.heartbeat-row.failed td:first-child { border-left: 3px solid var(--danger); }
+.cell-danger { color: var(--danger); font-weight: 600; }
+
+/* ─── History List ────────────────────────────────────────── */
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.history-item {
+  display: flex;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-color);
+  align-items: flex-start;
+}
+.history-item:last-child { border-bottom: none; }
+.history-content { flex: 1; min-width: 0; }
+.history-task {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.history-task code {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  background: var(--bg-primary);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.history-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+.history-error {
+  font-size: 0.75rem;
+  color: var(--danger);
+  margin-top: 4px;
+  font-family: var(--font-mono);
+}
+
+/* ─── Policy Badges ───────────────────────────────────────── */
+.policy-badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 8px;
+  text-transform: uppercase;
+}
+.policy-allow { background: rgba(34,197,94,0.15); color: var(--success); }
+.policy-deny { background: rgba(239,68,68,0.15); color: var(--danger); }
+.policy-quarantine { background: rgba(245,158,11,0.15); color: var(--warning); }
+
+.policy-risk {
+  font-size: 0.6rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-family: var(--font-mono);
+}
+.risk-safe { background: rgba(34,197,94,0.1); color: var(--success); }
+.risk-caution { background: rgba(245,158,11,0.1); color: var(--warning); }
+.risk-dangerous { background: rgba(239,68,68,0.1); color: var(--danger); }
+.risk-forbidden { background: rgba(239,68,68,0.2); color: var(--danger); }
+
+/* ─── Transaction Balance ─────────────────────────────────── */
+.tx-balance {
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ─── Children Grid ───────────────────────────────────────── */
+.children-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+.child-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+.child-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.child-name { font-weight: 600; font-size: 0.85rem; }
+.child-details {
+  display: flex;
+  gap: 10px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.child-role { text-transform: capitalize; }
+.child-funded { font-family: var(--font-mono); color: var(--success); }
+
+/* ─── Intel Cards ─────────────────────────────────────────── */
+.intel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.intel-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+.intel-card.stale { border-left: 3px solid var(--warning); }
+.intel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.intel-key { font-weight: 600; font-size: 0.85rem; color: var(--text-primary); }
+.intel-content {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+.intel-footer {
+  display: flex;
+  justify-content: space-between;
+}
+.stale-text { color: var(--warning) !important; }
+
+/* ─── Relationship Network ────────────────────────────────── */
+.relationship-groups { display: flex; flex-direction: column; gap: 16px; }
+.relationship-list { display: flex; flex-direction: column; gap: 6px; }
+.relationship-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.relationship-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.relationship-name { font-weight: 600; font-size: 0.85rem; }
+.relationship-notes { font-size: 0.7rem; color: var(--text-muted); }
+.relationship-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.trust-bar-container {
+  width: 60px;
+  height: 6px;
+  background: var(--bg-hover);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.trust-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.trust-bar-fill.hot { background: var(--success); }
+.trust-bar-fill.warm { background: var(--warning); }
+.trust-bar-fill.cold-trust { background: var(--text-muted); }
+.relationship-interactions {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
 @media (max-width: 768px) {
   .sidebar { transform: translateX(-100%); }
   .sidebar.open { transform: translateX(0); }

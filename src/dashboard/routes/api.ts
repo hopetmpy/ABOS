@@ -973,6 +973,149 @@ function handleReportWeekly(db: BetterSqlite3.Database, res: http.ServerResponse
   });
 }
 
+// ─── Agent Health ───────────────────────────────────────────────
+
+function handleGetHealth(db: BetterSqlite3.Database, res: http.ServerResponse): void {
+  // Agent state
+  const stateRow = safeQueryOne<{ value: string }>(db, "SELECT value FROM kv WHERE key = ?", ["agent_state"]);
+  const agentState = stateRow?.value || "unknown";
+
+  // Credit balance
+  const balanceRow = safeQueryOne<{ balance_after_cents: number }>(
+    db, "SELECT balance_after_cents FROM transactions ORDER BY created_at DESC LIMIT 1",
+  );
+  const creditBalance = balanceRow?.balance_after_cents ?? 0;
+
+  // Survival tier
+  const tier = creditBalance > 500 ? "normal" : creditBalance > 100 ? "low_compute" : creditBalance > 0 ? "critical" : "dead";
+
+  // Uptime
+  const startTime = safeQueryOne<{ value: string }>(db, "SELECT value FROM kv WHERE key = ?", ["start_time"]);
+  let uptimeMs = 0;
+  if (startTime?.value) {
+    uptimeMs = Date.now() - new Date(startTime.value).getTime();
+  }
+
+  // Heartbeat tasks
+  const heartbeats = safeQuery<{
+    task_name: string; cron_expression: string; enabled: number;
+    last_run_at: string | null; next_run_at: string | null;
+    last_result: string | null; last_error: string | null;
+    run_count: number; fail_count: number;
+  }>(db, "SELECT task_name, cron_expression, enabled, last_run_at, next_run_at, last_result, last_error, run_count, fail_count FROM heartbeat_schedule ORDER BY task_name");
+
+  // Recent heartbeat history
+  const heartbeatHistory = safeQuery<{
+    id: string; task_name: string; started_at: string;
+    completed_at: string | null; result: string; duration_ms: number; error: string | null;
+  }>(db, "SELECT id, task_name, started_at, completed_at, result, duration_ms, error FROM heartbeat_history ORDER BY started_at DESC LIMIT 20");
+
+  // Children
+  const children = safeQuery<{
+    id: string; name: string; address: string; status: string;
+    role: string; funded_amount_cents: number; created_at: string; last_checked: string | null;
+  }>(db, "SELECT id, name, address, status, role, funded_amount_cents, created_at, last_checked FROM children ORDER BY created_at DESC");
+
+  // Recent policy decisions
+  const policyDecisions = safeQuery<{
+    id: string; tool_name: string; risk_level: string;
+    decision: string; reason: string; created_at: string;
+  }>(db, "SELECT id, tool_name, risk_level, decision, reason, created_at FROM policy_decisions ORDER BY created_at DESC LIMIT 15");
+
+  // Recent transactions
+  const recentTransactions = safeQuery<{
+    id: string; type: string; amount_cents: number;
+    balance_after_cents: number; description: string; created_at: string;
+  }>(db, "SELECT id, type, amount_cents, balance_after_cents, description, created_at FROM transactions ORDER BY created_at DESC LIMIT 10");
+
+  // Last heartbeat ping data
+  const lastPing = safeQueryOne<{ value: string }>(db, "SELECT value FROM kv WHERE key = ?", ["last_heartbeat_ping"]);
+
+  jsonResponse(res, {
+    agentState,
+    creditBalance,
+    survivalTier: tier,
+    uptimeMs,
+    heartbeats,
+    heartbeatHistory,
+    children,
+    policyDecisions,
+    recentTransactions,
+    lastPing: lastPing?.value ? JSON.parse(lastPing.value) : null,
+  });
+}
+
+function handleGetHeartbeatHistory(
+  db: BetterSqlite3.Database,
+  res: http.ServerResponse,
+  taskName: string,
+): void {
+  const history = safeQuery<{
+    id: string; task_name: string; started_at: string;
+    completed_at: string | null; result: string; duration_ms: number; error: string | null;
+  }>(db, "SELECT * FROM heartbeat_history WHERE task_name = ? ORDER BY started_at DESC LIMIT 50", [taskName]);
+
+  const schedule = safeQueryOne<{
+    task_name: string; cron_expression: string; enabled: number;
+    last_run_at: string | null; next_run_at: string | null; run_count: number; fail_count: number;
+  }>(db, "SELECT * FROM heartbeat_schedule WHERE task_name = ?", [taskName]);
+
+  jsonResponse(res, { taskName, schedule, history });
+}
+
+// ─── Competitive Intelligence ───────────────────────────────────
+
+function handleGetCompetitive(db: BetterSqlite3.Database, res: http.ServerResponse): void {
+  // Market intel from knowledge_store
+  const marketIntel = safeQuery<KnowledgeRow>(
+    db,
+    "SELECT * FROM knowledge_store WHERE category = 'market' ORDER BY created_at DESC LIMIT 30",
+  );
+
+  // Social intel
+  const socialIntel = safeQuery<KnowledgeRow>(
+    db,
+    "SELECT * FROM knowledge_store WHERE category = 'social' ORDER BY created_at DESC LIMIT 20",
+  );
+
+  // Relationships (competitors, partners, etc.)
+  const relationships = safeQuery<{
+    id: string; entity_address: string; entity_name: string | null;
+    relationship_type: string; trust_score: number;
+    interaction_count: number; last_interaction_at: string | null; notes: string | null;
+  }>(
+    db,
+    "SELECT id, entity_address, entity_name, relationship_type, trust_score, interaction_count, last_interaction_at, notes FROM relationship_memory ORDER BY trust_score DESC",
+  );
+
+  // Competitive events from episodic memory
+  const competitiveEvents = safeQuery<{
+    id: string; event_type: string; summary: string;
+    outcome: string | null; created_at: string;
+  }>(
+    db,
+    "SELECT id, event_type, summary, outcome, created_at FROM episodic_memory WHERE event_type LIKE '%compet%' OR classification = 'strategic' ORDER BY created_at DESC LIMIT 15",
+  );
+
+  // Knowledge freshness stats
+  const totalKnowledge = safeQueryOne<{ count: number }>(db, "SELECT COUNT(*) as count FROM knowledge_store");
+  const staleCount = safeQueryOne<{ count: number }>(
+    db,
+    "SELECT COUNT(*) as count FROM knowledge_store WHERE julianday('now') - julianday(last_verified) > 7",
+  );
+
+  jsonResponse(res, {
+    marketIntel,
+    socialIntel,
+    relationships,
+    competitiveEvents,
+    stats: {
+      totalKnowledge: totalKnowledge?.count ?? 0,
+      staleItems: staleCount?.count ?? 0,
+    },
+  });
+}
+
 // ─── Route Dispatcher ──────────────────────────────────────────────
 
 export async function handleApiRequest(
@@ -1076,6 +1219,20 @@ export async function handleApiRequest(
     }
     if (pathOnly === "/api/reports/weekly" && method === "GET") {
       return handleReportWeekly(db, res);
+    }
+
+    // Health
+    if (pathOnly === "/api/health" && method === "GET") {
+      return handleGetHealth(db, res);
+    }
+    const heartbeatHistMatch = pathOnly.match(/^\/api\/health\/history\/([^/]+)$/);
+    if (heartbeatHistMatch && method === "GET") {
+      return handleGetHeartbeatHistory(db, res, heartbeatHistMatch[1]);
+    }
+
+    // Competitive Intelligence
+    if (pathOnly === "/api/competitive" && method === "GET") {
+      return handleGetCompetitive(db, res);
     }
 
     // Not found
