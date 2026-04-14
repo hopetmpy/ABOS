@@ -5,7 +5,7 @@
  * The database IS the automaton's memory.
  */
 
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -678,4 +678,54 @@ export const MIGRATION_V10 = `
 
   CREATE INDEX idx_knowledge_category ON knowledge_store(category);
   CREATE INDEX idx_knowledge_key ON knowledge_store(key);
+`;
+
+// === Sales & Marketing: Prospect Pipeline + Campaigns ===
+
+export const MIGRATION_V12 = `
+  -- Schema version: 12
+  -- Tables: prospect_pipeline, campaigns
+
+  CREATE TABLE IF NOT EXISTS prospect_pipeline (
+    id TEXT PRIMARY KEY,
+    entity_address TEXT NOT NULL,
+    prospect_name TEXT,
+    company TEXT,
+    title TEXT,
+    email TEXT,
+    stage TEXT NOT NULL DEFAULT 'cold' CHECK(stage IN ('cold','contacted','engaged','qualified','negotiating','won','lost','nurture')),
+    source TEXT,
+    deal_value_cents INTEGER DEFAULT 0,
+    expected_close_date TEXT,
+    segment TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_prospect_stage ON prospect_pipeline(stage);
+  CREATE INDEX IF NOT EXISTS idx_prospect_entity ON prospect_pipeline(entity_address);
+  CREATE INDEX IF NOT EXISTS idx_prospect_company ON prospect_pipeline(company);
+
+  CREATE TABLE IF NOT EXISTS campaigns (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    campaign_type TEXT NOT NULL DEFAULT 'outreach' CHECK(campaign_type IN ('outreach','nurture','content','event','competitive_intel')),
+    status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','active','paused','completed','cancelled')),
+    target_segment TEXT,
+    goal_id TEXT,
+    total_sent INTEGER DEFAULT 0,
+    total_opened INTEGER DEFAULT 0,
+    total_clicked INTEGER DEFAULT 0,
+    total_replied INTEGER DEFAULT 0,
+    total_converted INTEGER DEFAULT 0,
+    cost_cents INTEGER DEFAULT 0,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    started_at TEXT,
+    completed_at TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_campaign_status ON campaigns(status);
+  CREATE INDEX IF NOT EXISTS idx_campaign_type ON campaigns(campaign_type);
 `;

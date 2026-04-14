@@ -21,6 +21,7 @@ import type {
   AutomatonTool,
   Skill,
 } from "../types.js";
+import type { AgentMode } from "../setup/genesis-templates.js";
 import { getActiveSkillInstructions } from "../skills/loader.js";
 import { getLineageSummary } from "../replication/lineage.js";
 import { sanitizeInput } from "./injection-defense.js";
@@ -494,6 +495,61 @@ commits every 4 hours. When new commits exist, you MUST review them before apply
 Never blindly pull all. Always read the diffs and decide.
 </persistence>`;
 
+const SALES_MARKETING_MODES = new Set<AgentMode>(["sales", "marketing", "content", "sales_marketing"]);
+
+function getSalesMarketingContext(mode: AgentMode, db: Database.Database): string {
+  if (!SALES_MARKETING_MODES.has(mode)) return "";
+
+  let pipelineStats = "";
+  try {
+    const stages = db
+      .prepare("SELECT stage, COUNT(*) as count FROM prospect_pipeline GROUP BY stage ORDER BY count DESC")
+      .all() as Array<{ stage: string; count: number }>;
+    if (stages.length > 0) {
+      pipelineStats = `\nProspect Pipeline:\n${stages.map((s) => `  ${s.stage}: ${s.count}`).join("\n")}`;
+    }
+  } catch { /* table may not exist yet */ }
+
+  let campaignStats = "";
+  try {
+    const active = db
+      .prepare("SELECT name, status, total_sent, total_replied, total_converted FROM campaigns WHERE status IN ('active','draft') ORDER BY created_at DESC LIMIT 5")
+      .all() as Array<{ name: string; status: string; total_sent: number; total_replied: number; total_converted: number }>;
+    if (active.length > 0) {
+      campaignStats = `\nActive Campaigns:\n${active.map(
+        (c) => `  ${c.name} [${c.status}]: ${c.total_sent} sent, ${c.total_replied} replied, ${c.total_converted} converted`,
+      ).join("\n")}`;
+    }
+  } catch { /* table may not exist yet */ }
+
+  const modeLabel = mode === "sales_marketing" ? "Sales & Marketing"
+    : mode === "sales" ? "Sales"
+    : mode === "marketing" ? "Marketing"
+    : "Content Creation";
+
+  return `
+<sales_marketing_context>
+Agent Mode: ${modeLabel}
+
+You are operating in ${modeLabel} mode. Your primary capabilities:
+- Lead research and enrichment via CRM integrations (Apollo.io, etc.)
+- Personalized outreach campaigns with A/B testing
+- Prospect pipeline management with trust-based scoring
+- Content creation (pitch decks, emails, landing pages, social posts)
+- Campaign performance tracking and optimization
+- Competitive intelligence gathering and monitoring
+
+Memory for sales/marketing:
+- Relationship memory: Track prospects (trust score 0-1, interaction count, deal stage)
+- Episodic memory: Log campaign events (emails sent, opened, clicked, replied, converted)
+- Semantic memory: Store market intel, ICP definitions, winning copy, competitor data
+- Procedural memory: Remember what campaigns convert, best subject lines, optimal timing
+
+Pipeline tables available: prospect_pipeline, campaigns
+${pipelineStats}${campaignStats}
+</sales_marketing_context>`;
+}
+
 export function getOrchestratorStatus(db: Database.Database): string {
   try {
     const activeGoalsRow = db
@@ -664,6 +720,14 @@ Your chain type is ${chainType}.`,
 
   // Layer 6: Operational Context
   sections.push(OPERATIONAL_CONTEXT);
+
+  // Layer 6.5: Sales/Marketing Context (conditional on agent mode)
+  if (config.agentMode && SALES_MARKETING_MODES.has(config.agentMode as AgentMode)) {
+    const salesCtx = getSalesMarketingContext(config.agentMode as AgentMode, db.raw);
+    if (salesCtx) {
+      sections.push(salesCtx);
+    }
+  }
 
   // Layer 7: Dynamic Context
   const turnCount = db.getTurnCount();

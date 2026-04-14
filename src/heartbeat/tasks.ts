@@ -43,6 +43,12 @@ export const COLONY_TASK_INTERVALS_MS = {
   dead_agent_cleanup: 3_600_000,
 } as const;
 
+export const SALES_TASK_INTERVALS_MS = {
+  prospect_pipeline_review: 21_600_000,   // 6 hours
+  warm_lead_followup: 86_400_000,         // 24 hours
+  campaign_performance_snapshot: 43_200_000, // 12 hours
+} as const;
+
 export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
   heartbeat_ping: async (ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
     // Use ctx.creditBalance instead of calling conway.getCreditsBalance()
@@ -701,6 +707,146 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
       return { shouldWake: false };
     } catch (error) {
       logger.error("dead_agent_cleanup failed", error instanceof Error ? error : undefined);
+      return { shouldWake: false };
+    }
+  },
+
+  // === Sales & Marketing Heartbeat Tasks ===
+
+  prospect_pipeline_review: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
+    if (!shouldRunAtInterval(taskCtx, "prospect_pipeline_review", SALES_TASK_INTERVALS_MS.prospect_pipeline_review)) {
+      return { shouldWake: false };
+    }
+
+    try {
+      const { RelationshipMemoryManager } = await import("../memory/relationship.js");
+      const relMem = new RelationshipMemoryManager(taskCtx.db.raw);
+
+      const allTrusted = relMem.getTrusted(0.4);
+      const staleThresholdMs = 3 * 24 * 60 * 60 * 1000;
+      const now = Date.now();
+
+      const staleLeads = allTrusted.filter((lead) => {
+        if (!lead.lastInteractionAt) return true;
+        return now - new Date(lead.lastInteractionAt).getTime() > staleThresholdMs;
+      });
+
+      const hotLeads = allTrusted.filter((l) => l.trustScore >= 0.7).length;
+      const warmLeads = allTrusted.filter((l) => l.trustScore >= 0.4 && l.trustScore < 0.7).length;
+
+      taskCtx.db.setKV("last_pipeline_review", JSON.stringify({
+        timestamp: new Date().toISOString(),
+        totalProspects: allTrusted.length,
+        hotLeads,
+        warmLeads,
+        staleLeads: staleLeads.length,
+      }));
+
+      if (staleLeads.length > 0) {
+        return {
+          shouldWake: true,
+          message: `Pipeline review: ${staleLeads.length} warm/hot lead(s) need follow-up (no contact in 3+ days). ${hotLeads} hot, ${warmLeads} warm.`,
+        };
+      }
+
+      return { shouldWake: false };
+    } catch (error) {
+      logger.error("prospect_pipeline_review failed", error instanceof Error ? error : undefined);
+      return { shouldWake: false };
+    }
+  },
+
+  warm_lead_followup: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
+    if (!shouldRunAtInterval(taskCtx, "warm_lead_followup", SALES_TASK_INTERVALS_MS.warm_lead_followup)) {
+      return { shouldWake: false };
+    }
+
+    try {
+      const { RelationshipMemoryManager } = await import("../memory/relationship.js");
+      const relMem = new RelationshipMemoryManager(taskCtx.db.raw);
+
+      const warmLeads = relMem.getTrusted(0.3).filter((l) => l.trustScore < 0.7);
+      const now = Date.now();
+
+      const followUpCandidates = warmLeads.filter((lead) => {
+        if (!lead.lastInteractionAt) return false;
+        const daysSince = (now - new Date(lead.lastInteractionAt).getTime()) / (24 * 60 * 60 * 1000);
+        return daysSince >= 2 && daysSince <= 7;
+      });
+
+      taskCtx.db.setKV("last_warm_lead_followup_check", JSON.stringify({
+        timestamp: new Date().toISOString(),
+        warmLeadCount: warmLeads.length,
+        followUpCandidates: followUpCandidates.length,
+      }));
+
+      if (followUpCandidates.length > 0) {
+        const names = followUpCandidates
+          .slice(0, 5)
+          .map((l) => l.entityName || l.entityAddress.slice(0, 15))
+          .join(", ");
+        return {
+          shouldWake: true,
+          message: `${followUpCandidates.length} warm lead(s) ready for follow-up: ${names}${followUpCandidates.length > 5 ? "..." : ""}`,
+        };
+      }
+
+      return { shouldWake: false };
+    } catch (error) {
+      logger.error("warm_lead_followup failed", error instanceof Error ? error : undefined);
+      return { shouldWake: false };
+    }
+  },
+
+  campaign_performance_snapshot: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
+    if (!shouldRunAtInterval(taskCtx, "campaign_performance_snapshot", SALES_TASK_INTERVALS_MS.campaign_performance_snapshot)) {
+      return { shouldWake: false };
+    }
+
+    try {
+      const { EpisodicMemoryManager } = await import("../memory/episodic.js");
+      const episodic = new EpisodicMemoryManager(taskCtx.db.raw);
+
+      const outreachEvents = episodic.search("outreach", 100);
+      const campaignEvents = episodic.search("campaign", 100);
+      const allEvents = [...outreachEvents, ...campaignEvents];
+
+      let sent = 0;
+      let success = 0;
+      let failure = 0;
+      let partial = 0;
+
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      for (const event of allEvents) {
+        if (event.createdAt < sevenDaysAgo) continue;
+        sent++;
+        if (event.outcome === "success") success++;
+        else if (event.outcome === "failure") failure++;
+        else if (event.outcome === "partial") partial++;
+      }
+
+      const conversionRate = sent > 0 ? ((success / sent) * 100).toFixed(1) : "0.0";
+
+      taskCtx.db.setKV("last_campaign_snapshot", JSON.stringify({
+        timestamp: new Date().toISOString(),
+        period: "7d",
+        sent,
+        success,
+        failure,
+        partial,
+        conversionRate: parseFloat(conversionRate),
+      }));
+
+      if (sent >= 50 && parseFloat(conversionRate) < 1.0) {
+        return {
+          shouldWake: true,
+          message: `Campaign alert: conversion rate dropped to ${conversionRate}% (${success}/${sent} in 7 days). Review messaging strategy.`,
+        };
+      }
+
+      return { shouldWake: false };
+    } catch (error) {
+      logger.error("campaign_performance_snapshot failed", error instanceof Error ? error : undefined);
       return { shouldWake: false };
     }
   },
