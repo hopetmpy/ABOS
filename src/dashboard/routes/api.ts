@@ -770,6 +770,209 @@ function handleCreateContent(
   }
 }
 
+// ─── Reports & Analytics ────────────────────────────────────────
+
+function handleReportPipeline(db: BetterSqlite3.Database, res: http.ServerResponse): void {
+  const stages = safeQuery<{ stage: string; count: number; total_value: number }>(
+    db,
+    "SELECT stage, COUNT(*) as count, COALESCE(SUM(deal_value_cents), 0) as total_value FROM prospect_pipeline GROUP BY stage",
+  );
+
+  // Stage velocity: average days in each stage
+  const velocity = safeQuery<{ stage: string; avg_days: number }>(
+    db,
+    `SELECT stage, ROUND(AVG(julianday('now') - julianday(created_at)), 1) as avg_days
+     FROM prospect_pipeline GROUP BY stage`,
+  );
+
+  jsonResponse(res, { stages, velocity });
+}
+
+function handleReportCampaigns(db: BetterSqlite3.Database, res: http.ServerResponse): void {
+  const campaigns = safeQuery<{
+    name: string; campaign_type: string; status: string;
+    total_sent: number; total_opened: number; total_clicked: number;
+    total_replied: number; total_converted: number; cost_cents: number;
+  }>(
+    db,
+    "SELECT name, campaign_type, status, total_sent, total_opened, total_clicked, total_replied, total_converted, cost_cents FROM campaigns WHERE total_sent > 0 ORDER BY total_sent DESC",
+  );
+
+  jsonResponse(res, { campaigns });
+}
+
+function handleReportRevenue(db: BetterSqlite3.Database, res: http.ServerResponse): void {
+  const goals = safeQuery<{
+    title: string; status: string;
+    expected_revenue_cents: number; actual_revenue_cents: number;
+    deadline: string | null; created_at: string;
+  }>(
+    db,
+    "SELECT title, status, expected_revenue_cents, actual_revenue_cents, deadline, created_at FROM goals ORDER BY created_at DESC LIMIT 20",
+  );
+
+  // Pipeline value by stage (won = actual revenue)
+  const wonValue = safeQueryOne<{ total: number }>(
+    db,
+    "SELECT COALESCE(SUM(deal_value_cents), 0) as total FROM prospect_pipeline WHERE stage = 'won'",
+  );
+  const activeValue = safeQueryOne<{ total: number }>(
+    db,
+    "SELECT COALESCE(SUM(deal_value_cents), 0) as total FROM prospect_pipeline WHERE stage NOT IN ('won', 'lost', 'nurture')",
+  );
+
+  jsonResponse(res, {
+    goals,
+    wonRevenueCents: wonValue?.total ?? 0,
+    activePipelineCents: activeValue?.total ?? 0,
+  });
+}
+
+function handleReportCosts(
+  db: BetterSqlite3.Database,
+  res: http.ServerResponse,
+  url: string,
+): void {
+  const params = new URLSearchParams(url.split("?")[1] || "");
+  const days = Math.min(365, Math.max(1, parseInt(params.get("days") || "30", 10)));
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+
+  // Daily inference costs
+  const dailyCosts = safeQuery<{ day: string; total_cost: number; total_calls: number }>(
+    db,
+    `SELECT DATE(created_at) as day, SUM(cost_cents) as total_cost, COUNT(*) as total_calls
+     FROM inference_costs WHERE created_at >= ? GROUP BY DATE(created_at) ORDER BY day`,
+    [since],
+  );
+
+  // Cost by model
+  const byModel = safeQuery<{ model: string; total_cost: number; total_calls: number }>(
+    db,
+    `SELECT model, SUM(cost_cents) as total_cost, COUNT(*) as total_calls
+     FROM inference_costs WHERE created_at >= ? GROUP BY model ORDER BY total_cost DESC`,
+    [since],
+  );
+
+  // Cost by task type
+  const byTask = safeQuery<{ task_type: string; total_cost: number; total_calls: number }>(
+    db,
+    `SELECT task_type, SUM(cost_cents) as total_cost, COUNT(*) as total_calls
+     FROM inference_costs WHERE created_at >= ? GROUP BY task_type ORDER BY total_cost DESC`,
+    [since],
+  );
+
+  // Total transactions spend
+  const totalSpend = safeQueryOne<{ total: number }>(
+    db,
+    `SELECT COALESCE(SUM(amount_cents), 0) as total FROM transactions
+     WHERE type IN ('inference', 'x402_payment', 'transfer_out') AND created_at >= ?`,
+    [since],
+  );
+
+  jsonResponse(res, {
+    dailyCosts,
+    byModel,
+    byTask,
+    totalSpendCents: totalSpend?.total ?? 0,
+    periodDays: days,
+  });
+}
+
+function handleReportActivity(
+  db: BetterSqlite3.Database,
+  res: http.ServerResponse,
+  url: string,
+): void {
+  const params = new URLSearchParams(url.split("?")[1] || "");
+  const days = Math.min(365, Math.max(1, parseInt(params.get("days") || "30", 10)));
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+
+  // Activity by classification
+  const byClassification = safeQuery<{ classification: string; count: number }>(
+    db,
+    `SELECT COALESCE(classification, 'unknown') as classification, COUNT(*) as count
+     FROM episodic_memory WHERE created_at >= ? GROUP BY classification ORDER BY count DESC`,
+    [since],
+  );
+
+  // Activity by outcome
+  const byOutcome = safeQuery<{ outcome: string; count: number }>(
+    db,
+    `SELECT COALESCE(outcome, 'neutral') as outcome, COUNT(*) as count
+     FROM episodic_memory WHERE created_at >= ? GROUP BY outcome ORDER BY count DESC`,
+    [since],
+  );
+
+  // Daily activity volume
+  const dailyVolume = safeQuery<{ day: string; count: number }>(
+    db,
+    `SELECT DATE(created_at) as day, COUNT(*) as count
+     FROM episodic_memory WHERE created_at >= ? GROUP BY DATE(created_at) ORDER BY day`,
+    [since],
+  );
+
+  jsonResponse(res, { byClassification, byOutcome, dailyVolume, periodDays: days });
+}
+
+function handleReportWeekly(db: BetterSqlite3.Database, res: http.ServerResponse): void {
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+
+  // New prospects this week
+  const newProspects = safeQueryOne<{ count: number }>(
+    db,
+    "SELECT COUNT(*) as count FROM prospect_pipeline WHERE created_at >= ?",
+    [weekAgo],
+  );
+
+  // Stage changes (approximated by updated_at != created_at this week)
+  const stageChanges = safeQueryOne<{ count: number }>(
+    db,
+    "SELECT COUNT(*) as count FROM prospect_pipeline WHERE updated_at >= ? AND updated_at != created_at",
+    [weekAgo],
+  );
+
+  // Campaign metrics this week
+  const campaignMetrics = safeQueryOne<{
+    total_sent: number; total_opened: number;
+    total_replied: number; total_converted: number;
+  }>(
+    db,
+    "SELECT COALESCE(SUM(total_sent),0) as total_sent, COALESCE(SUM(total_opened),0) as total_opened, COALESCE(SUM(total_replied),0) as total_replied, COALESCE(SUM(total_converted),0) as total_converted FROM campaigns WHERE status = 'active'",
+  );
+
+  // Events this week
+  const eventCount = safeQueryOne<{ count: number }>(
+    db,
+    "SELECT COUNT(*) as count FROM episodic_memory WHERE created_at >= ?",
+    [weekAgo],
+  );
+
+  // Spend this week
+  const weeklySpend = safeQueryOne<{ total: number }>(
+    db,
+    `SELECT COALESCE(SUM(cost_cents), 0) as total FROM inference_costs WHERE created_at >= ?`,
+    [weekAgo],
+  );
+
+  // Top events
+  const topEvents = safeQuery<{ event_type: string; count: number }>(
+    db,
+    `SELECT event_type, COUNT(*) as count FROM episodic_memory
+     WHERE created_at >= ? GROUP BY event_type ORDER BY count DESC LIMIT 5`,
+    [weekAgo],
+  );
+
+  jsonResponse(res, {
+    period: "7d",
+    newProspects: newProspects?.count ?? 0,
+    stageChanges: stageChanges?.count ?? 0,
+    campaignMetrics: campaignMetrics || { total_sent: 0, total_opened: 0, total_replied: 0, total_converted: 0 },
+    eventCount: eventCount?.count ?? 0,
+    weeklySpendCents: weeklySpend?.total ?? 0,
+    topEvents,
+  });
+}
+
 // ─── Route Dispatcher ──────────────────────────────────────────────
 
 export async function handleApiRequest(
@@ -853,6 +1056,26 @@ export async function handleApiRequest(
     if (pathOnly === "/api/content" && method === "POST") {
       const body = await parseBody(req);
       return handleCreateContent(db, res, body);
+    }
+
+    // Reports
+    if (pathOnly === "/api/reports/pipeline" && method === "GET") {
+      return handleReportPipeline(db, res);
+    }
+    if (pathOnly === "/api/reports/campaigns" && method === "GET") {
+      return handleReportCampaigns(db, res);
+    }
+    if (pathOnly === "/api/reports/revenue" && method === "GET") {
+      return handleReportRevenue(db, res);
+    }
+    if (pathOnly === "/api/reports/costs" && method === "GET") {
+      return handleReportCosts(db, res, url);
+    }
+    if (pathOnly === "/api/reports/activity" && method === "GET") {
+      return handleReportActivity(db, res, url);
+    }
+    if (pathOnly === "/api/reports/weekly" && method === "GET") {
+      return handleReportWeekly(db, res);
     }
 
     // Not found
