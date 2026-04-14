@@ -36,6 +36,11 @@ registerPage('overview', async (container) => {
   const creditClass = data.creditBalance > 500 ? 'positive'
     : data.creditBalance > 100 ? 'warning' : 'danger';
 
+  // Fetch inbox stats for reply count
+  let inboxStats = { total: 0, unread: 0, bysentiment: {} };
+  try { inboxStats = await fetchAPI('inbox/stats'); } catch {}
+  const interestedCount = inboxStats.bysentiment?.interested || 0;
+
   container.innerHTML = `
     <div class="page-header">
       <h2>Dashboard Overview</h2>
@@ -62,6 +67,11 @@ registerPage('overview', async (container) => {
         <div class="kpi-label">Credits</div>
         <div class="kpi-value ${creditClass}">${formatCents(data.creditBalance)}</div>
         <div class="kpi-detail">${data.totalTurns} total agent turns</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Replies</div>
+        <div class="kpi-value">${inboxStats.total}</div>
+        <div class="kpi-detail">${inboxStats.unread} unread &middot; ${interestedCount} interested</div>
       </div>
     </div>
 
