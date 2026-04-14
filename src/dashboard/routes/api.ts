@@ -1116,6 +1116,87 @@ function handleGetCompetitive(db: BetterSqlite3.Database, res: http.ServerRespon
   });
 }
 
+// ─── Settings ───────────────────────────────────────────────────
+
+function handleGetSettings(db: BetterSqlite3.Database, res: http.ServerResponse): void {
+  // Agent identity
+  const name = safeQueryOne<{ value: string }>(db, "SELECT value FROM kv WHERE key = ?", ["agent_name"]);
+  const agentState = safeQueryOne<{ value: string }>(db, "SELECT value FROM kv WHERE key = ?", ["agent_state"]);
+
+  // Try to load config from disk
+  let config: Record<string, unknown> = {};
+  try {
+    const { loadConfig } = require("../../config.js") as { loadConfig: () => Record<string, unknown> | null };
+    const loaded = loadConfig();
+    if (loaded) config = loaded;
+  } catch {
+    // Config loading may fail in test environments
+  }
+
+  // Heartbeat tasks (for toggle switches)
+  const heartbeats = safeQuery<{
+    task_name: string; cron_expression: string; enabled: number;
+  }>(db, "SELECT task_name, cron_expression, enabled FROM heartbeat_schedule ORDER BY task_name");
+
+  // Treasury policy from config
+  const treasuryPolicy = (config as any).treasuryPolicy || {};
+
+  // Model strategy from config
+  const modelStrategy = (config as any).modelStrategy || {};
+
+  // Agent mode
+  const agentMode = (config as any).agentMode || "general";
+
+  jsonResponse(res, {
+    agentName: (config as any).name || name?.value || "Unknown",
+    agentMode,
+    walletAddress: (config as any).walletAddress || "",
+    creatorAddress: (config as any).creatorAddress || "",
+    inferenceModel: (config as any).inferenceModel || "gpt-5.2",
+    version: (config as any).version || "0.2.1",
+    logLevel: (config as any).logLevel || "info",
+    maxChildren: (config as any).maxChildren || 3,
+    chainType: (config as any).chainType || "evm",
+    heartbeats,
+    treasuryPolicy: {
+      maxSingleTransferCents: treasuryPolicy.maxSingleTransferCents ?? 0,
+      maxDailyTransferCents: treasuryPolicy.maxDailyTransferCents ?? 0,
+      minimumReserveCents: treasuryPolicy.minimumReserveCents ?? 0,
+      maxX402PaymentCents: treasuryPolicy.maxX402PaymentCents ?? 0,
+      maxInferenceDailyCents: treasuryPolicy.maxInferenceDailyCents ?? 0,
+      requireConfirmationAboveCents: treasuryPolicy.requireConfirmationAboveCents ?? 0,
+    },
+    modelStrategy: {
+      defaultModel: modelStrategy.defaultModel || "",
+      lowComputeModel: modelStrategy.lowComputeModel || "",
+    },
+  });
+}
+
+function handleUpdateSettings(
+  db: BetterSqlite3.Database,
+  res: http.ServerResponse,
+  body: Record<string, unknown>,
+): void {
+  const results: string[] = [];
+
+  // Toggle heartbeat tasks
+  if (body.heartbeatToggles && typeof body.heartbeatToggles === "object") {
+    const toggles = body.heartbeatToggles as Record<string, boolean>;
+    for (const [taskName, enabled] of Object.entries(toggles)) {
+      try {
+        db.prepare("UPDATE heartbeat_schedule SET enabled = ? WHERE task_name = ?")
+          .run(enabled ? 1 : 0, taskName);
+        results.push(`${taskName}: ${enabled ? "enabled" : "disabled"}`);
+      } catch {
+        results.push(`${taskName}: failed to update`);
+      }
+    }
+  }
+
+  jsonResponse(res, { updated: results });
+}
+
 // ─── Route Dispatcher ──────────────────────────────────────────────
 
 export async function handleApiRequest(
@@ -1233,6 +1314,15 @@ export async function handleApiRequest(
     // Competitive Intelligence
     if (pathOnly === "/api/competitive" && method === "GET") {
       return handleGetCompetitive(db, res);
+    }
+
+    // Settings
+    if (pathOnly === "/api/settings" && method === "GET") {
+      return handleGetSettings(db, res);
+    }
+    if (pathOnly === "/api/settings" && method === "PATCH") {
+      const body = await parseBody(req);
+      return handleUpdateSettings(db, res, body);
     }
 
     // Not found

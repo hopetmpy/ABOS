@@ -5,7 +5,7 @@
 // ─── State ──────────────────────────────────────────────────────
 let currentPage = 'overview';
 let refreshInterval = null;
-const REFRESH_MS = 30000;
+let REFRESH_MS = 30000;
 
 // ─── API Helper ─────────────────────────────────────────────────
 async function fetchAPI(endpoint) {

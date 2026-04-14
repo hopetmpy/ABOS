@@ -38,7 +38,7 @@
   "license": "MIT",
   "packageManager": "pnpm@10.28.1",
   "scripts": {
-    "build": "tsc && pnpm -r build",
+    "build": "tsc && cp -r src/dashboard/static dist/dashboard/static 2>/dev/null || true && pnpm -r build",
     "dev": "tsx watch src/index.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
