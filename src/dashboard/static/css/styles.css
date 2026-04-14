@@ -1493,6 +1493,52 @@ body {
   body { background: white; color: black; }
 }
 
+/* ─── Deliverability Tools ─────────────────────────────────── */
+.reputation-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.reputation-card {
+  background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius); padding: 14px; text-align: center;
+}
+.reputation-card.reputation-excellent { border-color: var(--success); }
+.reputation-card.reputation-good { border-color: rgba(34,197,94,0.4); }
+.reputation-card.reputation-fair { border-color: var(--warning); }
+.reputation-card.reputation-poor { border-color: rgba(239,68,68,0.4); }
+.reputation-card.reputation-critical { border-color: var(--danger); }
+.reputation-domain { font-weight: 600; font-size: 0.85rem; margin-bottom: 4px; }
+.reputation-score { font-size: 1.6rem; font-weight: 700; font-family: var(--font-mono); }
+.reputation-max { font-size: 0.7rem; color: var(--text-muted); }
+.reputation-grade { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin: 4px 0; }
+.reputation-excellent .reputation-grade { color: var(--success); }
+.reputation-good .reputation-grade { color: var(--success); }
+.reputation-fair .reputation-grade { color: var(--warning); }
+.reputation-poor .reputation-grade { color: var(--danger); }
+.reputation-critical .reputation-grade { color: var(--danger); }
+.reputation-details { display: flex; gap: 8px; justify-content: center; font-size: 0.65rem; color: var(--text-muted); flex-wrap: wrap; }
+
+.utilization-bar { width: 60px; height: 6px; background: var(--bg-hover); border-radius: 3px; overflow: hidden; }
+.utilization-fill { height: 100%; border-radius: 3px; }
+.utilization-fill.positive { background: var(--success); }
+.utilization-fill.warning { background: var(--warning); }
+.utilization-fill.danger { background: var(--danger); }
+
+.warmup-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-color); }
+.warmup-row:last-child { border-bottom: none; }
+.warmup-info { display: flex; flex-direction: column; gap: 2px; }
+.warmup-account { font-weight: 600; font-size: 0.85rem; }
+.warmup-progress { display: flex; align-items: center; gap: 8px; }
+.warmup-bar { width: 80px; height: 6px; background: var(--bg-hover); border-radius: 3px; overflow: hidden; }
+.warmup-fill { height: 100%; background: var(--accent); border-radius: 3px; }
+.warmup-day { font-size: 0.7rem; color: var(--text-muted); font-family: var(--font-mono); }
+
+.deliv-tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.deliv-tool-card {
+  background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius);
+  padding: 14px; cursor: pointer; transition: border-color var(--transition); text-align: center;
+}
+.deliv-tool-card:hover { border-color: var(--accent); }
+.deliv-tool-icon { font-size: 1.5rem; display: block; margin-bottom: 6px; }
+.deliv-tool-card strong { font-size: 0.85rem; display: block; margin-bottom: 4px; }
+.deliv-tool-card p { font-size: 0.7rem; color: var(--text-muted); margin: 0; }
+
 /* ─── Wallet ──────────────────────────────────────────────── */
 .wallet-hero {
   background: var(--bg-card);
