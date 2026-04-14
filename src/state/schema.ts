@@ -5,7 +5,7 @@
  * The database IS the automaton's memory.
  */
 
-export const SCHEMA_VERSION = 18;
+export const SCHEMA_VERSION = 19;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -1047,4 +1047,47 @@ export const MIGRATION_V18 = `
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_inbox_tracking_account ON email_inbox_tracking(account_id);
+`;
+
+// === Phase 2: Sequence Engine + Open/Click Tracking ===
+
+export const MIGRATION_V19 = `
+  -- Schema version: 19
+  -- Sequence enrollments, open/click tracking
+
+  CREATE TABLE IF NOT EXISTS sequence_enrollments (
+    id TEXT PRIMARY KEY,
+    sequence_id TEXT NOT NULL,
+    prospect_id TEXT NOT NULL,
+    campaign_id TEXT,
+    account_id TEXT,
+    current_step INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','paused','completed','replied','bounced','unsubscribed')),
+    next_send_at TEXT,
+    last_sent_at TEXT,
+    last_opened_at TEXT,
+    last_clicked_at TEXT,
+    last_replied_at TEXT,
+    timezone TEXT DEFAULT 'UTC',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    completed_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_enrollment_sequence ON sequence_enrollments(sequence_id, status);
+  CREATE INDEX IF NOT EXISTS idx_enrollment_prospect ON sequence_enrollments(prospect_id);
+  CREATE INDEX IF NOT EXISTS idx_enrollment_next_send ON sequence_enrollments(status, next_send_at);
+
+  CREATE TABLE IF NOT EXISTS open_click_tracking (
+    id TEXT PRIMARY KEY,
+    tracking_type TEXT NOT NULL CHECK(tracking_type IN ('open','click')),
+    enrollment_id TEXT,
+    prospect_id TEXT,
+    campaign_id TEXT,
+    sequence_step INTEGER,
+    original_url TEXT,
+    user_agent TEXT,
+    ip_address TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_tracking_enrollment ON open_click_tracking(enrollment_id);
+  CREATE INDEX IF NOT EXISTS idx_tracking_type ON open_click_tracking(tracking_type);
 `;

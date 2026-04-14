@@ -15,6 +15,7 @@ import { handleAIBrandABRoutes } from "./ai-brand-ab.js";
 import { handleBrainRoutes } from "./brain.js";
 import { handleAutonomousRoutes } from "./autonomous.js";
 import { handleWalletRoutes } from "./wallet.js";
+import { handleSequenceRoutes } from "./sequences.js";
 import {
   verifyAuth, handleAuthSetup, handleAuthLogin,
   handleGetTemplates, handleCreateTemplate, handleUpdateTemplate, handleDeleteTemplate,
@@ -1276,6 +1277,12 @@ export async function handleApiRequest(
       return jsonResponse(res, { authenticated: verifyAuth(db, req), authConfigured: !!safeQueryOne(db, "SELECT id FROM dashboard_auth LIMIT 1") });
     }
 
+    // ─── Tracking endpoints (no auth — embedded in emails) ───
+    if (pathOnly.startsWith("/api/track/")) {
+      const handled = await handleSequenceRoutes(req, res, db, pathOnly, method, url);
+      if (handled) return;
+    }
+
     // ─── Auth middleware for all other endpoints ───
     if (!verifyAuth(db, req)) {
       return errorResponse(res, "Unauthorized. Provide a valid Bearer token.", 401);
@@ -1308,6 +1315,12 @@ export async function handleApiRequest(
     // Autonomous Capabilities (Goals, Agents, Learnings, Enrichment, Landing Pages)
     if (pathOnly.startsWith("/api/goals") || pathOnly.startsWith("/api/agents/") || pathOnly === "/api/learnings" || pathOnly === "/api/enrichment/process" || pathOnly.includes("/landing-page")) {
       const handled = await handleAutonomousRoutes(req, res, db, pathOnly, method);
+      if (handled) return;
+    }
+
+    // Sequences (enrollment, execution, spintax)
+    if (pathOnly.startsWith("/api/sequences/")) {
+      const handled = await handleSequenceRoutes(req, res, db, pathOnly, method, url);
       if (handled) return;
     }
 
