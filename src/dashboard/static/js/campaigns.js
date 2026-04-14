@@ -27,6 +27,7 @@ registerPage('campaigns', async (container) => {
         <h2>Campaigns</h2>
         <p>${data.summary.total} campaigns &middot; ${data.summary.active} active &middot; ${data.summary.totalSent} emails sent &middot; ${data.summary.totalConverted} converted</p>
       </div>
+      <a href="/api/export/campaigns" class="btn" download="campaigns.csv">Export CSV</a>
       <button class="btn btn-primary" onclick="openCreateCampaignModal()">+ New Campaign</button>
     </div>
 
