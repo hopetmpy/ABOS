@@ -55,6 +55,19 @@ registerPage('health', async (container) => {
       </div>
     ` : ''}
 
+    <div class="section-card">
+      <h3>Enrichment Queue</h3>
+      <div id="enrichment-queue-section"><div class="spinner"></div></div>
+    </div>
+
+    <div class="section-card">
+      <h3>System Info</h3>
+      <div class="settings-list">
+        <div class="setting-row"><span class="setting-label">HTTPS</span><span class="setting-value ${location.protocol === 'https:' ? 'positive' : ''}">${location.protocol === 'https:' ? 'Enabled' : 'Not enabled \u2014 configure SSL at your reverse proxy'}</span></div>
+        <div class="setting-row"><span class="setting-label">Dashboard URL</span><span class="setting-value mono">${location.origin}</span></div>
+      </div>
+    </div>
+
     <div class="grid-2">
       <div class="section-card">
         <h3>Recent Transactions</h3>
@@ -195,6 +208,28 @@ function renderTransactions(txns) {
     </div>
   `;
 }
+
+// Load enrichment queue
+(async function loadEnrichmentQueue() {
+  const el = document.getElementById('enrichment-queue-section');
+  if (!el) { setTimeout(loadEnrichmentQueue, 500); return; }
+  try {
+    const data = await fetchAPI('enrichment/queue');
+    if (!data.queue || data.queue.length === 0) {
+      el.innerHTML = '<div class="cell-muted">No enrichment requests. Use "Enrich" on any prospect to queue one.</div>';
+    } else {
+      el.innerHTML = data.queue.slice(0, 10).map(q => `
+        <div class="history-item">
+          <div class="activity-dot ${q.status === 'completed' ? 'success' : q.status === 'failed' ? 'failure' : 'neutral'}"></div>
+          <div class="history-content">
+            <div class="history-task">${q.prospect_name || q.entity_address} <span class="outcome-badge outcome-${q.status === 'completed' ? 'success' : q.status === 'pending' ? 'neutral' : 'failure'}">${q.status}</span></div>
+          </div>
+          <div class="activity-time">${timeAgo(q.created_at)}</div>
+        </div>
+      `).join('');
+    }
+  } catch { el.innerHTML = '<div class="cell-muted">Could not load enrichment queue.</div>'; }
+})();
 
 function renderPolicyDecisions(decisions) {
   if (!decisions || decisions.length === 0) {

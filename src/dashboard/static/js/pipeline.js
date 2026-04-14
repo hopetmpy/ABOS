@@ -78,6 +78,11 @@ function renderProspectCard(p) {
         <span class="card-value">${p.deal_value_cents > 0 ? formatCents(p.deal_value_cents) : '--'}</span>
         ${daysSince !== null ? `<span class="card-days ${staleClass}" title="Days since last contact">${daysSince}d ago</span>` : ''}
       </div>
+      <div style="display:flex; gap:4px; margin-top:4px;">
+        <button class="btn-micro" onclick="event.stopPropagation(); pipelineEnrich('${p.id}')" title="Enrich">&#128269;</button>
+        <button class="btn-micro" onclick="event.stopPropagation(); pipelineLinkedIn('${p.id}')" title="LinkedIn DM">&#128172;</button>
+        ${p.email ? `<button class="btn-micro" onclick="event.stopPropagation(); pipelineEmail('${p.id}')" title="Send Email">&#9993;</button>` : ''}
+      </div>
     </div>
   `;
 }
@@ -200,64 +205,67 @@ async function submitAddProspect() {
 
 let currentProspectId = null;
 
-function openProspectDetail(id) {
+async function openProspectDetail(id) {
   const p = pipelineData?.prospects.find(x => x.id === id);
   if (!p) return;
 
   currentProspectId = id;
   document.getElementById('modal-prospect-name').textContent = p.prospect_name || p.entity_address;
+  document.getElementById('modal-prospect-body').innerHTML = '<div class="page-loading"><div class="spinner"></div></div>';
+  document.getElementById('prospect-modal').style.display = 'flex';
 
   const trustLabel = p.trustScore != null ? `${Math.round(p.trustScore * 100)}%` : 'N/A';
   const trustClass = p.trustScore >= 0.7 ? 'hot' : p.trustScore >= 0.4 ? 'warm' : 'cold-trust';
 
+  // Fetch lead score and timeline
+  let scoreData = null, timelineData = null;
+  try { scoreData = await fetchAPI(`prospects/${id}/score`); } catch {}
+  try { timelineData = await fetchAPI(`prospects/${id}/timeline`); } catch {}
+
+  const scoreDisplay = scoreData ? `<span style="font-weight:700">${scoreData.score}</span><span class="cell-muted">/${scoreData.maxPossible}</span>` : '<span class="cell-muted">--</span>';
+
   document.getElementById('modal-prospect-body').innerHTML = `
+    <div class="prospect-detail-actions" style="display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;">
+      <button class="btn btn-sm btn-primary" onclick="pipelineEnrich('${id}')">Enrich</button>
+      <button class="btn btn-sm" onclick="pipelineLinkedIn('${id}')">LinkedIn DM</button>
+      ${p.email ? `<button class="btn btn-sm" onclick="pipelineEmail('${id}')">Send Email</button>` : ''}
+    </div>
     <div class="detail-grid">
-      <div class="detail-item">
-        <span class="detail-label">Company</span>
-        <span class="detail-value">${p.company || '--'}</span>
-      </div>
-      <div class="detail-item">
-        <span class="detail-label">Title</span>
-        <span class="detail-value">${p.title || '--'}</span>
-      </div>
-      <div class="detail-item">
-        <span class="detail-label">Email</span>
-        <span class="detail-value">${p.email || '--'}</span>
-      </div>
-      <div class="detail-item">
-        <span class="detail-label">Trust Score</span>
-        <span class="detail-value"><span class="trust-badge ${trustClass}">${trustLabel}</span></span>
-      </div>
-      <div class="detail-item">
-        <span class="detail-label">Interactions</span>
-        <span class="detail-value">${p.interactionCount || 0}</span>
-      </div>
-      <div class="detail-item">
-        <span class="detail-label">Last Contact</span>
-        <span class="detail-value">${p.lastInteractionAt ? timeAgo(p.lastInteractionAt) : 'Never'}</span>
-      </div>
+      <div class="detail-item"><span class="detail-label">Company</span><span class="detail-value">${p.company || '--'}</span></div>
+      <div class="detail-item"><span class="detail-label">Title</span><span class="detail-value">${p.title || '--'}</span></div>
+      <div class="detail-item"><span class="detail-label">Email</span><span class="detail-value">${p.email || '--'}</span></div>
+      <div class="detail-item"><span class="detail-label">Trust</span><span class="detail-value"><span class="trust-badge ${trustClass}">${trustLabel}</span></span></div>
+      <div class="detail-item"><span class="detail-label">Lead Score</span><span class="detail-value">${scoreDisplay}</span></div>
+      <div class="detail-item"><span class="detail-label">Interactions</span><span class="detail-value">${p.interactionCount || 0}</span></div>
     </div>
-    <div class="form-row" style="margin-top: 16px;">
-      <div class="form-group">
-        <label>Stage</label>
-        <select id="edit-stage">
-          ${PIPELINE_STAGES.map(s => `<option value="${s}" ${s === p.stage ? 'selected' : ''}>${STAGE_LABELS[s]}</option>`).join('')}
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Deal Value ($)</label>
-        <input type="number" id="edit-value" value="${(p.deal_value_cents / 100).toFixed(0)}" min="0" step="100">
-      </div>
+    ${scoreData && scoreData.breakdown ? `<details style="margin-top:6px;"><summary style="font-size:0.7rem; color:var(--text-muted); cursor:pointer;">Score breakdown</summary><div style="margin-top:4px;">${scoreData.breakdown.map(b => `<div style="font-size:0.65rem; color:${b.matched ? 'var(--success)' : 'var(--text-muted)'};">${b.matched ? '&#10003;' : '&#10007;'} ${b.rule} (${b.points}pts)</div>`).join('')}</div></details>` : ''}
+    <div class="form-row" style="margin-top: 12px;">
+      <div class="form-group"><label>Stage</label><select id="edit-stage">${PIPELINE_STAGES.map(s => `<option value="${s}" ${s === p.stage ? 'selected' : ''}>${STAGE_LABELS[s]}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Deal Value ($)</label><input type="number" id="edit-value" value="${(p.deal_value_cents / 100).toFixed(0)}" min="0" step="100"></div>
     </div>
-    <div class="form-group">
-      <label>Notes</label>
-      <textarea id="edit-notes" rows="3">${p.notes || ''}</textarea>
-    </div>
+    <div class="form-group"><label>Notes</label><textarea id="edit-notes" rows="2">${p.notes || ''}</textarea></div>
+    ${timelineData && timelineData.timeline && timelineData.timeline.length > 0 ? `
+      <div style="margin-top:12px;"><h4 style="font-size:0.8rem; margin-bottom:6px;">Timeline (${timelineData.timeline.length})</h4>
+      <div class="activity-list" style="max-height:180px; overflow-y:auto;">
+        ${timelineData.timeline.slice(0, 10).map(e => `<div class="activity-item"><div class="activity-dot ${e.type.includes('sent') ? 'success' : e.type.includes('fail') ? 'failure' : 'neutral'}"></div><div class="activity-text" style="font-size:0.75rem;">${e.description}</div><div class="activity-time">${timeAgo(e.created_at)}</div></div>`).join('')}
+      </div></div>
+    ` : ''}
   `;
 
   document.getElementById('modal-save-btn').onclick = () => saveProspectChanges(id);
   document.getElementById('modal-delete-btn').onclick = () => deleteProspect(id);
-  document.getElementById('prospect-modal').style.display = 'flex';
+}
+
+async function pipelineEnrich(id) {
+  try { await postAPI(`prospects/${id}/enrich`, {}); showToast('Enrichment queued', 'success'); } catch (e) { showToast(e.message, 'error'); }
+}
+async function pipelineLinkedIn(id) {
+  try { const d = await postAPI(`linkedin/generate/${id}`, {}); showToast(`LinkedIn DM generated (DISC: ${d.discType || '?'})`, 'success'); } catch (e) { showToast(e.message, 'error'); }
+}
+async function pipelineEmail(id) {
+  const subject = prompt('Email subject:'); if (!subject) return;
+  const body = prompt('Email body:'); if (!body) return;
+  try { const d = await postAPI(`email/send/prospect/${id}`, { subject, body }); showToast(d.sent ? 'Email sent!' : 'Failed', d.sent ? 'success' : 'error'); } catch (e) { showToast(e.message, 'error'); }
 }
 
 async function saveProspectChanges(id) {

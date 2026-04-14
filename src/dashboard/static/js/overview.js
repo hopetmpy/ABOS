@@ -15,6 +15,23 @@ registerPage('overview', async (container) => {
   const warmLeads = (data.lastPipelineReview?.warmLeads) || 0;
   const staleLeads = (data.lastPipelineReview?.staleLeads) || 0;
 
+  // Onboarding check (#9)
+  const isFirstRun = data.totalProspects === 0 && data.activeCampaigns === 0 && data.totalTurns === 0;
+  if (isFirstRun) {
+    container.innerHTML = `
+      <div class="page-header"><h2>Welcome to Automaton</h2><p>Let's get your sales & marketing agent up and running</p></div>
+      <div class="onboarding-grid">
+        <a href="#/brand" class="onboard-card"><span class="onboard-step">1</span><strong>Set Up Brand Voice</strong><p>Add your company info, product features, pricing, and messaging guidelines</p></a>
+        <a href="#/pipeline" class="onboard-card"><span class="onboard-step">2</span><strong>Add Prospects</strong><p>Import your leads via CSV or add them manually to the pipeline</p></a>
+        <a href="#/email-settings" class="onboard-card"><span class="onboard-step">3</span><strong>Connect Email</strong><p>Add your Gmail, Outlook, or SMTP server to start sending</p></a>
+        <a href="#/ai-generate" class="onboard-card"><span class="onboard-step">4</span><strong>Connect AI Provider</strong><p>Add your OpenAI, Claude, Gemini, or Grok API key for content generation</p></a>
+        <a href="#/campaigns" class="onboard-card"><span class="onboard-step">5</span><strong>Create a Campaign</strong><p>Set up your first outreach campaign with A/B tested messaging</p></a>
+        <a href="#/settings" class="onboard-card"><span class="onboard-step">6</span><strong>Configure Settings</strong><p>Set up lead scoring rules, heartbeat tasks, and preferences</p></a>
+      </div>
+    `;
+    return;
+  }
+
   // Determine credit health class
   const creditClass = data.creditBalance > 500 ? 'positive'
     : data.creditBalance > 100 ? 'warning' : 'danger';

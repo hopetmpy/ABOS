@@ -187,6 +187,7 @@ let authToken = localStorage.getItem('dashboard-token') || '';
 function setAuthToken(token) {
   authToken = token;
   localStorage.setItem('dashboard-token', token);
+  localStorage.setItem('dashboard-token-time', String(Date.now()));
 }
 
 // Override fetchAPI to include token
@@ -259,10 +260,109 @@ document.addEventListener('keydown', (e) => {
 });
 
 function initApp() {
+  checkSessionExpiry();
   renderPage(getPageFromHash());
   updateGlobalStatus();
+  checkNotifications();
   startAutoRefresh();
   setInterval(updateGlobalStatus, REFRESH_MS);
+  setInterval(checkNotifications, 60000); // Check notifications every minute
+}
+
+// ─── Global Search (#12) ────────────────────────────────────────
+let searchDebounce = null;
+async function handleGlobalSearch(event) {
+  const query = event.target.value.trim();
+  const resultsEl = document.getElementById('global-search-results');
+  if (query.length < 2) { resultsEl.style.display = 'none'; return; }
+
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(async () => {
+    try {
+      const [prospects, campaigns, content] = await Promise.all([
+        fetchAPI(`prospects?search=${encodeURIComponent(query)}&limit=5`),
+        fetchAPI('campaigns'),
+        fetchAPI(`content?search=${encodeURIComponent(query)}&limit=5`),
+      ]);
+
+      const matchedCampaigns = (campaigns.campaigns || []).filter(c =>
+        c.name.toLowerCase().includes(query.toLowerCase()));
+
+      let html = '';
+      if (prospects.prospects?.length > 0) {
+        html += '<div class="search-section"><div class="search-section-title">Prospects</div>';
+        html += prospects.prospects.map(p => `<a class="search-result" href="#/prospects" onclick="document.getElementById('global-search-results').style.display='none'">${p.prospect_name || p.email} <span class="cell-muted">${p.company || ''}</span></a>`).join('');
+        html += '</div>';
+      }
+      if (matchedCampaigns.length > 0) {
+        html += '<div class="search-section"><div class="search-section-title">Campaigns</div>';
+        html += matchedCampaigns.slice(0, 3).map(c => `<a class="search-result" href="#/campaigns" onclick="document.getElementById('global-search-results').style.display='none'">${c.name} <span class="cell-muted">[${c.status}]</span></a>`).join('');
+        html += '</div>';
+      }
+      if (content.items?.length > 0) {
+        html += '<div class="search-section"><div class="search-section-title">Content</div>';
+        html += content.items.map(i => `<a class="search-result" href="#/content" onclick="document.getElementById('global-search-results').style.display='none'">${i.key} <span class="cell-muted">[${i.category}]</span></a>`).join('');
+        html += '</div>';
+      }
+
+      resultsEl.innerHTML = html || '<div class="search-empty">No results found</div>';
+      resultsEl.style.display = 'block';
+    } catch { resultsEl.style.display = 'none'; }
+  }, 300);
+}
+
+// Close search on click outside
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.global-search-bar')) {
+    const el = document.getElementById('global-search-results');
+    if (el) el.style.display = 'none';
+  }
+});
+
+// ─── Notifications (#10) ────────────────────────────────────────
+let notifications = [];
+
+async function checkNotifications() {
+  try {
+    const data = await fetchAPI('overview');
+    notifications = [];
+    if (data.creditBalance < 100) notifications.push({ type: 'danger', msg: `Low credits: ${formatCents(data.creditBalance)}` });
+    if (data.lastPipelineReview?.staleLeads > 0) notifications.push({ type: 'warning', msg: `${data.lastPipelineReview.staleLeads} leads need follow-up` });
+    if (data.lastCampaignSnapshot?.conversionRate < 1 && data.lastCampaignSnapshot?.sent > 50) {
+      notifications.push({ type: 'warning', msg: `Campaign conversion below 1%` });
+    }
+
+    const badge = document.getElementById('notif-count');
+    if (badge) {
+      if (notifications.length > 0) { badge.textContent = notifications.length; badge.style.display = 'inline'; }
+      else { badge.style.display = 'none'; }
+    }
+  } catch {}
+}
+
+function toggleNotifications() {
+  if (notifications.length === 0) { showToast('No alerts', 'info'); return; }
+  notifications.forEach(n => showToast(n.msg, n.type === 'danger' ? 'error' : 'info'));
+}
+
+// ─── Session Expiry (#17) ───────────────────────────────────────
+function checkSessionExpiry() {
+  const tokenTime = localStorage.getItem('dashboard-token-time');
+  if (tokenTime) {
+    const elapsed = Date.now() - parseInt(tokenTime, 10);
+    if (elapsed > 7 * 24 * 60 * 60 * 1000) { // 7 days
+      localStorage.removeItem('dashboard-token');
+      localStorage.removeItem('dashboard-token-time');
+      authToken = '';
+      showToast('Session expired. Please log in again.', 'error');
+    }
+  }
+}
+
+// ─── Input Sanitization (#18) ───────────────────────────────────
+function sanitizeHTML(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // ─── Init ───────────────────────────────────────────────────────

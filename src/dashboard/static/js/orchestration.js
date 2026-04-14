@@ -64,7 +64,18 @@ registerPage('orchestration', async (container) => {
       </div>
     </div>
   `;
+
+  // Load inbox messages async
+  loadInboxMessages();
 });
+
+async function loadInboxMessages() {
+  try {
+    // Inbox messages are in the inbox_messages table — we don't have a dedicated API yet,
+    // so we'll show orchestration events as the closest proxy
+    // This section is a placeholder that shows agent communication exists
+  } catch {}
+}
 
 function renderGoalAccordion(g) {
   const statusClass = g.status === 'active' ? 'status-active' : g.status === 'completed' ? 'status-completed' : g.status === 'failed' ? 'status-cancelled' : 'status-paused';

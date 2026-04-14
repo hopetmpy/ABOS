@@ -116,6 +116,22 @@ registerPage('settings', async (container) => {
     </div>
 
     <div class="section-card">
+      <h3>Lead Scoring Rules</h3>
+      <p class="section-description">Configure how prospects are scored. Points are awarded when a rule matches.</p>
+      <div id="scoring-rules-list"><div class="spinner"></div></div>
+      <div style="margin-top:12px;">
+        <h4 style="font-size:0.8rem; margin-bottom:8px;">Add Rule</h4>
+        <div class="form-row">
+          <div class="form-group"><label>Field</label><select id="sr-field"><option value="company">Company</option><option value="title">Title</option><option value="deal_value_cents">Deal Value</option><option value="trust_score">Trust Score</option><option value="email">Email</option><option value="source">Source</option><option value="segment">Segment</option><option value="interaction_count">Interactions</option></select></div>
+          <div class="form-group"><label>Operator</label><select id="sr-op"><option value="not_empty">Exists</option><option value="equals">Equals</option><option value="contains">Contains</option><option value="greater_than">Greater Than</option><option value="less_than">Less Than</option></select></div>
+          <div class="form-group"><label>Value</label><input type="text" id="sr-value" placeholder="(optional)"></div>
+          <div class="form-group"><label>Points</label><input type="number" id="sr-points" value="10" min="-50" max="100"></div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="addScoringRule()">Add Rule</button>
+      </div>
+    </div>
+
+    <div class="section-card">
       <h3>Dashboard Preferences</h3>
       <div class="settings-list">
         <div class="setting-row">
@@ -179,6 +195,51 @@ function changeRefreshInterval(ms) {
     showToast('Auto-refresh disabled', 'info');
   }
 }
+
+// ─── Lead Scoring Rules ─────────────────────────────────────
+async function loadScoringRules() {
+  const el = document.getElementById('scoring-rules-list');
+  if (!el) return;
+  try {
+    const data = await fetchAPI('lead-scoring/config');
+    if (!data.rules || data.rules.length === 0) {
+      el.innerHTML = '<div class="cell-muted" style="padding:8px 0;">No scoring rules configured. Add one below.</div>';
+      return;
+    }
+    el.innerHTML = data.rules.map(r => `
+      <div class="setting-row">
+        <span class="setting-label"><code>${r.field}</code> ${r.operator} ${r.value || ''} = <strong>${r.points}pts</strong></span>
+        <span class="setting-value">
+          <span class="health-badge health-${r.enabled ? 'healthy' : 'disabled'}">${r.enabled ? 'Active' : 'Off'}</span>
+          <button class="btn-micro" onclick="deleteScoringRule('${r.id}')" title="Delete">&#10005;</button>
+        </span>
+      </div>
+    `).join('');
+  } catch { el.innerHTML = '<div class="cell-muted">Failed to load rules.</div>'; }
+}
+
+async function addScoringRule() {
+  const field = document.getElementById('sr-field').value;
+  const operator = document.getElementById('sr-op').value;
+  const value = document.getElementById('sr-value').value.trim() || null;
+  const points = parseInt(document.getElementById('sr-points').value) || 10;
+  try {
+    await postAPI('lead-scoring/rules', { field, operator, value, points });
+    showToast('Scoring rule added', 'success');
+    loadScoringRules();
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function deleteScoringRule(id) {
+  try {
+    await fetch(`/api/lead-scoring/rules/${id}`, { method: 'DELETE' });
+    showToast('Rule deleted', 'success');
+    loadScoringRules();
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+// Auto-load scoring rules when settings page renders
+setTimeout(() => { if (currentPage === 'settings') loadScoringRules(); }, 100);
 
 // Load saved preferences on startup
 (function loadPreferences() {

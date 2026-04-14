@@ -107,8 +107,17 @@
         <div class="credit-display" id="credit-display">
           Credits: <span id="credit-amount">--</span>
         </div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme">&#9681;</button>
+          <button class="theme-toggle-btn" onclick="toggleNotifications()" title="Alerts" id="notif-btn">&#128276;<span id="notif-count" class="notif-badge" style="display:none">0</span></button>
+        </div>
       </div>
     </nav>
+
+    <div class="global-search-bar" id="global-search-bar">
+      <input type="text" id="global-search-input" placeholder="Search prospects, campaigns, content..." onkeyup="handleGlobalSearch(event)">
+      <div id="global-search-results" class="global-search-results" style="display:none"></div>
+    </div>
 
     <main class="content" id="main-content">
       <div class="page-loading" id="page-loading">

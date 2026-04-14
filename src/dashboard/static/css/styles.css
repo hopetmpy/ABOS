@@ -1493,6 +1493,122 @@ body {
   body { background: white; color: black; }
 }
 
+/* ─── Onboarding ──────────────────────────────────────────── */
+.onboarding-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.onboard-card {
+  display: block;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  text-decoration: none;
+  color: var(--text-primary);
+  transition: border-color var(--transition);
+  position: relative;
+}
+.onboard-card:hover { border-color: var(--accent); }
+.onboard-card strong { display: block; font-size: 0.95rem; margin-bottom: 4px; }
+.onboard-card p { font-size: 0.8rem; color: var(--text-secondary); margin: 0; line-height: 1.4; }
+.onboard-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+/* ─── Global Search ───────────────────────────────────────── */
+.global-search-bar {
+  margin-left: var(--sidebar-width);
+  padding: 8px 32px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  position: relative;
+}
+.global-search-bar input {
+  width: 100%;
+  max-width: 500px;
+  padding: 6px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  outline: none;
+  font-family: var(--font-sans);
+}
+.global-search-bar input:focus { border-color: var(--accent); }
+.global-search-results {
+  position: absolute;
+  top: 100%;
+  left: 32px;
+  width: calc(100% - 64px);
+  max-width: 500px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 0 0 var(--radius) var(--radius);
+  box-shadow: var(--shadow-lg);
+  z-index: 200;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.search-section { padding: 4px 0; }
+.search-section-title { font-size: 0.6rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; padding: 4px 12px; }
+.search-result { display: block; padding: 6px 12px; color: var(--text-primary); text-decoration: none; font-size: 0.8rem; }
+.search-result:hover { background: var(--bg-hover); }
+.search-empty { padding: 12px; color: var(--text-muted); font-size: 0.8rem; text-align: center; }
+
+/* ─── Theme Toggle + Notification Badge ───────────────────── */
+.theme-toggle-btn {
+  background: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  position: relative;
+  transition: all var(--transition);
+}
+.theme-toggle-btn:hover { color: var(--text-primary); border-color: var(--accent); }
+.notif-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: var(--danger);
+  color: white;
+  font-size: 0.55rem;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 8px;
+  min-width: 14px;
+  text-align: center;
+}
+
+/* ─── Micro Buttons (on kanban cards) ─────────────────────── */
+.btn-micro {
+  background: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.7rem;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all var(--transition);
+  line-height: 1;
+}
+.btn-micro:hover { background: var(--accent); color: white; border-color: var(--accent); }
+
 /* ─── Memory Items ────────────────────────────────────────── */
 .memory-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
 .memory-item { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--border-color); }
@@ -1714,4 +1830,11 @@ body {
   .mobile-nav { display: block; }
   .grid-2 { grid-template-columns: 1fr; }
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .global-search-bar { margin-left: 0; padding: 8px 16px; }
+  .disc-guide-grid { grid-template-columns: repeat(2, 1fr); }
+  .ab-variants { flex-direction: column; }
+  .ab-vs { justify-content: center; }
+  .soul-hero { flex-direction: column; text-align: center; }
+  .tools-grid { grid-template-columns: 1fr; }
+  .onboarding-grid { grid-template-columns: 1fr; }
 }
