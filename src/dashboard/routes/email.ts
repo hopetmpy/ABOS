@@ -20,6 +20,15 @@ import {
   type EmailAccount,
   type QueuedEmail,
 } from "../email-engine.js";
+import {
+  checkDnsAuth,
+  getNextSendingAccount,
+  getDomainRotationStats,
+  verifyEmailAddress,
+  calculateReputationScore,
+  checkBlacklists,
+  checkSpamScore,
+} from "../deliverability-engine.js";
 
 function json(res: http.ServerResponse, data: unknown, status = 200): void {
   res.writeHead(status, { "Content-Type": "application/json" });
@@ -361,6 +370,62 @@ function handleGetWarmupStatus(db: BetterSqlite3.Database, res: http.ServerRespo
   }
 }
 
+// ─── DNS Auth Check (SPF/DKIM/DMARC) ────────────────────────────
+
+async function handleCheckDnsAuth(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  const body = await parseBody(req);
+  const domain = body.domain as string;
+  if (!domain) return err(res, "domain required");
+  const result = await checkDnsAuth(domain, (body.dkimSelector as string) || "default");
+  json(res, result);
+}
+
+// ─── Domain Rotation Stats ──────────────────────────────────────
+
+function handleGetDomainRotation(db: BetterSqlite3.Database, res: http.ServerResponse): void {
+  const stats = getDomainRotationStats(db);
+  const nextAccount = getNextSendingAccount(db);
+  json(res, { accounts: stats, nextSendingAccount: nextAccount ? { id: nextAccount.id, email: nextAccount.email_address } : null });
+}
+
+// ─── Email Verification (SMTP RCPT TO) ─────────────────────────
+
+async function handleVerifyEmail(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  const body = await parseBody(req);
+  const email = body.email as string;
+  if (!email) return err(res, "email required");
+  const result = await verifyEmailAddress(email);
+  json(res, result);
+}
+
+// ─── Reputation Score ───────────────────────────────────────────
+
+function handleGetReputation(db: BetterSqlite3.Database, res: http.ServerResponse): void {
+  const scores = calculateReputationScore(db);
+  json(res, { domains: scores });
+}
+
+// ─── Blacklist Check ────────────────────────────────────────────
+
+async function handleCheckBlacklist(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  const body = await parseBody(req);
+  const target = (body.ip as string) || (body.domain as string);
+  if (!target) return err(res, "ip or domain required");
+  const result = await checkBlacklists(target);
+  json(res, result);
+}
+
+// ─── Spam Score Check ───────────────────────────────────────────
+
+async function handleCheckSpamScore(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  const body = await parseBody(req);
+  const subject = (body.subject as string) || "";
+  const emailBody = (body.body as string) || "";
+  if (!subject && !emailBody) return err(res, "subject or body required");
+  const result = checkSpamScore(subject, emailBody);
+  json(res, result);
+}
+
 // ─── Inbox Placement ────────────────────────────────────────────
 
 function handleGetPlacement(db: BetterSqlite3.Database, res: http.ServerResponse): void {
@@ -419,6 +484,24 @@ export async function handleEmailRoutes(
 
   // Inbox placement
   if (pathOnly === "/api/email/placement" && method === "GET") { handleGetPlacement(db, res); return true; }
+
+  // DNS Auth (SPF/DKIM/DMARC)
+  if (pathOnly === "/api/email/dns-auth" && method === "POST") { await handleCheckDnsAuth(req, res); return true; }
+
+  // Domain rotation
+  if (pathOnly === "/api/email/domain-rotation" && method === "GET") { handleGetDomainRotation(db, res); return true; }
+
+  // Email verification
+  if (pathOnly === "/api/email/verify" && method === "POST") { await handleVerifyEmail(req, res); return true; }
+
+  // Reputation score
+  if (pathOnly === "/api/email/reputation" && method === "GET") { handleGetReputation(db, res); return true; }
+
+  // Blacklist check
+  if (pathOnly === "/api/email/blacklist" && method === "POST") { await handleCheckBlacklist(req, res); return true; }
+
+  // Spam score check
+  if (pathOnly === "/api/email/spam-score" && method === "POST") { await handleCheckSpamScore(req, res); return true; }
 
   return false; // Not handled
 }
