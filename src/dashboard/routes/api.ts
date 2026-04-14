@@ -9,6 +9,7 @@ import type http from "node:http";
 import crypto from "node:crypto";
 import type BetterSqlite3 from "better-sqlite3";
 import { createLogger } from "../../observability/logger.js";
+import { handleEmailRoutes } from "./email.js";
 import {
   verifyAuth, handleAuthSetup, handleAuthLogin,
   handleGetTemplates, handleCreateTemplate, handleUpdateTemplate, handleDeleteTemplate,
@@ -1258,6 +1259,12 @@ export async function handleApiRequest(
     // ─── Auth middleware for all other endpoints ───
     if (!verifyAuth(db, req)) {
       return errorResponse(res, "Unauthorized. Provide a valid Bearer token.", 401);
+    }
+
+    // Email routes (SMTP adapter)
+    if (pathOnly.startsWith("/api/email/")) {
+      const handled = await handleEmailRoutes(req, res, db, pathOnly, method);
+      if (handled) return;
     }
 
     // Overview

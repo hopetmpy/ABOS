@@ -5,7 +5,7 @@
  * The database IS the automaton's memory.
  */
 
-export const SCHEMA_VERSION = 13;
+export const SCHEMA_VERSION = 14;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -818,4 +818,50 @@ export const MIGRATION_V13 = `
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     last_used_at TEXT
   );
+`;
+
+// === SMTP Email Adapter ===
+
+export const MIGRATION_V14 = `
+  -- Schema version: 14
+  -- SMTP email adapter: accounts, send queue, sent log
+
+  CREATE TABLE IF NOT EXISTS email_accounts (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email_address TEXT NOT NULL,
+    smtp_host TEXT NOT NULL,
+    smtp_port INTEGER NOT NULL DEFAULT 587,
+    smtp_secure INTEGER NOT NULL DEFAULT 0,
+    smtp_user TEXT NOT NULL,
+    smtp_pass TEXT NOT NULL,
+    is_default INTEGER NOT NULL DEFAULT 0,
+    daily_limit INTEGER NOT NULL DEFAULT 50,
+    sent_today INTEGER NOT NULL DEFAULT 0,
+    sent_today_reset TEXT,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','paused','error')),
+    last_error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS email_send_queue (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    prospect_id TEXT,
+    campaign_id TEXT,
+    sequence_id TEXT,
+    template_id TEXT,
+    to_email TEXT NOT NULL,
+    to_name TEXT,
+    subject TEXT NOT NULL,
+    body TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','sending','sent','failed','cancelled')),
+    scheduled_at TEXT NOT NULL DEFAULT (datetime('now')),
+    sent_at TEXT,
+    error TEXT,
+    message_id TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_send_queue_status ON email_send_queue(status, scheduled_at);
+  CREATE INDEX IF NOT EXISTS idx_send_queue_prospect ON email_send_queue(prospect_id);
 `;

@@ -32,6 +32,9 @@ importers:
       js-tiktoken:
         specifier: ^1.0.21
         version: 1.0.21
+      nodemailer:
+        specifier: ^8.0.5
+        version: 8.0.5
       openai:
         specifier: ^6.24.0
         version: 6.24.0(ws@8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))
@@ -60,6 +63,9 @@ importers:
       '@types/node':
         specifier: ^20.10.0
         version: 20.19.33
+      '@types/nodemailer':
+        specifier: ^8.0.0
+        version: 8.0.0
       tsx:
         specifier: ^4.7.0
         version: 4.21.0
@@ -622,6 +628,9 @@ packages:
   '@types/node@22.7.5':
     resolution: {integrity: sha512-jML7s2NAzMWc//QSJ1a3prpk78cOPchGvXJsC3C6R6PSMoooztvRVQEz89gmBTBY1SPMaqo5teB4uNHPdetShQ==}
 
+  '@types/nodemailer@8.0.0':
+    resolution: {integrity: sha512-fyf8jWULsCo0d0BuoQ75i6IeoHs47qcqxWc7yUdUcV0pOZGjUTTOvwdG1PRXUDqN/8A64yQdQdnA2pZgcdi+cA==}
+
   '@types/uuid@10.0.0':
     resolution: {integrity: sha512-7gqG38EyHgyP1S+7+xomFtL+ZNHcKv6DwNaCZmJmo1vgMugyF3TCnXVg4t1uk89mLNwnLtnY3TpOpCOyp1/xHQ==}
 
@@ -995,6 +1004,10 @@ packages:
   node-gyp-build@4.8.4:
     resolution: {integrity: sha512-LA4ZjwlnUblHVgq0oBF3Jl/6h/Nvs5fzBLwdEF4nuxnFdsfajde4WfxtJr3CaiH+F6ewcIB/q4jQ4UzPyid+CQ==}
     hasBin: true
+
+  nodemailer@8.0.5:
+    resolution: {integrity: sha512-0PF8Yb1yZuQfQbq+5/pZJrtF6WQcjTd5/S4JOHs9PGFxuTqoB/icwuB44pOdURHJbRKX1PPoJZtY7R4VUoCC8w==}
+    engines: {node: '>=6.0.0'}
 
   once@1.4.0:
     resolution: {integrity: sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w==}
@@ -1718,6 +1731,10 @@ snapshots:
     dependencies:
       undici-types: 6.19.8
 
+  '@types/nodemailer@8.0.0':
+    dependencies:
+      '@types/node': 20.19.33
+
   '@types/uuid@10.0.0': {}
 
   '@types/ws@7.4.7':
@@ -2106,6 +2123,8 @@ snapshots:
 
   node-gyp-build@4.8.4:
     optional: true
+
+  nodemailer@8.0.5: {}
 
   once@1.4.0:
     dependencies:
