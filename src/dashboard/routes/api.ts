@@ -6,6 +6,7 @@
  */
 
 import type http from "node:http";
+import crypto from "node:crypto";
 import type BetterSqlite3 from "better-sqlite3";
 import { createLogger } from "../../observability/logger.js";
 
@@ -117,6 +118,194 @@ function handleOverview(db: BetterSqlite3.Database, res: http.ServerResponse): v
   });
 }
 
+// ─── Pipeline ───────────────────────────────────────────────────
+
+interface ProspectRow {
+  id: string;
+  entity_address: string;
+  prospect_name: string | null;
+  company: string | null;
+  title: string | null;
+  email: string | null;
+  stage: string;
+  source: string | null;
+  deal_value_cents: number;
+  expected_close_date: string | null;
+  segment: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface RelationshipRow {
+  entity_address: string;
+  trust_score: number;
+  interaction_count: number;
+  last_interaction_at: string | null;
+}
+
+const VALID_STAGES = new Set([
+  "cold", "contacted", "engaged", "qualified", "negotiating", "won", "lost", "nurture",
+]);
+
+function handleGetPipeline(db: BetterSqlite3.Database, res: http.ServerResponse): void {
+  const prospects = safeQuery<ProspectRow>(
+    db,
+    "SELECT * FROM prospect_pipeline ORDER BY updated_at DESC",
+  );
+
+  // Enrich with trust scores from relationship_memory
+  const enriched = prospects.map((p) => {
+    const rel = safeQueryOne<RelationshipRow>(
+      db,
+      "SELECT entity_address, trust_score, interaction_count, last_interaction_at FROM relationship_memory WHERE entity_address = ?",
+      [p.entity_address],
+    );
+    return {
+      ...p,
+      trustScore: rel?.trust_score ?? null,
+      interactionCount: rel?.interaction_count ?? 0,
+      lastInteractionAt: rel?.last_interaction_at ?? null,
+    };
+  });
+
+  // Summary
+  const summary: Record<string, { count: number; value: number }> = {};
+  let totalValue = 0;
+  for (const p of prospects) {
+    if (!summary[p.stage]) summary[p.stage] = { count: 0, value: 0 };
+    summary[p.stage].count++;
+    summary[p.stage].value += p.deal_value_cents;
+    totalValue += p.deal_value_cents;
+  }
+
+  jsonResponse(res, {
+    prospects: enriched,
+    summary,
+    totalCount: prospects.length,
+    totalValue,
+  });
+}
+
+function handleCreateProspect(
+  db: BetterSqlite3.Database,
+  res: http.ServerResponse,
+  body: Record<string, unknown>,
+): void {
+  const entityAddress = body.entityAddress || body.email;
+  if (!entityAddress || typeof entityAddress !== "string") {
+    return errorResponse(res, "entityAddress or email is required");
+  }
+
+  const stage = (body.stage as string) || "cold";
+  if (!VALID_STAGES.has(stage)) {
+    return errorResponse(res, `Invalid stage: ${stage}`);
+  }
+
+  const id = `dash_${Date.now().toString(36)}_${crypto.randomBytes(6).toString("hex")}`;
+  const now = new Date().toISOString();
+
+  try {
+    db.prepare(`
+      INSERT INTO prospect_pipeline (id, entity_address, prospect_name, company, title, email, stage, source, deal_value_cents, expected_close_date, segment, notes, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      entityAddress,
+      (body.prospectName as string) || null,
+      (body.company as string) || null,
+      (body.title as string) || null,
+      (body.email as string) || null,
+      stage,
+      (body.source as string) || null,
+      typeof body.dealValueCents === "number" ? body.dealValueCents : 0,
+      (body.expectedCloseDate as string) || null,
+      (body.segment as string) || null,
+      (body.notes as string) || null,
+      now,
+      now,
+    );
+
+    const created = safeQueryOne<ProspectRow>(db, "SELECT * FROM prospect_pipeline WHERE id = ?", [id]);
+    jsonResponse(res, created, 201);
+  } catch (err: any) {
+    errorResponse(res, err.message || "Failed to create prospect", 500);
+  }
+}
+
+function handleUpdateProspect(
+  db: BetterSqlite3.Database,
+  res: http.ServerResponse,
+  id: string,
+  body: Record<string, unknown>,
+): void {
+  const existing = safeQueryOne<ProspectRow>(db, "SELECT * FROM prospect_pipeline WHERE id = ?", [id]);
+  if (!existing) {
+    return errorResponse(res, "Prospect not found", 404);
+  }
+
+  if (body.stage && typeof body.stage === "string" && !VALID_STAGES.has(body.stage)) {
+    return errorResponse(res, `Invalid stage: ${body.stage}`);
+  }
+
+  const updates: string[] = [];
+  const values: unknown[] = [];
+
+  const allowedFields: Record<string, string> = {
+    prospectName: "prospect_name",
+    company: "company",
+    title: "title",
+    email: "email",
+    stage: "stage",
+    source: "source",
+    dealValueCents: "deal_value_cents",
+    expectedCloseDate: "expected_close_date",
+    segment: "segment",
+    notes: "notes",
+  };
+
+  for (const [jsKey, dbCol] of Object.entries(allowedFields)) {
+    if (body[jsKey] !== undefined) {
+      updates.push(`${dbCol} = ?`);
+      values.push(body[jsKey]);
+    }
+  }
+
+  if (updates.length === 0) {
+    return errorResponse(res, "No fields to update");
+  }
+
+  updates.push("updated_at = ?");
+  values.push(new Date().toISOString());
+  values.push(id);
+
+  try {
+    db.prepare(`UPDATE prospect_pipeline SET ${updates.join(", ")} WHERE id = ?`).run(...values);
+    const updated = safeQueryOne<ProspectRow>(db, "SELECT * FROM prospect_pipeline WHERE id = ?", [id]);
+    jsonResponse(res, updated);
+  } catch (err: any) {
+    errorResponse(res, err.message || "Failed to update prospect", 500);
+  }
+}
+
+function handleDeleteProspect(
+  db: BetterSqlite3.Database,
+  res: http.ServerResponse,
+  id: string,
+): void {
+  const existing = safeQueryOne<ProspectRow>(db, "SELECT * FROM prospect_pipeline WHERE id = ?", [id]);
+  if (!existing) {
+    return errorResponse(res, "Prospect not found", 404);
+  }
+
+  try {
+    db.prepare("DELETE FROM prospect_pipeline WHERE id = ?").run(id);
+    jsonResponse(res, { deleted: true, id });
+  } catch (err: any) {
+    errorResponse(res, err.message || "Failed to delete prospect", 500);
+  }
+}
+
 // ─── Route Dispatcher ──────────────────────────────────────────────
 
 export async function handleApiRequest(
@@ -130,10 +319,29 @@ export async function handleApiRequest(
   // Strip query string for routing
   const pathOnly = url.split("?")[0];
 
+  // Extract ID from paths like /api/pipeline/abc123
+  const pipelineMatch = pathOnly.match(/^\/api\/pipeline\/([^/]+)$/);
+
   try {
     // Overview
     if (pathOnly === "/api/overview" && method === "GET") {
       return handleOverview(db, res);
+    }
+
+    // Pipeline
+    if (pathOnly === "/api/pipeline" && method === "GET") {
+      return handleGetPipeline(db, res);
+    }
+    if (pathOnly === "/api/pipeline" && method === "POST") {
+      const body = await parseBody(req);
+      return handleCreateProspect(db, res, body);
+    }
+    if (pipelineMatch && method === "PATCH") {
+      const body = await parseBody(req);
+      return handleUpdateProspect(db, res, pipelineMatch[1], body);
+    }
+    if (pipelineMatch && method === "DELETE") {
+      return handleDeleteProspect(db, res, pipelineMatch[1]);
     }
 
     // Not found
