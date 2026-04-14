@@ -12,6 +12,7 @@ import { createLogger } from "../../observability/logger.js";
 import { handleEmailRoutes } from "./email.js";
 import { handleLinkedInRoutes } from "./linkedin.js";
 import { handleAIBrandABRoutes } from "./ai-brand-ab.js";
+import { handleBrainRoutes } from "./brain.js";
 import {
   verifyAuth, handleAuthSetup, handleAuthLogin,
   handleGetTemplates, handleCreateTemplate, handleUpdateTemplate, handleDeleteTemplate,
@@ -1293,6 +1294,12 @@ export async function handleApiRequest(
     // AI Content Generation, Brand Knowledge, A/B Testing
     if (pathOnly.startsWith("/api/ai/") || pathOnly.startsWith("/api/brand") || pathOnly.startsWith("/api/ab-tests")) {
       const handled = await handleAIBrandABRoutes(req, res, db, pathOnly, method, url);
+      if (handled) return;
+    }
+
+    // Agent Brain (Memory, Orchestration, Soul, Tools)
+    if (pathOnly.startsWith("/api/memory/") || pathOnly.startsWith("/api/orchestration/") || pathOnly.startsWith("/api/soul") || pathOnly.startsWith("/api/tools/")) {
+      const handled = await handleBrainRoutes(req, res, db, pathOnly, method, url);
       if (handled) return;
     }
 

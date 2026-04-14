@@ -1493,6 +1493,63 @@ body {
   body { background: white; color: black; }
 }
 
+/* ─── Memory Items ────────────────────────────────────────── */
+.memory-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.memory-item { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--border-color); }
+.memory-item:last-child { border-bottom: none; }
+.memory-priority { width: 6px; height: 6px; border-radius: 50%; margin-top: 7px; flex-shrink: 0; }
+.memory-text { flex: 1; font-size: 0.85rem; color: var(--text-primary); line-height: 1.4; }
+
+/* ─── Goal Accordion ──────────────────────────────────────── */
+.goal-accordion { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius); margin-bottom: 8px; }
+.goal-summary { padding: 12px; cursor: pointer; list-style: none; }
+.goal-summary::-webkit-details-marker { display: none; }
+.goal-title-row { display: flex; justify-content: space-between; align-items: center; }
+.goal-title { font-weight: 600; font-size: 0.9rem; }
+.goal-detail { padding: 0 12px 12px; }
+
+.task-row { display: flex; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border-color); }
+.task-row:last-child { border-bottom: none; }
+.task-status { font-size: 1rem; width: 24px; text-align: center; }
+.task-info { flex: 1; display: flex; gap: 8px; align-items: center; font-size: 0.8rem; flex-wrap: wrap; }
+.task-title { font-weight: 500; }
+
+/* ─── Soul Hero ───────────────────────────────────────────── */
+.soul-hero { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 24px; display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+.soul-name { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); }
+.soul-purpose { font-size: 0.9rem; color: var(--text-secondary); margin-top: 4px; line-height: 1.4; max-width: 500px; }
+.soul-meta { display: flex; gap: 16px; margin-top: 8px; font-size: 0.75rem; color: var(--text-muted); }
+.soul-alignment { text-align: center; min-width: 150px; }
+.alignment-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.alignment-bar { width: 150px; height: 10px; background: var(--bg-hover); border-radius: 5px; overflow: hidden; }
+.alignment-fill { height: 100%; border-radius: 5px; transition: width 0.5s; }
+.alignment-fill.positive { background: var(--success); }
+.alignment-fill.warning { background: var(--warning); }
+.alignment-fill.danger { background: var(--danger); }
+.alignment-value { font-size: 1.4rem; font-weight: 700; font-family: var(--font-mono); margin-top: 4px; }
+
+.soul-section { margin-bottom: 16px; }
+.soul-section h4 { font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; }
+.soul-quote { font-style: italic; color: var(--text-secondary); padding: 12px; border-left: 3px solid var(--accent); background: var(--bg-primary); border-radius: 0 var(--radius) var(--radius) 0; font-size: 0.85rem; line-height: 1.5; }
+.soul-text { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5; }
+.soul-list { padding-left: 20px; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6; }
+
+.soul-timeline { display: flex; flex-direction: column; gap: 2px; }
+.soul-timeline-entry { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; }
+.soul-version { font-size: 0.75rem; font-weight: 700; font-family: var(--font-mono); color: var(--text-muted); width: 30px; }
+.soul-timeline-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+.soul-timeline-content { flex: 1; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* ─── Tools Grid ──────────────────────────────────────────── */
+.tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.tool-category { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius); padding: 12px; }
+.tool-item { padding: 6px 0; border-bottom: 1px solid var(--border-color); }
+.tool-item:last-child { border-bottom: none; }
+.tool-item-header { display: flex; justify-content: space-between; align-items: center; }
+.tool-name { font-size: 0.8rem; }
+.tool-desc { font-size: 0.7rem; color: var(--text-muted); margin-top: 2px; }
+.tool-usage { font-size: 0.65rem; color: var(--text-muted); font-family: var(--font-mono); margin-top: 2px; }
+
 /* ─── Login Screen ────────────────────────────────────────── */
 .login-screen {
   position: fixed;
