@@ -46,8 +46,9 @@ registerPage('campaigns', async (container) => {
     ${renderCreateCampaignModal()}
   `;
 
-  // Load sequence section async
+  // Load sequence section + analytics async
   loadSequenceSection();
+  loadCampaignAnalytics();
 });
 
 async function loadSequenceSection() {
@@ -195,7 +196,10 @@ function renderCampaignCard(c) {
             <div class="funnel-label">Converted</div>
           </div>
         </div>
-        <div class="campaign-cost">Cost: ${formatCents(c.cost_cents)} &middot; ${c.total_converted > 0 ? `$${(c.cost_cents / c.total_converted / 100).toFixed(2)}/conversion` : 'No conversions yet'}</div>
+        <div class="campaign-cost">
+          Cost: ${formatCents(c.cost_cents)} &middot; ${c.total_converted > 0 ? `$${(c.cost_cents / c.total_converted / 100).toFixed(2)}/conversion` : 'No conversions yet'}
+          <a href="/api/analytics/export/${c.id}" class="btn-micro" style="margin-left:8px;" download title="Export CSV" onclick="event.stopPropagation()">&#128190; Export</a>
+        </div>
       ` : `
         <div class="campaign-no-data">No emails sent yet</div>
       `}
@@ -368,4 +372,65 @@ async function openCampaignDetail(id) {
   } catch (err) {
     showToast(err.message, 'error');
   }
+}
+
+// ─── Campaign Analytics ─────────────────────────────────────────
+
+async function loadCampaignAnalytics() {
+  try {
+    const [trends, sendTime, comparison] = await Promise.all([
+      fetchAPI('analytics/reply-trends?days=30'),
+      fetchAPI('analytics/send-time'),
+      fetchAPI('analytics/sequences'),
+    ]);
+
+    const main = document.getElementById('main-content');
+
+    // Reply trends section
+    if (trends.timeline && trends.timeline.length > 0) {
+      const trendsSection = document.createElement('div');
+      trendsSection.className = 'section-card';
+      trendsSection.style.marginTop = '20px';
+      trendsSection.innerHTML = `
+        <h3>Reply Rate Trends (${trends.periodDays}d)</h3>
+        <div class="table-container"><table class="data-table"><thead><tr><th>Date</th><th>Sent</th><th>Opened</th><th>Replied</th><th>Open Rate</th><th>Reply Rate</th></tr></thead>
+        <tbody>${trends.timeline.slice(-14).map(d => `
+          <tr><td class="cell-mono">${d.day.slice(5)}</td><td class="cell-mono">${d.sent}</td><td class="cell-mono">${d.opened}</td><td class="cell-mono">${d.replied}</td>
+          <td class="${d.openRate > 30 ? 'positive' : ''}">${d.openRate}%</td><td class="${d.replyRate > 5 ? 'positive' : ''}">${d.replyRate}%</td></tr>
+        `).join('')}</tbody></table></div>
+      `;
+      main.appendChild(trendsSection);
+    }
+
+    // Send time + sequence comparison in grid
+    const gridSection = document.createElement('div');
+    gridSection.className = 'grid-2';
+    gridSection.style.marginTop = '16px';
+    gridSection.innerHTML = `
+      <div class="section-card">
+        <h3>Best Send Time</h3>
+        <p class="section-description">Best open time: <strong>${sendTime.bestOpenHour}</strong> &middot; Best reply time: <strong>${sendTime.bestReplyHour}</strong></p>
+        <div class="stage-bars">
+          ${sendTime.weekdays.map(d => `
+            <div class="stage-row">
+              <span class="stage-label" style="width:40px">${d.name}</span>
+              <div class="stage-bar-track">
+                <div class="stage-bar-fill contacted" style="width:${sendTime.weekdays.length > 0 ? Math.max((d.opens / Math.max(...sendTime.weekdays.map(w => w.opens), 1)) * 100, 2) : 0}%">${d.opens || ''}</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="section-card">
+        <h3>Sequence Comparison</h3>
+        ${comparison.sequences.length === 0 ? '<div class="empty-state"><p>No sequences to compare.</p></div>' :
+          `<div class="table-container"><table class="data-table"><thead><tr><th>Sequence</th><th>Enrolled</th><th>Replied</th><th>Reply Rate</th></tr></thead>
+          <tbody>${comparison.sequences.map(s => `
+            <tr><td class="cell-name">${s.name}</td><td class="cell-mono">${s.enrolled}</td><td class="cell-mono">${s.replied}</td>
+            <td class="${s.replyRate > 5 ? 'positive' : ''} cell-mono">${s.replyRate}%</td></tr>
+          `).join('')}</tbody></table></div>`}
+      </div>
+    `;
+    main.appendChild(gridSection);
+  } catch { /* analytics tables may not exist */ }
 }

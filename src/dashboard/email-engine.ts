@@ -308,7 +308,25 @@ export async function sendEmail(
       opts?.sequenceId || null, opts?.templateId || null,
       to, opts?.toName || null, subject, body);
 
-  // 4. SEND WITH LIST-UNSUBSCRIBE HEADER
+  // 4. INJECT OPEN/CLICK TRACKING
+  const trackingId = genId("trk");
+  // Open tracking pixel
+  body = body + `<img src="/api/track/open/${trackingId}" width="1" height="1" style="display:none" alt="">`;
+  // Click tracking: rewrite links
+  body = body.replace(/<a\s+([^>]*?)href=["']([^"']+)["']/gi, (match, attrs, url) => {
+    if (url.startsWith("mailto:") || url.startsWith("#") || url.startsWith("/api/")) return match;
+    const clickId = `${trackingId}_${crypto.randomBytes(4).toString("hex")}`;
+    return `<a ${attrs}href="/api/track/click/${clickId}?url=${encodeURIComponent(url)}"`;
+  });
+
+  // Store tracking reference
+  try {
+    const { recordOpen } = await import("./sequence-engine.js");
+    db.prepare("INSERT INTO open_click_tracking (id, tracking_type, prospect_id, campaign_id) VALUES (?, 'open', ?, ?)")
+      .run(trackingId, opts?.prospectId || null, opts?.campaignId || null);
+  } catch { /* open_click_tracking table may not exist */ }
+
+  // 5. SEND WITH LIST-UNSUBSCRIBE HEADER
   const transport = createTransport(account);
   const senderDomain = account.email_address.split("@")[1] || "example.com";
 

@@ -17,6 +17,7 @@ import { handleAutonomousRoutes } from "./autonomous.js";
 import { handleWalletRoutes } from "./wallet.js";
 import { handleSequenceRoutes } from "./sequences.js";
 import { handleInboxRoutes } from "./inbox.js";
+import { handleAnalyticsRoutes } from "./analytics.js";
 import {
   verifyAuth, handleAuthSetup, handleAuthLogin,
   handleGetTemplates, handleCreateTemplate, handleUpdateTemplate, handleDeleteTemplate,
@@ -1322,6 +1323,12 @@ export async function handleApiRequest(
     // Unified Inbox
     if (pathOnly.startsWith("/api/inbox")) {
       const handled = await handleInboxRoutes(req, res, db, pathOnly, method, url);
+      if (handled) return;
+    }
+
+    // Campaign Analytics
+    if (pathOnly.startsWith("/api/analytics/")) {
+      const handled = await handleAnalyticsRoutes(req, res, db, pathOnly, method, url);
       if (handled) return;
     }
 
