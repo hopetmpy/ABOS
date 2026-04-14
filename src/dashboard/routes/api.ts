@@ -10,6 +10,7 @@ import crypto from "node:crypto";
 import type BetterSqlite3 from "better-sqlite3";
 import { createLogger } from "../../observability/logger.js";
 import { handleEmailRoutes } from "./email.js";
+import { handleLinkedInRoutes } from "./linkedin.js";
 import {
   verifyAuth, handleAuthSetup, handleAuthLogin,
   handleGetTemplates, handleCreateTemplate, handleUpdateTemplate, handleDeleteTemplate,
@@ -1214,6 +1215,21 @@ function handleUpdateSettings(
     }
   }
 
+  // Humantic AI API key
+  if (body.humanticApiKey && typeof body.humanticApiKey === "string") {
+    try {
+      const existing = db.prepare("SELECT key FROM kv WHERE key = 'humantic_api_key'").get();
+      if (existing) {
+        db.prepare("UPDATE kv SET value = ? WHERE key = 'humantic_api_key'").run(body.humanticApiKey);
+      } else {
+        db.prepare("INSERT INTO kv (key, value) VALUES ('humantic_api_key', ?)").run(body.humanticApiKey);
+      }
+      results.push("humantic_api_key: saved");
+    } catch {
+      results.push("humantic_api_key: failed to save");
+    }
+  }
+
   jsonResponse(res, { updated: results });
 }
 
@@ -1264,6 +1280,12 @@ export async function handleApiRequest(
     // Email routes (SMTP adapter)
     if (pathOnly.startsWith("/api/email/")) {
       const handled = await handleEmailRoutes(req, res, db, pathOnly, method);
+      if (handled) return;
+    }
+
+    // LinkedIn routes (outreach + Humantic AI)
+    if (pathOnly.startsWith("/api/linkedin/")) {
+      const handled = await handleLinkedInRoutes(req, res, db, pathOnly, method, url);
       if (handled) return;
     }
 

@@ -49,6 +49,7 @@ import {
   MIGRATION_V12,
   MIGRATION_V13,
   MIGRATION_V14,
+  MIGRATION_V15,
 } from "./schema.js";
 import type {
   RiskLevel,
@@ -639,6 +640,10 @@ function applyMigrations(db: DatabaseType): void {
     {
       version: 14,
       apply: () => db.exec(MIGRATION_V14),
+    },
+    {
+      version: 15,
+      apply: () => db.exec(MIGRATION_V15),
     },
   ];
 

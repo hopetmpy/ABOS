@@ -5,7 +5,7 @@
  * The database IS the automaton's memory.
  */
 
-export const SCHEMA_VERSION = 14;
+export const SCHEMA_VERSION = 15;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -864,4 +864,54 @@ export const MIGRATION_V14 = `
   );
   CREATE INDEX IF NOT EXISTS idx_send_queue_status ON email_send_queue(status, scheduled_at);
   CREATE INDEX IF NOT EXISTS idx_send_queue_prospect ON email_send_queue(prospect_id);
+`;
+
+// === LinkedIn Outreach + Humantic AI Personality ===
+
+export const MIGRATION_V15 = `
+  -- Schema version: 15
+  -- LinkedIn outreach queue + Humantic AI personality profiles
+
+  CREATE TABLE IF NOT EXISTS humantic_profiles (
+    id TEXT PRIMARY KEY,
+    prospect_id TEXT NOT NULL,
+    linkedin_url TEXT,
+    disc_type TEXT,
+    disc_dominance REAL,
+    disc_influence REAL,
+    disc_steadiness REAL,
+    disc_conscientiousness REAL,
+    ocean_openness REAL,
+    ocean_conscientiousness REAL,
+    ocean_extraversion REAL,
+    ocean_agreeableness REAL,
+    ocean_neuroticism REAL,
+    communication_style TEXT,
+    dos TEXT,
+    donts TEXT,
+    buyer_persona TEXT,
+    confidence REAL DEFAULT 0,
+    raw_response TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_humantic_prospect ON humantic_profiles(prospect_id);
+
+  CREATE TABLE IF NOT EXISTS linkedin_outreach_queue (
+    id TEXT PRIMARY KEY,
+    prospect_id TEXT NOT NULL,
+    prospect_name TEXT,
+    company TEXT,
+    title TEXT,
+    linkedin_url TEXT,
+    message TEXT NOT NULL,
+    personality_context TEXT,
+    disc_type TEXT,
+    campaign_id TEXT,
+    status TEXT NOT NULL DEFAULT 'ready' CHECK(status IN ('ready','copied','sent','skipped')),
+    sent_at TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_linkedin_queue_status ON linkedin_outreach_queue(status);
 `;
