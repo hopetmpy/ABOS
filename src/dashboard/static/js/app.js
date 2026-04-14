@@ -181,11 +181,116 @@ document.querySelectorAll('.nav-link').forEach(link => {
   });
 });
 
-// ─── Init ───────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+// ─── Auth / Login ───────────────────────────────────────────────
+let authToken = localStorage.getItem('dashboard-token') || '';
+
+function setAuthToken(token) {
+  authToken = token;
+  localStorage.setItem('dashboard-token', token);
+}
+
+// Override fetchAPI to include token
+const _origFetch = window.fetch;
+window.fetch = function(url, opts = {}) {
+  if (typeof url === 'string' && url.startsWith('/api/') && authToken) {
+    opts.headers = { ...opts.headers, 'Authorization': `Bearer ${authToken}` };
+  }
+  return _origFetch.call(this, url, opts);
+};
+
+async function checkAuth() {
+  try {
+    const res = await _origFetch('/api/auth/check');
+    const data = await res.json();
+    return data;
+  } catch { return { authConfigured: false, authenticated: false }; }
+}
+
+async function submitLogin() {
+  const token = document.getElementById('login-token').value.trim();
+  if (!token) return;
+  document.getElementById('login-error').textContent = '';
+
+  try {
+    const res = await _origFetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    const data = await res.json();
+    if (data.authenticated) {
+      setAuthToken(token);
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app-wrapper').style.display = 'flex';
+      initApp();
+    } else {
+      document.getElementById('login-error').textContent = 'Invalid token. Please try again.';
+    }
+  } catch (e) {
+    document.getElementById('login-error').textContent = 'Connection error.';
+  }
+}
+
+async function setupAuth() {
+  try {
+    const res = await _origFetch('/api/auth/setup', { method: 'POST' });
+    const data = await res.json();
+    if (data.token) {
+      document.getElementById('login-content').innerHTML = `
+        <div style="margin-top:16px; padding:16px; background:var(--bg-primary); border-radius:var(--radius); border:1px solid var(--success);">
+          <p style="font-size:0.8rem; color:var(--success); margin-bottom:8px;">Token generated! Copy and save it — it won't be shown again.</p>
+          <input type="text" value="${data.token}" readonly onclick="this.select()" style="width:100%; font-family:var(--font-mono); font-size:0.75rem;">
+        </div>
+        <button class="btn btn-primary" style="width:100%; margin-top:12px;" onclick="location.reload()">Continue to Login</button>
+      `;
+    } else {
+      document.getElementById('login-error').textContent = data.error || 'Failed to generate token';
+    }
+  } catch (e) {
+    document.getElementById('login-error').textContent = 'Connection error.';
+  }
+}
+
+// Allow Enter key on login
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && document.getElementById('login-screen').style.display !== 'none') {
+    submitLogin();
+  }
+});
+
+function initApp() {
   renderPage(getPageFromHash());
   updateGlobalStatus();
   startAutoRefresh();
-  // Refresh global status every 30s too
   setInterval(updateGlobalStatus, REFRESH_MS);
+}
+
+// ─── Init ───────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  const auth = await checkAuth();
+
+  if (auth.authConfigured && !auth.authenticated && !authToken) {
+    // Auth is required, show login
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('app-wrapper').style.display = 'none';
+  } else if (auth.authConfigured && authToken) {
+    // Try existing token
+    const res = await _origFetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: authToken }),
+    });
+    const data = await res.json();
+    if (data.authenticated) {
+      initApp();
+    } else {
+      localStorage.removeItem('dashboard-token');
+      authToken = '';
+      document.getElementById('login-screen').style.display = 'flex';
+      document.getElementById('app-wrapper').style.display = 'none';
+    }
+  } else {
+    // No auth configured, go straight in
+    initApp();
+  }
 });
