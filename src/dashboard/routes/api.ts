@@ -306,6 +306,235 @@ function handleDeleteProspect(
   }
 }
 
+// ─── Campaigns ──────────────────────────────────────────────────
+
+interface CampaignRow {
+  id: string;
+  name: string;
+  campaign_type: string;
+  status: string;
+  target_segment: string | null;
+  goal_id: string | null;
+  total_sent: number;
+  total_opened: number;
+  total_clicked: number;
+  total_replied: number;
+  total_converted: number;
+  cost_cents: number;
+  notes: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+const VALID_CAMPAIGN_TYPES = new Set(["outreach", "nurture", "content", "event", "competitive_intel"]);
+const VALID_CAMPAIGN_STATUSES = new Set(["draft", "active", "paused", "completed", "cancelled"]);
+
+function handleGetCampaigns(db: BetterSqlite3.Database, res: http.ServerResponse): void {
+  const campaigns = safeQuery<CampaignRow>(
+    db,
+    "SELECT * FROM campaigns ORDER BY created_at DESC",
+  );
+
+  const summary = {
+    total: campaigns.length,
+    active: campaigns.filter((c) => c.status === "active").length,
+    draft: campaigns.filter((c) => c.status === "draft").length,
+    totalSent: campaigns.reduce((sum, c) => sum + c.total_sent, 0),
+    totalConverted: campaigns.reduce((sum, c) => sum + c.total_converted, 0),
+    totalCostCents: campaigns.reduce((sum, c) => sum + c.cost_cents, 0),
+  };
+
+  jsonResponse(res, { campaigns, summary });
+}
+
+function handleGetCampaignById(
+  db: BetterSqlite3.Database,
+  res: http.ServerResponse,
+  id: string,
+): void {
+  const campaign = safeQueryOne<CampaignRow>(db, "SELECT * FROM campaigns WHERE id = ?", [id]);
+  if (!campaign) {
+    return errorResponse(res, "Campaign not found", 404);
+  }
+
+  // Get related episodic events
+  const events = safeQuery<{
+    id: string; event_type: string; summary: string;
+    outcome: string | null; created_at: string;
+  }>(
+    db,
+    "SELECT id, event_type, summary, outcome, created_at FROM episodic_memory WHERE summary LIKE ? OR event_type LIKE ? ORDER BY created_at DESC LIMIT 20",
+    [`%${campaign.name}%`, "%campaign%"],
+  );
+
+  jsonResponse(res, { campaign, events });
+}
+
+function handleCreateCampaign(
+  db: BetterSqlite3.Database,
+  res: http.ServerResponse,
+  body: Record<string, unknown>,
+): void {
+  const name = body.name;
+  if (!name || typeof name !== "string") {
+    return errorResponse(res, "Campaign name is required");
+  }
+
+  const campaignType = (body.campaignType as string) || "outreach";
+  if (!VALID_CAMPAIGN_TYPES.has(campaignType)) {
+    return errorResponse(res, `Invalid campaign type: ${campaignType}`);
+  }
+
+  const id = `camp_${Date.now().toString(36)}_${crypto.randomBytes(6).toString("hex")}`;
+  const now = new Date().toISOString();
+
+  try {
+    db.prepare(`
+      INSERT INTO campaigns (id, name, campaign_type, status, target_segment, notes, created_at)
+      VALUES (?, ?, ?, 'draft', ?, ?, ?)
+    `).run(
+      id,
+      name,
+      campaignType,
+      (body.targetSegment as string) || null,
+      (body.notes as string) || null,
+      now,
+    );
+
+    const created = safeQueryOne<CampaignRow>(db, "SELECT * FROM campaigns WHERE id = ?", [id]);
+    jsonResponse(res, created, 201);
+  } catch (err: any) {
+    errorResponse(res, err.message || "Failed to create campaign", 500);
+  }
+}
+
+function handleUpdateCampaign(
+  db: BetterSqlite3.Database,
+  res: http.ServerResponse,
+  id: string,
+  body: Record<string, unknown>,
+): void {
+  const existing = safeQueryOne<CampaignRow>(db, "SELECT * FROM campaigns WHERE id = ?", [id]);
+  if (!existing) {
+    return errorResponse(res, "Campaign not found", 404);
+  }
+
+  if (body.status && typeof body.status === "string" && !VALID_CAMPAIGN_STATUSES.has(body.status)) {
+    return errorResponse(res, `Invalid status: ${body.status}`);
+  }
+
+  const updates: string[] = [];
+  const values: unknown[] = [];
+
+  const allowedFields: Record<string, string> = {
+    name: "name",
+    status: "status",
+    targetSegment: "target_segment",
+    notes: "notes",
+    totalSent: "total_sent",
+    totalOpened: "total_opened",
+    totalClicked: "total_clicked",
+    totalReplied: "total_replied",
+    totalConverted: "total_converted",
+    costCents: "cost_cents",
+  };
+
+  for (const [jsKey, dbCol] of Object.entries(allowedFields)) {
+    if (body[jsKey] !== undefined) {
+      updates.push(`${dbCol} = ?`);
+      values.push(body[jsKey]);
+    }
+  }
+
+  // Auto-set started_at when activating
+  if (body.status === "active" && !existing.started_at) {
+    updates.push("started_at = ?");
+    values.push(new Date().toISOString());
+  }
+  // Auto-set completed_at when completing
+  if (body.status === "completed" && !existing.completed_at) {
+    updates.push("completed_at = ?");
+    values.push(new Date().toISOString());
+  }
+
+  if (updates.length === 0) {
+    return errorResponse(res, "No fields to update");
+  }
+
+  values.push(id);
+
+  try {
+    db.prepare(`UPDATE campaigns SET ${updates.join(", ")} WHERE id = ?`).run(...values);
+    const updated = safeQueryOne<CampaignRow>(db, "SELECT * FROM campaigns WHERE id = ?", [id]);
+    jsonResponse(res, updated);
+  } catch (err: any) {
+    errorResponse(res, err.message || "Failed to update campaign", 500);
+  }
+}
+
+// ─── Activity Feed ──────────────────────────────────────────────
+
+function handleGetActivity(
+  db: BetterSqlite3.Database,
+  res: http.ServerResponse,
+  url: string,
+): void {
+  const params = new URLSearchParams(url.split("?")[1] || "");
+  const page = Math.max(1, parseInt(params.get("page") || "1", 10));
+  const limit = Math.min(50, Math.max(1, parseInt(params.get("limit") || "20", 10)));
+  const typeFilter = params.get("type") || "all";
+  const offset = (page - 1) * limit;
+
+  let whereClause = "";
+  const queryParams: unknown[] = [];
+
+  if (typeFilter !== "all") {
+    whereClause = "WHERE classification = ?";
+    queryParams.push(typeFilter);
+  }
+
+  const countRow = safeQueryOne<{ count: number }>(
+    db,
+    `SELECT COUNT(*) as count FROM episodic_memory ${whereClause}`,
+    queryParams,
+  );
+  const total = countRow?.count ?? 0;
+
+  const events = safeQuery<{
+    id: string; session_id: string | null; event_type: string;
+    summary: string; detail: string | null;
+    outcome: string | null; importance: number;
+    classification: string | null; created_at: string;
+  }>(
+    db,
+    `SELECT id, session_id, event_type, summary, detail, outcome, importance, classification, created_at
+     FROM episodic_memory ${whereClause}
+     ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+    [...queryParams, limit, offset],
+  );
+
+  // Also get recent agent turns for richer activity context
+  const recentTurns = safeQuery<{
+    id: string; timestamp: string; state: string; thinking: string; cost_cents: number;
+  }>(
+    db,
+    "SELECT id, timestamp, state, thinking, cost_cents FROM turns ORDER BY timestamp DESC LIMIT 10",
+  );
+
+  jsonResponse(res, {
+    events,
+    recentTurns: page === 1 ? recentTurns : [], // Only include turns on first page
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      hasMore: offset + limit < total,
+    },
+  });
+}
+
 // ─── Route Dispatcher ──────────────────────────────────────────────
 
 export async function handleApiRequest(
@@ -319,8 +548,9 @@ export async function handleApiRequest(
   // Strip query string for routing
   const pathOnly = url.split("?")[0];
 
-  // Extract ID from paths like /api/pipeline/abc123
+  // Extract IDs from paths like /api/pipeline/abc123
   const pipelineMatch = pathOnly.match(/^\/api\/pipeline\/([^/]+)$/);
+  const campaignMatch = pathOnly.match(/^\/api\/campaigns\/([^/]+)$/);
 
   try {
     // Overview
@@ -342,6 +572,27 @@ export async function handleApiRequest(
     }
     if (pipelineMatch && method === "DELETE") {
       return handleDeleteProspect(db, res, pipelineMatch[1]);
+    }
+
+    // Campaigns
+    if (pathOnly === "/api/campaigns" && method === "GET") {
+      return handleGetCampaigns(db, res);
+    }
+    if (pathOnly === "/api/campaigns" && method === "POST") {
+      const body = await parseBody(req);
+      return handleCreateCampaign(db, res, body);
+    }
+    if (campaignMatch && method === "GET") {
+      return handleGetCampaignById(db, res, campaignMatch[1]);
+    }
+    if (campaignMatch && method === "PATCH") {
+      const body = await parseBody(req);
+      return handleUpdateCampaign(db, res, campaignMatch[1], body);
+    }
+
+    // Activity Feed
+    if (pathOnly === "/api/activity" && method === "GET") {
+      return handleGetActivity(db, res, url);
     }
 
     // Not found
