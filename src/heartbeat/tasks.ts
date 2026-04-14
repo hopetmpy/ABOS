@@ -47,6 +47,9 @@ export const SALES_TASK_INTERVALS_MS = {
   prospect_pipeline_review: 21_600_000,   // 6 hours
   warm_lead_followup: 86_400_000,         // 24 hours
   campaign_performance_snapshot: 43_200_000, // 12 hours
+  sequence_executor: 300_000,              // 5 minutes
+  check_email_inbox: 300_000,              // 5 minutes
+  outreach_campaign_executor: 300_000,     // 5 minutes
 } as const;
 
 export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
@@ -847,6 +850,81 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
       return { shouldWake: false };
     } catch (error) {
       logger.error("campaign_performance_snapshot failed", error instanceof Error ? error : undefined);
+      return { shouldWake: false };
+    }
+  },
+
+  // === Gap 2: Sequence Executor ===
+  sequence_executor: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
+    if (!shouldRunAtInterval(taskCtx, "sequence_executor", SALES_TASK_INTERVALS_MS.sequence_executor)) {
+      return { shouldWake: false };
+    }
+    try {
+      const { executeDueSteps } = await import("../dashboard/sequence-engine.js");
+      const result = await executeDueSteps(taskCtx.db.raw);
+      taskCtx.db.setKV("last_sequence_execution", JSON.stringify({
+        ...result,
+        timestamp: new Date().toISOString(),
+      }));
+      if (result.sent > 0 || result.errors > 0) {
+        return {
+          shouldWake: result.errors > 0,
+          message: `Sequences: ${result.sent} sent, ${result.skipped} skipped, ${result.errors} errors`,
+        };
+      }
+      return { shouldWake: false };
+    } catch (error) {
+      logger.error("sequence_executor failed", error instanceof Error ? error : undefined);
+      return { shouldWake: false };
+    }
+  },
+
+  // === Gap 1: IMAP Inbox Check ===
+  check_email_inbox: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
+    if (!shouldRunAtInterval(taskCtx, "check_email_inbox", SALES_TASK_INTERVALS_MS.check_email_inbox)) {
+      return { shouldWake: false };
+    }
+    try {
+      const { pollImapInbox } = await import("../dashboard/production-glue.js");
+      const result = await pollImapInbox(taskCtx.db.raw);
+      taskCtx.db.setKV("last_imap_poll", JSON.stringify({
+        ...result,
+        timestamp: new Date().toISOString(),
+      }));
+      if (result.processed > 0) {
+        return {
+          shouldWake: true,
+          message: `IMAP: ${result.processed} new replies from ${result.accounts} accounts`,
+        };
+      }
+      return { shouldWake: false };
+    } catch (error) {
+      logger.error("check_email_inbox failed", error instanceof Error ? error : undefined);
+      return { shouldWake: false };
+    }
+  },
+
+  // === Gap 6: Outreach Campaign Executor ===
+  outreach_campaign_executor: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
+    if (!shouldRunAtInterval(taskCtx, "outreach_campaign_executor", SALES_TASK_INTERVALS_MS.outreach_campaign_executor)) {
+      return { shouldWake: false };
+    }
+    try {
+      const { executeOutreachTasks } = await import("../dashboard/production-glue.js");
+      const result = executeOutreachTasks(taskCtx.db.raw);
+      taskCtx.db.setKV("last_outreach_execution", JSON.stringify({
+        ...result,
+        timestamp: new Date().toISOString(),
+      }));
+      if (result.tasksAdvanced > 0) {
+        return {
+          shouldWake: true,
+          message: `Outreach: ${result.tasksAdvanced} tasks advanced across ${result.goalsProcessed} goals`,
+        };
+      }
+      return { shouldWake: false };
+    } catch (error) {
+      logger.error("outreach_campaign_executor failed", error instanceof Error ? error : undefined);
       return { shouldWake: false };
     }
   },

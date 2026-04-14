@@ -6,6 +6,7 @@ import type http from "node:http";
 import crypto from "node:crypto";
 import type BetterSqlite3 from "better-sqlite3";
 import { processReply, getInboxStats } from "../email-reader.js";
+import { getEmailThread, pollImapInbox } from "../production-glue.js";
 import { sendEmail } from "../email-engine.js";
 
 function json(res: http.ServerResponse, data: unknown, status = 200): void {
@@ -173,8 +174,14 @@ export async function handleInboxRoutes(
 ): Promise<boolean> {
   const replyMatch = pathOnly.match(/^\/api\/inbox\/([^/]+)$/);
   const replyBackMatch = pathOnly.match(/^\/api\/inbox\/([^/]+)\/reply$/);
+  const threadMatch = pathOnly.match(/^\/api\/inbox\/thread\/([^/]+)$/);
 
   if (pathOnly === "/api/inbox" && method === "GET") { handleGetInbox(db, res, url); return true; }
+  if (threadMatch && method === "GET") { json(res, { thread: getEmailThread(db, threadMatch[1]) }); return true; }
+  if (pathOnly === "/api/inbox/imap-poll" && method === "POST") {
+    try { const result = await pollImapInbox(db); json(res, result); } catch (e: any) { json(res, { error: e.message }, 500); }
+    return true;
+  }
   if (pathOnly === "/api/inbox/stats" && method === "GET") { handleGetInboxStats(db, res); return true; }
   if (pathOnly === "/api/inbox/poll" && method === "POST") { await handlePollInbox(db, req, res); return true; }
   if (replyBackMatch && method === "POST") { await handleReplyBack(db, replyBackMatch[1], req, res); return true; }

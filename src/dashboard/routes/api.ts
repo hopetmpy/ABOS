@@ -19,6 +19,7 @@ import { handleSequenceRoutes } from "./sequences.js";
 import { handleInboxRoutes } from "./inbox.js";
 import { handleAnalyticsRoutes } from "./analytics.js";
 import { handleOutreachRoutes } from "./outreach.js";
+import { processWebhookEvents, getEmailThread, autoCreateSequenceForCampaign } from "../production-glue.js";
 import {
   verifyAuth, handleAuthSetup, handleAuthLogin,
   handleGetTemplates, handleCreateTemplate, handleUpdateTemplate, handleDeleteTemplate,
@@ -431,8 +432,11 @@ function handleCreateCampaign(
       now,
     );
 
+    // Auto-create a linked sequence for this campaign (Gap 4)
+    const seqId = autoCreateSequenceForCampaign(db, id, name as string);
+
     const created = safeQueryOne<CampaignRow>(db, "SELECT * FROM campaigns WHERE id = ?", [id]);
-    jsonResponse(res, created, 201);
+    jsonResponse(res, { ...created, linkedSequenceId: seqId }, 201);
   } catch (err: any) {
     errorResponse(res, err.message || "Failed to create campaign", 500);
   }
@@ -1278,6 +1282,14 @@ export async function handleApiRequest(
     }
     if (pathOnly === "/api/auth/check" && method === "GET") {
       return jsonResponse(res, { authenticated: verifyAuth(db, req), authConfigured: !!safeQueryOne(db, "SELECT id FROM dashboard_auth LIMIT 1") });
+    }
+
+    // ─── Webhook endpoints (no auth — external services call these) ───
+    if (pathOnly === "/api/webhooks/email" && method === "POST") {
+      const body = await parseBody(req);
+      const events = Array.isArray(body) ? body : (body.events as any[] || [body]);
+      const result = processWebhookEvents(db, events as any);
+      return jsonResponse(res, result);
     }
 
     // ─── Tracking endpoints (no auth — embedded in emails) ───
