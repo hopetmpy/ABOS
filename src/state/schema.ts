@@ -5,7 +5,7 @@
  * The database IS the automaton's memory.
  */
 
-export const SCHEMA_VERSION = 20;
+export const SCHEMA_VERSION = 21;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -1121,4 +1121,29 @@ export const MIGRATION_V20 = `
   CREATE INDEX IF NOT EXISTS idx_replies_sentiment ON email_replies(sentiment);
   CREATE INDEX IF NOT EXISTS idx_replies_read ON email_replies(is_read);
   CREATE INDEX IF NOT EXISTS idx_replies_message_id ON email_replies(message_id);
+`;
+
+// === LinkedIn + Email Pipeline: DISC Effectiveness ===
+
+export const MIGRATION_V21 = `
+  -- Schema version: 21
+  -- DISC effectiveness tracking for LinkedIn + Email outreach
+
+  CREATE TABLE IF NOT EXISTS disc_effectiveness (
+    id TEXT PRIMARY KEY,
+    disc_type TEXT NOT NULL,
+    channel TEXT NOT NULL CHECK(channel IN ('email','linkedin','both')),
+    message_style TEXT,
+    sent INTEGER DEFAULT 0,
+    opened INTEGER DEFAULT 0,
+    clicked INTEGER DEFAULT 0,
+    replied INTEGER DEFAULT 0,
+    converted INTEGER DEFAULT 0,
+    open_rate REAL DEFAULT 0,
+    reply_rate REAL DEFAULT 0,
+    period TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_disc_eff_type ON disc_effectiveness(disc_type);
+  CREATE INDEX IF NOT EXISTS idx_disc_eff_channel ON disc_effectiveness(channel);
 `;

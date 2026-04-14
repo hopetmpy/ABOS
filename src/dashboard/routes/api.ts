@@ -19,6 +19,7 @@ import { handleSequenceRoutes } from "./sequences.js";
 import { handleInboxRoutes } from "./inbox.js";
 import { handleAnalyticsRoutes } from "./analytics.js";
 import { handleOutreachRoutes } from "./outreach.js";
+import { handleLinkedInAdvancedRoutes } from "./linkedin-advanced.js";
 import { processWebhookEvents, getEmailThread, autoCreateSequenceForCampaign } from "../production-glue.js";
 import {
   verifyAuth, handleAuthSetup, handleAuthLogin,
@@ -1306,6 +1307,12 @@ export async function handleApiRequest(
     // Email routes (SMTP adapter)
     if (pathOnly.startsWith("/api/email/")) {
       const handled = await handleEmailRoutes(req, res, db, pathOnly, method);
+      if (handled) return;
+    }
+
+    // LinkedIn Advanced routes (research, pipeline, warm leads, DISC, attribution, campaign)
+    if (pathOnly.startsWith("/api/linkedin/") && (pathOnly.includes("research") || pathOnly.includes("pipeline") || pathOnly.includes("warm-leads") || pathOnly.includes("disc-effectiveness") || pathOnly.includes("attribution") || pathOnly.includes("manual-send") || pathOnly.includes("campaign/launch"))) {
+      const handled = await handleLinkedInAdvancedRoutes(req, res, db, pathOnly, method);
       if (handled) return;
     }
 

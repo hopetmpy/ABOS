@@ -50,6 +50,7 @@ export const SALES_TASK_INTERVALS_MS = {
   sequence_executor: 300_000,              // 5 minutes
   check_email_inbox: 300_000,              // 5 minutes
   outreach_campaign_executor: 300_000,     // 5 minutes
+  disc_effectiveness_update: 43_200_000,   // 12 hours
 } as const;
 
 export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
@@ -925,6 +926,25 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
       return { shouldWake: false };
     } catch (error) {
       logger.error("outreach_campaign_executor failed", error instanceof Error ? error : undefined);
+      return { shouldWake: false };
+    }
+  },
+
+  // === DISC Effectiveness Tracker ===
+  disc_effectiveness_update: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
+    if (!shouldRunAtInterval(taskCtx, "disc_effectiveness_update", SALES_TASK_INTERVALS_MS.disc_effectiveness_update)) {
+      return { shouldWake: false };
+    }
+    try {
+      const { updateDiscEffectiveness } = await import("../dashboard/linkedin-pipeline.js");
+      const result = updateDiscEffectiveness(taskCtx.db.raw);
+      taskCtx.db.setKV("last_disc_effectiveness_update", JSON.stringify({
+        ...result,
+        timestamp: new Date().toISOString(),
+      }));
+      return { shouldWake: false };
+    } catch (error) {
+      logger.error("disc_effectiveness_update failed", error instanceof Error ? error : undefined);
       return { shouldWake: false };
     }
   },
