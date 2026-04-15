@@ -16,6 +16,14 @@ const resolveMx = promisify(dns.resolveMx);
 
 const logger = createLogger("email.smtp");
 
+function getBaseUrl(db: BetterSqlite3.Database): string {
+  try {
+    const row = db.prepare("SELECT value FROM kv WHERE key = 'base_url'").get() as { value: string } | undefined;
+    if (row?.value) return row.value.replace(/\/$/, "");
+  } catch {}
+  return "http://localhost:3141";
+}
+
 // ─── Types ──────────────────────────────────────────────────────
 
 export interface EmailAccount {
@@ -350,7 +358,7 @@ export async function sendEmail(
       html: body,
       text: body.replace(/<[^>]*>/g, ""),
       headers: {
-        "List-Unsubscribe": `<mailto:unsubscribe@${senderDomain}?subject=unsubscribe>`,
+        "List-Unsubscribe": `<${getBaseUrl(db)}/unsubscribe?email=${encodeURIComponent(to)}>, <mailto:unsubscribe@${senderDomain}?subject=unsubscribe>`,
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
       },
     });

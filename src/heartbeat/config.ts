@@ -92,6 +92,12 @@ const DEFAULT_HEARTBEAT_CONFIG: HeartbeatConfig = {
       task: "outreach_campaign_executor",
       enabled: false,
     },
+    {
+      name: "disc_effectiveness_update",
+      schedule: "0 */12 * * *",
+      task: "disc_effectiveness_update",
+      enabled: false,
+    },
   ],
   defaultIntervalMs: 60_000,
   lowComputeMultiplier: 4,
@@ -165,6 +171,10 @@ const SALES_MARKETING_TASK_NAMES = new Set([
   "prospect_pipeline_review",
   "warm_lead_followup",
   "campaign_performance_snapshot",
+  "sequence_executor",
+  "check_email_inbox",
+  "outreach_campaign_executor",
+  "disc_effectiveness_update",
 ]);
 
 /**

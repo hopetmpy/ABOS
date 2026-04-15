@@ -62,6 +62,13 @@ registerPage('settings', async (container) => {
             <span class="setting-label">Max Children</span>
             <span class="setting-value">${data.maxChildren}</span>
           </div>
+          <div class="setting-row">
+            <span class="setting-label">Base URL</span>
+            <span class="setting-value" style="display:flex;gap:6px;align-items:center">
+              <input type="text" id="base-url-input" value="${data.baseUrl || ''}" placeholder="https://your-domain.com" style="width:220px;font-size:13px;padding:4px 8px">
+              <button class="btn btn-sm" onclick="saveBaseUrl()">Save</button>
+            </span>
+          </div>
         </div>
       </div>
 
@@ -170,6 +177,14 @@ async function toggleHeartbeat(taskName, enabled) {
     const main = document.getElementById('main-content');
     await pageRenderers.settings(main);
   }
+}
+
+async function saveBaseUrl() {
+  const url = document.getElementById('base-url-input').value.trim();
+  try {
+    await patchAPI('settings', { baseUrl: url });
+    showToast('Base URL saved', 'success');
+  } catch (e) { showToast(e.message, 'error'); }
 }
 
 function toggleTheme() {

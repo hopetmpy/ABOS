@@ -1181,9 +1181,13 @@ function handleGetSettings(db: BetterSqlite3.Database, res: http.ServerResponse)
   // Agent mode
   const agentMode = (config as any).agentMode || "general";
 
+  // Base URL for public links (unsubscribe, landing pages)
+  const baseUrlRow = safeQueryOne<{ value: string }>(db, "SELECT value FROM kv WHERE key = 'base_url'");
+
   jsonResponse(res, {
     agentName: (config as any).name || name?.value || "Unknown",
     agentMode,
+    baseUrl: baseUrlRow?.value || "",
     walletAddress: (config as any).walletAddress || "",
     creatorAddress: (config as any).creatorAddress || "",
     inferenceModel: (config as any).inferenceModel || "gpt-5.2",
@@ -1225,6 +1229,21 @@ function handleUpdateSettings(
       } catch {
         results.push(`${taskName}: failed to update`);
       }
+    }
+  }
+
+  // Base URL for public links
+  if (typeof body.baseUrl === "string") {
+    try {
+      const existing = db.prepare("SELECT key FROM kv WHERE key = 'base_url'").get();
+      if (existing) {
+        db.prepare("UPDATE kv SET value = ? WHERE key = 'base_url'").run(body.baseUrl);
+      } else {
+        db.prepare("INSERT INTO kv (key, value) VALUES ('base_url', ?)").run(body.baseUrl);
+      }
+      results.push("base_url: saved");
+    } catch {
+      results.push("base_url: failed to save");
     }
   }
 
@@ -1283,6 +1302,52 @@ export async function handleApiRequest(
     }
     if (pathOnly === "/api/auth/check" && method === "GET") {
       return jsonResponse(res, { authenticated: verifyAuth(db, req), authConfigured: !!safeQueryOne(db, "SELECT id FROM dashboard_auth LIMIT 1") });
+    }
+
+    // ─── Unsubscribe + GDPR endpoints (no auth — public-facing) ───
+    if (pathOnly === "/api/unsubscribe" && method === "POST") {
+      const body = await parseBody(req);
+      const email = (body.email as string || "").toLowerCase().trim();
+      if (!email || !email.includes("@")) return errorResponse(res, "Valid email required");
+      try {
+        const existing = safeQueryOne<{ id: string }>(db, "SELECT id FROM email_suppressions WHERE email = ?", [email]);
+        if (!existing) {
+          const id = `sup_${Date.now().toString(36)}_${crypto.randomBytes(6).toString("hex")}`;
+          db.prepare("INSERT INTO email_suppressions (id, email, reason) VALUES (?, ?, 'unsubscribed')").run(id, email);
+        }
+        logActivity(db, "", "unsubscribe", `Unsubscribed: ${email}`, "prospect");
+      } catch {}
+      return jsonResponse(res, { success: true, message: "You have been unsubscribed." });
+    }
+
+    if (pathOnly === "/api/gdpr/delete" && method === "POST") {
+      const body = await parseBody(req);
+      const email = (body.email as string || "").toLowerCase().trim();
+      if (!email || !email.includes("@")) return errorResponse(res, "Valid email required");
+      try {
+        // Find prospect
+        const prospect = safeQueryOne<{ id: string }>(db, "SELECT id FROM prospect_pipeline WHERE email = ?", [email]);
+        if (prospect) {
+          // Delete all related data
+          db.prepare("DELETE FROM activity_log WHERE prospect_id = ?").run(prospect.id);
+          db.prepare("DELETE FROM email_events WHERE prospect_id = ?").run(prospect.id);
+          db.prepare("DELETE FROM sequence_enrollments WHERE prospect_id = ?").run(prospect.id);
+          db.prepare("DELETE FROM humantic_profiles WHERE prospect_id = ?").run(prospect.id);
+          db.prepare("DELETE FROM linkedin_outreach_queue WHERE prospect_id = ?").run(prospect.id);
+          db.prepare("DELETE FROM enrichment_queue WHERE prospect_id = ?").run(prospect.id);
+          db.prepare("DELETE FROM prospect_pipeline WHERE id = ?").run(prospect.id);
+        }
+        // Remove from relationship memory
+        db.prepare("DELETE FROM relationship_memory WHERE entity_address = ?").run(email);
+        // Ensure suppression
+        const existing = safeQueryOne<{ id: string }>(db, "SELECT id FROM email_suppressions WHERE email = ?", [email]);
+        if (!existing) {
+          const id = `sup_${Date.now().toString(36)}_${crypto.randomBytes(6).toString("hex")}`;
+          db.prepare("INSERT INTO email_suppressions (id, email, reason) VALUES (?, ?, 'unsubscribed')").run(id, email);
+        }
+        logActivity(db, "", "gdpr_delete", `GDPR deletion: ${email}`, "prospect");
+      } catch {}
+      return jsonResponse(res, { success: true, message: "All personal data has been deleted per GDPR." });
     }
 
     // ─── Webhook endpoints (no auth — external services call these) ───

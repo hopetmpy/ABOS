@@ -350,9 +350,13 @@ async function handleDeployLandingPage(
 
   if (!html) return err(res, "No landing page HTML. Generate one first.");
 
-  // In production: write_file + expose_port via Conway API
-  // For now: store the URL placeholder
-  const deployUrl = `http://localhost:3141/landing/${campaignId}`;
+  // Use configurable base_url from KV store, fallback to localhost
+  let baseUrl = "http://localhost:3141";
+  try {
+    const row = db.prepare("SELECT value FROM kv WHERE key = 'base_url'").get() as { value: string } | undefined;
+    if (row?.value) baseUrl = row.value.replace(/\/$/, "");
+  } catch {}
+  const deployUrl = `${baseUrl}/landing/${campaignId}`;
   try {
     db.prepare("UPDATE campaigns SET landing_page_url = ? WHERE id = ?").run(deployUrl, campaignId);
   } catch { /* column may not exist */ }
