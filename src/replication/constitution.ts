@@ -10,6 +10,7 @@ import pathLib from "path";
 import { createHash } from "crypto";
 import type { Database as DatabaseType } from "better-sqlite3";
 import type { ConwayClient } from "../types.js";
+import type { ReplicationPayload } from "./replicationPayload.js";
 
 /**
  * Compute SHA-256 hash of content.
@@ -26,6 +27,7 @@ export async function propagateConstitution(
   conway: ConwayClient,
   sandboxId: string,
   db: DatabaseType,
+  payload?: Pick<ReplicationPayload, "constitutionContent" | "constitutionHash">,
 ): Promise<void> {
   const constitutionPath = pathLib.join(
     process.env.HOME || "/root",
@@ -33,8 +35,8 @@ export async function propagateConstitution(
     "constitution.md",
   );
 
-  const constitution = fs.readFileSync(constitutionPath, "utf-8");
-  const hash = sha256(constitution);
+  const constitution = payload?.constitutionContent ?? fs.readFileSync(constitutionPath, "utf-8");
+  const hash = payload?.constitutionHash ?? sha256(constitution);
 
   // Write constitution to child sandbox
   await conway.writeFile("/root/.automaton/constitution.md", constitution);

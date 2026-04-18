@@ -34,6 +34,7 @@ function selectSandboxTier(requestedMemoryMb: number) {
 
 import { isValidAddress } from "../identity/chain.js";
 import type { ChainType } from "../identity/chain.js";
+import { buildReplicationPayload } from "./buildReplicationPayload.js";
 
 /**
  * Validate that an address is a well-formed, non-zero wallet address.
@@ -135,23 +136,28 @@ export async function spawnChild(
 
     // Write genesis configuration (on the CHILD sandbox)
     await childConway.exec("mkdir -p /root/.automaton", 10_000);
+    const replicationPayload = buildReplicationPayload(genesis, identity);
     const genesisJson = JSON.stringify(
       {
-        name: genesis.name,
-        genesisPrompt: genesis.genesisPrompt,
-        creatorMessage: genesis.creatorMessage,
-        creatorAddress: identity.address,
-        parentAddress: identity.address,
-        chainType: genesis.chainType || (identity as any).chainType || "evm",
+        name: replicationPayload.name,
+        genesisPrompt: replicationPayload.genesisPrompt,
+        creatorMessage: replicationPayload.creatorMessage,
+        creatorAddress: replicationPayload.creatorAddress,
+        parentAddress: replicationPayload.parentAddress,
+        chainType: replicationPayload.chainType,
       },
       null,
       2,
     );
     await childConway.writeFile("/root/.automaton/genesis.json", genesisJson);
+    await childConway.writeFile(
+      "/root/.automaton/replication-payload.json",
+      JSON.stringify(replicationPayload, null, 2),
+    );
 
     // Propagate constitution with hash verification
     try {
-      await propagateConstitution(childConway, sandbox.id, db.raw);
+      await propagateConstitution(childConway, sandbox.id, db.raw, replicationPayload);
     } catch {
       // Constitution file not found locally
     }
