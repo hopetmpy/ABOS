@@ -4,12 +4,16 @@ export default defineConfig({
   test: {
     testTimeout: 30_000,
     teardownTimeout: 5_000,
-    include: ["src/__tests__/**/*.test.ts"],
+    include: [
+      "src/__tests__/**/*.test.ts",
+      "src/constitution/__tests__/**/*.spec.ts",
+    ],
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
       exclude: [
         "src/__tests__/**",
+        "src/constitution/__tests__/**",
         "src/types.ts",
         "node_modules/**",
       ],
