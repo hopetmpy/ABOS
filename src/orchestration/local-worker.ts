@@ -89,6 +89,14 @@ interface LocalWorkerConfig {
   conway: ConwayClient;
   workerId: string;
   maxTurns?: number;
+  /**
+   * Additional tools from the parent agent that workers can use.
+   * These are merged with the built-in worker tools (exec, read_file,
+   * write_file, task_done) to give workers access to the parent's
+   * custom capabilities — e.g. GitHub, email, web search, or external
+   * API integrations like Obol (https://obolagents.com).
+   */
+  customTools?: WorkerTool[];
 }
 
 interface WorkerToolResult {
@@ -132,6 +140,13 @@ export class LocalWorkerPool {
       })
       .finally(() => {
         this.activeWorkers.delete(workerId);
+        // Mark child as terminated in DB so the orchestrator doesn't
+        // re-assign new tasks to this dead worker address.
+        try {
+          this.config.db.prepare(
+            "UPDATE children SET status = 'terminated' WHERE address = ?",
+          ).run(address);
+        } catch { /* ignore DB errors during cleanup */ }
       });
 
     this.activeWorkers.set(workerId, { promise: workerPromise, taskId: task.id, abortController });
@@ -298,6 +313,11 @@ export class LocalWorkerPool {
 
   private buildWorkerSystemPrompt(task: TaskNode): string {
     const role = task.agentRole ?? "generalist";
+    const customToolNames = (this.config.customTools ?? []).map(t => t.name);
+    const customToolSection = customToolNames.length > 0
+      ? `\n- You also have custom tools from the parent agent: ${customToolNames.join(", ")}. Use them when the task requires external actions (API calls, outreach, publishing).`
+      : "";
+
     return `You are a worker agent with the role: ${role}.
 
 You have been assigned a specific task by the parent orchestrator. Your job is to
@@ -307,7 +327,7 @@ RULES:
 - Focus ONLY on the assigned task. Do not deviate.
 - Use exec to run shell commands (install packages, run scripts, etc.)
 - Use write_file to create or modify files.
-- Use read_file to inspect existing files.
+- Use read_file to inspect existing files.${customToolSection}
 - When done, provide a clear summary of what you accomplished as your final message.
 - If you cannot complete the task, explain why in your final message.
 - Do NOT call tools after you are done. Just give your final text response.
@@ -334,7 +354,7 @@ RULES:
   }
 
   private buildWorkerTools(): WorkerTool[] {
-    return [
+    const builtinTools: WorkerTool[] = [
       {
         name: "exec",
         description: "Execute a shell command and return stdout/stderr. Use for installing packages, running scripts, building code, etc.",
@@ -454,5 +474,13 @@ RULES:
         },
       },
     ];
+
+    // Merge parent-provided custom tools so workers can use the same
+    // integrations as the orchestrator (GitHub, email, web APIs, etc.)
+    const custom = this.config.customTools ?? [];
+    if (custom.length > 0) {
+      logger.info(`Worker has ${custom.length} custom tool(s) from parent: ${custom.map(t => t.name).join(", ")}`);
+    }
+    return [...builtinTools, ...custom];
   }
 }
