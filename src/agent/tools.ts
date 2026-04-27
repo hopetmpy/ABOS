@@ -22,6 +22,7 @@ import type {
 import type { PolicyEngine } from "./policy-engine.js";
 import { sanitizeToolResult, sanitizeInput } from "./injection-defense.js";
 import { createLogger } from "../observability/logger.js";
+import { createJintelAgentTools, JINTEL_TOOL_NAMES } from "../jintel/agent-tools.js";
 
 const logger = createLogger("tools");
 
@@ -2796,6 +2797,14 @@ Model: ${ctx.inference.getDefaultModel()}
       },
     },
 
+    // ── Jintel Financial Intelligence (x402 pay-per-query) ──
+    // GraphQL endpoint at https://api.jintel.ai/api unifying market quotes,
+    // SEC filings, sanctions screening, news, macro indicators, and more.
+    // Each query auto-pays USDC on Base (~$0.015 floor) via the existing
+    // x402Fetch path; the treasury policy's maxX402PaymentCents cap applies.
+    // The full ~40-tool set is defined in src/jintel/agent-tools.ts.
+    ...createJintelAgentTools(),
+
     // === Orchestration Tools ===
     {
       name: "create_goal",
@@ -3385,6 +3394,21 @@ export async function executeTool(
         } catch (error) {
           logger.error(
             "Spend tracking failed for x402_fetch",
+            error instanceof Error ? error : undefined,
+          );
+        }
+      } else if (JINTEL_TOOL_NAMES.has(toolName)) {
+        // Jintel tools all pay via x402 — server quotes the amount per query.
+        try {
+          turnContext.sessionSpend.recordSpend({
+            toolName,
+            amountCents: 0,
+            domain: "api.jintel.ai",
+            category: "x402",
+          });
+        } catch (error) {
+          logger.error(
+            `Spend tracking failed for ${toolName}`,
             error instanceof Error ? error : undefined,
           );
         }
