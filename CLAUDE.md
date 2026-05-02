@@ -159,3 +159,15 @@ The landscape scanner (`src/landscape/scanner.ts`) runs 6 concurrent scanners ev
 - **Integration test**: `scripts/integration-test.sh` (or `--quick` to skip slow network tests)
 - **Config**: `~/.automaton/automaton.json` (runtime), `docker-compose.yml` (infra)
 - **Secrets**: Docker secrets or env vars, never in CLI args or git
+
+## Testing baseline (2026-05-01 — Intent Solutions Testing SOP)
+
+This repo participates in the **Intent Solutions Testing SOP** per `~/.claude/CLAUDE.md` § "Intent Solutions Testing SOP" and the VPS-as-the-home program (`OPS-5nm`, Priority 6).
+
+**Installed**: `@intentsolutions/audit-harness v0.1.0` vendored at `.audit-harness/` with wrapper at `scripts/audit-harness`.
+
+**Commands**: `scripts/audit-harness {verify, init, list, escape-scan --staged}`.
+
+**Next step**: run `/audit-tests` to produce `TEST_AUDIT.md`. See `000-docs/001-OD-SOPS-audit-harness-baseline-2026-05-01.md`.
+
+**Upgrade**: `AUDIT_HARNESS_VERSION=vX.Y.Z curl -sSL https://raw.githubusercontent.com/jeremylongshore/audit-harness/main/install.sh | bash`. Or run `/sync-testing-harness` from any session.
