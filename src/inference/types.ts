@@ -133,6 +133,20 @@ export const STATIC_MODEL_BASELINE: Omit<ModelEntry, "lastSeen" | "createdAt" | 
     enabled: true,
   },
   {
+    modelId: "MiniMax-M3",
+    provider: "minimax",
+    displayName: "MiniMax M3",
+    tierMinimum: "normal",
+    costPer1kInput: 6,     // $0.60/M
+    costPer1kOutput: 24,   // $2.40/M
+    maxTokens: 128000,
+    contextWindow: 524288,
+    supportsTools: true,
+    supportsVision: true,
+    parameterStyle: "max_tokens",
+    enabled: true,
+  },
+  {
     modelId: "MiniMax-M2.7",
     provider: "minimax",
     displayName: "MiniMax M2.7",
@@ -150,34 +164,6 @@ export const STATIC_MODEL_BASELINE: Omit<ModelEntry, "lastSeen" | "createdAt" | 
     modelId: "MiniMax-M2.7-highspeed",
     provider: "minimax",
     displayName: "MiniMax M2.7 High Speed",
-    tierMinimum: "low_compute",
-    costPer1kInput: 6,     // $0.60/M
-    costPer1kOutput: 24,   // $2.40/M
-    maxTokens: 192000,
-    contextWindow: 204800,
-    supportsTools: true,
-    supportsVision: false,
-    parameterStyle: "max_tokens",
-    enabled: true,
-  },
-  {
-    modelId: "MiniMax-M2.5",
-    provider: "minimax",
-    displayName: "MiniMax M2.5",
-    tierMinimum: "normal",
-    costPer1kInput: 3,     // $0.30/M
-    costPer1kOutput: 12,   // $1.20/M
-    maxTokens: 192000,
-    contextWindow: 204800,
-    supportsTools: true,
-    supportsVision: false,
-    parameterStyle: "max_tokens",
-    enabled: true,
-  },
-  {
-    modelId: "MiniMax-M2.5-highspeed",
-    provider: "minimax",
-    displayName: "MiniMax M2.5 High Speed",
     tierMinimum: "low_compute",
     costPer1kInput: 6,     // $0.60/M
     costPer1kOutput: 24,   // $2.40/M

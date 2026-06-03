@@ -416,7 +416,8 @@ describe("ProviderRegistry", () => {
     expect(minimax?.name).toBe("MiniMax");
     expect(minimax?.baseUrl).toBe("https://api.minimax.io/v1");
     expect(minimax?.apiKeyEnvVar).toBe("MINIMAX_API_KEY");
-    expect(minimax?.models.length).toBe(4);
+    expect(minimax?.models.length).toBe(3);
+    expect(minimax?.models[0].id).toBe("MiniMax-M3");
   });
 
   it("minimax provider resolves models when enabled via config", () => {
@@ -431,14 +432,14 @@ describe("ProviderRegistry", () => {
           priority: 1,
           models: [
             {
-              id: "MiniMax-M2.7",
+              id: "MiniMax-M3",
               tier: "reasoning",
-              contextWindow: 204800,
-              maxOutputTokens: 192000,
-              costPerInputToken: 0.3,
-              costPerOutputToken: 1.2,
+              contextWindow: 524288,
+              maxOutputTokens: 128000,
+              costPerInputToken: 0.6,
+              costPerOutputToken: 2.4,
               supportsTools: true,
-              supportsVision: false,
+              supportsVision: true,
               supportsStreaming: true,
             },
           ],
@@ -456,7 +457,7 @@ describe("ProviderRegistry", () => {
     const resolved = registry.resolveModel("reasoning");
 
     expect(resolved.provider.id).toBe("minimax");
-    expect(resolved.model.id).toBe("MiniMax-M2.7");
+    expect(resolved.model.id).toBe("MiniMax-M3");
   });
 
   it("resolveCandidates includes enabled minimax in fallback", () => {
