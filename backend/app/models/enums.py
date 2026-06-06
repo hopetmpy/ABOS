@@ -1,0 +1,62 @@
+import enum
+
+
+class InstallRing(str, enum.Enum):
+    R0_KNOW = "R0_KNOW"
+    R1_THINK = "R1_THINK"
+    R2_READ = "R2_READ"
+    R3_WRITE = "R3_WRITE"
+    R4_SPEND = "R4_SPEND"
+    R5_GOVERN = "R5_GOVERN"
+
+
+class HarnessPatchRisk(str, enum.Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CONSTITUTIONAL = "CONSTITUTIONAL"
+
+
+class Lifecycle(str, enum.Enum):
+    DRAFT = "DRAFT"
+    PUBLISHED = "PUBLISHED"
+    SOURCE_VERIFIED = "SOURCE_VERIFIED"
+    BUILD_VERIFIED = "BUILD_VERIFIED"
+    EVAL_VERIFIED = "EVAL_VERIFIED"
+    CANARY_PROVEN = "CANARY_PROVEN"
+    LIVEWORLD_PROVEN = "LIVEWORLD_PROVEN"
+    STAKE_BACKED = "STAKE_BACKED"
+    QUARANTINED = "QUARANTINED"
+
+
+class ProjectMode(str, enum.Enum):
+    GREEN = "GREEN"
+    YELLOW = "YELLOW"
+    RED = "RED"
+    HIBERNATE = "HIBERNATE"
+    EXIT = "EXIT"
+
+
+class EvalStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    PASSED = "PASSED"
+    FAILED = "FAILED"
+    BLOCKED = "BLOCKED"
+
+
+class UpgradeDecision(str, enum.Enum):
+    AUTO_INSTALL = "AUTO_INSTALL"
+    CANARY = "CANARY"
+    ASK_HUMAN = "ASK_HUMAN"
+    REJECT = "REJECT"
+    BLOCKED = "BLOCKED"
+
+
+class ReceiptVisibility(str, enum.Enum):
+    PRIVATE_RAW = "PRIVATE_RAW"
+    EVALUATOR_VIEW = "EVALUATOR_VIEW"
+    PUBLIC_COMMITMENT = "PUBLIC_COMMITMENT"
+    EVAL_ATTESTATION = "EVAL_ATTESTATION"
+    IMPROVEMENT_OBJECT = "IMPROVEMENT_OBJECT"
+    DISPUTE_ONLY = "DISPUTE_ONLY"
