@@ -87,6 +87,22 @@ describe("createTokenCounter", () => {
     expect(counter.cache.has("default::evict-0")).toBe(false);
     expect(counter.cache.has("default::evict-10004")).toBe(true);
   });
+
+  it("uses the char heuristic above the tokenize cap without hanging", () => {
+    const counter = createTokenCounter();
+
+    // A long whitespace-free run is the pathological input for js-tiktoken's
+    // O(n^2) BPE. Above the cap we must fall back to the char heuristic and
+    // return promptly instead of blocking the event loop for minutes.
+    const huge = "a".repeat(50_000);
+
+    const start = Date.now();
+    const count = counter.countTokens(huge);
+    const elapsed = Date.now() - start;
+
+    expect(count).toBe(Math.ceil(huge.length / 3.5));
+    expect(elapsed).toBeLessThan(1_000);
+  });
 });
 
 describe("ContextManager.assembleContext", () => {
