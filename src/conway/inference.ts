@@ -80,10 +80,13 @@ export function createInferenceClient(
       backend !== "ollama" && /^(o[1-9]|gpt-5|gpt-4\.1)/.test(model);
     const tokenLimit = opts?.maxTokens || maxTokens;
 
+    // Streaming is supported by all OpenAI-compatible backends (conway, openai,
+    // ollama, litellm). The caller can opt in via opts.stream; defaults to false
+    // for backward compatibility.
     const body: Record<string, unknown> = {
       model,
       messages: messages.map(formatMessage),
-      stream: false,
+      stream: opts?.stream ?? false,
     };
 
     if (usesCompletionTokens) {
@@ -119,7 +122,7 @@ export function createInferenceClient(
       backend === "ollama" ? (ollamaBaseUrl as string).replace(/\/$/, "") :
       apiUrl;
     const openAiLikeApiKey =
-      backend === "litellm" ? (litellmApiKey || "sk-litellm") :
+      backend === "litellm" ? (litellmApiKey || "") :
       backend === "openai" ? (openaiApiKey as string) :
       backend === "ollama" ? "ollama" :
       apiKey;
@@ -230,6 +233,18 @@ async function chatViaOpenAiCompatible(params: {
 
   if (!resp.ok) {
     const text = await resp.text();
+    if (params.backend === "litellm") {
+      switch (resp.status) {
+        case 401:
+          throw new Error(`Invalid LiteLLM API key: ${text}`);
+        case 429:
+          throw new Error(`Rate limited by LiteLLM proxy: ${text}`);
+        case 404:
+          throw new Error(`Model not found on LiteLLM proxy: ${text}`);
+        default:
+          throw new Error(`LiteLLM proxy error ${resp.status}: ${text}`);
+      }
+    }
     throw new Error(
       `Inference error (${params.backend}): ${resp.status}: ${text}`,
     );
