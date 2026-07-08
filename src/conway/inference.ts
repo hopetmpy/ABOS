@@ -27,11 +27,13 @@ interface InferenceClientOptions {
   openaiApiKey?: string;
   anthropicApiKey?: string;
   ollamaBaseUrl?: string;
+  litellmBaseUrl?: string;
+  litellmApiKey?: string;
   /** Optional registry lookup — if provided, used before name heuristics */
   getModelProvider?: (modelId: string) => string | undefined;
 }
 
-type InferenceBackend = "conway" | "openai" | "anthropic" | "ollama";
+type InferenceBackend = "conway" | "openai" | "anthropic" | "ollama" | "litellm";
 
 function isLoopbackHttpUrl(url: string | undefined): boolean {
   if (!url) return false;
@@ -48,11 +50,11 @@ function isLoopbackHttpUrl(url: string | undefined): boolean {
 export function createInferenceClient(
   options: InferenceClientOptions,
 ): InferenceClient {
-  const { apiUrl, apiKey, openaiApiKey, anthropicApiKey, ollamaBaseUrl, getModelProvider } = options;
+  const { apiUrl, apiKey, openaiApiKey, anthropicApiKey, ollamaBaseUrl, litellmBaseUrl, litellmApiKey, getModelProvider } = options;
   const httpClient = new ResilientHttpClient({
     baseTimeout: INFERENCE_TIMEOUT_MS,
     retryableStatuses: [429, 500, 502, 503, 504],
-    allowHttpOnLoopback: isLoopbackHttpUrl(ollamaBaseUrl),
+    allowHttpOnLoopback: isLoopbackHttpUrl(ollamaBaseUrl) || isLoopbackHttpUrl(litellmBaseUrl),
   });
   let currentModel = options.defaultModel;
   let maxTokens = options.maxTokens;
@@ -68,6 +70,7 @@ export function createInferenceClient(
       openaiApiKey,
       anthropicApiKey,
       ollamaBaseUrl,
+      litellmBaseUrl,
       getModelProvider,
     });
 
@@ -111,10 +114,12 @@ export function createInferenceClient(
     }
 
     const openAiLikeApiUrl =
+      backend === "litellm" ? (litellmBaseUrl as string).replace(/\/$/, "") :
       backend === "openai" ? "https://api.openai.com" :
       backend === "ollama" ? (ollamaBaseUrl as string).replace(/\/$/, "") :
       apiUrl;
     const openAiLikeApiKey =
+      backend === "litellm" ? (litellmApiKey || "sk-litellm") :
       backend === "openai" ? (openaiApiKey as string) :
       backend === "ollama" ? "ollama" :
       apiKey;
@@ -180,12 +185,14 @@ function resolveInferenceBackend(
     openaiApiKey?: string;
     anthropicApiKey?: string;
     ollamaBaseUrl?: string;
+    litellmBaseUrl?: string;
     getModelProvider?: (modelId: string) => string | undefined;
   },
 ): InferenceBackend {
   // Registry-based routing: most accurate, no name guessing
   if (keys.getModelProvider) {
     const provider = keys.getModelProvider(model);
+    if (provider === "litellm" && keys.litellmBaseUrl) return "litellm";
     if (provider === "ollama" && keys.ollamaBaseUrl) return "ollama";
     if (provider === "anthropic" && keys.anthropicApiKey) return "anthropic";
     if (provider === "openai" && keys.openaiApiKey) return "openai";
@@ -205,7 +212,7 @@ async function chatViaOpenAiCompatible(params: {
   body: Record<string, unknown>;
   apiUrl: string;
   apiKey: string;
-  backend: "conway" | "openai" | "ollama";
+  backend: "conway" | "openai" | "ollama" | "litellm";
   httpClient: ResilientHttpClient;
 }): Promise<InferenceResponse> {
   const resp = await params.httpClient.request(`${params.apiUrl}/v1/chat/completions`, {
@@ -213,7 +220,7 @@ async function chatViaOpenAiCompatible(params: {
     headers: {
       "Content-Type": "application/json",
       Authorization:
-        params.backend === "openai" || params.backend === "ollama"
+        params.backend === "openai" || params.backend === "ollama" || params.backend === "litellm"
           ? `Bearer ${params.apiKey}`
           : params.apiKey,
     },
