@@ -13,6 +13,7 @@ import { createPathProtectionRules } from "./path-protection.js";
 import { createFinancialRules } from "./financial.js";
 import { createAuthorityRules } from "./authority.js";
 import { createRateLimitRules } from "./rate-limits.js";
+import { createVentureRules } from "./venture.js";
 
 /**
  * Create the default set of policy rules.
@@ -26,6 +27,7 @@ export function createDefaultRules(
     ...createCommandSafetyRules(),
     ...createPathProtectionRules(),
     ...createFinancialRules(treasuryPolicy),
+    ...createVentureRules(treasuryPolicy),
     ...createAuthorityRules(),
     ...createRateLimitRules(),
   ];

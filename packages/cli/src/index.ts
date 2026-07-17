@@ -23,6 +23,12 @@ async function main(): Promise<void> {
     case "send":
       await import("./commands/send.js");
       break;
+    case "plans":
+      await import("./commands/plans.js");
+      break;
+    case "requests":
+      await import("./commands/requests.js");
+      break;
     default:
       console.log(`
 Conway Automaton CLI - Creator Tools
@@ -32,6 +38,8 @@ Usage:
   automaton-cli logs [--tail N]     View automaton logs
   automaton-cli fund <amount> [--to 0x...]  Transfer Conway credits
   automaton-cli send <to-address> <message> Send a social message
+  automaton-cli plans [list|show|approve|reject]  Review & decide venture proposals
+  automaton-cli requests [list|fulfill|decline]   Handle KYC/account/funding requests
 `);
   }
 }

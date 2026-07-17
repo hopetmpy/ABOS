@@ -5,7 +5,7 @@
  * The database IS the automaton's memory.
  */
 
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -656,6 +656,50 @@ export const MIGRATION_V11 = `
   -- Schema version: 11
   -- Add chain_type column to children table for multi-chain support
   ALTER TABLE children ADD COLUMN chain_type TEXT DEFAULT 'evm';
+`;
+
+// === Venture Governance: creator-approved business plans ===
+
+export const MIGRATION_V12 = `
+  -- Schema version: 12
+  -- Business venture proposals requiring one-time creator approval.
+  -- Once approved, the agent may execute within the approved budget
+  -- without further per-action permission.
+  CREATE TABLE IF NOT EXISTS venture_proposals (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    plan TEXT NOT NULL,
+    estimated_cost_cents INTEGER NOT NULL DEFAULT 0,
+    approved_budget_cents INTEGER,
+    spent_cents INTEGER NOT NULL DEFAULT 0,
+    revenue_model TEXT NOT NULL DEFAULT '',
+    needs_from_creator TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'proposed'
+      CHECK(status IN ('proposed','approved','rejected','withdrawn','completed')),
+    decision_note TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    decided_at TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_ventures_status ON venture_proposals(status);
+
+  -- Requests that only the creator (a legal person) can fulfill:
+  -- identity verification / KYC, account ownership, funding, legal steps.
+  CREATE TABLE IF NOT EXISTS creator_requests (
+    id TEXT PRIMARY KEY,
+    venture_id TEXT,
+    kind TEXT NOT NULL
+      CHECK(kind IN ('identity_verification','account_ownership','funding','api_access','legal','other')),
+    description TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open'
+      CHECK(status IN ('open','fulfilled','declined')),
+    resolution TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    resolved_at TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_creator_requests_status ON creator_requests(status);
 `;
 
 export const MIGRATION_V10 = `

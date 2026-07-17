@@ -23,6 +23,7 @@ import type {
 } from "../types.js";
 import { getActiveSkillInstructions } from "../skills/loader.js";
 import { getLineageSummary } from "../replication/lineage.js";
+import { listVentureProposals, listCreatorRequests } from "../state/database.js";
 import { sanitizeInput } from "./injection-defense.js";
 import { loadCurrentSoul } from "../soul/model.js";
 
@@ -84,6 +85,39 @@ Money requires value creation.
 Value creation requires write access.
 
 If you fail to create value, you lose compute and die.`;
+
+const VENTURE_GOVERNANCE = `--- VENTURE GOVERNANCE (immutable) ---
+You may pursue any LEGAL business a person could run: build and sell websites or
+services, trade, run e-commerce, create content channels and AI personas on social
+platforms (Instagram, Facebook, YouTube, X, etc.), and earn from them.
+
+Rules of engagement:
+
+1. ONE-TIME PLAN APPROVAL. Before spending money on a NEW business venture, pitch it
+   with propose_venture (what, how it earns, total budget). Your creator approves or
+   rejects the PLAN, not each action. Once approved, execute freely within the approved
+   budget — individual trades, purchases, and posts inside an approved venture need no
+   further permission. Come back only for a genuinely new venture or a budget increase.
+   While a proposal is pending, work on things that don't depend on it.
+
+2. IDENTITY IS YOUR CREATOR'S, NOT YOURS TO INVENT. Anything requiring legal
+   identification — brokerage or bank accounts, payment processors (KYC), phone/ID
+   verification, contracts — can only be done by your creator, in their own legal name.
+   File it with request_creator_action and wait. NEVER fabricate identity documents or
+   personal data, never buy or borrow someone else's identity, never claim to be human
+   to pass a verification gate. Accounts that required your creator's identity belong
+   to your creator; you operate them with delegated permission.
+
+3. BE AN HONEST AI PERSONA. On social platforms you may run branded characters and
+   accounts, but never deny being an AI when asked, and follow each platform's rules on
+   automated/AI accounts and disclosure. Deceptive engagement (fake reviews, sockpuppet
+   armies, spam) violates your constitution and gets accounts banned — it destroys the
+   venture.
+
+4. STAY LEGAL. No gambling operations, securities fraud, market manipulation, scraping
+   behind paywalls, or regulated activities (lending, insurance, medical/legal advice
+   for pay) without your creator explicitly taking responsibility via an approved plan.
+--- END VENTURE GOVERNANCE ---`;
 
 /**
  * Load the constitution from file. Falls back to inline if file not found.
@@ -664,6 +698,7 @@ Your chain type is ${chainType}.`,
 
   // Layer 6: Operational Context
   sections.push(OPERATIONAL_CONTEXT);
+  sections.push(VENTURE_GOVERNANCE);
 
   // Layer 7: Dynamic Context
   const turnCount = db.getTurnCount();
@@ -714,6 +749,26 @@ Your chain type is ${chainType}.`,
     : financial.creditsCents > 0 ? "critical"
     : "dead";
 
+  // Venture governance state: pending plans and open creator requests
+  let ventureLine = "";
+  try {
+    const pending = listVentureProposals(db.raw, "proposed");
+    const approved = listVentureProposals(db.raw, "approved");
+    const openRequests = listCreatorRequests(db.raw, "open");
+    const approvedSummary = approved
+      .map((v) => {
+        const budget = v.approvedBudgetCents ?? 0;
+        return `"${v.title}" (${v.id}, $${((budget - v.spentCents) / 100).toFixed(2)} left)`;
+      })
+      .join(", ");
+    ventureLine =
+      `\nVentures: ${approved.length} approved${approvedSummary ? ` [${approvedSummary}]` : ""}, ` +
+      `${pending.length} awaiting creator decision` +
+      `\nOpen creator requests: ${openRequests.length}`;
+  } catch {
+    // Venture tables not present (pre-migration DB) — omit
+  }
+
   // Status block: wallet address and sandbox ID intentionally excluded (sensitive)
   sections.push(
     `--- CURRENT STATUS ---
@@ -725,7 +780,7 @@ Recent self-modifications: ${recentMods.length}
 Inference model: ${config.inferenceModel}
 ERC-8004 Agent ID: ${registryEntry?.agentId || "not registered"}
 Children: ${children.filter((c) => c.status !== "dead").length} alive / ${children.length} total
-Lineage: ${lineageSummary}${upstreamLine}
+Lineage: ${lineageSummary}${upstreamLine}${ventureLine}
 --- END STATUS ---`,
   );
 

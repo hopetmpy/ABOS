@@ -46,6 +46,7 @@ import {
   MIGRATION_V9_ALTER_CHILDREN_ROLE,
   MIGRATION_V10,
   MIGRATION_V11,
+  MIGRATION_V12,
 } from "./schema.js";
 import type {
   RiskLevel,
@@ -625,6 +626,10 @@ function applyMigrations(db: DatabaseType): void {
         try { db.exec(MIGRATION_V11); } catch { /* column may already exist */ }
       },
     },
+    {
+      version: 12,
+      apply: () => db.exec(MIGRATION_V12),
+    },
   ];
 
   for (const m of migrations) {
@@ -1187,6 +1192,244 @@ export function updateKnowledge(
 
 export function deleteKnowledge(db: DatabaseType, id: string): void {
   db.prepare("DELETE FROM knowledge_store WHERE id = ?").run(id);
+}
+
+// ─── Venture Governance Helpers ─────────────────────────────────
+// Business plans require one-time creator approval. Once approved,
+// the agent executes freely within the approved budget.
+
+export type VentureStatus =
+  | "proposed"
+  | "approved"
+  | "rejected"
+  | "withdrawn"
+  | "completed";
+
+export interface VentureProposalRow {
+  id: string;
+  title: string;
+  summary: string;
+  plan: string;
+  estimatedCostCents: number;
+  approvedBudgetCents: number | null;
+  spentCents: number;
+  revenueModel: string;
+  needsFromCreator: string[];
+  status: VentureStatus;
+  decisionNote: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+}
+
+export type CreatorRequestKind =
+  | "identity_verification"
+  | "account_ownership"
+  | "funding"
+  | "api_access"
+  | "legal"
+  | "other";
+
+export type CreatorRequestStatus = "open" | "fulfilled" | "declined";
+
+export interface CreatorRequestRow {
+  id: string;
+  ventureId: string | null;
+  kind: CreatorRequestKind;
+  description: string;
+  status: CreatorRequestStatus;
+  resolution: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
+function deserializeVentureRow(row: any): VentureProposalRow {
+  let needs: string[] = [];
+  try {
+    const parsed = JSON.parse(row.needs_from_creator || "[]");
+    if (Array.isArray(parsed)) needs = parsed.map(String);
+  } catch {
+    // Malformed JSON — treat as no requests
+  }
+  return {
+    id: row.id,
+    title: row.title,
+    summary: row.summary,
+    plan: row.plan,
+    estimatedCostCents: row.estimated_cost_cents,
+    approvedBudgetCents: row.approved_budget_cents,
+    spentCents: row.spent_cents,
+    revenueModel: row.revenue_model,
+    needsFromCreator: needs,
+    status: row.status as VentureStatus,
+    decisionNote: row.decision_note,
+    createdAt: row.created_at,
+    decidedAt: row.decided_at,
+  };
+}
+
+export function insertVentureProposal(
+  db: DatabaseType,
+  proposal: {
+    id: string;
+    title: string;
+    summary: string;
+    plan: string;
+    estimatedCostCents: number;
+    revenueModel: string;
+    needsFromCreator: string[];
+  },
+): void {
+  db.prepare(
+    `INSERT INTO venture_proposals
+       (id, title, summary, plan, estimated_cost_cents, revenue_model, needs_from_creator)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    proposal.id,
+    proposal.title,
+    proposal.summary,
+    proposal.plan,
+    proposal.estimatedCostCents,
+    proposal.revenueModel,
+    JSON.stringify(proposal.needsFromCreator),
+  );
+}
+
+export function getVentureProposalById(
+  db: DatabaseType,
+  id: string,
+): VentureProposalRow | undefined {
+  const row = db
+    .prepare("SELECT * FROM venture_proposals WHERE id = ?")
+    .get(id) as any;
+  return row ? deserializeVentureRow(row) : undefined;
+}
+
+export function listVentureProposals(
+  db: DatabaseType,
+  status?: VentureStatus,
+): VentureProposalRow[] {
+  const rows = (
+    status
+      ? db
+          .prepare(
+            "SELECT * FROM venture_proposals WHERE status = ? ORDER BY created_at DESC",
+          )
+          .all(status)
+      : db
+          .prepare("SELECT * FROM venture_proposals ORDER BY created_at DESC")
+          .all()
+  ) as any[];
+  return rows.map(deserializeVentureRow);
+}
+
+/**
+ * Creator decision on a venture proposal. Approving sets the budget the
+ * agent may spend on this venture without further permission (defaults to
+ * the agent's own estimate when not specified).
+ */
+export function decideVentureProposal(
+  db: DatabaseType,
+  id: string,
+  decision: "approved" | "rejected",
+  options?: { budgetCents?: number; note?: string },
+): VentureProposalRow | undefined {
+  const existing = getVentureProposalById(db, id);
+  if (!existing) return undefined;
+
+  const budget =
+    decision === "approved"
+      ? (options?.budgetCents ?? existing.estimatedCostCents)
+      : null;
+
+  db.prepare(
+    `UPDATE venture_proposals
+     SET status = ?, approved_budget_cents = ?, decision_note = ?, decided_at = datetime('now')
+     WHERE id = ?`,
+  ).run(decision, budget, options?.note ?? null, id);
+
+  return getVentureProposalById(db, id);
+}
+
+/**
+ * Record spend attributed to a venture. Returns the updated row, or
+ * undefined if the venture doesn't exist.
+ */
+export function addVentureSpend(
+  db: DatabaseType,
+  id: string,
+  amountCents: number,
+): VentureProposalRow | undefined {
+  const result = db
+    .prepare(
+      "UPDATE venture_proposals SET spent_cents = spent_cents + ? WHERE id = ?",
+    )
+    .run(amountCents, id);
+  if (result.changes === 0) return undefined;
+  return getVentureProposalById(db, id);
+}
+
+function deserializeCreatorRequestRow(row: any): CreatorRequestRow {
+  return {
+    id: row.id,
+    ventureId: row.venture_id,
+    kind: row.kind as CreatorRequestKind,
+    description: row.description,
+    status: row.status as CreatorRequestStatus,
+    resolution: row.resolution,
+    createdAt: row.created_at,
+    resolvedAt: row.resolved_at,
+  };
+}
+
+export function insertCreatorRequest(
+  db: DatabaseType,
+  request: {
+    id: string;
+    ventureId?: string;
+    kind: CreatorRequestKind;
+    description: string;
+  },
+): void {
+  db.prepare(
+    `INSERT INTO creator_requests (id, venture_id, kind, description)
+     VALUES (?, ?, ?, ?)`,
+  ).run(request.id, request.ventureId ?? null, request.kind, request.description);
+}
+
+export function listCreatorRequests(
+  db: DatabaseType,
+  status?: CreatorRequestStatus,
+): CreatorRequestRow[] {
+  const rows = (
+    status
+      ? db
+          .prepare(
+            "SELECT * FROM creator_requests WHERE status = ? ORDER BY created_at DESC",
+          )
+          .all(status)
+      : db
+          .prepare("SELECT * FROM creator_requests ORDER BY created_at DESC")
+          .all()
+  ) as any[];
+  return rows.map(deserializeCreatorRequestRow);
+}
+
+export function resolveCreatorRequest(
+  db: DatabaseType,
+  id: string,
+  status: "fulfilled" | "declined",
+  resolution?: string,
+): CreatorRequestRow | undefined {
+  const result = db
+    .prepare(
+      `UPDATE creator_requests
+       SET status = ?, resolution = ?, resolved_at = datetime('now')
+       WHERE id = ?`,
+    )
+    .run(status, resolution ?? null, id);
+  if (result.changes === 0) return undefined;
+  const row = db.prepare("SELECT * FROM creator_requests WHERE id = ?").get(id) as any;
+  return row ? deserializeCreatorRequestRow(row) : undefined;
 }
 
 // ─── Heartbeat Schedule Helpers (Phase 1.1) ─────────────────────

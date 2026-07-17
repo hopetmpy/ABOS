@@ -21,6 +21,8 @@ import type {
 } from "../types.js";
 import type { PolicyEngine } from "./policy-engine.js";
 import { sanitizeToolResult, sanitizeInput } from "./injection-defense.js";
+import { createVentureTools } from "./venture-tools.js";
+import { addVentureSpend } from "../state/database.js";
 import { createLogger } from "../observability/logger.js";
 
 const logger = createLogger("tools");
@@ -1006,6 +1008,11 @@ Model: ${ctx.inference.getDefaultModel()}
           to_address: { type: "string", description: "Recipient address" },
           amount_cents: { type: "number", description: "Amount in cents" },
           reason: { type: "string", description: "Reason for transfer" },
+          venture_id: {
+            type: "string",
+            description:
+              "Approved venture this spend belongs to (required above the confirmation threshold; see propose_venture)",
+          },
         },
         required: ["to_address", "amount_cents"],
       },
@@ -1721,6 +1728,11 @@ Model: ${ctx.inference.getDefaultModel()}
           amount_cents: {
             type: "number",
             description: "Amount in cents to transfer",
+          },
+          venture_id: {
+            type: "string",
+            description:
+              "Approved venture this funding belongs to (required above the confirmation threshold; see propose_venture)",
           },
         },
         required: ["child_id", "amount_cents"],
@@ -3208,6 +3220,9 @@ Model: ${ctx.inference.getDefaultModel()}
         return lines.join("\n");
       },
     },
+
+    // ── Venture Governance Tools ──
+    ...createVentureTools(),
   ];
 }
 
@@ -3345,6 +3360,25 @@ export async function executeTool(
     // Sanitize results from external source tools
     if (EXTERNAL_SOURCE_TOOLS.has(toolName)) {
       result = sanitizeToolResult(result);
+    }
+
+    // Attribute spend to its approved venture budget
+    if (
+      !result.startsWith("Blocked:") &&
+      (toolName === "transfer_credits" || toolName === "fund_child")
+    ) {
+      const ventureId = args.venture_id as string | undefined;
+      const amount = args.amount_cents as number | undefined;
+      if (ventureId && amount && amount > 0) {
+        try {
+          addVentureSpend(context.db.raw, ventureId, amount);
+        } catch (error) {
+          logger.error(
+            `Venture spend tracking failed for ${toolName}`,
+            error instanceof Error ? error : undefined,
+          );
+        }
+      }
     }
 
     // Record spend for financial operations
