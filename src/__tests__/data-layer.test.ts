@@ -106,6 +106,21 @@ describe("SSRF Protection", () => {
       expect(isInternalNetwork("example.com")).toBe(false);
       expect(isInternalNetwork("api.conway.tech")).toBe(false);
     });
+
+    it("blocks decimal IPv4 literal for loopback", () => {
+      expect(isInternalNetwork("2130706433")).toBe(true); // 127.0.0.1
+    });
+
+    it("blocks IPv6-mapped IPv4 loopback", () => {
+      expect(isInternalNetwork("::ffff:127.0.0.1")).toBe(true);
+      expect(isInternalNetwork("::ffff:7f00:1")).toBe(true);
+    });
+
+    it("blocks IPv6 link-local and unique local", () => {
+      expect(isInternalNetwork("fe80::1")).toBe(true);
+      expect(isInternalNetwork("fc00::1")).toBe(true);
+      expect(isInternalNetwork("fd12:3456::1")).toBe(true);
+    });
   });
 
   describe("isAllowedUri", () => {

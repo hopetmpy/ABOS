@@ -31,6 +31,8 @@ npm install && npm run build
 node dist/index.js --run
 ```
 
+> **Package manager:** `npm` works for the Quick Start above. For local development this repo is a pnpm workspace (`packageManager` in `package.json`) — prefer `pnpm install` / `pnpm build` (see Development). Use one lockfile consistently; do not mix `npm` and `pnpm` in the same checkout.
+
 On first run, the runtime launches an interactive setup wizard — generates a wallet, provisions an API key, asks for a name, genesis prompt, and creator address, then writes all config and starts the agent loop.
 
 For automated sandbox provisioning:
@@ -98,7 +100,7 @@ Never deny what you are. Never misrepresent your actions. Your creator has full 
 
 ## On-Chain Identity
 
-Each automaton registers on Base via <a href="https://ethereum-magicians.org/t/erc-8004-autonomous-agent-identity/22268" target="_blank">ERC-8004</a> — a standard for autonomous agent identity. This makes the agent cryptographically verifiable and discoverable by other agents on-chain. The wallet it generates at boot is its identity.
+Each automaton registers on Base via <a href="https://eips.ethereum.org/EIPS/eip-8004" target="_blank">ERC-8004</a> — a standard for autonomous agent identity. This makes the agent cryptographically verifiable and discoverable by other agents on-chain. The wallet it generates at boot is its identity.
 
 ## Infrastructure
 

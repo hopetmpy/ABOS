@@ -27,11 +27,51 @@ const DISCOVERY_TIMEOUT_MS = 60_000;
 // ─── SSRF Protection ────────────────────────────────────────────
 
 /**
- * Check if a hostname resolves to an internal/private network.
+ * Check if a hostname string itself is an internal/private address form.
  * Blocks: 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12,
- *         192.168.0.0/16, 169.254.0.0/16, ::1, localhost, 0.0.0.0/8
+ *         192.168.0.0/16, 169.254.0.0/16, ::1, localhost, 0.0.0.0/8,
+ *         IPv6-mapped IPv4 (::ffff:…), IPv6 link-local / ULA,
+ *         and decimal / octal IPv4 literals.
+ *
+ * Note: this does not resolve DNS — a domain that later resolves to a
+ * private IP can still bypass hostname-only checks (see issue #183).
  */
 export function isInternalNetwork(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+
+  // Decimal IPv4 literal (e.g. 2130706433 → 127.0.0.1)
+  if (/^\d+$/.test(host)) {
+    const n = Number(host);
+    if (Number.isSafeInteger(n) && n >= 0 && n <= 0xffffffff) {
+      const a = (n >>> 24) & 0xff;
+      const b = (n >>> 16) & 0xff;
+      const c = (n >>> 8) & 0xff;
+      const d = n & 0xff;
+      return isInternalNetwork(`${a}.${b}.${c}.${d}`);
+    }
+  }
+
+  // Octal-ish dotted IPv4 (e.g. 0177.0.0.1)
+  if (/^0[0-7]+(\.0*[0-7]+)+$/.test(host)) {
+    const parts = host.split(".").map((p) => parseInt(p, 8));
+    if (parts.length === 4 && parts.every((p) => p >= 0 && p <= 255)) {
+      return isInternalNetwork(parts.join("."));
+    }
+  }
+
+  // IPv6-mapped IPv4 (:ffff:127.0.0.1 or ::ffff:7f00:1)
+  const mappedDotted = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+  if (mappedDotted) {
+    return isInternalNetwork(mappedDotted[1]);
+  }
+  const mappedHex = host.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+  if (mappedHex) {
+    const hi = parseInt(mappedHex[1], 16);
+    const lo = parseInt(mappedHex[2], 16);
+    const dotted = `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+    return isInternalNetwork(dotted);
+  }
+
   const blocked = [
     /^127\./,
     /^10\./,
@@ -41,8 +81,10 @@ export function isInternalNetwork(hostname: string): boolean {
     /^::1$/,
     /^localhost$/i,
     /^0\./,
+    /^fe80:/i, // IPv6 link-local
+    /^f[cd][0-9a-f]{2}:/i, // IPv6 unique local (fc00::/7)
   ];
-  return blocked.some(pattern => pattern.test(hostname));
+  return blocked.some((pattern) => pattern.test(host));
 }
 
 /**
