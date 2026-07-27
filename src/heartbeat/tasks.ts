@@ -23,6 +23,7 @@ import { getMetrics } from "../observability/metrics.js";
 import { AlertEngine, createDefaultAlertRules } from "../observability/alerts.js";
 import { metricsInsertSnapshot, metricsPruneOld } from "../state/database.js";
 import { ulid } from "ulid";
+import { happyPaisa } from "../soul/HappyPaisaSoul.js";
 
 const logger = createLogger("heartbeat.tasks");
 
@@ -44,6 +45,32 @@ export const COLONY_TASK_INTERVALS_MS = {
 } as const;
 
 export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
+  /**
+   * Spark-engine idle poke — wakes the agent if Happy Paisa hasn't seen a turn
+   * for ~30 minutes (morale / momentum check).
+   */
+  happy_paisa_poke: async (_ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
+    const check = await happyPaisa.heartbeatCheck(30);
+    const payload = {
+      action: check.action,
+      message: check.message ?? null,
+      soul: happyPaisa.getName(),
+      mode: happyPaisa.getState().mode,
+      energy: happyPaisa.getState().energy,
+      timestamp: new Date().toISOString(),
+    };
+    taskCtx.db.setKV("last_happy_paisa_poke", JSON.stringify(payload));
+
+    if (check.action === "poke") {
+      logger.info("Happy Paisa poke — requesting wake", { message: check.message });
+      return {
+        shouldWake: true,
+        message: check.message ?? "Happy Paisa poke: still in the fight?",
+      };
+    }
+    return { shouldWake: false };
+  },
+
   heartbeat_ping: async (ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
     // Use ctx.creditBalance instead of calling conway.getCreditsBalance()
     const credits = ctx.creditBalance;

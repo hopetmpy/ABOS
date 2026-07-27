@@ -25,6 +25,7 @@ import { getActiveSkillInstructions } from "../skills/loader.js";
 import { getLineageSummary } from "../replication/lineage.js";
 import { sanitizeInput } from "./injection-defense.js";
 import { loadCurrentSoul } from "../soul/model.js";
+import { happyPaisa } from "../soul/HappyPaisaSoul.js";
 
 function getCoreRules(chainType?: string): string {
   const usdcNetwork = chainType === "solana" ? "USDC on Solana" : "USDC on Base";
@@ -633,6 +634,10 @@ Your chain type is ${chainType}.`,
       );
     }
   }
+
+  // Layer 3.25: Happy Paisa spark-engine persona (fixed product voice)
+  happyPaisa.noteInteraction();
+  sections.push(happyPaisa.toSystemPromptBlock());
 
   // Layer 3.5: WORKLOG.md -- persistent working context
   const worklogContent = loadWorklog();
