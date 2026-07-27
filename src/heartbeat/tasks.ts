@@ -294,9 +294,21 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
 
     if (newCount === 0) return { shouldWake: false };
 
+    // Spark-engine coach line from the freshest message content
+    const sample = messages
+      .map((m) => String(m.content || ""))
+      .filter(Boolean)
+      .slice(0, 3)
+      .join(" ");
+    const momentum = happyPaisa.inferMomentum(sample);
+    const coach = happyPaisa.coach(sample.slice(0, 280), momentum);
+    happyPaisa.noteInteraction();
+
     return {
       shouldWake: true,
-      message: `${newCount} new message(s) from: ${messages.map((m) => m.from.slice(0, 10)).join(", ")}`,
+      message:
+        `${newCount} new message(s) from: ${messages.map((m) => m.from.slice(0, 10)).join(", ")}. ` +
+        `[HappyPaisa/${momentum}] ${coach}`,
     };
   },
 

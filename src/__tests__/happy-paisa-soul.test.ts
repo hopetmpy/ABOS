@@ -49,6 +49,25 @@ describe("HappyPaisaSoul", () => {
     expect(check.action).toBe("poke");
     expect(check.message).toMatch(/fight/i);
   });
+
+  it("infers momentum from text", () => {
+    expect(soul.inferMomentum("I am completely stuck on this blocker")).toBe(
+      "stuck",
+    );
+    expect(soul.inferMomentum("feeling overwhelmed and burned out")).toBe(
+      "fragile",
+    );
+    expect(soul.inferMomentum("PR merged and tests are green")).toBe(
+      "crushing_it",
+    );
+    expect(soul.inferMomentum("working through the list")).toBe("moving");
+  });
+
+  it("flavors plain outbound but skips JSON", () => {
+    const flavored = soul.flavorOutbound("Need a hand tomorrow?");
+    expect(flavored.length).toBeGreaterThan("Need a hand tomorrow?".length);
+    expect(soul.flavorOutbound('{"type":"ping"}')).toBe('{"type":"ping"}');
+  });
 });
 
 describe("heartbeat default config", () => {

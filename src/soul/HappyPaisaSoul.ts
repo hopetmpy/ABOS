@@ -227,6 +227,58 @@ export class HappyPaisaSoul {
     }
   }
 
+  /**
+   * Lightweight keyword classifier for momentum state from free text
+   * (inbox messages, worklog snippets, user notes). Not ML — intentional.
+   */
+  public inferMomentum(text: string): UserMomentumState {
+    const t = text.toLowerCase();
+    const fragileHits =
+      /\b(burnout|burned out|overwhelmed|exhausted|can't|cannot|anxious|panic|depression|fragile|shutdown|hopeless)\b/.test(
+        t,
+      );
+    const stuckHits =
+      /\b(stuck|blocked|blocker|failing|broken|wall|stalled|spinning|deadlock|help)\b/.test(
+        t,
+      );
+    const crushHits =
+      /\b(shipped|done|crushed|won|victory|landed|merged|fixed|unblocked|green)\b/.test(
+        t,
+      );
+
+    if (fragileHits) return "fragile";
+    if (crushHits && !stuckHits) return "crushing_it";
+    if (stuckHits) return "stuck";
+    return "moving";
+  }
+
+  /** Classify text and return a persona line. */
+  public coach(context: string, userState?: UserMomentumState): string {
+    const state = userState ?? this.inferMomentum(context);
+    return this.respond(context, state);
+  }
+
+  /**
+   * Optional light flavor for outbound human-facing text.
+   * Skips JSON, system protocol payloads, and already-long messages.
+   */
+  public flavorOutbound(content: string): string {
+    const trimmed = content.trim();
+    if (!trimmed) return content;
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) return content;
+    if (trimmed.length > 800) return content;
+    // Already has spark energy
+    if (/[🔥⚡💥]/.test(trimmed)) return content;
+
+    const phrase = this.pickPhrase([
+      "we move!",
+      "okay! good!",
+      "forward is enough!",
+    ]);
+    // Prefix sparingly — keep original content intact
+    return `${phrase} ${trimmed}`;
+  }
+
   private pickPhrase(fallback: string[]): string {
     const phrases =
       this.config.soul.behavior.speaking_traits.natural_phrases ?? [];
