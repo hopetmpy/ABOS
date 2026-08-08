@@ -9,6 +9,7 @@
 
 import fs from "fs";
 import path from "path";
+import os from "node:os";
 import { getWallet, getAutomatonDir } from "./identity/wallet.js";
 import { provision, loadApiKeyFromConfig } from "./identity/provision.js";
 import { loadConfig, resolvePath } from "./config.js";
@@ -40,8 +41,57 @@ import { keccak256, toHex } from "viem";
 const logger = createLogger("main");
 const VERSION = "0.2.1";
 
+// File-based trace: write every key startup step to ~/.automaton/trace.log
+// so we can diagnose stdio/TTY issues even when stdout/stderr are swallowed
+// (e.g. by tsx watch, launchd, CI runners, or background processes).
+// Uses ~/.automaton because /tmp may be read-only on some macOS sandboxes.
+// Always also echoes to stderr so we have a visible signal even if file
+// writes fail.
+const _tracePath = `${os.homedir()}/.automaton/trace.log`;
+function _trace(msg: string): void {
+  const line = `[trace ${new Date().toISOString()}] ${msg}\n`;
+  try { process.stderr.write(line); } catch {}
+  try { fs.appendFileSync(_tracePath, line); } catch {}
+}
+try { fs.writeFileSync(_tracePath, ""); } catch {}
+_trace(`module loaded, argv=${JSON.stringify(process.argv)}, node=${process.version}, trace=${_tracePath}, cwd=${process.cwd()}, homedir=${os.homedir()}`);
+
+// Force stdout to be blocking (line-buffered) so log lines appear immediately
+// even when stdout is piped (e.g. under `tsx watch`, CI runners, launchd).
+// Without this, Node block-buffers stdout when !isTTY, and early log lines
+// stay invisible until the buffer fills or the process exits.
+try {
+  const handle = (process.stdout as any)._handle;
+  if (handle && typeof handle.setBlocking === "function") {
+    handle.setBlocking(true);
+  }
+} catch {}
+
+// If the parent process closes our stdout/stderr pipe (editor task runners,
+// capture tools, `| head`, a crashed supervisor), subsequent writes fail with
+// an EPIPE delivered asynchronously via the stream's "error" event — a
+// try/catch around write() cannot catch it, and unhandled it becomes an
+// uncaughtException. The uncaught handler's own stderr echo then re-raises
+// EPIPE, spinning the process in an infinite crash loop. Attaching an "error"
+// listener here stops stream errors from ever reaching uncaughtException;
+// the first failure per stream is recorded in the trace file.
+for (const stream of [process.stdout, process.stderr]) {
+  let reported = false;
+  stream.on("error", (err: NodeJS.ErrnoException) => {
+    if (reported) return;
+    reported = true;
+    const line = `[trace ${new Date().toISOString()}] stdio ${err?.code || "error"} (writes to this stream are now discarded): ${err?.message}\n`;
+    try { fs.appendFileSync(_tracePath, line); } catch {}
+  });
+}
+
+process.on("uncaughtException", (err) => { _trace(`UNCAUGHT: ${err.message}\n${err.stack}`); });
+process.on("unhandledRejection", (reason: any) => { _trace(`UNHANDLED REJECTION: ${reason?.message || reason}\n${reason?.stack || ""}`); });
+
 async function main(): Promise<void> {
+  _trace("main() entered");
   const args = process.argv.slice(2);
+  process.stderr.write(`[automaton] main() entered, args=${JSON.stringify(args)}\n`);
 
   // ─── CLI Commands ────────────────────────────────────────────
 
@@ -131,7 +181,10 @@ Environment:
 
   if (args.includes("--run")) {
     StructuredLogger.setSink(prettySink);
+    _trace("--run branch, calling run()");
+    process.stderr.write(`[automaton] entering run()...\n`);
     await run();
+    _trace("run() returned");
     return;
   }
 
@@ -184,22 +237,41 @@ Version:    ${config.version}
 // ─── Main Run ──────────────────────────────────────────────────
 
 async function run(): Promise<void> {
+  // Beacon: stderr is unbuffered, so this is always visible even when stdout
+  // is being swallowed (e.g. by a parent process piping the child's output).
+  _trace("run() top");
+  process.stderr.write(`[automaton] run() starting v${VERSION}\n`);
   logger.info(`[${new Date().toISOString()}] Conway Automaton v${VERSION} starting...`);
 
   // Load config — first run triggers interactive setup wizard
+  _trace("run: loading config");
   let config = loadConfig();
+  _trace(`run: config loaded=${!!config}`);
   if (!config) {
+    _trace("run: no config, running wizard");
     const { runSetupWizard } = await import("./setup/wizard.js");
     config = await runSetupWizard();
+    _trace("run: wizard returned");
   }
 
   // Load wallet (chain-aware)
+  _trace("run: loading wallet");
   const { account, chainIdentity, chainType: walletChainType } = await getWallet();
+  _trace(`run: wallet loaded addr=${chainIdentity.address}`);
   const resolvedChainType = config.chainType || walletChainType || "evm";
   const apiKey = config.conwayApiKey || loadApiKeyFromConfig();
   if (!apiKey) {
-    logger.error("No API key found. Run: automaton --provision");
-    process.exit(1);
+    // The wizard intentionally allows proceeding without a Conway API key
+    // (it advertises "limited functionality"). Honor that contract here:
+    // keep the agent alive so it can recover (e.g. via --provision) and so
+    // the heartbeat + survival systems still run. Conway API calls that
+    // require the key will surface a clear error at call time.
+    logger.warn(
+      `[${new Date().toISOString()}] No Conway API key configured. Starting with limited functionality.`,
+    );
+    logger.warn(
+      `[${new Date().toISOString()}] Provision one with: automaton --provision  (or set CONWAY_API_KEY)`,
+    );
   }
 
   // Initialize database
@@ -220,7 +292,7 @@ async function run(): Promise<void> {
     account,
     creatorAddress: config.creatorAddress,
     sandboxId: config.sandboxId,
-    apiKey,
+    apiKey: apiKey || "",
     createdAt,
     chainType: resolvedChainType,
     chainIdentity,
@@ -241,7 +313,7 @@ async function run(): Promise<void> {
   // Create Conway client
   const conway = createConwayClient({
     apiUrl: config.conwayApiUrl,
-    apiKey,
+    apiKey: apiKey || "",
     sandboxId: config.sandboxId,
   });
 
@@ -286,7 +358,7 @@ async function run(): Promise<void> {
   modelRegistry.initialize();
   const inference = createInferenceClient({
     apiUrl: config.conwayApiUrl,
-    apiKey,
+    apiKey: apiKey || "",
     defaultModel: config.inferenceModel,
     maxTokens: config.maxTokensPerTurn,
     lowComputeModel: config.modelStrategy?.lowComputeModel || "gpt-5-mini",
