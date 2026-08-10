@@ -26,6 +26,8 @@ import { DurableScheduler } from "./scheduler.js";
 import { upsertHeartbeatSchedule } from "../state/database.js";
 import type BetterSqlite3 from "better-sqlite3";
 import { createLogger } from "../observability/logger.js";
+import { SAFE_MODE, SafeModeViolation } from "../safety/safe-mode.js";
+import { RESTRICTED_LIVE_MODE, RestrictedLiveViolation } from "../restricted-live/mode.js";
 
 const logger = createLogger("heartbeat");
 
@@ -58,6 +60,8 @@ export interface HeartbeatDaemon {
 export function createHeartbeatDaemon(
   options: HeartbeatDaemonOptions,
 ): HeartbeatDaemon {
+  if (SAFE_MODE) throw new SafeModeViolation("persistentScheduling", "create production heartbeat daemon", "heartbeat/daemon");
+  if (RESTRICTED_LIVE_MODE) throw new RestrictedLiveViolation("DAEMON_DENIED", "Background heartbeat is disabled in restricted-live mode");
   const { identity, config, heartbeatConfig, db, rawDb, conway, social, onWakeRequest } = options;
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   let running = false;

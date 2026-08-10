@@ -10,4 +10,5 @@ dist
 *.tgz
 .automaton/wallet.json
 .automaton/state.db
-
+.automaton-safe/
+.automaton-live/

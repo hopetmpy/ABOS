@@ -170,6 +170,7 @@ export interface ToolContext {
   conway: ConwayClient;
   inference: InferenceClient;
   social?: SocialClientInterface;
+  runtimeCapabilities?: import("./safety/safe-mode.js").RuntimeCapabilities;
 }
 
 export interface SocialClientInterface {

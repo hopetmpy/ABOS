@@ -36,6 +36,10 @@ export { DEFAULT_TOKEN_BUDGET };
 export function estimateTokens(text: string): number {
   const content = text ?? "";
   const legacyEstimate = Math.ceil(content.length / 4);
+  // Exact tokenization of attacker/model-controlled megabyte-scale strings can
+  // become a CPU denial of service. The conservative bound is sufficient for
+  // deciding that such content exceeds the context budget.
+  if (content.length > 4_096) return legacyEstimate;
   try {
     if (!tokenCounter) {
       tokenCounter = createTokenCounter();

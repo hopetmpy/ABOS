@@ -12,6 +12,7 @@ import { getAutomatonDir } from "./identity/wallet.js";
 import { loadApiKeyFromConfig } from "./identity/provision.js";
 import { createLogger } from "./observability/logger.js";
 import type { ChainType } from "./identity/chain.js";
+import { SAFE_MODE, SafeModeViolation } from "./safety/safe-mode.js";
 
 const logger = createLogger("config");
 const CONFIG_FILENAME = "automaton.json";
@@ -105,6 +106,7 @@ export function saveConfig(config: AutomatonConfig): void {
  * Resolve ~ paths to absolute paths.
  */
 export function resolvePath(p: string): string {
+  if (SAFE_MODE && p.startsWith("~")) throw new SafeModeViolation("filesystemWrite", `expand tilde path ${p}`, "config");
   if (p.startsWith("~")) {
     return path.join(process.env.HOME || "/root", p.slice(1));
   }

@@ -674,7 +674,7 @@ describe("executeTool with PolicyEngine", () => {
     expect(result.result).toBe("");
   });
 
-  it("allows tool execution when no policy engine is provided", async () => {
+  it("denies tool execution when no policy engine is provided", async () => {
     const tools = createBuiltinTools("test-sandbox-id");
     const identity = createTestIdentity();
     const config = createTestConfig();
@@ -689,11 +689,11 @@ describe("executeTool with PolicyEngine", () => {
       inference,
     };
 
-    // No policyEngine or turnContext - backward compatible
+    // Policy and turn context are mandatory: fail closed.
     const result = await executeTool("check_credits", {}, tools, context);
 
-    expect(result.error).toBeUndefined();
-    expect(result.result).toContain("Credit balance");
+    expect(result.error).toContain("POLICY_CONTEXT_REQUIRED");
+    expect(result.result).toBe("");
   });
 
   it("allows tool execution when policy allows", async () => {

@@ -37,7 +37,7 @@ describe("Agent Loop", () => {
     db.close();
   });
 
-  it("exec tool runs and is persisted", async () => {
+  it("exec tool fails closed when policy context is absent", async () => {
     const inference = new MockInferenceClient([
       toolCallResponse([
         { name: "exec", arguments: { command: "echo hello" } },
@@ -63,14 +63,13 @@ describe("Agent Loop", () => {
     );
     expect(execTurn).toBeDefined();
     expect(execTurn!.toolCalls[0].name).toBe("exec");
-    expect(execTurn!.toolCalls[0].error).toBeUndefined();
+    expect(execTurn!.toolCalls[0].error).toContain("POLICY_CONTEXT_REQUIRED");
 
     // Verify conway.exec was called
-    expect(conway.execCalls.length).toBeGreaterThanOrEqual(1);
-    expect(conway.execCalls[0].command).toBe("echo hello");
+    expect(conway.execCalls.length).toBe(0);
   });
 
-  it("forbidden patterns blocked", async () => {
+  it("forbidden patterns fail closed before execution when policy context is absent", async () => {
     const inference = new MockInferenceClient([
       toolCallResponse([
         { name: "exec", arguments: { command: "rm -rf ~/.automaton" } },
@@ -89,13 +88,14 @@ describe("Agent Loop", () => {
       onTurnComplete: (turn) => turns.push(turn),
     });
 
-    // The tool result should contain a blocked message, not an error
+    // Missing policy context takes precedence over inline command filtering.
     const execTurn = turns.find((t) =>
       t.toolCalls.some((tc) => tc.name === "exec"),
     );
     expect(execTurn).toBeDefined();
     const execCall = execTurn!.toolCalls.find((tc) => tc.name === "exec");
-    expect(execCall!.result).toContain("Blocked");
+    expect(execCall!.error).toContain("POLICY_CONTEXT_REQUIRED");
+    expect(execCall!.result).toBe("");
 
     // conway.exec should NOT have been called
     expect(conway.execCalls.length).toBe(0);

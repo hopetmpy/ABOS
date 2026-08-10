@@ -16,6 +16,7 @@ import type {
 import { getSurvivalTier } from "../conway/credits.js";
 import { getUsdcBalance } from "../conway/x402.js";
 import { createLogger } from "../observability/logger.js";
+import { OFFLINE_TEST, SAFE_MODE } from "../safety/safe-mode.js";
 
 type DatabaseType = BetterSqlite3.Database;
 const logger = createLogger("heartbeat.tick");
@@ -56,7 +57,7 @@ export async function buildTickContext(
   }
 
   let usdcBalance = 0;
-  if (walletAddress) {
+  if (walletAddress && !SAFE_MODE && !OFFLINE_TEST) {
     try {
       const network = chainType === "solana" ? "solana:mainnet" : "eip155:8453";
       usdcBalance = await getUsdcBalance(walletAddress, network, chainType as any);

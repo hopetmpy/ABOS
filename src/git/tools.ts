@@ -6,6 +6,13 @@
  */
 
 import type { ConwayClient, GitStatus, GitLogEntry } from "../types.js";
+import { SAFE_MODE, SafeModeViolation } from "../safety/safe-mode.js";
+import { RESTRICTED_LIVE_MODE, RestrictedLiveViolation } from "../restricted-live/mode.js";
+
+function denyGitWrite(operation: string, capability: "gitWrite" | "gitPush" = "gitWrite"): void {
+  if (SAFE_MODE) throw new SafeModeViolation(capability, operation, "git/tools");
+  if (RESTRICTED_LIVE_MODE) throw new RestrictedLiveViolation("GIT_WRITE_DENIED", `${operation} is disabled in restricted-live mode`);
+}
 
 /**
  * Get git status for a repository.
@@ -80,6 +87,7 @@ export async function gitCommit(
   message: string,
   addAll: boolean = true,
 ): Promise<string> {
+  denyGitWrite("git commit");
   if (addAll) {
     await conway.exec(`cd ${escapeShellArg(repoPath)} && git add -A`, 10000);
   }
@@ -130,6 +138,7 @@ export async function gitPush(
   remote: string = "origin",
   branch?: string,
 ): Promise<string> {
+  denyGitWrite("git push", "gitPush");
   const branchArg = branch ? ` ${escapeShellArg(branch)}` : "";
   const result = await conway.exec(
     `cd ${escapeShellArg(repoPath)} && git push ${escapeShellArg(remote)}${branchArg} 2>&1`,
@@ -152,6 +161,7 @@ export async function gitBranch(
   action: "list" | "create" | "checkout" | "delete",
   branchName?: string,
 ): Promise<string> {
+  if (action !== "list") denyGitWrite(`git branch ${action}`);
   let cmd: string;
 
   switch (action) {
@@ -187,6 +197,7 @@ export async function gitClone(
   targetPath: string,
   depth?: number,
 ): Promise<string> {
+  denyGitWrite("git clone");
   const depthArg = depth
     ? ` --depth ${Math.max(1, Math.floor(Number(depth)))}`
     : "";
@@ -209,6 +220,7 @@ export async function gitInit(
   conway: ConwayClient,
   repoPath: string,
 ): Promise<string> {
+  denyGitWrite("git init");
   const result = await conway.exec(
     `cd ${escapeShellArg(repoPath)} && git init 2>&1`,
     10000,

@@ -17,6 +17,12 @@ import type { WalletData } from "../types.js";
 import type { ChainType } from "./chain.js";
 import { EvmChainIdentity, SolanaChainIdentity } from "./chain.js";
 import type { ChainIdentity } from "./chain.js";
+import { SAFE_MODE, SAFE_STATE_ROOT, SafeModeViolation } from "../safety/safe-mode.js";
+import { RESTRICTED_LIVE_MODE, RestrictedLiveViolation } from "../restricted-live/mode.js";
+
+function denyProductionWalletInRestrictedLive(): void {
+  if (RESTRICTED_LIVE_MODE) throw new RestrictedLiveViolation("WALLET_ISOLATION", "Production/personal wallet access is disabled in restricted-live mode");
+}
 
 /**
  * Create a stub PrivateKeyAccount for Solana wallets.
@@ -41,17 +47,16 @@ function createSolanaStubAccount(solanaAddress: string): PrivateKeyAccount {
   } as unknown as PrivateKeyAccount;
 }
 
-const AUTOMATON_DIR = path.join(
-  process.env.HOME || "/root",
-  ".automaton",
-);
+const AUTOMATON_DIR = SAFE_MODE ? SAFE_STATE_ROOT : path.join(process.env.HOME || "/root", ".automaton");
 const WALLET_FILE = path.join(AUTOMATON_DIR, "wallet.json");
 
 export function getAutomatonDir(): string {
+  denyProductionWalletInRestrictedLive();
   return AUTOMATON_DIR;
 }
 
 export function getWalletPath(): string {
+  denyProductionWalletInRestrictedLive();
   return WALLET_FILE;
 }
 
@@ -60,6 +65,7 @@ export function getWalletPath(): string {
  * Returns the 64-byte secret key (first 32 = private, last 32 = public).
  */
 export function generateSolanaKeypair(): { secretKey: Uint8Array; publicKey: Uint8Array; address: string } {
+  if (SAFE_MODE) throw new SafeModeViolation("walletSigning", "generate Solana keypair", "identity/wallet");
   const keypair = nacl.sign.keyPair();
   return {
     secretKey: keypair.secretKey,
@@ -80,6 +86,8 @@ export async function getWallet(chainType?: ChainType): Promise<{
   chainType: ChainType;
   isNew: boolean;
 }> {
+  denyProductionWalletInRestrictedLive();
+  if (SAFE_MODE) throw new SafeModeViolation("walletSigning", "load or generate wallet", "identity/wallet");
   if (!fs.existsSync(AUTOMATON_DIR)) {
     fs.mkdirSync(AUTOMATON_DIR, { recursive: true, mode: 0o700 });
   }
@@ -144,6 +152,7 @@ export async function getWallet(chainType?: ChainType): Promise<{
  * Get the wallet address without loading the full account.
  */
 export function getWalletAddress(): string | null {
+  denyProductionWalletInRestrictedLive();
   if (!fs.existsSync(WALLET_FILE)) {
     return null;
   }
@@ -167,6 +176,8 @@ export function getWalletAddress(): string | null {
  * For Solana wallets, returns a proxy account.
  */
 export function loadWalletAccount(): PrivateKeyAccount | null {
+  denyProductionWalletInRestrictedLive();
+  if (SAFE_MODE) throw new SafeModeViolation("walletSigning", "load wallet account", "identity/wallet");
   if (!fs.existsSync(WALLET_FILE)) {
     return null;
   }
@@ -187,6 +198,7 @@ export function loadWalletAccount(): PrivateKeyAccount | null {
  * Get the chain type from the wallet file.
  */
 export function getWalletChainType(): ChainType {
+  denyProductionWalletInRestrictedLive();
   if (!fs.existsSync(WALLET_FILE)) {
     return "evm";
   }
@@ -201,5 +213,6 @@ export function getWalletChainType(): ChainType {
 }
 
 export function walletExists(): boolean {
+  denyProductionWalletInRestrictedLive();
   return fs.existsSync(WALLET_FILE);
 }

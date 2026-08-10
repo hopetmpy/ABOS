@@ -28,6 +28,8 @@ import { keccak256, toHex } from "viem";
 import type { Address, PrivateKeyAccount } from "viem";
 import { randomUUID } from "crypto";
 import type { ChainType, ChainIdentity } from "../identity/chain.js";
+import { SAFE_MODE, OFFLINE_TEST, createSafeConwayClient } from "../safety/safe-mode.js";
+import { RESTRICTED_LIVE_MODE, RestrictedLiveViolation } from "../restricted-live/mode.js";
 
 interface ConwayClientOptions {
   apiUrl: string;
@@ -36,6 +38,10 @@ interface ConwayClientOptions {
 }
 
 export function createConwayClient(options: ConwayClientOptions): ConwayClient {
+  if (RESTRICTED_LIVE_MODE) throw new RestrictedLiveViolation("CLIENT_DENIED", "Generic Conway client is disabled; use restricted-live read/inference adapters");
+  // Offline tests must never reach the host execSync/network implementation.
+  // This adapter-level guard complements (and does not replace) the test harness.
+  if (SAFE_MODE || OFFLINE_TEST) return createSafeConwayClient();
   const { apiUrl, apiKey } = options;
   // Normalize sandbox ID defensively so values like whitespace/"undefined"/"null"
   // never produce malformed API paths such as /v1/sandboxes//exec.
