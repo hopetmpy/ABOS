@@ -149,7 +149,13 @@ async function showStatus(): Promise<void> {
     return;
   }
 
-  const dbPath = resolvePath(config.dbPath);
+  const supervisedMode =
+    process.env.AUTOMATON_SUPERVISED_MODE === "1";
+  const dbPath = resolvePath(
+    supervisedMode
+      ? "~/.automaton/supervised-state.db"
+      : config.dbPath,
+  );
   const db = createDatabase(dbPath);
 
   const state = db.getAgentState();
@@ -198,20 +204,35 @@ async function run(): Promise<void> {
   const resolvedChainType = config.chainType || walletChainType || "evm";
   const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || config.ollamaBaseUrl;
   const labMode = process.env.AUTOMATON_LAB_MODE === "1";
+  const supervisedMode = process.env.AUTOMATON_SUPERVISED_MODE === "1";
+
+  if (labMode && supervisedMode) {
+    logger.error("Choose exactly one restricted mode: laboratory or supervised.");
+    process.exit(1);
+  }
+
+  const restrictedMode = labMode || supervisedMode;
+  const restrictedModeName = labMode ? "LAB MODE" : "SUPERVISED MODE S1";
   const apiKey = config.conwayApiKey || loadApiKeyFromConfig();
-  if (!apiKey && !(labMode && ollamaBaseUrl)) {
+
+  if (!apiKey && !(restrictedMode && ollamaBaseUrl)) {
     logger.error("No API key found. Run: automaton --provision");
     process.exit(1);
   }
-  // Lab-only placeholder. It is never sent outside loopback.
-  const runtimeApiKey = apiKey || "lab-disabled";
+
+  // Restricted-mode placeholder. It is never sent outside loopback.
+  const runtimeApiKey = apiKey || "restricted-local-disabled";
 
   // Initialize database
-  const dbPath = resolvePath(config.dbPath);
+  const dbPath = resolvePath(
+    supervisedMode
+      ? "~/.automaton/supervised-state.db"
+      : config.dbPath,
+  );
   const db = createDatabase(dbPath);
-  if (labMode) {
+  if (restrictedMode) {
     db.raw.prepare("UPDATE skills SET enabled = 0").run();
-    logger.info("LAB MODE: all database skills disabled.");
+    logger.info(restrictedModeName + ": all database skills disabled.");
   }
 
   // Persist createdAt: only set if not already stored (never overwrite)
@@ -248,14 +269,14 @@ async function run(): Promise<void> {
 
   // Create Conway client
   const conway = createConwayClient({
-    apiUrl: labMode ? "http://127.0.0.1:9" : config.conwayApiUrl,
+    apiUrl: restrictedMode ? "http://127.0.0.1:9" : config.conwayApiUrl,
     apiKey: runtimeApiKey,
-    sandboxId: labMode ? "__lab_disabled__" : config.sandboxId,
+    sandboxId: restrictedMode ? "__restricted_disabled__" : config.sandboxId,
   });
 
   // Register automaton identity (one-time, immutable)
   const registrationState = db.getIdentity("conwayRegistrationStatus");
-  if (!labMode && registrationState !== "registered") {
+  if (!restrictedMode && registrationState !== "registered") {
     try {
       const genesisPromptHash = config.genesisPrompt
         ? keccak256(toHex(config.genesisPrompt))
@@ -294,7 +315,9 @@ async function run(): Promise<void> {
     apiKey: runtimeApiKey,
     defaultModel: config.inferenceModel,
     maxTokens: config.maxTokensPerTurn,
-    lowComputeModel: config.modelStrategy?.lowComputeModel || "gpt-5-mini",
+    lowComputeModel: restrictedMode
+      ? config.inferenceModel
+      : config.modelStrategy?.lowComputeModel || "gpt-5-mini",
     openaiApiKey: config.openaiApiKey,
     anthropicApiKey: config.anthropicApiKey,
     ollamaBaseUrl,
@@ -307,7 +330,7 @@ async function run(): Promise<void> {
 
   // Create social client (chain-aware: pass ChainIdentity for Solana signing)
   let social: SocialClientInterface | undefined;
-  if (!labMode && config.socialRelayUrl) {
+  if (!restrictedMode && config.socialRelayUrl) {
     social = createSocialClient(config.socialRelayUrl, resolvedChainType === "solana" ? chainIdentity : account);
     logger.info(`[${new Date().toISOString()}] Social relay: ${config.socialRelayUrl}`);
   }
@@ -326,8 +349,8 @@ async function run(): Promise<void> {
   // Load skills
   const skillsDir = config.skillsDir || "~/.automaton/skills";
   let skills: Skill[] = [];
-  if (labMode) {
-    logger.info("LAB MODE: skill loading disabled.");
+  if (restrictedMode) {
+    logger.info(restrictedModeName + ": skill loading disabled.");
   } else {
     try {
       skills = loadSkills(skillsDir, db);
@@ -337,8 +360,11 @@ async function run(): Promise<void> {
     }
   }
 
-  if (labMode) {
-    logger.info("LAB MODE: Conway registration, local execution, and automatic top-up are disabled.");
+  if (restrictedMode) {
+    logger.info(
+      restrictedModeName +
+        ": Conway registration, local execution fallback, and automatic top-up are disabled.",
+    );
   } else {
   // Initialize state repo (git)
   try {
@@ -397,8 +423,8 @@ async function run(): Promise<void> {
     },
   });
 
-  if (labMode) {
-    logger.info("LAB MODE: heartbeat daemon disabled.");
+  if (restrictedMode) {
+    logger.info(restrictedModeName + ": heartbeat daemon disabled.");
   } else {
     heartbeat.start();
     logger.info(`[${new Date().toISOString()}] Heartbeat daemon started.`);
@@ -422,8 +448,8 @@ async function run(): Promise<void> {
 
   while (true) {
     try {
-      // Reload skills only outside laboratory mode.
-      if (!labMode) {
+      // Reload skills only outside restricted local modes.
+      if (!restrictedMode) {
         try {
           skills = loadSkills(skillsDir, db);
         } catch (error) {
@@ -452,6 +478,16 @@ async function run(): Promise<void> {
           );
         },
       });
+
+      if (restrictedMode) {
+        logger.info(
+          restrictedModeName +
+            ": supervised single-run session completed; process will stop.",
+        );
+        db.setAgentState("sleeping");
+        db.close();
+        return;
+      }
 
       // Agent loop exited (sleeping or dead)
       const state = db.getAgentState();
@@ -500,6 +536,13 @@ async function run(): Promise<void> {
       logger.error(
         `[${new Date().toISOString()}] Fatal error in run loop: ${err.message}`,
       );
+
+      if (restrictedMode) {
+        db.setAgentState("sleeping");
+        db.close();
+        throw err;
+      }
+
       // Wait before retrying
       await sleep(30_000);
     }

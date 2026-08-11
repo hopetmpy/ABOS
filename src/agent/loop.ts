@@ -66,6 +66,7 @@ import { ProviderRegistry } from "../inference/provider-registry.js";
 import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import { isIdleOnlyTool } from "./idle-only-tools.js";
 import { filterToolsForLabMode, isLabModeEnabled } from "./lab-mode.js";
+import { createSupervisedTools, isSupervisedModeEnabled } from "./supervised-mode.js";
 
 const logger = createLogger("loop");
 const MAX_TOOL_CALLS_PER_TURN = 10;
@@ -97,13 +98,33 @@ export async function runAgentLoop(
   const { identity, config, db, conway, inference, social, skills, policyEngine, spendTracker, onStateChange, onTurnComplete, ollamaBaseUrl } =
     options;
 
+  const labMode = isLabModeEnabled();
+  const supervisedMode = isSupervisedModeEnabled();
+  const restrictedMode = labMode || supervisedMode;
+
   const builtinTools = createBuiltinTools(identity.sandboxId);
-  const installedTools = loadInstalledTools(db);
-  const tools = filterToolsForLabMode([...builtinTools, ...installedTools]);
-  if (isLabModeEnabled()) {
-    logger.warn(
-      `LAB MODE enabled: ${tools.length} internal tools exposed; external actions disabled`,
+  const installedTools = restrictedMode ? [] : loadInstalledTools(db);
+
+  let tools;
+  if (supervisedMode) {
+    const sleepTool = builtinTools.find((tool) => tool.name === "sleep");
+    const supervisedReadTools = createSupervisedTools().filter(
+      (tool) => tool.name === "supervised_read_file",
     );
+    tools = [
+      ...(sleepTool ? [sleepTool] : []),
+      ...supervisedReadTools,
+    ];
+    logger.warn(
+      `SUPERVISED MODE S1 enabled: ${tools.length} confined tools exposed; shell, writes, external actions, and delegation disabled`,
+    );
+  } else {
+    tools = filterToolsForLabMode([...builtinTools, ...installedTools]);
+    if (labMode) {
+      logger.warn(
+        `LAB MODE enabled: ${tools.length} internal tools exposed; external actions disabled`,
+      );
+    }
   }
   const toolContext: ToolContext = {
     identity,
@@ -118,6 +139,14 @@ export async function runAgentLoop(
   const modelStrategyConfig: ModelStrategyConfig = {
     ...DEFAULT_MODEL_STRATEGY_CONFIG,
     ...(config.modelStrategy ?? {}),
+    ...(restrictedMode
+      ? {
+          inferenceModel: config.inferenceModel,
+          lowComputeModel: config.inferenceModel,
+          criticalModel: config.inferenceModel,
+          enableModelFallback: false,
+        }
+      : {}),
   };
   const modelRegistry = new ModelRegistry(db.raw);
   modelRegistry.initialize();
@@ -135,7 +164,7 @@ export async function runAgentLoop(
   let orchestrator: Orchestrator | undefined;
   let workerPool: LocalWorkerPool | undefined;
 
-  if (!isLabModeEnabled() && hasTable(db.raw, "goals")) {
+  if (!restrictedMode && hasTable(db.raw, "goals")) {
     try {
       planModeController = new PlanModeController(db.raw);
 
@@ -606,17 +635,41 @@ export async function runAgentLoop(
       log(config, `[THINK] Routing inference (tier: ${survivalTier}, model: ${inference.getDefaultModel()})...`);
 
       const inferenceTools = toolsToInferenceFormat(tools);
-      const routerResult = await inferenceRouter.route(
-        {
-          messages: messages,
-          taskType: "agent_turn",
-          tier: survivalTier,
-          sessionId: db.getKV("session_id") || "default",
-          turnId: ulid(),
+
+      let routerResult;
+      if (restrictedMode) {
+        const startedAt = Date.now();
+        const localResponse = await inference.chat(messages, {
+          model: config.inferenceModel,
+          maxTokens: config.maxTokensPerTurn,
           tools: inferenceTools,
-        },
-        (msgs, opts) => inference.chat(msgs, { ...opts, tools: inferenceTools }),
-      );
+        });
+
+        routerResult = {
+          content: localResponse.message?.content || "",
+          model: config.inferenceModel,
+          provider: "ollama" as const,
+          inputTokens: localResponse.usage?.promptTokens || 0,
+          outputTokens: localResponse.usage?.completionTokens || 0,
+          costCents: 0,
+          latencyMs: Date.now() - startedAt,
+          toolCalls: localResponse.toolCalls,
+          finishReason: localResponse.finishReason || "stop",
+        };
+      } else {
+        routerResult = await inferenceRouter.route(
+          {
+            messages: messages,
+            taskType: "agent_turn",
+            tier: survivalTier,
+            sessionId: db.getKV("session_id") || "default",
+            turnId: ulid(),
+            tools: inferenceTools,
+          },
+          (msgs, opts) =>
+            inference.chat(msgs, { ...opts, tools: inferenceTools }),
+        );
+      }
 
       // Build a compatible response for the rest of the loop
       const response = {
@@ -955,6 +1008,18 @@ async function getFinancialState(
   db?: AutomatonDatabase,
   chainType?: string,
 ): Promise<FinancialState> {
+  const restrictedLocalMode =
+    process.env.AUTOMATON_LAB_MODE === "1" ||
+    process.env.AUTOMATON_SUPERVISED_MODE === "1";
+
+  if (restrictedLocalMode) {
+    return {
+      creditsCents: 0,
+      usdcBalance: 0,
+      lastChecked: new Date().toISOString(),
+    };
+  }
+
   let creditsCents = _lastKnownCredits;
   let usdcBalance = _lastKnownUsdc;
 
