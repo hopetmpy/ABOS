@@ -663,7 +663,12 @@ Your chain type is ${chainType}.`,
   }
 
   // Layer 6: Operational Context
-  sections.push(OPERATIONAL_CONTEXT);
+  const labMode = process.env.AUTOMATON_LAB_MODE === "1";
+if (labMode) {
+sections.push("--- LABORATORY MODE ---\nObserve, reason, simulate, and report only. Do not create goals, delegate tasks, spawn workers or children, execute code, modify files, use external services, or perform real-world actions. Await explicit creator authorization.\n--- END LABORATORY MODE ---");
+} else {
+sections.push(OPERATIONAL_CONTEXT);
+}
 
   // Layer 7: Dynamic Context
   const turnCount = db.getTurnCount();
@@ -730,7 +735,7 @@ Lineage: ${lineageSummary}${upstreamLine}
   );
 
   const orchestratorStatus = getOrchestratorStatus(db.raw);
-  if (orchestratorStatus) {
+  if (!labMode && orchestratorStatus) {
     sections.push(
       `--- ORCHESTRATOR STATUS ---
 ${orchestratorStatus}

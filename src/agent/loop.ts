@@ -65,6 +65,7 @@ import { createWorkerInferenceBridge } from "./worker-inference-bridge.js";
 import { ProviderRegistry } from "../inference/provider-registry.js";
 import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import { isIdleOnlyTool } from "./idle-only-tools.js";
+import { filterToolsForLabMode, isLabModeEnabled } from "./lab-mode.js";
 
 const logger = createLogger("loop");
 const MAX_TOOL_CALLS_PER_TURN = 10;
@@ -98,7 +99,12 @@ export async function runAgentLoop(
 
   const builtinTools = createBuiltinTools(identity.sandboxId);
   const installedTools = loadInstalledTools(db);
-  const tools = [...builtinTools, ...installedTools];
+  const tools = filterToolsForLabMode([...builtinTools, ...installedTools]);
+  if (isLabModeEnabled()) {
+    logger.warn(
+      `LAB MODE enabled: ${tools.length} internal tools exposed; external actions disabled`,
+    );
+  }
   const toolContext: ToolContext = {
     identity,
     config,
@@ -129,7 +135,7 @@ export async function runAgentLoop(
   let orchestrator: Orchestrator | undefined;
   let workerPool: LocalWorkerPool | undefined;
 
-  if (hasTable(db.raw, "goals")) {
+  if (!isLabModeEnabled() && hasTable(db.raw, "goals")) {
     try {
       planModeController = new PlanModeController(db.raw);
 
