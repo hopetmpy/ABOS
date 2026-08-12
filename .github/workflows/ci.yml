@@ -43,4 +43,15 @@ jobs:
           node-version: 22
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
-      - run: pnpm audit --audit-level=high || true
+      # Blocking: production dependencies are what the automaton actually
+      # ships and runs. This must stay clean -- no `|| true` here.
+      - name: Audit production dependencies (blocking)
+        run: pnpm audit --prod --audit-level=high
+      # Non-blocking: dev-only tooling (vitest's own dependency chain, etc.)
+      # never ships in the runtime. `continue-on-error` keeps this failure
+      # visible in the GitHub UI (unlike `|| true`, which hides it entirely)
+      # without blocking merges on test-tooling advisories. Tracked as
+      # follow-up work rather than silently ignored.
+      - name: Audit all dependencies, including dev-only (report only)
+        continue-on-error: true
+        run: pnpm audit --audit-level=high
