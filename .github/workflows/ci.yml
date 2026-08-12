@@ -51,7 +51,7 @@ jobs:
       # never ships in the runtime. `continue-on-error` keeps this failure
       # visible in the GitHub UI (unlike `|| true`, which hides it entirely)
       # without blocking merges on test-tooling advisories. Tracked as
-      # follow-up work rather than silently ignored.
-      - name: Audit all dependencies, including dev-only (report only)
+      # follow-up work (a vitest v2 -> v3 bump) rather than silently ignored.
+      - name: Audit dev dependencies (report only)
         continue-on-error: true
-        run: pnpm audit --audit-level=high
+        run: pnpm audit --dev --audit-level=high
