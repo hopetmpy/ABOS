@@ -209,13 +209,19 @@ function isRateLimited(db: AutomatonDatabase): boolean {
  * Commits a git snapshot before modification.
  *
  * Safety checks:
- * 1. Protected file check (hard-coded invariant)
- * 2. Blocked directory check
- * 3. Path traversal check (symlink resolution)
+ * 1. Path traversal check (symlink resolution)
+ * 2. Protected file check (hard-coded invariant) -- evaluated against
+ *    BOTH the literal path and the symlink-resolved real path, so a
+ *    symlink whose target resolves to a protected file is also blocked
+ * 3. Blocked directory check
  * 4. Rate limiting
  * 5. File size limit
  * 6. Pre-modification git snapshot
  * 7. Audit log entry
+ *
+ * All file I/O below is performed against the symlink-resolved real
+ * path (not the literal, possibly-symlinked path the caller supplied),
+ * so validation and execution always agree on which file is touched.
  */
 export async function editFile(
   conway: ConwayClient,
@@ -224,20 +230,26 @@ export async function editFile(
   newContent: string,
   reason: string,
 ): Promise<{ success: boolean; error?: string }> {
-  // 1. Protected file check
-  if (isProtectedFile(filePath)) {
-    return {
-      success: false,
-      error: `BLOCKED: Cannot modify protected file: ${filePath}. This is a hard-coded safety invariant.`,
-    };
-  }
-
-  // 2. Path validation (symlink resolution + traversal check)
+  // 1. Path validation (symlink resolution + traversal check). This must
+  // run BEFORE the protected-file check: it resolves symlinks to their
+  // real target so that check can see through them.
   const resolvedPath = resolveAndValidatePath(filePath);
   if (!resolvedPath) {
     return {
       success: false,
       error: `BLOCKED: Invalid or suspicious file path: ${filePath}`,
+    };
+  }
+
+  // 2. Protected file check -- checked against both the literal path and
+  // the resolved real path. Checking only the literal path would let an
+  // agent create a symlink (e.g. via `exec`) at an unprotected path that
+  // points at a protected file, then "edit" the symlink to bypass this
+  // guard entirely.
+  if (isProtectedFile(filePath) || isProtectedFile(resolvedPath)) {
+    return {
+      success: false,
+      error: `BLOCKED: Cannot modify protected file: ${filePath}. This is a hard-coded safety invariant.`,
     };
   }
 
@@ -257,10 +269,11 @@ export async function editFile(
     };
   }
 
-  // 5. Read current content for diff
+  // 5. Read current content for diff. Uses the resolved real path so the
+  // diff reflects what will actually be overwritten.
   let oldContent = "";
   try {
-    oldContent = await conway.readFile(filePath);
+    oldContent = await conway.readFile(resolvedPath);
   } catch {
     oldContent = "(new file)";
   }
@@ -273,13 +286,16 @@ export async function editFile(
     // Git not available -- proceed without snapshot
   }
 
-  // 7. Write new content
+  // 7. Write new content. Uses the resolved real path -- never the raw,
+  // possibly-symlinked path -- so a symlink cannot redirect the write
+  // after validation has already run.
   try {
-    await conway.writeFile(filePath, newContent);
-  } catch (err: any) {
+    await conway.writeFile(resolvedPath, newContent);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
     return {
       success: false,
-      error: `Failed to write file: ${err.message}`,
+      error: `Failed to write file: ${message}`,
     };
   }
 
@@ -287,7 +303,7 @@ export async function editFile(
   const diff = generateSimpleDiff(oldContent, newContent);
 
   logModification(db, "code_edit", reason, {
-    filePath,
+    filePath: resolvedPath,
     diff: diff.slice(0, MAX_DIFF_SIZE),
     reversible: true,
   });
@@ -301,7 +317,7 @@ export async function editFile(
   }
 
   // 10. Rebuild if source file was edited
-  if (/\.(ts|js|tsx|jsx)$/.test(filePath)) {
+  if (/\.(ts|js|tsx|jsx)$/.test(resolvedPath)) {
     try {
       await conway.exec("npm run build", 60_000);
     } catch {
@@ -327,17 +343,9 @@ export function validateModification(
 } {
   const checks: { name: string; passed: boolean; detail: string }[] = [];
 
-  // Protected file check
-  const isProtected = isProtectedFile(filePath);
-  checks.push({
-    name: "protected_file",
-    passed: !isProtected,
-    detail: isProtected
-      ? `File matches protected pattern`
-      : "File is not protected",
-  });
-
-  // Path validation
+  // Path validation (symlink resolution + traversal check) -- run first
+  // so the protected-file check below can also evaluate the real,
+  // symlink-resolved target, not just the literal path.
   const resolved = resolveAndValidatePath(filePath);
   checks.push({
     name: "path_valid",
@@ -345,6 +353,19 @@ export function validateModification(
     detail: resolved
       ? `Resolved to: ${resolved}`
       : "Path is invalid or suspicious",
+  });
+
+  // Protected file check -- checked against both the literal path and
+  // the symlink-resolved real path, so a symlink whose target resolves
+  // to a protected file is also caught.
+  const isProtected =
+    isProtectedFile(filePath) || (!!resolved && isProtectedFile(resolved));
+  checks.push({
+    name: "protected_file",
+    passed: !isProtected,
+    detail: isProtected
+      ? `File matches protected pattern`
+      : "File is not protected",
   });
 
   // Rate limit

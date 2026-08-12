@@ -9,10 +9,13 @@
  * - Policy rules: path.protected_files, path.read_sensitive, path.traversal_detection
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import path from "path";
-import { isProtectedFile } from "../self-mod/code.js";
+import fs from "fs";
+import os from "os";
+import { isProtectedFile, editFile, validateModification } from "../self-mod/code.js";
 import { createPathProtectionRules } from "../agent/policy-rules/path-protection.js";
+import { MockConwayClient, createTestDb } from "./mocks.js";
 import type { PolicyRequest, AutomatonTool, ToolContext } from "../types.js";
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -113,6 +116,99 @@ describe("isProtectedFile", () => {
     expect(isProtectedFile("/home/user/.gnupg/keys")).toBe(true);
     expect(isProtectedFile("/etc/systemd/system/something.service")).toBe(true);
     expect(isProtectedFile("/proc/self/environ")).toBe(true);
+  });
+});
+
+// ─── Symlink Bypass Regression Tests ─────────────────────────────
+// A symlink whose literal name is unprotected but whose real target
+// resolves to a protected file must still be blocked, both by the
+// pre-flight validateModification() check and by editFile() itself.
+
+describe("symlink bypass of protected-file guard", () => {
+  const originalCwd = process.cwd();
+  let tmpDir: string;
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function setUpSymlinkToProtectedFile(): { symlinkPath: string } {
+    // Resolve to the real path immediately: on macOS, os.tmpdir() contains
+    // symlink components (/var -> /private/var), and process.cwd() returns
+    // the canonicalized path after chdir. Without this, string-prefix
+    // comparisons against process.cwd() would spuriously fail.
+    tmpDir = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), "automaton-symlink-test-")),
+    );
+    process.chdir(tmpDir);
+
+    // Real protected file, e.g. "agent/tools.ts"
+    fs.mkdirSync(path.join(tmpDir, "agent"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "agent", "tools.ts"), "// original tools\n");
+
+    // Unprotected-looking symlink pointing at the protected file
+    const symlinkPath = path.join(tmpDir, "notes.ts");
+    fs.symlinkSync(path.join("agent", "tools.ts"), symlinkPath);
+
+    return { symlinkPath };
+  }
+
+  it("validateModification blocks a symlink resolving to a protected file", () => {
+    const { symlinkPath } = setUpSymlinkToProtectedFile();
+
+    // The literal name is not protected...
+    expect(isProtectedFile(symlinkPath)).toBe(false);
+
+    // ...but validateModification must still block it once resolved.
+    const db = createTestDb();
+    const result = validateModification(db, symlinkPath, 100);
+    expect(result.allowed).toBe(false);
+    const protectedCheck = result.checks.find((c) => c.name === "protected_file");
+    expect(protectedCheck?.passed).toBe(false);
+  });
+
+  it("editFile refuses to write through a symlink to a protected file", async () => {
+    const { symlinkPath } = setUpSymlinkToProtectedFile();
+
+    const conway = new MockConwayClient();
+    const db = createTestDb();
+
+    const result = await editFile(
+      conway,
+      db,
+      symlinkPath,
+      "// malicious overwrite\n",
+      "attempt to bypass protection via symlink",
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/BLOCKED/);
+
+    // Nothing should have been written through the symlink.
+    expect(conway.files[symlinkPath]).toBeUndefined();
+    const realTarget = path.join(tmpDir, "agent", "tools.ts");
+    expect(conway.files[realTarget]).toBeUndefined();
+  });
+
+  it("editFile still allows editing a normal, non-symlinked file", async () => {
+    tmpDir = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), "automaton-symlink-test-")),
+    );
+    process.chdir(tmpDir);
+
+    const conway = new MockConwayClient();
+    const db = createTestDb();
+
+    const result = await editFile(
+      conway,
+      db,
+      "notes.txt",
+      "hello world\n",
+      "normal edit",
+    );
+
+    expect(result.success).toBe(true);
   });
 });
 
