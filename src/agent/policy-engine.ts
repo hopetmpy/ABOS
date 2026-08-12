@@ -19,6 +19,9 @@ import type {
 } from "../types.js";
 import { insertPolicyDecision } from "../state/database.js";
 import type { PolicyDecisionRow } from "../state/database.js";
+import { createLogger } from "../observability/logger.js";
+
+const logger = createLogger("policy-engine");
 
 export class PolicyEngine {
   private db: Database.Database;
@@ -112,8 +115,18 @@ export class PolicyEngine {
 
     try {
       insertPolicyDecision(this.db, row);
-    } catch {
-      // Don't let logging failures block tool execution
+    } catch (err: unknown) {
+      // Don't let logging failures block tool execution -- but do NOT
+      // swallow this silently. A failed write here means a policy
+      // decision (including a `deny`) has no audit trail, which
+      // undermines the "every decision is audited" guarantee.
+      const message = err instanceof Error ? err.message : String(err);
+      logger.warn("Failed to persist policy decision to audit log", {
+        toolName: decision.toolName,
+        action: decision.action,
+        reasonCode: decision.reasonCode,
+        error: message,
+      });
     }
   }
 

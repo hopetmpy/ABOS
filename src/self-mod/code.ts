@@ -20,6 +20,9 @@ import type {
   AutomatonDatabase,
 } from "../types.js";
 import { logModification } from "./audit-log.js";
+import { createLogger } from "../observability/logger.js";
+
+const logger = createLogger("self-mod");
 
 // ─── IMMUTABLE SAFETY INVARIANTS ─────────────────────────────
 // These are hard-coded and CANNOT be changed by the agent.
@@ -282,8 +285,15 @@ export async function editFile(
   try {
     const { gitCommit } = await import("../git/tools.js");
     await gitCommit(conway, process.cwd(), `pre-modify: ${reason}`);
-  } catch {
-    // Git not available -- proceed without snapshot
+  } catch (err: unknown) {
+    // Git not available or the commit failed -- proceed without a
+    // snapshot, but log it. Silently swallowing this would leave no
+    // trace that the pre-modification safety snapshot was skipped.
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn("Pre-modification git snapshot failed; proceeding without it", {
+      filePath: resolvedPath,
+      error: message,
+    });
   }
 
   // 7. Write new content. Uses the resolved real path -- never the raw,
@@ -312,8 +322,16 @@ export async function editFile(
   try {
     const { gitCommit } = await import("../git/tools.js");
     await gitCommit(conway, process.cwd(), `self-mod: ${reason}`);
-  } catch {
-    // Git not available -- proceed without commit
+  } catch (err: unknown) {
+    // Git not available or the commit failed -- proceed without it,
+    // but log it. This is the git-versioning half of the audit trail
+    // for self-modifications, so a silent failure here is a debugging
+    // and forensics gap.
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn("Post-modification git commit failed", {
+      filePath: resolvedPath,
+      error: message,
+    });
   }
 
   // 10. Rebuild if source file was edited
