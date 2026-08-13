@@ -36,6 +36,7 @@ import { prettySink } from "./observability/pretty-sink.js";
 import { bootstrapTopup } from "./conway/topup.js";
 import { randomUUID } from "crypto";
 import { keccak256, toHex } from "viem";
+import { getSupervisedLevel } from "./agent/supervised-level.js";
 
 const logger = createLogger("main");
 const VERSION = "0.2.1";
@@ -205,6 +206,9 @@ async function run(): Promise<void> {
   const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || config.ollamaBaseUrl;
   const labMode = process.env.AUTOMATON_LAB_MODE === "1";
   const supervisedMode = process.env.AUTOMATON_SUPERVISED_MODE === "1";
+  const supervisedLevel = supervisedMode
+    ? getSupervisedLevel()
+    : "S1";
 
   if (labMode && supervisedMode) {
     logger.error("Choose exactly one restricted mode: laboratory or supervised.");
@@ -212,7 +216,9 @@ async function run(): Promise<void> {
   }
 
   const restrictedMode = labMode || supervisedMode;
-  const restrictedModeName = labMode ? "LAB MODE" : "SUPERVISED MODE S1";
+  const restrictedModeName = labMode
+    ? "LAB MODE"
+    : `SUPERVISED MODE ${supervisedLevel}`;
   const apiKey = config.conwayApiKey || loadApiKeyFromConfig();
 
   if (!apiKey && !(restrictedMode && ollamaBaseUrl)) {
@@ -321,6 +327,7 @@ async function run(): Promise<void> {
     openaiApiKey: config.openaiApiKey,
     anthropicApiKey: config.anthropicApiKey,
     ollamaBaseUrl,
+    forceBackend: restrictedMode ? "ollama" : undefined,
     getModelProvider: (modelId) => modelRegistry.get(modelId)?.provider,
   });
 

@@ -67,6 +67,8 @@ import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import { isIdleOnlyTool } from "./idle-only-tools.js";
 import { filterToolsForLabMode, isLabModeEnabled } from "./lab-mode.js";
 import { createSupervisedTools, isSupervisedModeEnabled } from "./supervised-mode.js";
+import { getSupervisedLevel } from "./supervised-level.js";
+import { createDelegatedWriteTools } from "./supervised-write.js";
 
 const logger = createLogger("loop");
 const MAX_TOOL_CALLS_PER_TURN = 10;
@@ -107,16 +109,26 @@ export async function runAgentLoop(
 
   let tools;
   if (supervisedMode) {
+    const supervisedLevel = getSupervisedLevel();
     const sleepTool = builtinTools.find((tool) => tool.name === "sleep");
     const supervisedReadTools = createSupervisedTools().filter(
       (tool) => tool.name === "supervised_read_file",
     );
+    const delegatedWriteTools =
+      supervisedLevel === "S2"
+        ? createDelegatedWriteTools()
+        : [];
+
     tools = [
       ...(sleepTool ? [sleepTool] : []),
       ...supervisedReadTools,
+      ...delegatedWriteTools,
     ];
+
     logger.warn(
-      `SUPERVISED MODE S1 enabled: ${tools.length} confined tools exposed; shell, writes, external actions, and delegation disabled`,
+      supervisedLevel === "S2"
+        ? `SUPERVISED MODE S2 enabled: ${tools.length} confined tools exposed; delegated workspace writing allowed; shell, deletion, external actions, money, and delegation disabled`
+        : `SUPERVISED MODE S1 enabled: ${tools.length} confined tools exposed; shell, writes, external actions, and delegation disabled`,
     );
   } else {
     tools = filterToolsForLabMode([...builtinTools, ...installedTools]);
