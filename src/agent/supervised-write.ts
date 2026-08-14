@@ -9,6 +9,7 @@ import {
   loadValidDelegatedPermit,
   saveDelegatedState,
 } from "./supervised-permit.js";
+import { getSupervisedLevel } from "./supervised-level.js";
 
 const MAX_SINGLE_WRITE_BYTES = 1024 * 1024;
 const BLOCKED_NAMES = new Set(["SUPERVISED_TASK.md"]);
@@ -198,6 +199,27 @@ export function performDelegatedWrite(
   fs.mkdirSync(workspaceRoot, { recursive: true, mode: 0o700 });
   fs.chmodSync(workspaceRoot, 0o700);
 
+  const normalizedRequestedPath =
+    nodePath.normalize(requestedPath);
+  const normalizedPermitPath =
+    nodePath.normalize(permit.workspacePath);
+
+  if (
+    normalizedRequestedPath === normalizedPermitPath ||
+    normalizedRequestedPath.startsWith(
+      normalizedPermitPath + nodePath.sep,
+    )
+  ) {
+    return [
+      "Blocked: path must be relative to the delegated project root.",
+      "Do not include the project folder prefix: " +
+        permit.workspacePath,
+      "Use a path such as src/file.ts, not " +
+        permit.workspacePath +
+        "/src/file.ts.",
+    ].join("\n");
+  }
+
   const target = resolveDelegatedTarget(
     requestedPath,
     workspaceRoot,
@@ -220,9 +242,10 @@ export function performDelegatedWrite(
     return "Blocked: this permit does not allow file creation.";
   }
 
+  const displayPath = normalizedRequestedPath;
   const normalizedRelativePath = nodePath.join(
     permit.workspacePath,
-    nodePath.normalize(requestedPath),
+    normalizedRequestedPath,
   );
 
   const newPath =
@@ -247,18 +270,22 @@ export function performDelegatedWrite(
     if (exists && previousSha256 === requestedSha256) {
       return [
         "DELEGATED_FILE_ALREADY_COMPLETE",
-        "Path: " + normalizedRelativePath,
+        "Path: " + displayPath,
         "SHA-256: " + requestedSha256,
         "No file was rewritten and no quota was consumed.",
-        "This path is finalized for the current task. Do not call this tool for it again. Complete any remaining paths, then provide the final response.",
+        getSupervisedLevel() === "S3"
+          ? "The requested content is already present. Do not repeat this write."
+          : "This path is finalized for the current task. Do not call this tool for it again. Complete any remaining paths, then provide the final response.",
       ].join("\n");
     }
 
-    return [
-      "Blocked: this path was already finalized during the current task.",
-      "Path: " + normalizedRelativePath,
-      "Further changes require a new task authorization.",
-    ].join("\n");
+    if (getSupervisedLevel() !== "S3") {
+      return [
+        "Blocked: this path was already finalized during the current task.",
+        "Path: " + displayPath,
+        "Further changes require a new task authorization.",
+      ].join("\n");
+    }
   }
 
   if (
@@ -327,7 +354,7 @@ export function performDelegatedWrite(
       exists
         ? "DELEGATED_FILE_MODIFIED"
         : "DELEGATED_FILE_CREATED",
-      "Path: " + normalizedRelativePath,
+      "Path: " + displayPath,
       "Bytes: " + contentBytes,
       "SHA-256: " + contentSha256,
       "Files used: " +
@@ -360,7 +387,7 @@ export function createDelegatedWriteTools(
     {
       name: "supervised_write_file",
       description:
-        "Create or replace one UTF-8 text file inside the currently delegated S2 project. One task-level human permit covers multiple writes within its limits.",
+        "Create or replace one UTF-8 text file inside the delegated supervised project. The path is always relative to the project root and must never include the delegated project-folder prefix. S3 may revise an existing task file within the same byte quota; every revision is backed up and audited.",
       category: "memory",
       riskLevel: "safe",
       parameters: {

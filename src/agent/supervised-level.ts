@@ -1,4 +1,4 @@
-export type SupervisedLevel = "S1" | "S2";
+export type SupervisedLevel = "S1" | "S2" | "S3";
 
 export function getSupervisedLevel(): SupervisedLevel {
   const value = process.env.AUTOMATON_SUPERVISED_LEVEL;
@@ -11,8 +11,12 @@ export function getSupervisedLevel(): SupervisedLevel {
     return "S2";
   }
 
+  if (value === "S3") {
+    return "S3";
+  }
+
   throw new Error(
-    "Invalid AUTOMATON_SUPERVISED_LEVEL. Allowed values: S1 or S2.",
+    "Invalid AUTOMATON_SUPERVISED_LEVEL. Allowed values: S1, S2, or S3.",
   );
 }
 
