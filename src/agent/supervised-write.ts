@@ -273,13 +273,17 @@ export function performDelegatedWrite(
         "Path: " + displayPath,
         "SHA-256: " + requestedSha256,
         "No file was rewritten and no quota was consumed.",
-        getSupervisedLevel() === "S3"
+        getSupervisedLevel() === "S3" ||
+        getSupervisedLevel() === "S4"
           ? "The requested content is already present. Do not repeat this write."
           : "This path is finalized for the current task. Do not call this tool for it again. Complete any remaining paths, then provide the final response.",
       ].join("\n");
     }
 
-    if (getSupervisedLevel() !== "S3") {
+    if (
+      getSupervisedLevel() !== "S3" &&
+      getSupervisedLevel() !== "S4"
+    ) {
       return [
         "Blocked: this path was already finalized during the current task.",
         "Path: " + displayPath,
@@ -387,7 +391,7 @@ export function createDelegatedWriteTools(
     {
       name: "supervised_write_file",
       description:
-        "Create or replace one UTF-8 text file inside the delegated supervised project. The path is always relative to the project root and must never include the delegated project-folder prefix. S3 may revise an existing task file within the same byte quota; every revision is backed up and audited.",
+        "Create or replace one UTF-8 text file inside the delegated supervised project. The path is always relative to the project root and must never include the delegated project-folder prefix. S3 and S4 may revise an existing task file within the same byte quota; every revision is backed up and audited.",
       category: "memory",
       riskLevel: "safe",
       parameters: {

@@ -75,6 +75,15 @@ import {
   type SupervisedExecutionOperation,
 } from "./supervised-exec-catalog.js";
 import { createSupervisedExecutionTools } from "./supervised-exec.js";
+import {
+  beginMissionCycle,
+  blockMission,
+  clearMissionValidations,
+  createSupervisedMissionTools,
+  getMissionProgress,
+  recordMissionTurn,
+  recordMissionValidation,
+} from "./supervised-mission.js";
 
 const logger = createLogger("loop");
 const MAX_TOOL_CALLS_PER_TURN = 10;
@@ -113,12 +122,43 @@ export async function runAgentLoop(
     ? getSupervisedLevel()
     : "S1";
 
+  if (supervisedLevel === "S4") {
+    const missionCycle = beginMissionCycle();
+
+    if ("error" in missionCycle) {
+      log(
+        config,
+        "[SUPERVISED S4] Mission cycle blocked: " +
+          missionCycle.error,
+      );
+      db.setAgentState("sleeping");
+      onStateChange?.("sleeping");
+      return;
+    }
+
+    log(
+      config,
+      "[SUPERVISED S4] Mission cycle " +
+        missionCycle.state.cyclesUsed +
+        "/" +
+        missionCycle.permit.maxCycles +
+        " started; persistent turns " +
+        missionCycle.state.turnsUsed +
+        "/" +
+        missionCycle.permit.maxTurns +
+        ".",
+    );
+  }
+
   const requiredSupervisedOperations =
     new Set<SupervisedExecutionOperation>();
   const passedSupervisedOperations =
     new Set<SupervisedExecutionOperation>();
 
-  if (supervisedLevel === "S3") {
+  if (
+    supervisedLevel === "S3" ||
+    supervisedLevel === "S4"
+  ) {
     const currentTask = readCurrentTask();
 
     if (!("error" in currentTask)) {
@@ -144,12 +184,18 @@ export async function runAgentLoop(
     );
     const delegatedWriteTools =
       supervisedLevel === "S2" ||
-      supervisedLevel === "S3"
+      supervisedLevel === "S3" ||
+      supervisedLevel === "S4"
         ? createDelegatedWriteTools()
         : [];
     const supervisedExecutionTools =
-      supervisedLevel === "S3"
+      supervisedLevel === "S3" ||
+      supervisedLevel === "S4"
         ? createSupervisedExecutionTools()
+        : [];
+    const supervisedMissionTools =
+      supervisedLevel === "S4"
+        ? createSupervisedMissionTools()
         : [];
 
     tools = [
@@ -157,11 +203,14 @@ export async function runAgentLoop(
       ...supervisedReadTools,
       ...delegatedWriteTools,
       ...supervisedExecutionTools,
+      ...supervisedMissionTools,
     ];
 
     logger.warn(
-      supervisedLevel === "S3"
-        ? `SUPERVISED MODE S3 enabled: ${tools.length} confined tools exposed; delegated writing and closed-catalog sandboxed validation allowed; shell, deletion, network, external actions, money, and delegation disabled`
+      supervisedLevel === "S4"
+        ? `SUPERVISED MODE S4 enabled: ${tools.length} confined tools exposed; persistent mission planning, delegated writing, and closed-catalog sandboxed validation allowed; shell, deletion, network, external actions, money, and delegation disabled`
+        : supervisedLevel === "S3"
+          ? `SUPERVISED MODE S3 enabled: ${tools.length} confined tools exposed; delegated writing and closed-catalog sandboxed validation allowed; shell, deletion, network, external actions, money, and delegation disabled`
         : supervisedLevel === "S2"
           ? `SUPERVISED MODE S2 enabled: ${tools.length} confined tools exposed; delegated workspace writing allowed; shell, deletion, external actions, money, and delegation disabled`
           : `SUPERVISED MODE S1 enabled: ${tools.length} confined tools exposed; shell, writes, external actions, and delegation disabled`,
@@ -831,6 +880,51 @@ export async function runAgentLoop(
         }
       }
 
+      if (supervisedLevel === "S4") {
+        for (const toolCall of turn.toolCalls) {
+          const resultText = String(
+            toolCall.result || "",
+          );
+
+          if (
+            toolCall.name ===
+              "supervised_write_file" &&
+            (
+              resultText.includes(
+                "DELEGATED_FILE_CREATED",
+              ) ||
+              resultText.includes(
+                "DELEGATED_FILE_MODIFIED",
+              )
+            )
+          ) {
+            clearMissionValidations(
+              "Delegated workspace file changed.",
+            );
+          }
+
+          if (
+            toolCall.name ===
+              "supervised_run_validation"
+          ) {
+            const operationMatch =
+              resultText.match(
+                /^Operation: (node_check|typescript_check|typescript_build|vitest)$/m,
+              );
+
+            if (operationMatch) {
+              recordMissionValidation(
+                operationMatch[1] as
+                  SupervisedExecutionOperation,
+                resultText.includes(
+                  "SUPERVISED_EXECUTION_PASSED",
+                ),
+              );
+            }
+          }
+        }
+      }
+
       if (supervisedMode && turn.toolCalls.length > 0) {
         const supervisedResultSummary = turn.toolCalls
           .map((toolCall) => {
@@ -855,10 +949,23 @@ export async function runAgentLoop(
             "",
             supervisedResultSummary,
             "",
+            ...(
+              supervisedLevel === "S4"
+                ? [
+                    "CURRENT PERSISTENT MISSION STATE:",
+                    getMissionProgress(),
+                    "",
+                  ]
+                : []
+            ),
             "Continue the exact authorized task from these results.",
             "Do not recreate or rewrite files reported as already complete.",
-            "If a validation failed, correct only the relevant file and validate again.",
-            "If the task is complete, respond with the requested final report and use no tools.",
+            supervisedLevel === "S4"
+              ? "Classify each validation failure against the active plan step: an expected observation completes that step with factual evidence; an unexpected failure requires correcting only the relevant file and validating again."
+              : "If a validation failed, correct only the relevant file and validate again.",
+            supervisedLevel === "S4"
+              ? "Continue the persistent mission plan. Immediately update the matching plan step after each successful action before starting unrelated work. If a step intentionally required observing a validation failure and that expected failure occurred, mark the observation step completed with the failure output as evidence, not blocked. Correct unexpected failures, run missing validations, and use supervised_complete_mission only when every requirement is proven."
+              : "If the task is complete, respond with the requested final report and use no tools.",
           ].join("\n"),
         };
       }
@@ -877,6 +984,26 @@ export async function runAgentLoop(
       });
       onTurnComplete?.(turn);
 
+      const recordedMissionTurn =
+        supervisedLevel === "S4"
+          ? recordMissionTurn(turn.thinking)
+          : null;
+
+      if (
+        recordedMissionTurn &&
+        "error" in recordedMissionTurn
+      ) {
+        log(
+          config,
+          "[SUPERVISED S4] Mission turn blocked: " +
+            recordedMissionTurn.error,
+        );
+        db.setAgentState("sleeping");
+        onStateChange?.("sleeping");
+        running = false;
+        break;
+      }
+
       if (supervisedMode) {
         const supervisedTurnsCompleted =
           cycleTurnCount + 1;
@@ -889,6 +1016,88 @@ export async function runAgentLoop(
           );
 
         if (
+          supervisedLevel === "S4" &&
+          recordedMissionTurn &&
+          !("error" in recordedMissionTurn)
+        ) {
+          const missionCompleted =
+            recordedMissionTurn.state.status ===
+            "completed";
+          const turnLimitReached =
+            recordedMissionTurn.state.turnsUsed >=
+            recordedMissionTurn.permit.maxTurns;
+          const cycleLimitReached =
+            supervisedTurnsCompleted >= 8;
+          const finalCycleReached =
+            recordedMissionTurn.state.cyclesUsed >=
+            recordedMissionTurn.permit.maxCycles;
+
+          if (missionCompleted) {
+            log(
+              config,
+              "[SUPERVISED S4] Mission completed with persistent evidence; session will stop.",
+            );
+            db.setAgentState("sleeping");
+            onStateChange?.("sleeping");
+            running = false;
+            break;
+          }
+
+          if (
+            turnLimitReached ||
+            (
+              cycleLimitReached &&
+              finalCycleReached
+            )
+          ) {
+            const reason = turnLimitReached
+              ? "Persistent mission turn limit reached before completion."
+              : "Persistent mission cycle limit reached before completion.";
+
+            blockMission(reason);
+            log(
+              config,
+              "[SUPERVISED S4] " + reason,
+            );
+            db.setAgentState("sleeping");
+            onStateChange?.("sleeping");
+            running = false;
+            break;
+          }
+
+          if (cycleLimitReached) {
+            log(
+              config,
+              "[SUPERVISED S4] Eight-turn cycle completed; progress persisted for the next authorized cycle.",
+            );
+            db.setAgentState("sleeping");
+            onStateChange?.("sleeping");
+            running = false;
+            break;
+          }
+
+          if (producedFinalResponse) {
+            pendingInput = {
+              source: "system",
+              content: [
+                "SUPERVISED S4 MISSION CONTINUES:",
+                  getMissionProgress(),
+                  "",
+                "A normal final response cannot complete an active persistent mission.",
+                "Inspect the current mission progress.",
+                "If no plan exists, define the bounded mission plan.",
+                "Advance only dependency-ready steps and record concise evidence.",
+                "Run every validation required by SUPERVISED_TASK.md.",
+                "Use supervised_complete_mission only after all steps and required validations are complete.",
+              ].join("\n"),
+            };
+
+            log(
+              config,
+              "[SUPERVISED S4] Premature final response blocked; mission remains active.",
+            );
+          }
+        } else if (
           supervisedLevel === "S3" &&
           producedFinalResponse &&
           missingOperations.length > 0 &&

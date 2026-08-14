@@ -21,6 +21,14 @@ import {
 import {
   SUPERVISED_EXECUTION_OPERATIONS,
 } from "./agent/supervised-exec-catalog.js";
+import {
+  getMissionPermitPath,
+  getMissionStatePath,
+  issueMissionPermit,
+  revokeMissionPermit,
+  type SupervisedMissionPermit,
+  type SupervisedMissionState,
+} from "./agent/supervised-mission-permit.js";
 
 function fail(message: string): never {
   console.error(message);
@@ -97,6 +105,7 @@ function showStatus(): void {
 
   if (!hasS3) {
     console.log("NO_ACTIVE_S3_PERMIT");
+    console.log("NO_ACTIVE_S4_PERMIT");
     return;
   }
 
@@ -127,6 +136,71 @@ function showStatus(): void {
       permit.maxTotalSeconds,
   );
   console.log("Expires at:      " + permit.expiresAt);
+
+  const hasS4 =
+    fs.existsSync(getMissionPermitPath()) &&
+    fs.existsSync(getMissionStatePath());
+
+  if (!hasS4) {
+    console.log("NO_ACTIVE_S4_PERMIT");
+    return;
+  }
+
+  const missionPermit =
+    readJson<SupervisedMissionPermit>(
+      getMissionPermitPath(),
+    );
+  const missionState =
+    readJson<SupervisedMissionState>(
+      getMissionStatePath(),
+    );
+
+  console.log("=== ACTIVE SUPERVISED S4 PERMIT ===");
+  console.log("Permit ID:       " + missionPermit.id);
+  console.log(
+    "S3 permit ID:    " +
+      missionPermit.executionPermitId,
+  );
+  console.log(
+    "S2 permit ID:    " +
+      missionPermit.delegatedPermitId,
+  );
+  console.log(
+    "Project folder:  " +
+      missionPermit.workspacePath,
+  );
+  console.log("Status:          " + missionState.status);
+  console.log(
+    "Cycles used:     " +
+      missionState.cyclesUsed +
+      "/" +
+      missionPermit.maxCycles,
+  );
+  console.log(
+    "Turns used:      " +
+      missionState.turnsUsed +
+      "/" +
+      missionPermit.maxTurns,
+  );
+  console.log(
+    "Plan revision:   " +
+      missionState.planRevision,
+  );
+  console.log(
+    "Validations:     " +
+      (
+        missionState.passedOperations.join(", ") ||
+        "(none)"
+      ),
+  );
+  console.log(
+    "Last summary:    " +
+      (missionState.lastSummary || "(none)"),
+  );
+  console.log(
+    "Expires at:      " +
+      missionPermit.expiresAt,
+  );
 }
 
 const command = process.argv[2];
@@ -137,9 +211,15 @@ if (command === "status") {
 }
 
 if (command === "revoke") {
+  const s4Revoked = revokeMissionPermit();
   const s3Revoked = revokeExecutionPermit();
   const s2Revoked = revokeDelegatedPermit();
 
+  console.log(
+    s4Revoked
+      ? "S4_PERMIT_REVOKED"
+      : "NO_ACTIVE_S4_PERMIT",
+  );
   console.log(
     s3Revoked
       ? "S3_PERMIT_REVOKED"
@@ -153,12 +233,17 @@ if (command === "revoke") {
   process.exit(0);
 }
 
-if (command !== "grant" && command !== "grant-s3") {
+if (
+  command !== "grant" &&
+  command !== "grant-s3" &&
+  command !== "grant-s4"
+) {
   fail(
     [
       "Usage:",
       "  node dist/supervised-authorize.js grant <project-folder> [minutes] [max-files] [max-bytes]",
       "  node dist/supervised-authorize.js grant-s3 <project-folder> [minutes] [max-files] [max-bytes] [max-runs] [max-seconds]",
+      "  node dist/supervised-authorize.js grant-s4 <project-folder> [minutes] [max-files] [max-bytes] [max-runs] [max-seconds] [max-cycles] [max-turns]",
       "  node dist/supervised-authorize.js status",
       "  node dist/supervised-authorize.js revoke",
     ].join("\n"),
@@ -195,17 +280,31 @@ const maxTotalSeconds = positiveInteger(
   300,
   "max-seconds",
 );
+const maxCycles = positiveInteger(
+  process.argv[9],
+  5,
+  "max-cycles",
+);
+const maxTurns = positiveInteger(
+  process.argv[10],
+  40,
+  "max-turns",
+);
 
 const task = readCurrentTask();
 if ("error" in task) fail(task.error);
 
-const s3Requested = command === "grant-s3";
+const s4Requested = command === "grant-s4";
+const s3Requested =
+  command === "grant-s3" || s4Requested;
 
 console.log("");
 console.log(
-  s3Requested
-    ? "=== DELEGATED S3 TASK AUTHORIZATION ==="
-    : "=== DELEGATED S2 TASK AUTHORIZATION ===",
+  s4Requested
+    ? "=== PERSISTENT S4 MISSION AUTHORIZATION ==="
+    : s3Requested
+      ? "=== DELEGATED S3 TASK AUTHORIZATION ==="
+      : "=== DELEGATED S2 TASK AUTHORIZATION ===",
 );
 console.log("Project folder:  " + projectFolder);
 console.log("Duration:        " + durationMinutes + " minutes");
@@ -227,6 +326,14 @@ if (s3Requested) {
   console.log("Maximum seconds: " + maxTotalSeconds);
 }
 
+  if (s4Requested) {
+    console.log("Maximum cycles:  " + maxCycles);
+    console.log("Maximum turns:   " + maxTurns);
+    console.log(
+      "Persistent work: allowed within mission limits",
+    );
+  }
+
 console.log("Task SHA-256:    " + task.sha256);
 console.log("");
 console.log("--- CURRENT TASK ---");
@@ -235,9 +342,11 @@ console.log("--- END TASK ---");
 console.log("");
 
 console.log(
-  s3Requested
-    ? "This single authorization covers all permitted file writes and closed-catalog validations required by this exact task."
-    : "This single authorization covers all permitted file writes required by this exact task.",
+    s4Requested
+      ? "This single authorization covers the bounded persistent mission, permitted file writes, and closed-catalog validations required by this exact task."
+      : s3Requested
+        ? "This single authorization covers all permitted file writes and closed-catalog validations required by this exact task."
+        : "This single authorization covers all permitted file writes required by this exact task.",
 );
 
 const confirmation =
@@ -255,9 +364,11 @@ try {
 
   if (answer !== confirmation) {
     console.log(
-      s3Requested
-        ? "REJECTED: no S2 or S3 permit was created."
-        : "REJECTED: no S2 permit was created.",
+        s4Requested
+          ? "REJECTED: no S2, S3, or S4 permit was created."
+          : s3Requested
+            ? "REJECTED: no S2 or S3 permit was created."
+            : "REJECTED: no S2 permit was created.",
     );
     process.exit(2);
   }
@@ -304,14 +415,46 @@ try {
     );
   }
 
+  if (!s4Requested) {
+    console.log("");
+    console.log("DELEGATED_S3_PERMIT_GRANTED");
+    console.log("S2 Permit ID: " + delegatedPermit.id);
+    console.log("S3 Permit ID: " + executionPermit.id);
+    console.log("Project:      " + executionPermit.workspacePath);
+    console.log("Expires:      " + executionPermit.expiresAt);
+    console.log(
+      "Launch with AUTOMATON_SUPERVISED_LEVEL=S3.",
+    );
+    process.exit(0);
+  }
+
+  const missionPermit = issueMissionPermit({
+    maxCycles,
+    maxTurns,
+    durationMinutes,
+  });
+
+  if ("error" in missionPermit) {
+    revokeExecutionPermit();
+    revokeDelegatedPermit();
+
+    fail(
+      missionPermit.error +
+        "\nS2 and S3 permits rolled back because S4 authorization failed.",
+    );
+  }
+
   console.log("");
-  console.log("DELEGATED_S3_PERMIT_GRANTED");
+  console.log("PERSISTENT_S4_MISSION_GRANTED");
   console.log("S2 Permit ID: " + delegatedPermit.id);
   console.log("S3 Permit ID: " + executionPermit.id);
-  console.log("Project:      " + executionPermit.workspacePath);
-  console.log("Expires:      " + executionPermit.expiresAt);
+  console.log("S4 Permit ID: " + missionPermit.id);
+  console.log("Project:      " + missionPermit.workspacePath);
+  console.log("Max cycles:   " + missionPermit.maxCycles);
+  console.log("Max turns:    " + missionPermit.maxTurns);
+  console.log("Expires:      " + missionPermit.expiresAt);
   console.log(
-    "Launch with AUTOMATON_SUPERVISED_LEVEL=S3.",
+    "Launch with AUTOMATON_SUPERVISED_LEVEL=S4.",
   );
 } finally {
   prompt.close();

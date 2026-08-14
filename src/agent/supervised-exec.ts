@@ -15,6 +15,7 @@ import {
 import {
   getSupervisedOperationDefinition,
   isSupervisedExecutionOperation,
+  SUPERVISED_EXECUTION_OPERATIONS,
   type SupervisedExecutionOperation,
 } from "./supervised-exec-catalog.js";
 
@@ -899,7 +900,7 @@ export function createSupervisedExecutionTools(
     {
       name: "supervised_run_validation",
       description:
-        "Run one operation from the closed S3 validation catalog inside a no-network Bubblewrap sandbox. No shell command or arbitrary argument is accepted.",
+        "Run one operation from the closed S3/S4 validation catalog inside a no-network Bubblewrap sandbox. Authorized operations are node_check, typescript_check, typescript_build, and vitest. No shell command or arbitrary argument is accepted.",
       category: "memory",
       riskLevel: "safe",
       parameters: {
@@ -907,7 +908,9 @@ export function createSupervisedExecutionTools(
         properties: {
           operation: {
             type: "string",
-            enum: ["node_check"],
+            enum: [
+              ...SUPERVISED_EXECUTION_OPERATIONS,
+            ],
             description: "Authorized validation operation.",
           },
           path: {

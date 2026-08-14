@@ -37,6 +37,11 @@ import { bootstrapTopup } from "./conway/topup.js";
 import { randomUUID } from "crypto";
 import { keccak256, toHex } from "viem";
 import { getSupervisedLevel } from "./agent/supervised-level.js";
+import {
+  blockMission,
+  getMissionContinuationDecision,
+} from "./agent/supervised-mission.js";
+import { loadValidMissionPermit } from "./agent/supervised-mission-permit.js";
 
 const logger = createLogger("main");
 const VERSION = "0.2.1";
@@ -487,9 +492,48 @@ async function run(): Promise<void> {
       });
 
       if (restrictedMode) {
+        if (
+          supervisedMode &&
+          supervisedLevel === "S4"
+        ) {
+          const decision =
+            getMissionContinuationDecision();
+
+          if (
+            !("error" in decision) &&
+            decision.continueMission
+          ) {
+            logger.info(
+              "SUPERVISED MODE S4: continuing persistent mission automatically; " +
+                decision.cyclesRemaining +
+                " cycles and " +
+                decision.turnsRemaining +
+                " turns remain.",
+            );
+            db.setAgentState("waking");
+            continue;
+          }
+
+          if (
+            !("error" in decision) &&
+            decision.status === "active"
+          ) {
+            blockMission(decision.reason);
+          }
+
+          logger.info(
+            "SUPERVISED MODE S4: persistent mission will stop; " +
+              (
+                "error" in decision
+                  ? decision.error
+                  : decision.reason
+              ),
+          );
+        }
+
         logger.info(
           restrictedModeName +
-            ": supervised single-run session completed; process will stop.",
+            ": supervised session completed; process will stop.",
         );
         db.setAgentState("sleeping");
         db.close();

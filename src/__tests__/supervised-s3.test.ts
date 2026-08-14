@@ -709,6 +709,22 @@ it("has no external network", async () => {
     expect(serialized).not.toContain("command");
     expect(serialized).not.toContain("args");
     expect(serialized).not.toContain("shell");
-    expect(serialized).toContain("node_check");
+
+    const operationSchema = (
+      tools[0].parameters as {
+        properties: {
+          operation: {
+            enum: string[];
+          };
+        };
+      }
+    ).properties.operation;
+
+    expect(operationSchema.enum).toEqual([
+      "node_check",
+      "typescript_check",
+      "typescript_build",
+      "vitest",
+    ]);
   });
 });

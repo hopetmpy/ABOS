@@ -90,7 +90,7 @@ describe("supervised S2 delegated writing", () => {
   it("rejects unknown supervised levels", () => {
     process.env.AUTOMATON_SUPERVISED_LEVEL = "S9";
     expect(() => getSupervisedLevel()).toThrow(
-      "Allowed values: S1, S2, or S3",
+      "Allowed values: S1, S2, S3, or S4",
     );
   });
 
