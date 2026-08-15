@@ -488,6 +488,39 @@ describe(
     );
 
     it(
+      "rejects circular mission-completion steps",
+      () => {
+        grantParents();
+
+        expect(
+          issueMissionPermit({
+            maxCycles: 5,
+            maxTurns: 40,
+            durationMinutes: 60,
+          }),
+        ).not.toHaveProperty("error");
+
+        const result = defineMissionPlan(
+          "Complete bounded work.",
+          [
+            {
+              id: "complete-mission",
+              title: "Finalize mission",
+              dependsOn: [],
+            },
+          ],
+        );
+
+        expect(result).toContain(
+          "cannot contain a mission-completion step",
+        );
+        expect(result).toContain(
+          "supervised_complete_mission",
+        );
+      },
+    );
+
+    it(
       "rejects duplicate, unknown, and cyclic dependencies",
       () => {
         grantParents();

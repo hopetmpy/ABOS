@@ -29,6 +29,14 @@ import {
   type SupervisedMissionPermit,
   type SupervisedMissionState,
 } from "./agent/supervised-mission-permit.js";
+import {
+  getNetworkPermitPath,
+  getNetworkStatePath,
+  issueNetworkPermit,
+  revokeNetworkPermit,
+  type SupervisedNetworkPermit,
+  type SupervisedNetworkState,
+} from "./agent/supervised-network-permit.js";
 
 function fail(message: string): never {
   console.error(message);
@@ -53,6 +61,25 @@ function positiveInteger(
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1) {
     fail(label + " must be a positive integer.");
+  }
+
+  return parsed;
+}
+
+function nonNegativeInteger(
+  value: string | undefined,
+  fallback: number,
+  label: string,
+): number {
+  if (value === undefined) return fallback;
+
+  const parsed = Number(value);
+
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    fail(
+      label +
+        " must be a non-negative integer.",
+    );
   }
 
   return parsed;
@@ -106,6 +133,7 @@ function showStatus(): void {
   if (!hasS3) {
     console.log("NO_ACTIVE_S3_PERMIT");
     console.log("NO_ACTIVE_S4_PERMIT");
+    console.log("NO_ACTIVE_S5_PERMIT");
     return;
   }
 
@@ -143,6 +171,7 @@ function showStatus(): void {
 
   if (!hasS4) {
     console.log("NO_ACTIVE_S4_PERMIT");
+    console.log("NO_ACTIVE_S5_PERMIT");
     return;
   }
 
@@ -201,6 +230,70 @@ function showStatus(): void {
     "Expires at:      " +
       missionPermit.expiresAt,
   );
+
+  const hasS5 =
+    fs.existsSync(getNetworkPermitPath()) &&
+    fs.existsSync(getNetworkStatePath());
+
+  if (!hasS5) {
+    console.log("NO_ACTIVE_S5_PERMIT");
+    return;
+  }
+
+  const networkPermit =
+    readJson<SupervisedNetworkPermit>(
+      getNetworkPermitPath(),
+    );
+  const networkState =
+    readJson<SupervisedNetworkState>(
+      getNetworkStatePath(),
+    );
+
+  console.log("=== ACTIVE SUPERVISED S5 PERMIT ===");
+  console.log(
+    "Permit ID:       " +
+      networkPermit.id,
+  );
+  console.log(
+    "S4 permit ID:    " +
+      networkPermit.missionPermitId,
+  );
+  console.log(
+    "Project folder:  " +
+      networkPermit.workspacePath,
+  );
+  console.log(
+    "Domains:         " +
+      networkPermit.allowedDomains.join(", "),
+  );
+  console.log(
+    "Requests used:   " +
+      networkState.requestsUsed +
+      "/" +
+      networkPermit.maxRequests,
+  );
+  console.log(
+    "Bytes received:  " +
+      networkState.totalBytesReceived +
+      "/" +
+      networkPermit.maxTotalBytes,
+  );
+  console.log(
+    "Response limit:  " +
+      networkPermit.maxResponseBytes,
+  );
+  console.log(
+    "Redirect limit:  " +
+      networkPermit.maxRedirects,
+  );
+  console.log(
+    "Timeout ms:      " +
+      networkPermit.requestTimeoutMs,
+  );
+  console.log(
+    "Expires at:      " +
+      networkPermit.expiresAt,
+  );
 }
 
 const command = process.argv[2];
@@ -211,10 +304,16 @@ if (command === "status") {
 }
 
 if (command === "revoke") {
+  const s5Revoked = revokeNetworkPermit();
   const s4Revoked = revokeMissionPermit();
   const s3Revoked = revokeExecutionPermit();
   const s2Revoked = revokeDelegatedPermit();
 
+  console.log(
+    s5Revoked
+      ? "S5_PERMIT_REVOKED"
+      : "NO_ACTIVE_S5_PERMIT",
+  );
   console.log(
     s4Revoked
       ? "S4_PERMIT_REVOKED"
@@ -236,7 +335,8 @@ if (command === "revoke") {
 if (
   command !== "grant" &&
   command !== "grant-s3" &&
-  command !== "grant-s4"
+  command !== "grant-s4" &&
+  command !== "grant-s5"
 ) {
   fail(
     [
@@ -244,6 +344,7 @@ if (
       "  node dist/supervised-authorize.js grant <project-folder> [minutes] [max-files] [max-bytes]",
       "  node dist/supervised-authorize.js grant-s3 <project-folder> [minutes] [max-files] [max-bytes] [max-runs] [max-seconds]",
       "  node dist/supervised-authorize.js grant-s4 <project-folder> [minutes] [max-files] [max-bytes] [max-runs] [max-seconds] [max-cycles] [max-turns]",
+      "  node dist/supervised-authorize.js grant-s5 <project-folder> [minutes] [max-files] [max-bytes] [max-runs] [max-seconds] [max-cycles] [max-turns] <domains-csv> [max-requests] [max-response-bytes] [max-total-network-bytes] [max-redirects] [timeout-ms]",
       "  node dist/supervised-authorize.js status",
       "  node dist/supervised-authorize.js revoke",
     ].join("\n"),
@@ -291,18 +392,71 @@ const maxTurns = positiveInteger(
   "max-turns",
 );
 
+const rawDomains = process.argv[11];
+const allowedDomains =
+  rawDomains
+    ?.split(",")
+    .map((domain) => domain.trim())
+    .filter((domain) => domain.length > 0) ||
+  [];
+
+const maxNetworkRequests =
+  positiveInteger(
+    process.argv[12],
+    10,
+    "max-requests",
+  );
+const maxResponseBytes =
+  positiveInteger(
+    process.argv[13],
+    256 * 1024,
+    "max-response-bytes",
+  );
+const maxNetworkTotalBytes =
+  positiveInteger(
+    process.argv[14],
+    1024 * 1024,
+    "max-total-network-bytes",
+  );
+const maxRedirects =
+  nonNegativeInteger(
+    process.argv[15],
+    2,
+    "max-redirects",
+  );
+const requestTimeoutMs =
+  positiveInteger(
+    process.argv[16],
+    10_000,
+    "timeout-ms",
+  );
+
 const task = readCurrentTask();
 if ("error" in task) fail(task.error);
 
-const s4Requested = command === "grant-s4";
+const s5Requested =
+  String(command) === "grant-s5";
+const s4Requested =
+  command === "grant-s4" || s5Requested;
 const s3Requested =
   command === "grant-s3" || s4Requested;
 
+if (
+  s5Requested &&
+  allowedDomains.length === 0
+) {
+  fail(
+    "At least one exact S5 domain is required.",
+  );
+}
+
 console.log("");
 console.log(
-  s4Requested
-    ? "=== PERSISTENT S4 MISSION AUTHORIZATION ==="
-    : s3Requested
+  s5Requested
+    ? "=== READ-ONLY S5 NETWORK MISSION AUTHORIZATION ==="
+    : s4Requested
+      ? "=== PERSISTENT S4 MISSION AUTHORIZATION ==="
+      : s3Requested
       ? "=== DELEGATED S3 TASK AUTHORIZATION ==="
       : "=== DELEGATED S2 TASK AUTHORIZATION ===",
 );
@@ -314,7 +468,14 @@ console.log("Create files:    allowed");
 console.log("Modify files:    allowed");
 console.log("Delete files:    blocked");
 console.log("Shell commands:  blocked");
-console.log("Internet:        blocked");
+console.log(
+  "Internet:        " +
+    (
+      s5Requested
+        ? "read-only HTTPS to exact authorized domains"
+        : "blocked"
+    ),
+);
 console.log("Money:           blocked");
 
 if (s3Requested) {
@@ -334,6 +495,38 @@ if (s3Requested) {
     );
   }
 
+if (s5Requested) {
+  console.log(
+    "Exact domains:   " +
+      allowedDomains.join(", "),
+  );
+  console.log("HTTP method:     GET only");
+  console.log(
+    "Maximum requests: " +
+      maxNetworkRequests,
+  );
+  console.log(
+    "Response bytes:  " +
+      maxResponseBytes,
+  );
+  console.log(
+    "Total net bytes: " +
+      maxNetworkTotalBytes,
+  );
+  console.log(
+    "Maximum redirects: " +
+      maxRedirects,
+  );
+  console.log(
+    "Timeout ms:      " +
+      requestTimeoutMs,
+  );
+  console.log("POST/uploads:    blocked");
+  console.log("Credentials:     blocked");
+  console.log("Cookies/headers: blocked");
+  console.log("Other domains:   blocked");
+}
+
 console.log("Task SHA-256:    " + task.sha256);
 console.log("");
 console.log("--- CURRENT TASK ---");
@@ -342,9 +535,11 @@ console.log("--- END TASK ---");
 console.log("");
 
 console.log(
-    s4Requested
-      ? "This single authorization covers the bounded persistent mission, permitted file writes, and closed-catalog validations required by this exact task."
-      : s3Requested
+    s5Requested
+      ? "This single authorization covers the bounded persistent mission, confined file writes, closed-catalog validations, and read-only HTTPS access to the exact listed domains required by this exact task."
+      : s4Requested
+        ? "This single authorization covers the bounded persistent mission, permitted file writes, and closed-catalog validations required by this exact task."
+        : s3Requested
         ? "This single authorization covers all permitted file writes and closed-catalog validations required by this exact task."
         : "This single authorization covers all permitted file writes required by this exact task.",
 );
@@ -364,9 +559,11 @@ try {
 
   if (answer !== confirmation) {
     console.log(
-        s4Requested
-          ? "REJECTED: no S2, S3, or S4 permit was created."
-          : s3Requested
+        s5Requested
+          ? "REJECTED: no S2, S3, S4, or S5 permit was created."
+          : s4Requested
+            ? "REJECTED: no S2, S3, or S4 permit was created."
+            : s3Requested
             ? "REJECTED: no S2 or S3 permit was created."
             : "REJECTED: no S2 permit was created.",
     );
@@ -442,6 +639,54 @@ try {
       missionPermit.error +
         "\nS2 and S3 permits rolled back because S4 authorization failed.",
     );
+  }
+
+  if (s5Requested) {
+    const networkPermit = issueNetworkPermit({
+      allowedDomains,
+      maxRequests: maxNetworkRequests,
+      maxResponseBytes,
+      maxTotalBytes: maxNetworkTotalBytes,
+      maxRedirects,
+      requestTimeoutMs,
+      durationMinutes,
+    });
+
+    if ("error" in networkPermit) {
+      revokeMissionPermit();
+      revokeExecutionPermit();
+      revokeDelegatedPermit();
+
+      fail(
+        networkPermit.error +
+          "\nS2, S3, and S4 permits rolled back because S5 authorization failed.",
+      );
+    }
+
+    console.log("");
+    console.log("READ_ONLY_S5_NETWORK_GRANTED");
+    console.log("S2 Permit ID: " + delegatedPermit.id);
+    console.log("S3 Permit ID: " + executionPermit.id);
+    console.log("S4 Permit ID: " + missionPermit.id);
+    console.log("S5 Permit ID: " + networkPermit.id);
+    console.log("Project:      " + networkPermit.workspacePath);
+    console.log(
+      "Domains:      " +
+        networkPermit.allowedDomains.join(", "),
+    );
+    console.log(
+      "Max requests: " +
+        networkPermit.maxRequests,
+    );
+    console.log(
+      "Max net bytes: " +
+        networkPermit.maxTotalBytes,
+    );
+    console.log("Expires:      " + networkPermit.expiresAt);
+    console.log(
+      "Launch with AUTOMATON_SUPERVISED_LEVEL=S5.",
+    );
+    process.exit(0);
   }
 
   console.log("");

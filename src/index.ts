@@ -494,7 +494,10 @@ async function run(): Promise<void> {
       if (restrictedMode) {
         if (
           supervisedMode &&
-          supervisedLevel === "S4"
+          (
+            supervisedLevel === "S4" ||
+            supervisedLevel === "S5"
+          )
         ) {
           const decision =
             getMissionContinuationDecision();
@@ -504,7 +507,7 @@ async function run(): Promise<void> {
             decision.continueMission
           ) {
             logger.info(
-              "SUPERVISED MODE S4: continuing persistent mission automatically; " +
+              `SUPERVISED MODE ${supervisedLevel}: continuing persistent mission automatically; ` +
                 decision.cyclesRemaining +
                 " cycles and " +
                 decision.turnsRemaining +
@@ -522,7 +525,7 @@ async function run(): Promise<void> {
           }
 
           logger.info(
-            "SUPERVISED MODE S4: persistent mission will stop; " +
+            `SUPERVISED MODE ${supervisedLevel}: persistent mission will stop; ` +
               (
                 "error" in decision
                   ? decision.error

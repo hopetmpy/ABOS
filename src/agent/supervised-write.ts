@@ -10,9 +10,59 @@ import {
   saveDelegatedState,
 } from "./supervised-permit.js";
 import { getSupervisedLevel } from "./supervised-level.js";
+import {
+  loadValidNetworkPermit,
+} from "./supervised-network-permit.js";
+import {
+  validateSupervisedNetworkUrl,
+} from "./supervised-network-policy.js";
 
 const MAX_SINGLE_WRITE_BYTES = 1024 * 1024;
 const BLOCKED_NAMES = new Set(["SUPERVISED_TASK.md"]);
+
+function validateS5ContentUrls(
+  content: string,
+): string | null {
+  if (getSupervisedLevel() !== "S5") {
+    return null;
+  }
+
+  const authorization =
+    loadValidNetworkPermit();
+
+  if ("error" in authorization) {
+    return authorization.error;
+  }
+
+  const candidates =
+    content.match(
+      /https?:\/\/[^\s<>"']+/gi,
+    ) || [];
+
+  for (const candidate of candidates) {
+    const cleaned = candidate.replace(
+      /[),.;:\]]+$/g,
+      "",
+    );
+
+    const validated =
+      validateSupervisedNetworkUrl(
+        cleaned,
+        authorization.permit
+          .allowedDomains,
+      );
+
+    if ("error" in validated) {
+      return [
+        "Blocked: S5 content contains a URL outside the exact network authorization.",
+        "URL: " + cleaned,
+        validated.error,
+      ].join("\n");
+    }
+  }
+
+  return null;
+}
 
 function sha256(content: string | Buffer): string {
   return crypto.createHash("sha256").update(content).digest("hex");
@@ -194,6 +244,11 @@ export function performDelegatedWrite(
   const authorization = loadValidDelegatedPermit();
   if ("error" in authorization) return authorization.error;
 
+  const urlError =
+    validateS5ContentUrls(content);
+
+  if (urlError) return urlError;
+
   const { permit, state } = authorization;
 
   fs.mkdirSync(workspaceRoot, { recursive: true, mode: 0o700 });
@@ -274,7 +329,8 @@ export function performDelegatedWrite(
         "SHA-256: " + requestedSha256,
         "No file was rewritten and no quota was consumed.",
         getSupervisedLevel() === "S3" ||
-        getSupervisedLevel() === "S4"
+        getSupervisedLevel() === "S4" ||
+        getSupervisedLevel() === "S5"
           ? "The requested content is already present. Do not repeat this write."
           : "This path is finalized for the current task. Do not call this tool for it again. Complete any remaining paths, then provide the final response.",
       ].join("\n");
@@ -282,7 +338,8 @@ export function performDelegatedWrite(
 
     if (
       getSupervisedLevel() !== "S3" &&
-      getSupervisedLevel() !== "S4"
+      getSupervisedLevel() !== "S4" &&
+      getSupervisedLevel() !== "S5"
     ) {
       return [
         "Blocked: this path was already finalized during the current task.",
@@ -391,7 +448,7 @@ export function createDelegatedWriteTools(
     {
       name: "supervised_write_file",
       description:
-        "Create or replace one UTF-8 text file inside the delegated supervised project. The path is always relative to the project root and must never include the delegated project-folder prefix. S3 and S4 may revise an existing task file within the same byte quota; every revision is backed up and audited.",
+        "Create or replace one UTF-8 text file inside the delegated supervised project. The path is always relative to the project root and must never include the delegated project-folder prefix. S3, S4, and S5 may revise an existing task file within the same byte quota; every revision is backed up and audited.",
       category: "memory",
       riskLevel: "safe",
       parameters: {
@@ -411,15 +468,22 @@ export function createDelegatedWriteTools(
         required: ["path", "content"],
       },
       execute: async (args) => {
+        const delegatedPath =
+          typeof args.path === "string"
+            ? args.path
+            : typeof args.file === "string"
+              ? args.file
+              : null;
+
         if (
-          typeof args.path !== "string" ||
+          delegatedPath === null ||
           typeof args.content !== "string"
         ) {
           return "ERROR: path and content strings are required.";
         }
 
         return performDelegatedWrite(
-          args.path,
+          delegatedPath,
           args.content,
           workspaceRoot,
         );

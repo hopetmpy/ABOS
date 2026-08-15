@@ -75,6 +75,7 @@ import {
   type SupervisedExecutionOperation,
 } from "./supervised-exec-catalog.js";
 import { createSupervisedExecutionTools } from "./supervised-exec.js";
+import { createSupervisedNetworkTools } from "./supervised-network.js";
 import {
   beginMissionCycle,
   blockMission,
@@ -122,13 +123,19 @@ export async function runAgentLoop(
     ? getSupervisedLevel()
     : "S1";
 
-  if (supervisedLevel === "S4") {
+  const persistentSupervisedMission =
+    supervisedLevel === "S4" ||
+    supervisedLevel === "S5";
+  const persistentSupervisedLabel =
+    supervisedLevel === "S5" ? "S5" : "S4";
+
+  if (persistentSupervisedMission) {
     const missionCycle = beginMissionCycle();
 
     if ("error" in missionCycle) {
       log(
         config,
-        "[SUPERVISED S4] Mission cycle blocked: " +
+        `[SUPERVISED ${persistentSupervisedLabel}] Mission cycle blocked: ` +
           missionCycle.error,
       );
       db.setAgentState("sleeping");
@@ -138,7 +145,7 @@ export async function runAgentLoop(
 
     log(
       config,
-      "[SUPERVISED S4] Mission cycle " +
+      `[SUPERVISED ${persistentSupervisedLabel}] Mission cycle ` +
         missionCycle.state.cyclesUsed +
         "/" +
         missionCycle.permit.maxCycles +
@@ -157,7 +164,7 @@ export async function runAgentLoop(
 
   if (
     supervisedLevel === "S3" ||
-    supervisedLevel === "S4"
+    persistentSupervisedMission
   ) {
     const currentTask = readCurrentTask();
 
@@ -185,17 +192,21 @@ export async function runAgentLoop(
     const delegatedWriteTools =
       supervisedLevel === "S2" ||
       supervisedLevel === "S3" ||
-      supervisedLevel === "S4"
+      persistentSupervisedMission
         ? createDelegatedWriteTools()
         : [];
     const supervisedExecutionTools =
       supervisedLevel === "S3" ||
-      supervisedLevel === "S4"
+      persistentSupervisedMission
         ? createSupervisedExecutionTools()
         : [];
     const supervisedMissionTools =
-      supervisedLevel === "S4"
+      persistentSupervisedMission
         ? createSupervisedMissionTools()
+        : [];
+    const supervisedNetworkTools =
+      supervisedLevel === "S5"
+        ? createSupervisedNetworkTools()
         : [];
 
     tools = [
@@ -204,12 +215,15 @@ export async function runAgentLoop(
       ...delegatedWriteTools,
       ...supervisedExecutionTools,
       ...supervisedMissionTools,
+      ...supervisedNetworkTools,
     ];
 
     logger.warn(
-      supervisedLevel === "S4"
-        ? `SUPERVISED MODE S4 enabled: ${tools.length} confined tools exposed; persistent mission planning, delegated writing, and closed-catalog sandboxed validation allowed; shell, deletion, network, external actions, money, and delegation disabled`
-        : supervisedLevel === "S3"
+      supervisedLevel === "S5"
+        ? `SUPERVISED MODE S5 enabled: ${tools.length} confined tools exposed; persistent mission planning, delegated writing, closed-catalog sandboxed validation, and bounded read-only HTTPS allowed; shell, deletion, network outside the exact allowlist, mutating external actions, money, and delegation disabled`
+        : persistentSupervisedMission
+          ? `SUPERVISED MODE S4 enabled: ${tools.length} confined tools exposed; persistent mission planning, delegated writing, and closed-catalog sandboxed validation allowed; shell, deletion, network, external actions, money, and delegation disabled`
+          : supervisedLevel === "S3"
           ? `SUPERVISED MODE S3 enabled: ${tools.length} confined tools exposed; delegated writing and closed-catalog sandboxed validation allowed; shell, deletion, network, external actions, money, and delegation disabled`
         : supervisedLevel === "S2"
           ? `SUPERVISED MODE S2 enabled: ${tools.length} confined tools exposed; delegated workspace writing allowed; shell, deletion, external actions, money, and delegation disabled`
@@ -880,7 +894,7 @@ export async function runAgentLoop(
         }
       }
 
-      if (supervisedLevel === "S4") {
+      if (persistentSupervisedMission) {
         for (const toolCall of turn.toolCalls) {
           const resultText = String(
             toolCall.result || "",
@@ -950,7 +964,7 @@ export async function runAgentLoop(
             supervisedResultSummary,
             "",
             ...(
-              supervisedLevel === "S4"
+              persistentSupervisedMission
                 ? [
                     "CURRENT PERSISTENT MISSION STATE:",
                     getMissionProgress(),
@@ -960,10 +974,10 @@ export async function runAgentLoop(
             ),
             "Continue the exact authorized task from these results.",
             "Do not recreate or rewrite files reported as already complete.",
-            supervisedLevel === "S4"
+            persistentSupervisedMission
               ? "Classify each validation failure against the active plan step: an expected observation completes that step with factual evidence; an unexpected failure requires correcting only the relevant file and validating again."
               : "If a validation failed, correct only the relevant file and validate again.",
-            supervisedLevel === "S4"
+            persistentSupervisedMission
               ? "Continue the persistent mission plan. Immediately update the matching plan step after each successful action before starting unrelated work. If a step intentionally required observing a validation failure and that expected failure occurred, mark the observation step completed with the failure output as evidence, not blocked. Correct unexpected failures, run missing validations, and use supervised_complete_mission only when every requirement is proven."
               : "If the task is complete, respond with the requested final report and use no tools.",
           ].join("\n"),
@@ -985,7 +999,7 @@ export async function runAgentLoop(
       onTurnComplete?.(turn);
 
       const recordedMissionTurn =
-        supervisedLevel === "S4"
+        persistentSupervisedMission
           ? recordMissionTurn(turn.thinking)
           : null;
 
@@ -995,7 +1009,7 @@ export async function runAgentLoop(
       ) {
         log(
           config,
-          "[SUPERVISED S4] Mission turn blocked: " +
+          `[SUPERVISED ${persistentSupervisedLabel}] Mission turn blocked: ` +
             recordedMissionTurn.error,
         );
         db.setAgentState("sleeping");
@@ -1016,7 +1030,7 @@ export async function runAgentLoop(
           );
 
         if (
-          supervisedLevel === "S4" &&
+          persistentSupervisedMission &&
           recordedMissionTurn &&
           !("error" in recordedMissionTurn)
         ) {
@@ -1035,7 +1049,7 @@ export async function runAgentLoop(
           if (missionCompleted) {
             log(
               config,
-              "[SUPERVISED S4] Mission completed with persistent evidence; session will stop.",
+              `[SUPERVISED ${persistentSupervisedLabel}] Mission completed with persistent evidence; session will stop.`,
             );
             db.setAgentState("sleeping");
             onStateChange?.("sleeping");
@@ -1057,7 +1071,7 @@ export async function runAgentLoop(
             blockMission(reason);
             log(
               config,
-              "[SUPERVISED S4] " + reason,
+              `[SUPERVISED ${persistentSupervisedLabel}] ` + reason,
             );
             db.setAgentState("sleeping");
             onStateChange?.("sleeping");
@@ -1068,7 +1082,7 @@ export async function runAgentLoop(
           if (cycleLimitReached) {
             log(
               config,
-              "[SUPERVISED S4] Eight-turn cycle completed; progress persisted for the next authorized cycle.",
+              `[SUPERVISED ${persistentSupervisedLabel}] Eight-turn cycle completed; progress persisted for the next authorized cycle.`,
             );
             db.setAgentState("sleeping");
             onStateChange?.("sleeping");
@@ -1094,7 +1108,7 @@ export async function runAgentLoop(
 
             log(
               config,
-              "[SUPERVISED S4] Premature final response blocked; mission remains active.",
+              `[SUPERVISED ${persistentSupervisedLabel}] Premature final response blocked; mission remains active.`,
             );
           }
         } else if (

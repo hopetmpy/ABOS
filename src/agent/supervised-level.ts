@@ -1,4 +1,9 @@
-export type SupervisedLevel = "S1" | "S2" | "S3" | "S4";
+export type SupervisedLevel =
+  | "S1"
+  | "S2"
+  | "S3"
+  | "S4"
+  | "S5";
 
 export function getSupervisedLevel(): SupervisedLevel {
   const value = process.env.AUTOMATON_SUPERVISED_LEVEL;
@@ -19,8 +24,12 @@ export function getSupervisedLevel(): SupervisedLevel {
     return "S4";
   }
 
+  if (value === "S5") {
+    return "S5";
+  }
+
   throw new Error(
-    "Invalid AUTOMATON_SUPERVISED_LEVEL. Allowed values: S1, S2, S3, or S4.",
+    "Invalid AUTOMATON_SUPERVISED_LEVEL. Allowed values: S1, S2, S3, S4, or S5.",
   );
 }
 
@@ -30,7 +39,8 @@ export function isSupervisedWriteEnabled(): boolean {
     (
       getSupervisedLevel() === "S2" ||
       getSupervisedLevel() === "S3" ||
-      getSupervisedLevel() === "S4"
+      getSupervisedLevel() === "S4" ||
+      getSupervisedLevel() === "S5"
     )
   );
 }

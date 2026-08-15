@@ -79,6 +79,44 @@ function isStepId(value: unknown): value is string {
   );
 }
 
+function isReservedMissionCompletionStep(
+  id: unknown,
+  title: unknown,
+): boolean {
+  if (
+    typeof id !== "string" ||
+    typeof title !== "string"
+  ) {
+    return false;
+  }
+
+  const normalizedTitle = title
+    .trim()
+    .toLowerCase()
+    .replace(/[ _-]+/g, " ");
+
+  return (
+    [
+      "complete-mission",
+      "complete_mission",
+      "finalize-mission",
+      "finalize_mission",
+      "finish-mission",
+      "finish_mission",
+      "mission-completion",
+      "mission_completion",
+    ].includes(id) ||
+    [
+      "complete mission",
+      "finalize mission",
+      "finalise mission",
+      "finish mission",
+      "mission completion",
+      "finalize mission completion",
+    ].includes(normalizedTitle)
+  );
+}
+
 function isStepStatus(
   value: unknown,
 ): value is SupervisedMissionStepStatus {
@@ -183,6 +221,10 @@ function validatePlan(
     if (
       !isRecord(step) ||
       !isStepId(step.id) ||
+      isReservedMissionCompletionStep(
+        step.id,
+        step.title,
+      ) ||
       ids.has(step.id) ||
       typeof step.title !== "string" ||
       step.title.trim().length === 0 ||
@@ -337,6 +379,18 @@ export function defineMissionPlan(
       )
     ) {
       return "ERROR: mission step definition is invalid.";
+    }
+
+    if (
+      isReservedMissionCompletionStep(
+        requested.id,
+        requested.title,
+      )
+    ) {
+      return [
+        "ERROR: mission plans cannot contain a mission-completion step.",
+        "Use supervised_complete_mission only after all real work steps are completed.",
+      ].join("\n");
     }
 
     ids.add(requested.id);
