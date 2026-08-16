@@ -142,16 +142,26 @@ export async function runAgentLoop(
       if (config.anthropicApiKey && !process.env.ANTHROPIC_API_KEY) {
         process.env.ANTHROPIC_API_KEY = config.anthropicApiKey;
       }
-      // Conway Compute API is OpenAI-compatible. Use it as fallback when no
-      // direct OpenAI key is available. The conwayApiKey is always present
-      // (required for sandbox operations), so this ensures the orchestrator
-      // can always make inference calls.
+      // NVIDIA NIM key: prefer env, fall back to config.
+      if (config.nimApiKey && !process.env.NVIDIA_NIM_API_KEY) {
+        process.env.NVIDIA_NIM_API_KEY = config.nimApiKey;
+      }
+      // Conway Compute API is OpenAI-compatible. Use it as a fallback ONLY when
+      // no direct OpenAI key is available AND no local/NIM path is configured.
       if (config.conwayApiKey && !process.env.CONWAY_API_KEY) {
         process.env.CONWAY_API_KEY = config.conwayApiKey;
       }
-      // If no OpenAI key is set but Conway key is available, use Conway as
-      // the OpenAI provider (Conway Compute is OpenAI API-compatible).
-      if (!process.env.OPENAI_API_KEY && config.conwayApiKey) {
+      // If no OpenAI key is set and no local/NIM model is the active model,
+      // fall back to Conway Compute (OpenAI-compatible). We intentionally do NOT
+      // do this when the active model routes to Ollama or NIM — those backends
+      // must not be silently redirected to Conway.
+      const activeModel = config.inferenceModel || "";
+      const looksLocalOrNim =
+        /^[a-z0-9._-]+:[a-z0-9._-]+$/i.test(activeModel) ||
+        activeModel.includes("/") ||
+        !!config.ollamaBaseUrl ||
+        !!config.nimApiKey;
+      if (!process.env.OPENAI_API_KEY && config.conwayApiKey && !looksLocalOrNim) {
         process.env.OPENAI_API_KEY = config.conwayApiKey;
         process.env.OPENAI_BASE_URL = `${config.conwayApiUrl}/v1`;
       }

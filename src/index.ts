@@ -277,11 +277,17 @@ async function run(): Promise<void> {
     }
   }
 
-  // Resolve Ollama base URL: env var takes precedence over config
-  const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || config.ollamaBaseUrl;
+  // Resolve Ollama base URL: env var takes precedence over config.
+  // Default to the standard local Ollama port so local models work out of the box.
+  const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || config.ollamaBaseUrl || "http://localhost:11434";
 
-  // Create inference client — pass a live registry lookup so model names like
-  // "gpt-oss:120b" route to Ollama based on their registered provider, not heuristics.
+  // Resolve NVIDIA NIM config: env vars take precedence over config file.
+  const nimBaseUrl = process.env.NIM_BASE_URL || config.nimBaseUrl || "https://integrate.api.nvidia.com/v1";
+  const nimApiKey = process.env.NVIDIA_NIM_API_KEY || config.nimApiKey;
+
+  // Create inference client — pass a live registry lookup so model names route
+  // to the correct backend (Ollama/NIM/OpenAI/Anthropic/Conway) by registered
+  // provider, not by name heuristics alone.
   const modelRegistry = new ModelRegistry(db.raw);
   modelRegistry.initialize();
   const inference = createInferenceClient({
@@ -289,16 +295,16 @@ async function run(): Promise<void> {
     apiKey,
     defaultModel: config.inferenceModel,
     maxTokens: config.maxTokensPerTurn,
-    lowComputeModel: config.modelStrategy?.lowComputeModel || "gpt-5-mini",
+    lowComputeModel: config.modelStrategy?.lowComputeModel || "qwen2.5:7b",
     openaiApiKey: config.openaiApiKey,
     anthropicApiKey: config.anthropicApiKey,
     ollamaBaseUrl,
+    nimBaseUrl,
+    nimApiKey,
     getModelProvider: (modelId) => modelRegistry.get(modelId)?.provider,
   });
 
-  if (ollamaBaseUrl) {
-    logger.info(`[${new Date().toISOString()}] Ollama backend: ${ollamaBaseUrl}`);
-  }
+  logger.info(`[${new Date().toISOString()}] Inference backend: ${config.inferenceModel} (Ollama: ${ollamaBaseUrl}${nimApiKey ? `, NIM: ${nimBaseUrl}` : ", NIM: (no key)"})`);
 
   // Create social client (chain-aware: pass ChainIdentity for Solana signing)
   let social: SocialClientInterface | undefined;

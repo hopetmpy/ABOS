@@ -27,11 +27,15 @@ interface InferenceClientOptions {
   openaiApiKey?: string;
   anthropicApiKey?: string;
   ollamaBaseUrl?: string;
+  /** NVIDIA NIM (OpenAI-compatible) base URL, e.g. https://integrate.api.nvidia.com/v1 */
+  nimBaseUrl?: string;
+  /** NVIDIA NIM API key (env: NVIDIA_NIM_API_KEY). Optional but required to actually call NIM. */
+  nimApiKey?: string;
   /** Optional registry lookup — if provided, used before name heuristics */
   getModelProvider?: (modelId: string) => string | undefined;
 }
 
-type InferenceBackend = "conway" | "openai" | "anthropic" | "ollama";
+type InferenceBackend = "conway" | "openai" | "anthropic" | "ollama" | "nim";
 
 function isLoopbackHttpUrl(url: string | undefined): boolean {
   if (!url) return false;
@@ -45,14 +49,24 @@ function isLoopbackHttpUrl(url: string | undefined): boolean {
   }
 }
 
+/**
+ * Strip a trailing "/v1" (with optional trailing slash) so the caller can
+ * always append "/v1/chat/completions" without producing a doubled segment.
+ * NIM base URLs are commonly given as ".../v1", OpenAI/conway as bare hosts.
+ */
+function stripV1Suffix(url: string): string {
+  return url.replace(/\/+$/, "").replace(/\/v1$/i, "");
+}
+
 export function createInferenceClient(
   options: InferenceClientOptions,
 ): InferenceClient {
-  const { apiUrl, apiKey, openaiApiKey, anthropicApiKey, ollamaBaseUrl, getModelProvider } = options;
+  const { apiUrl, apiKey, openaiApiKey, anthropicApiKey, ollamaBaseUrl, nimBaseUrl, nimApiKey, getModelProvider } = options;
   const httpClient = new ResilientHttpClient({
     baseTimeout: INFERENCE_TIMEOUT_MS,
     retryableStatuses: [429, 500, 502, 503, 504],
-    allowHttpOnLoopback: isLoopbackHttpUrl(ollamaBaseUrl),
+    allowHttpOnLoopback:
+      isLoopbackHttpUrl(ollamaBaseUrl) || isLoopbackHttpUrl(nimBaseUrl),
   });
   let currentModel = options.defaultModel;
   let maxTokens = options.maxTokens;
@@ -68,13 +82,15 @@ export function createInferenceClient(
       openaiApiKey,
       anthropicApiKey,
       ollamaBaseUrl,
+      nimBaseUrl,
+      nimApiKey,
       getModelProvider,
     });
 
-    // Newer models (o-series, gpt-5.x, gpt-4.1) require max_completion_tokens.
-    // Ollama always uses max_tokens.
+    // Newer OpenAI reasoning models (o-series, gpt-5.x, gpt-4.1) require
+    // max_completion_tokens. Ollama and NIM always use max_tokens.
     const usesCompletionTokens =
-      backend !== "ollama" && /^(o[1-9]|gpt-5|gpt-4\.1)/.test(model);
+      backend !== "ollama" && backend !== "nim" && /^(o[1-9]|gpt-5|gpt-4\.1)/.test(model);
     const tokenLimit = opts?.maxTokens || maxTokens;
 
     const body: Record<string, unknown> = {
@@ -113,10 +129,12 @@ export function createInferenceClient(
     const openAiLikeApiUrl =
       backend === "openai" ? "https://api.openai.com" :
       backend === "ollama" ? (ollamaBaseUrl as string).replace(/\/$/, "") :
+      backend === "nim" ? stripV1Suffix((nimBaseUrl as string)) :
       apiUrl;
     const openAiLikeApiKey =
       backend === "openai" ? (openaiApiKey as string) :
       backend === "ollama" ? "ollama" :
+      backend === "nim" ? (nimApiKey as string) :
       apiKey;
 
     return chatViaOpenAiCompatible({
@@ -180,6 +198,8 @@ function resolveInferenceBackend(
     openaiApiKey?: string;
     anthropicApiKey?: string;
     ollamaBaseUrl?: string;
+    nimBaseUrl?: string;
+    nimApiKey?: string;
     getModelProvider?: (modelId: string) => string | undefined;
   },
 ): InferenceBackend {
@@ -187,6 +207,7 @@ function resolveInferenceBackend(
   if (keys.getModelProvider) {
     const provider = keys.getModelProvider(model);
     if (provider === "ollama" && keys.ollamaBaseUrl) return "ollama";
+    if (provider === "nim" && keys.nimBaseUrl && keys.nimApiKey) return "nim";
     if (provider === "anthropic" && keys.anthropicApiKey) return "anthropic";
     if (provider === "openai" && keys.openaiApiKey) return "openai";
     if (provider === "conway") return "conway";
@@ -194,6 +215,9 @@ function resolveInferenceBackend(
   }
 
   // Heuristic fallback (model not in registry yet)
+  // Ollama tags contain a colon (e.g. "qwen2.5:7b", "llama3.1:8b").
+  if (keys.ollamaBaseUrl && /^[a-z0-9._-]+:[a-z0-9._-]+$/i.test(model)) return "ollama";
+  if (keys.nimBaseUrl && keys.nimApiKey && /\//.test(model)) return "nim"; // NIM model IDs like "meta/llama-3.1-70b-instruct"
   if (keys.anthropicApiKey && /^claude/i.test(model)) return "anthropic";
   if (keys.openaiApiKey && /^(gpt-[3-9]|gpt-4|gpt-5|o[1-9][-\s.]|o[1-9]$|chatgpt)/i.test(model)) return "openai";
   return "conway";
@@ -205,7 +229,7 @@ async function chatViaOpenAiCompatible(params: {
   body: Record<string, unknown>;
   apiUrl: string;
   apiKey: string;
-  backend: "conway" | "openai" | "ollama";
+  backend: "conway" | "openai" | "ollama" | "nim";
   httpClient: ResilientHttpClient;
 }): Promise<InferenceResponse> {
   const resp = await params.httpClient.request(`${params.apiUrl}/v1/chat/completions`, {
@@ -213,9 +237,9 @@ async function chatViaOpenAiCompatible(params: {
     headers: {
       "Content-Type": "application/json",
       Authorization:
-        params.backend === "openai" || params.backend === "ollama"
-          ? `Bearer ${params.apiKey}`
-          : params.apiKey,
+        params.backend === "conway"
+          ? params.apiKey
+          : `Bearer ${params.apiKey}`,
     },
     body: JSON.stringify(params.body),
     timeout: INFERENCE_TIMEOUT_MS,

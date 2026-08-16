@@ -52,6 +52,10 @@ export interface AutomatonConfig {
   openaiApiKey?: string;
   anthropicApiKey?: string;
   ollamaBaseUrl?: string;
+  /** NVIDIA NIM (OpenAI-compatible) base URL. Default: https://integrate.api.nvidia.com/v1 */
+  nimBaseUrl?: string;
+  /** NVIDIA NIM API key. Env override: NVIDIA_NIM_API_KEY */
+  nimApiKey?: string;
   inferenceModel: string;
   maxTokensPerTurn: number;
   heartbeatConfigPath: string;
@@ -79,7 +83,7 @@ export interface AutomatonConfig {
 
 export const DEFAULT_CONFIG: Partial<AutomatonConfig> = {
   conwayApiUrl: "https://api.conway.tech",
-  inferenceModel: "gpt-5.2",
+  inferenceModel: "qwen2.5:7b",
   maxTokensPerTurn: 4096,
   heartbeatConfigPath: "~/.automaton/heartbeat.yml",
   dbPath: "~/.automaton/state.db",
@@ -90,6 +94,8 @@ export const DEFAULT_CONFIG: Partial<AutomatonConfig> = {
   maxTurnsPerCycle: 25,
   childSandboxMemoryMb: 1024,
   socialRelayUrl: "https://social.conway.tech",
+  // Default to local + NVIDIA NIM; Conway/OpenAI become optional fallbacks.
+  nimBaseUrl: "https://integrate.api.nvidia.com/v1",
 };
 
 // ─── Agent State ─────────────────────────────────────────────────
@@ -1142,7 +1148,7 @@ export const DEFAULT_MEMORY_BUDGET: MemoryBudget = {
 
 // === Phase 2.3: Inference & Model Strategy Types ===
 
-export type ModelProvider = "openai" | "anthropic" | "conway" | "ollama" | "other";
+export type ModelProvider = "openai" | "anthropic" | "conway" | "ollama" | "nim" | "other";
 
 export type InferenceTaskType =
   | "agent_turn"
