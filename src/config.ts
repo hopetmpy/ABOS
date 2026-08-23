@@ -6,8 +6,8 @@
 
 import fs from "fs";
 import path from "path";
-import type { AutomatonConfig, TreasuryPolicy, ModelStrategyConfig, SoulConfig } from "./types.js";
-import { DEFAULT_CONFIG, DEFAULT_TREASURY_POLICY, DEFAULT_MODEL_STRATEGY_CONFIG, DEFAULT_SOUL_CONFIG } from "./types.js";
+import type { AutomatonConfig, TreasuryPolicy, ModelStrategyConfig, SoulConfig, AutonomousResearchConfig } from "./types.js";
+import { DEFAULT_AUTONOMOUS_RESEARCH_CONFIG, DEFAULT_CONFIG, DEFAULT_TREASURY_POLICY, DEFAULT_MODEL_STRATEGY_CONFIG, DEFAULT_SOUL_CONFIG, normalizeAutonomousResearchConfig } from "./types.js";
 import { getAutomatonDir } from "./identity/wallet.js";
 import { loadApiKeyFromConfig } from "./identity/provision.js";
 import { createLogger } from "./observability/logger.js";
@@ -61,6 +61,9 @@ export function loadConfig(): AutomatonConfig | null {
       ...(raw.soulConfig ?? {}),
     };
 
+    const autonomousResearch: AutonomousResearchConfig =
+      normalizeAutonomousResearchConfig(raw.autonomousResearch);
+
     return {
       ...DEFAULT_CONFIG,
       ...raw,
@@ -72,6 +75,7 @@ export function loadConfig(): AutomatonConfig | null {
       treasuryPolicy,
       modelStrategy,
       soulConfig,
+      autonomousResearch,
       chainType: raw.chainType || "evm",
     } as AutomatonConfig;
   } catch {
@@ -95,6 +99,8 @@ export function saveConfig(config: AutomatonConfig): void {
     treasuryPolicy: config.treasuryPolicy ?? DEFAULT_TREASURY_POLICY,
     modelStrategy: config.modelStrategy ?? DEFAULT_MODEL_STRATEGY_CONFIG,
     soulConfig: config.soulConfig ?? DEFAULT_SOUL_CONFIG,
+    autonomousResearch:
+      config.autonomousResearch ?? DEFAULT_AUTONOMOUS_RESEARCH_CONFIG,
   };
   fs.writeFileSync(configPath, JSON.stringify(toSave, null, 2), {
     mode: 0o600,
@@ -156,6 +162,7 @@ export function createConfig(params: {
     maxChildren: DEFAULT_CONFIG.maxChildren || 3,
     parentAddress: params.parentAddress,
     treasuryPolicy: params.treasuryPolicy ?? DEFAULT_TREASURY_POLICY,
+    autonomousResearch: DEFAULT_AUTONOMOUS_RESEARCH_CONFIG,
     chainType: params.chainType || "evm",
   };
 }

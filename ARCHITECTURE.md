@@ -13,6 +13,7 @@ Conway Automaton is a sovereign AI agent runtime. An automaton owns an Ethereum 
 - [Policy Engine](#policy-engine)
 - [Inference Pipeline](#inference-pipeline)
 - [Memory System](#memory-system)
+- [Autonomous Research](#autonomous-research)
 - [Heartbeat Daemon](#heartbeat-daemon)
 - [Financial System](#financial-system)
 - [Identity and Wallet](#identity-and-wallet)
@@ -188,6 +189,9 @@ src/
     ingestion.ts           Post-turn memory extraction pipeline
     tools.ts               Memory tool implementations
     types.ts               Turn classification logic
+
+  research/                Bounded self-directed research
+    autonomous-research.ts Candidate generation, gates, persistence, adaptation
 
   observability/           Monitoring
     logger.ts              StructuredLogger (JSON, levels, modules)
@@ -424,6 +428,29 @@ The automaton has a 5-tier hierarchical memory system:
 
 ---
 
+## Autonomous Research
+
+**File:** `src/research/autonomous-research.ts`
+
+When enabled, the main loop asks the research engine to act before an idle orchestrator tick. The engine creates work only when no goal is active and all cooldown, daily-start, failure-backoff, and credit-reserve gates pass.
+
+```
+idle + eligible
+  -> generate diverse structured candidates
+  -> validate shape, blocked topics, risk, cost, and criteria
+  -> compare with prior goals using deterministic token similarity
+  -> rank novelty, value, feasibility, learning value, cost, and domain history
+  -> create one normal goal
+  -> planner / worker execution
+  -> persist hypothesis, outcome, and adaptive domain reward
+```
+
+Research goals require prior-art search, falsification, bounded experiments, success criteria, stop conditions, and reusable evidence. The normal task graph, worker harnesses, policy engine, spend controls, protected files, and audit stream remain authoritative. Planner output above the per-goal research ceiling is rejected before task execution.
+
+State is stored in the existing SQLite `kv`, `goals`, `task_graph`, `event_stream`, and `knowledge_store` tables, so cycles and failure backoff survive restarts without a parallel scheduler or database.
+
+---
+
 ## Heartbeat Daemon
 
 **Files:** `src/heartbeat/`
@@ -444,11 +471,12 @@ Every tick (default 60s):
   4. If task returns shouldWake=true: insert wake event
 ```
 
-**Built-in tasks (11):**
+**Built-in tasks (12):**
 
 | Task | Default Schedule | Purpose |
 |---|---|---|
 | `heartbeat_ping` | `*/15 * * * *` | Ping Conway, distress on critical/dead |
+| `autonomous_research` | `*/30 * * * *` | Wake an eligible idle agent for bounded research |
 | `check_credits` | `0 */6 * * *` | Monitor tier, manage 1hr dead grace period |
 | `check_usdc_balance` | `*/5 * * * *` | Wake agent if USDC available for topup |
 | `check_for_updates` | `0 */4 * * *` | Git upstream monitoring (dedup: only new commits) |
@@ -712,9 +740,10 @@ AutomatonConfig
   treasuryPolicy          Financial limits (TreasuryPolicy)
   soulConfig              Soul system config
   modelStrategy           Model routing config
+  autonomousResearch      Bounded autonomous research config
 ```
 
-**Deep-merged fields:** `treasuryPolicy`, `modelStrategy`, and `soulConfig` are merged with defaults so partial overrides work correctly.
+**Deep-merged fields:** `treasuryPolicy`, `modelStrategy`, `soulConfig`, and `autonomousResearch` are merged with defaults so partial overrides work correctly. Autonomous research remains disabled until explicitly enabled.
 
 ---
 

@@ -31,6 +31,7 @@ import { AgentWorkspace } from "./workspace.js";
 import {
   getActiveGoals,
   getGoalById,
+  insertEvent,
   getTaskById,
   getTasksByGoal,
   updateGoalStatus,
@@ -454,6 +455,23 @@ export class Orchestrator {
       };
     }
 
+    const budgetError = validateAutonomousResearchPlanBudget(goal, output);
+    if (budgetError) {
+      updateGoalStatus(this.params.db, goal.id, "failed");
+      insertEvent(this.params.db, {
+        type: "autonomous_research_budget_rejected",
+        agentAddress: this.params.identity.address,
+        goalId: goal.id,
+        content: budgetError,
+        tokenCount: 0,
+      });
+      return {
+        ...state,
+        phase: "failed",
+        failedError: budgetError,
+      };
+    }
+
     decomposeGoal(this.params.db, goal.id, plannerOutputToTasks(goal.id, output));
     await this.persistPlannerOutput(goal.id, output, "plan");
 
@@ -751,6 +769,23 @@ export class Orchestrator {
           priority: 50,
           timeoutMs: 300_000,
         }],
+      };
+    }
+
+    const budgetError = validateAutonomousResearchPlanBudget(goal, output);
+    if (budgetError) {
+      updateGoalStatus(this.params.db, goal.id, "failed");
+      insertEvent(this.params.db, {
+        type: "autonomous_research_budget_rejected",
+        agentAddress: this.params.identity.address,
+        goalId: goal.id,
+        content: budgetError,
+        tokenCount: 0,
+      });
+      return {
+        ...state,
+        phase: "failed",
+        failedError: budgetError,
       };
     }
 
@@ -1129,6 +1164,39 @@ function pickGoal(goals: GoalRow[], preferredId: string | null): GoalRow {
   }
 
   return goals[0];
+}
+
+function validateAutonomousResearchPlanBudget(
+  goal: GoalRow,
+  output: PlannerOutput,
+): string | null {
+  if (!goal.strategy?.includes("autonomous-research/v1")) {
+    return null;
+  }
+
+  const match = goal.strategy.match(
+    /(?:^|;\s*)estimatedCostCents=(\d+)(?:;|$)/,
+  );
+  if (!match) {
+    return "Autonomous research plan rejected: goal has no valid cost ceiling.";
+  }
+
+  const budgetCents = Number(match[1]);
+  const taskTotalCents = output.tasks.reduce(
+    (sum, task) => sum + Math.max(0, task.estimatedCostCents),
+    0,
+  );
+  const estimatedTotalCents = Math.max(
+    Math.max(0, output.estimatedTotalCostCents),
+    taskTotalCents,
+  );
+  if (estimatedTotalCents > budgetCents) {
+    return (
+      "Autonomous research plan rejected: estimated execution cost " +
+      `${estimatedTotalCents} cents exceeds the goal ceiling of ${budgetCents} cents.`
+    );
+  }
+  return null;
 }
 
 function clampPriority(priority: number, fallbackIndex: number): number {

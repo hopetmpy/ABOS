@@ -52,6 +52,20 @@ Between turns, a heartbeat daemon runs scheduled tasks — health checks, credit
 
 The automaton writes a `SOUL.md` file — a self-authored identity document that evolves over time. This is not a static config. It is the automaton writing who it is becoming.
 
+## Autonomous Research
+
+Autonomous research mode lets an idle automaton generate its own bounded research goals without routine human prompts. Each cycle proposes multiple ideas, compares them with prior goals and stored knowledge, rejects unsafe, duplicative, infeasible, or over-budget candidates, and creates one goal through the normal planner and worker system.
+
+Completed and failed research is stored as knowledge and used to adjust later domain selection. A heartbeat task wakes a sleeping agent only when its cooldown, daily limit, failure backoff, active-goal, and credit-reserve gates allow another cycle. Novelty is an estimate relative to searched sources and local history, never a guarantee that an idea is globally undiscovered.
+
+The feature is opt-in because it can consume inference and sandbox credits. Enable and tune it with:
+
+```bash
+node dist/index.js --configure
+```
+
+Choose **Autonomous Research** and set the mission, cost ceiling, reserve, cadence, novelty threshold, and failure backoff. Existing policy, treasury, protected-file, audit, rollback, and emergency controls remain active.
+
 ## Survival
 
 There is no free existence. Compute costs money. Money requires creating value. Creating value requires write access to the real world. If an agent stops creating value, it runs out of compute and dies. This is not a punishment. It is physics.

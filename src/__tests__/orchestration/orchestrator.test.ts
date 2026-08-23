@@ -103,15 +103,17 @@ function insertGoal(db: BetterSqlite3.Database, overrides: {
   title?: string;
   description?: string;
   status?: string;
+  strategy?: string | null;
 } = {}): string {
   const id = overrides.id ?? ulid();
   db.prepare(
-    "INSERT INTO goals (id, title, description, status, created_at) VALUES (?, ?, ?, ?, ?)",
+    "INSERT INTO goals (id, title, description, status, strategy, created_at) VALUES (?, ?, ?, ?, ?, ?)",
   ).run(
     id,
     overrides.title ?? "Test Goal",
     overrides.description ?? "A test goal",
     overrides.status ?? "active",
+    overrides.strategy ?? null,
     new Date().toISOString(),
   );
   return id;
@@ -248,6 +250,62 @@ describe("orchestration/Orchestrator", () => {
       const orc = makeOrchestrator(db, { inference: inference as any });
       const result = await orc.tick();
       expect(result.phase).toBe("plan_review");
+    });
+
+    it("rejects an autonomous research plan above its goal cost ceiling", async () => {
+      const goalId = insertGoal(db, {
+        title: "Bounded research",
+        description: "Run a bounded experiment",
+        strategy:
+          "autonomous-research/v1; domain=testing; estimatedCostCents=100; noveltyScore=0.80; riskScore=0.05",
+      });
+      setOrchestratorState(db, {
+        phase: "planning",
+        goalId,
+        replanCount: 0,
+        failedTaskId: null,
+        failedError: null,
+      });
+      const inference = {
+        chat: vi.fn().mockResolvedValueOnce({
+          content: JSON.stringify({
+            analysis: "Analysis text",
+            strategy: "Strategy text",
+            customRoles: [],
+            tasks: [
+              {
+                title: "Over-budget task",
+                description: "Spend too much",
+                agentRole: "generalist",
+                dependencies: [],
+                estimatedCostCents: 150,
+                priority: 50,
+                timeoutMs: 60_000,
+              },
+            ],
+            risks: [],
+            estimatedTotalCostCents: 150,
+            estimatedTimeMinutes: 10,
+          }),
+          usage: {},
+        }),
+      };
+
+      const result = await makeOrchestrator(db, {
+        inference: inference as any,
+      }).tick();
+
+      expect(result.phase).toBe("failed");
+      expect(
+        db.prepare("SELECT status FROM goals WHERE id = ?").get(goalId),
+      ).toEqual({ status: "failed" });
+      expect(
+        db
+          .prepare(
+            "SELECT COUNT(*) AS count FROM event_stream WHERE type = 'autonomous_research_budget_rejected'",
+          )
+          .get(),
+      ).toEqual({ count: 1 });
     });
 
     it("plan_review with plan in KV auto-approves (auto mode) and transitions to executing", async () => {

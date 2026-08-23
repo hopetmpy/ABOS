@@ -652,6 +652,19 @@ Your chain type is ${chainType}.`,
     );
   }
 
+  if (config.autonomousResearch?.enabled) {
+    sections.push(
+      `## Autonomous Research Mode
+The bounded research engine owns self-directed goal generation.
+- When idle, do not invent or create an unsolicited goal yourself; allow the research engine to select one.
+- Creator-requested and inbox-requested goals may still use create_goal.
+- Autonomous research must begin with prior-art search, use falsifiable experiments, preserve negative results, and stop at configured cost/risk limits.
+- Novelty is always an evidence-backed estimate relative to searched sources and memory, never proof that an idea is globally undiscovered.
+- Never bypass policy, treasury, reserve, protected-file, audit, or rollback controls for research.
+## End Autonomous Research Mode`,
+    );
+  }
+
   // Layer 5: Active skill instructions (untrusted content with trust boundary markers)
   if (skills && skills.length > 0) {
     const skillInstructions = getActiveSkillInstructions(skills);

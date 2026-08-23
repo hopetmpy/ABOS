@@ -26,6 +26,12 @@ const DEFAULT_HEARTBEAT_CONFIG: HeartbeatConfig = {
       enabled: true,
     },
     {
+      name: "autonomous_research",
+      schedule: "*/30 * * * *",
+      task: "autonomous_research",
+      enabled: true,
+    },
+    {
       name: "check_credits",
       schedule: "0 */6 * * *",
       task: "check_credits",

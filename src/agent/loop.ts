@@ -65,6 +65,7 @@ import { createWorkerInferenceBridge } from "./worker-inference-bridge.js";
 import { ProviderRegistry } from "../inference/provider-registry.js";
 import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import { isIdleOnlyTool } from "./idle-only-tools.js";
+import { AutonomousResearchEngine } from "../research/autonomous-research.js";
 
 const logger = createLogger("loop");
 const MAX_TOOL_CALLS_PER_TURN = 10;
@@ -128,6 +129,7 @@ export async function runAgentLoop(
   let planModeController: PlanModeController | undefined;
   let orchestrator: Orchestrator | undefined;
   let workerPool: LocalWorkerPool | undefined;
+  let autonomousResearch: AutonomousResearchEngine | undefined;
 
   if (hasTable(db.raw, "goals")) {
     try {
@@ -170,6 +172,12 @@ export async function runAgentLoop(
       }
 
       const unifiedInference = new UnifiedInferenceClient(registry);
+      autonomousResearch = new AutonomousResearchEngine(
+        db.raw,
+        unifiedInference,
+        identity,
+        config,
+      );
       const agentTracker = new SimpleAgentTracker(db);
       const funding = new SimpleFundingProtocol(conway, identity, db);
       const messaging = new ColonyMessaging(
@@ -538,6 +546,13 @@ export async function runAgentLoop(
       }
 
       if (orchestrator) {
+        if (autonomousResearch) {
+          const researchTick = await autonomousResearch.tick(financial);
+          if (researchTick.status === "created") {
+            log(config, `[RESEARCH] ${researchTick.message}`);
+          }
+        }
+
         const orchestratorTick = await orchestrator.tick();
         db.setKV("orchestrator.last_tick", JSON.stringify(orchestratorTick));
         const localWorkersActive = workerPool?.getActiveCount() ?? 0;

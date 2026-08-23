@@ -11,7 +11,12 @@
 import readline from "readline";
 import chalk from "chalk";
 import { loadConfig, saveConfig, resolvePath } from "../config.js";
-import { DEFAULT_TREASURY_POLICY, DEFAULT_MODEL_STRATEGY_CONFIG } from "../types.js";
+import {
+  DEFAULT_AUTONOMOUS_RESEARCH_CONFIG,
+  DEFAULT_TREASURY_POLICY,
+  DEFAULT_MODEL_STRATEGY_CONFIG,
+  normalizeAutonomousResearchConfig,
+} from "../types.js";
 import type { AutomatonConfig, ModelStrategyConfig, TreasuryPolicy, ModelEntry } from "../types.js";
 import { closePrompts } from "./prompts.js";
 import { createDatabase } from "../state/database.js";
@@ -187,6 +192,7 @@ function printMainMenu(config: AutomatonConfig): void {
   console.log(`  ${chalk.white("2.")} Model Strategy        ${dim(config.inferenceModel)} / ${dim(strategy.maxTokensPerTurn + " tokens")}`);
   console.log(`  ${chalk.white("3.")} Treasury Policy       ${dim("max transfer: " + (config.treasuryPolicy?.maxSingleTransferCents ?? DEFAULT_TREASURY_POLICY.maxSingleTransferCents) + "¢")}`);
   console.log(`  ${chalk.white("4.")} General               ${dim(config.name)} / ${dim(config.logLevel)}`);
+  console.log(`  ${chalk.white("5.")} Autonomous Research    ${val(config.autonomousResearch?.enabled ?? false)}`);
   console.log("");
   console.log(chalk.dim("  q  Quit"));
   console.log("");
@@ -308,6 +314,72 @@ async function configureGeneral(config: AutomatonConfig): Promise<void> {
   console.log("");
 }
 
+// ─── Section: Autonomous Research ─────────────────────────────────
+
+async function configureAutonomousResearch(
+  config: AutomatonConfig,
+): Promise<void> {
+  console.log(chalk.cyan("\n  ── Autonomous Research ─────────────────────────\n"));
+  console.log(chalk.dim(
+    "  Generates one bounded, prior-art-checked research goal at a time.\n",
+  ));
+
+  const current = normalizeAutonomousResearchConfig(
+    config.autonomousResearch ?? DEFAULT_AUTONOMOUS_RESEARCH_CONFIG,
+  );
+  current.enabled = await askBool("Enable autonomous research", current.enabled);
+  current.mission =
+    (await askString(
+      "Research mission (blank uses genesis prompt)",
+      current.mission,
+    )) || undefined;
+  current.cooldownMinutes = await askNumber(
+    "Cooldown between generation attempts (minutes)",
+    current.cooldownMinutes,
+  );
+  current.maxGoalsPerDay = await askNumber(
+    "Maximum new goals per day",
+    current.maxGoalsPerDay,
+  );
+  current.maxConsecutiveFailures = await askNumber(
+    "Failures before automatic pause",
+    current.maxConsecutiveFailures,
+  );
+  current.pauseAfterFailuresMinutes = await askNumber(
+    "Failure pause duration (minutes)",
+    current.pauseAfterFailuresMinutes,
+  );
+  current.minCreditsCents = await askNumber(
+    "Minimum credit balance (cents)",
+    current.minCreditsCents,
+  );
+  current.reserveCreditsCents = await askNumber(
+    "Untouchable credit reserve (cents)",
+    current.reserveCreditsCents,
+  );
+  current.maxGoalCostCents = await askNumber(
+    "Maximum estimated cost per goal (cents)",
+    current.maxGoalCostCents,
+  );
+  current.candidateCount = await askNumber(
+    "Candidate ideas per cycle",
+    current.candidateCount,
+  );
+  current.minNoveltyScore =
+    (await askNumber(
+      "Minimum novelty score (percent)",
+      Math.round(current.minNoveltyScore * 100),
+    )) / 100;
+  current.maxRiskScore =
+    (await askNumber(
+      "Maximum risk score (percent)",
+      Math.round(current.maxRiskScore * 100),
+    )) / 100;
+
+  config.autonomousResearch = normalizeAutonomousResearchConfig(current);
+  console.log("");
+}
+
 // ─── Entry point ──────────────────────────────────────────────────
 
 export async function runConfigure(): Promise<void> {
@@ -344,12 +416,17 @@ export async function runConfigure(): Promise<void> {
         saveConfig(config);
         console.log(chalk.green("  ✓ General settings saved.\n"));
         break;
+      case "5":
+        await configureAutonomousResearch(config);
+        saveConfig(config);
+        console.log(chalk.green("  ✓ Autonomous research settings saved.\n"));
+        break;
       case "q":
       case "":
         running = false;
         break;
       default:
-        console.log(chalk.yellow(`  Unknown option: "${choice}". Enter 1-4 or q.\n`));
+        console.log(chalk.yellow(`  Unknown option: "${choice}". Enter 1-5 or q.\n`));
     }
   }
 

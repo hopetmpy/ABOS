@@ -19,6 +19,7 @@ import { createTokenCounter } from "../memory/context-manager.js";
 
 const MAX_CONTEXT_TURNS = 20;
 const SUMMARY_THRESHOLD = 15;
+const TOKEN_COUNT_SAMPLE_SIZE = 10_000;
 
 let tokenCounter: ReturnType<typeof createTokenCounter> | null = null;
 
@@ -40,7 +41,11 @@ export function estimateTokens(text: string): number {
     if (!tokenCounter) {
       tokenCounter = createTokenCounter();
     }
-    const tokens = tokenCounter.countTokens(content);
+    const sample = content.slice(0, TOKEN_COUNT_SAMPLE_SIZE);
+    const sampleTokens = tokenCounter.countTokens(sample);
+    const tokens = content.length > TOKEN_COUNT_SAMPLE_SIZE
+      ? Math.ceil(sampleTokens * (content.length / sample.length))
+      : sampleTokens;
     if (Number.isFinite(tokens) && tokens > 0) {
       // Keep a conservative floor to avoid under-budgeting context.
       return Math.max(tokens, legacyEstimate);

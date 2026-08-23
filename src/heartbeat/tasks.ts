@@ -90,6 +90,26 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
     return { shouldWake: false };
   },
 
+  autonomous_research: async (
+    ctx: TickContext,
+    taskCtx: HeartbeatLegacyContext,
+  ) => {
+    const { shouldWakeForAutonomousResearch } = await import(
+      "../research/autonomous-research.js"
+    );
+    const shouldWake = shouldWakeForAutonomousResearch(
+      taskCtx.db.raw,
+      taskCtx.config,
+      ctx.creditBalance,
+    );
+    return shouldWake
+      ? {
+          shouldWake: true,
+          message: "Autonomous research cycle is eligible to generate a new goal.",
+        }
+      : { shouldWake: false };
+  },
+
   check_credits: async (ctx: TickContext, taskCtx: HeartbeatLegacyContext) => {
     // Use ctx.creditBalance instead of calling conway.getCreditsBalance()
     const credits = ctx.creditBalance;

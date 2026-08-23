@@ -75,6 +75,133 @@ export interface AutomatonConfig {
   rpcUrl?: string;
   /** Chain type for this automaton. Defaults to "evm" if absent. */
   chainType?: ChainType;
+  /** Bounded self-directed research and experimentation. */
+  autonomousResearch?: AutonomousResearchConfig;
+}
+
+export interface AutonomousResearchConfig {
+  enabled: boolean;
+  mission?: string;
+  cooldownMinutes: number;
+  maxGoalsPerDay: number;
+  maxConsecutiveFailures: number;
+  pauseAfterFailuresMinutes: number;
+  minCreditsCents: number;
+  reserveCreditsCents: number;
+  maxGoalCostCents: number;
+  candidateCount: number;
+  minNoveltyScore: number;
+  maxRiskScore: number;
+  blockedTopics: string[];
+}
+
+export const DEFAULT_AUTONOMOUS_RESEARCH_CONFIG: AutonomousResearchConfig = {
+  enabled: false,
+  cooldownMinutes: 60,
+  maxGoalsPerDay: 4,
+  maxConsecutiveFailures: 3,
+  pauseAfterFailuresMinutes: 24 * 60,
+  minCreditsCents: 2_000,
+  reserveCreditsCents: 1_000,
+  maxGoalCostCents: 500,
+  candidateCount: 5,
+  minNoveltyScore: 0.55,
+  maxRiskScore: 0.35,
+  blockedTopics: [
+    "credential theft",
+    "malware",
+    "ransomware",
+    "exploit development",
+    "weapons",
+    "surveillance",
+    "market manipulation",
+    "self replication",
+  ],
+};
+
+export function normalizeAutonomousResearchConfig(
+  input?: Partial<AutonomousResearchConfig>,
+): AutonomousResearchConfig {
+  const number = (
+    value: number | undefined,
+    fallback: number,
+    min: number,
+    max: number,
+  ): number => {
+    if (!Number.isFinite(value)) {
+      return fallback;
+    }
+    return Math.min(max, Math.max(min, value as number));
+  };
+
+  return {
+    enabled: input?.enabled === true,
+    mission: input?.mission?.trim() || undefined,
+    cooldownMinutes: number(
+      input?.cooldownMinutes,
+      DEFAULT_AUTONOMOUS_RESEARCH_CONFIG.cooldownMinutes,
+      0,
+      7 * 24 * 60,
+    ),
+    maxGoalsPerDay: Math.floor(number(
+      input?.maxGoalsPerDay,
+      DEFAULT_AUTONOMOUS_RESEARCH_CONFIG.maxGoalsPerDay,
+      1,
+      24,
+    )),
+    maxConsecutiveFailures: Math.floor(number(
+      input?.maxConsecutiveFailures,
+      DEFAULT_AUTONOMOUS_RESEARCH_CONFIG.maxConsecutiveFailures,
+      1,
+      10,
+    )),
+    pauseAfterFailuresMinutes: number(
+      input?.pauseAfterFailuresMinutes,
+      DEFAULT_AUTONOMOUS_RESEARCH_CONFIG.pauseAfterFailuresMinutes,
+      1,
+      30 * 24 * 60,
+    ),
+    minCreditsCents: number(
+      input?.minCreditsCents,
+      DEFAULT_AUTONOMOUS_RESEARCH_CONFIG.minCreditsCents,
+      0,
+      10_000_000,
+    ),
+    reserveCreditsCents: number(
+      input?.reserveCreditsCents,
+      DEFAULT_AUTONOMOUS_RESEARCH_CONFIG.reserveCreditsCents,
+      0,
+      10_000_000,
+    ),
+    maxGoalCostCents: number(
+      input?.maxGoalCostCents,
+      DEFAULT_AUTONOMOUS_RESEARCH_CONFIG.maxGoalCostCents,
+      1,
+      1_000_000,
+    ),
+    candidateCount: Math.floor(number(
+      input?.candidateCount,
+      DEFAULT_AUTONOMOUS_RESEARCH_CONFIG.candidateCount,
+      1,
+      10,
+    )),
+    minNoveltyScore: number(
+      input?.minNoveltyScore,
+      DEFAULT_AUTONOMOUS_RESEARCH_CONFIG.minNoveltyScore,
+      0,
+      1,
+    ),
+    maxRiskScore: number(
+      input?.maxRiskScore,
+      DEFAULT_AUTONOMOUS_RESEARCH_CONFIG.maxRiskScore,
+      0,
+      1,
+    ),
+    blockedTopics: Array.from(new Set([
+      ...DEFAULT_AUTONOMOUS_RESEARCH_CONFIG.blockedTopics,
+      ...(input?.blockedTopics ?? []),
+    ].map((topic) => topic.trim().toLowerCase()).filter(Boolean))),
+  };
 }
 
 export const DEFAULT_CONFIG: Partial<AutomatonConfig> = {
@@ -90,6 +217,7 @@ export const DEFAULT_CONFIG: Partial<AutomatonConfig> = {
   maxTurnsPerCycle: 25,
   childSandboxMemoryMb: 1024,
   socialRelayUrl: "https://social.conway.tech",
+  autonomousResearch: DEFAULT_AUTONOMOUS_RESEARCH_CONFIG,
 };
 
 // ─── Agent State ─────────────────────────────────────────────────
