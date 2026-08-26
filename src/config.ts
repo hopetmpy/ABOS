@@ -61,6 +61,10 @@ export function loadConfig(): AutomatonConfig | null {
       ...(raw.soulConfig ?? {}),
     };
 
+    // NVIDIA NIM config — env vars take precedence over config file.
+    const nimBaseUrl = process.env.NIM_BASE_URL || raw.nimBaseUrl || DEFAULT_CONFIG.nimBaseUrl;
+    const nimApiKey = process.env.NVIDIA_NIM_API_KEY || raw.nimApiKey;
+
     return {
       ...DEFAULT_CONFIG,
       ...raw,
@@ -73,6 +77,8 @@ export function loadConfig(): AutomatonConfig | null {
       modelStrategy,
       soulConfig,
       chainType: raw.chainType || "evm",
+      nimBaseUrl,
+      nimApiKey,
     } as AutomatonConfig;
   } catch {
     return null;
@@ -144,7 +150,9 @@ export function createConfig(params: {
     openaiApiKey: params.openaiApiKey,
     anthropicApiKey: params.anthropicApiKey,
     ollamaBaseUrl: params.ollamaBaseUrl,
-    inferenceModel: DEFAULT_CONFIG.inferenceModel || "gpt-5.2",
+    nimBaseUrl: DEFAULT_CONFIG.nimBaseUrl || "https://integrate.api.nvidia.com/v1",
+    nimApiKey: undefined, // set at runtime from NVIDIA_NIM_API_KEY env
+    inferenceModel: DEFAULT_CONFIG.inferenceModel || "qwen2.5:7b",
     maxTokensPerTurn: DEFAULT_CONFIG.maxTokensPerTurn || 4096,
     heartbeatConfigPath:
       DEFAULT_CONFIG.heartbeatConfigPath || "~/.automaton/heartbeat.yml",

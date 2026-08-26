@@ -55,20 +55,66 @@ const DEFAULT_EMERGENCY_STOP_CREDITS = 100;
 
 const DEFAULT_TIER_DEFAULTS: Record<ModelTier, TierDefault> = {
   reasoning: {
-    preferredProvider: "openai",
-    fallbackOrder: ["groq", "together"],
+    preferredProvider: "nim",
+    fallbackOrder: ["local", "openai"],
   },
   fast: {
-    preferredProvider: "groq",
-    fallbackOrder: ["openai", "together", "local"],
+    preferredProvider: "local",
+    fallbackOrder: ["nim", "openai"],
   },
   cheap: {
-    preferredProvider: "groq",
-    fallbackOrder: ["together", "local", "openai"],
+    preferredProvider: "local",
+    fallbackOrder: ["nim", "openai"],
   },
 };
 
 const DEFAULT_PROVIDERS: ProviderConfig[] = [
+  {
+    id: "nim",
+    name: "NVIDIA NIM",
+    // OpenAI-compatible. Default endpoint for NVIDIA-hosted models.
+    baseUrl: "https://integrate.api.nvidia.com/v1",
+    apiKeyEnvVar: "NVIDIA_NIM_API_KEY",
+    models: [
+      {
+        id: "meta/llama-3.1-70b-instruct",
+        tier: "reasoning",
+        contextWindow: 131072,
+        maxOutputTokens: 8192,
+        costPerInputToken: 0,
+        costPerOutputToken: 0,
+        supportsTools: true,
+        supportsVision: false,
+        supportsStreaming: true,
+      },
+      {
+        id: "meta/llama-3.1-8b-instruct",
+        tier: "fast",
+        contextWindow: 131072,
+        maxOutputTokens: 8192,
+        costPerInputToken: 0,
+        costPerOutputToken: 0,
+        supportsTools: true,
+        supportsVision: false,
+        supportsStreaming: true,
+      },
+      {
+        id: "meta/llama-3.1-8b-instruct",
+        tier: "cheap",
+        contextWindow: 131072,
+        maxOutputTokens: 4096,
+        costPerInputToken: 0,
+        costPerOutputToken: 0,
+        supportsTools: true,
+        supportsVision: false,
+        supportsStreaming: true,
+      },
+    ],
+    maxRequestsPerMinute: 600,
+    maxTokensPerMinute: 500_000,
+    priority: 1,
+    enabled: true,
+  },
   {
     id: "openai",
     name: "OpenAI",
@@ -111,8 +157,8 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
     ],
     maxRequestsPerMinute: 500,
     maxTokensPerMinute: 2_000_000,
-    priority: 1,
-    enabled: true,
+    priority: 3,
+    enabled: false,
   },
   {
     id: "groq",
@@ -156,8 +202,8 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
     ],
     maxRequestsPerMinute: 14400,
     maxTokensPerMinute: 500000,
-    priority: 2,
-    enabled: true,
+    priority: 4,
+    enabled: false,
   },
   {
     id: "together",
@@ -201,7 +247,7 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
     ],
     maxRequestsPerMinute: 600,
     maxTokensPerMinute: 1_000_000,
-    priority: 3,
+    priority: 5,
     enabled: false,
   },
   {
@@ -211,9 +257,9 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
     apiKeyEnvVar: "LOCAL_API_KEY",
     models: [
       {
-        id: "llama3.3:70b",
+        id: "qwen2.5:7b",
         tier: "fast",
-        contextWindow: 131072,
+        contextWindow: 32768,
         maxOutputTokens: 8192,
         costPerInputToken: 0,
         costPerOutputToken: 0,
@@ -235,8 +281,8 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
     ],
     maxRequestsPerMinute: 100,
     maxTokensPerMinute: 200000,
-    priority: 10,
-    enabled: false,
+    priority: 2,
+    enabled: true,
   },
 ];
 

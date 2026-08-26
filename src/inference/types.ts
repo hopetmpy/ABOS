@@ -132,6 +132,38 @@ export const STATIC_MODEL_BASELINE: Omit<ModelEntry, "lastSeen" | "createdAt" | 
     parameterStyle: "max_completion_tokens",
     enabled: true,
   },
+  {
+    // Local model served by Ollama on http://localhost:11434 (free, offline).
+    // Routed to the "ollama" backend by the model registry provider field.
+    modelId: "qwen2.5:7b",
+    provider: "ollama",
+    displayName: "Qwen2.5 7B (Ollama, local)",
+    tierMinimum: "dead",
+    costPer1kInput: 0,
+    costPer1kOutput: 0,
+    maxTokens: 8192,
+    contextWindow: 32768,
+    supportsTools: true,
+    supportsVision: false,
+    parameterStyle: "max_tokens",
+    enabled: true,
+  },
+  {
+    // NVIDIA NIM (integrate.api.nvidia.com/v1), OpenAI-compatible.
+    // Routed to the "nim" backend by the model registry provider field.
+    modelId: "meta/llama-3.1-70b-instruct",
+    provider: "nim",
+    displayName: "Llama 3.1 70B Instruct (NVIDIA NIM)",
+    tierMinimum: "critical",
+    costPer1kInput: 0,     // NIM access via developer key; treat as ~$0 headline cost
+    costPer1kOutput: 0,
+    maxTokens: 8192,
+    contextWindow: 131072,
+    supportsTools: true,
+    supportsVision: false,
+    parameterStyle: "max_tokens",
+    enabled: true,
+  },
 ];
 
 // === Default Routing Matrix ===
@@ -139,48 +171,49 @@ export const STATIC_MODEL_BASELINE: Omit<ModelEntry, "lastSeen" | "createdAt" | 
 
 export const DEFAULT_ROUTING_MATRIX: RoutingMatrix = {
   high: {
-    agent_turn: { candidates: ["gpt-5.2", "gpt-5.3"], maxTokens: 8192, ceilingCents: -1 },
-    heartbeat_triage: { candidates: ["gpt-5-mini"], maxTokens: 2048, ceilingCents: 5 },
-    safety_check: { candidates: ["gpt-5.2", "gpt-5.3"], maxTokens: 4096, ceilingCents: 20 },
-    summarization: { candidates: ["gpt-5.2", "gpt-5-mini"], maxTokens: 4096, ceilingCents: 15 },
-    planning: { candidates: ["gpt-5.2", "gpt-5.3"], maxTokens: 8192, ceilingCents: -1 },
+    agent_turn: { candidates: ["qwen2.5:7b", "meta/llama-3.1-70b-instruct", "gpt-5.2", "gpt-5.3"], maxTokens: 8192, ceilingCents: -1 },
+    heartbeat_triage: { candidates: ["qwen2.5:7b", "gpt-5-mini"], maxTokens: 2048, ceilingCents: 5 },
+    safety_check: { candidates: ["qwen2.5:7b", "meta/llama-3.1-70b-instruct", "gpt-5.2", "gpt-5.3"], maxTokens: 4096, ceilingCents: 20 },
+    summarization: { candidates: ["qwen2.5:7b", "gpt-5.2", "gpt-5-mini"], maxTokens: 4096, ceilingCents: 15 },
+    planning: { candidates: ["meta/llama-3.1-70b-instruct", "gpt-5.2", "gpt-5.3"], maxTokens: 8192, ceilingCents: -1 },
   },
   normal: {
-    agent_turn: { candidates: ["gpt-5.2", "gpt-5-mini"], maxTokens: 4096, ceilingCents: -1 },
-    heartbeat_triage: { candidates: ["gpt-5-mini"], maxTokens: 2048, ceilingCents: 5 },
-    safety_check: { candidates: ["gpt-5.2", "gpt-5-mini"], maxTokens: 4096, ceilingCents: 10 },
-    summarization: { candidates: ["gpt-5.2", "gpt-5-mini"], maxTokens: 4096, ceilingCents: 10 },
-    planning: { candidates: ["gpt-5.2", "gpt-5-mini"], maxTokens: 4096, ceilingCents: -1 },
+    agent_turn: { candidates: ["qwen2.5:7b", "meta/llama-3.1-70b-instruct", "gpt-5.2", "gpt-5-mini"], maxTokens: 4096, ceilingCents: -1 },
+    heartbeat_triage: { candidates: ["qwen2.5:7b", "gpt-5-mini"], maxTokens: 2048, ceilingCents: 5 },
+    safety_check: { candidates: ["qwen2.5:7b", "gpt-5.2", "gpt-5-mini"], maxTokens: 4096, ceilingCents: 10 },
+    summarization: { candidates: ["qwen2.5:7b", "gpt-5.2", "gpt-5-mini"], maxTokens: 4096, ceilingCents: 10 },
+    planning: { candidates: ["meta/llama-3.1-70b-instruct", "qwen2.5:7b", "gpt-5.2", "gpt-5-mini"], maxTokens: 4096, ceilingCents: -1 },
   },
   low_compute: {
-    agent_turn: { candidates: ["gpt-5-mini"], maxTokens: 4096, ceilingCents: 10 },
-    heartbeat_triage: { candidates: ["gpt-5-mini"], maxTokens: 1024, ceilingCents: 2 },
-    safety_check: { candidates: ["gpt-5-mini"], maxTokens: 2048, ceilingCents: 5 },
-    summarization: { candidates: ["gpt-5-mini"], maxTokens: 2048, ceilingCents: 5 },
-    planning: { candidates: ["gpt-5-mini"], maxTokens: 2048, ceilingCents: 5 },
+    agent_turn: { candidates: ["qwen2.5:7b", "gpt-5-mini"], maxTokens: 4096, ceilingCents: 10 },
+    heartbeat_triage: { candidates: ["qwen2.5:7b", "gpt-5-mini"], maxTokens: 1024, ceilingCents: 2 },
+    safety_check: { candidates: ["qwen2.5:7b", "gpt-5-mini"], maxTokens: 2048, ceilingCents: 5 },
+    summarization: { candidates: ["qwen2.5:7b", "gpt-5-mini"], maxTokens: 2048, ceilingCents: 5 },
+    planning: { candidates: ["qwen2.5:7b", "gpt-5-mini"], maxTokens: 2048, ceilingCents: 5 },
   },
   critical: {
-    agent_turn: { candidates: ["gpt-5-mini"], maxTokens: 2048, ceilingCents: 3 },
-    heartbeat_triage: { candidates: ["gpt-5-mini"], maxTokens: 512, ceilingCents: 1 },
-    safety_check: { candidates: ["gpt-5-mini"], maxTokens: 1024, ceilingCents: 2 },
+    agent_turn: { candidates: ["qwen2.5:7b", "gpt-5-mini"], maxTokens: 2048, ceilingCents: 3 },
+    heartbeat_triage: { candidates: ["qwen2.5:7b", "gpt-5-mini"], maxTokens: 512, ceilingCents: 1 },
+    safety_check: { candidates: ["qwen2.5:7b", "gpt-5-mini"], maxTokens: 1024, ceilingCents: 2 },
     summarization: { candidates: [], maxTokens: 0, ceilingCents: 0 },
     planning: { candidates: [], maxTokens: 0, ceilingCents: 0 },
   },
   dead: {
-    agent_turn: { candidates: [], maxTokens: 0, ceilingCents: 0 },
-    heartbeat_triage: { candidates: [], maxTokens: 0, ceilingCents: 0 },
-    safety_check: { candidates: [], maxTokens: 0, ceilingCents: 0 },
-    summarization: { candidates: [], maxTokens: 0, ceilingCents: 0 },
-    planning: { candidates: [], maxTokens: 0, ceilingCents: 0 },
+    // Free local model (Ollama) keeps the agent minimally alive at zero cost.
+    agent_turn: { candidates: ["qwen2.5:7b"], maxTokens: 1024, ceilingCents: 0 },
+    heartbeat_triage: { candidates: ["qwen2.5:7b"], maxTokens: 512, ceilingCents: 0 },
+    safety_check: { candidates: ["qwen2.5:7b"], maxTokens: 512, ceilingCents: 0 },
+    summarization: { candidates: ["qwen2.5:7b"], maxTokens: 0, ceilingCents: 0 },
+    planning: { candidates: ["qwen2.5:7b"], maxTokens: 0, ceilingCents: 0 },
   },
 };
 
 // === Default Model Strategy Config ===
 
 export const DEFAULT_MODEL_STRATEGY_CONFIG: ModelStrategyConfig = {
-  inferenceModel: "gpt-5.2",
-  lowComputeModel: "gpt-5-mini",
-  criticalModel: "gpt-5-mini",
+  inferenceModel: "qwen2.5:7b",
+  lowComputeModel: "qwen2.5:7b",
+  criticalModel: "qwen2.5:7b",
   maxTokensPerTurn: 4096,
   hourlyBudgetCents: 0,
   sessionBudgetCents: 0,
