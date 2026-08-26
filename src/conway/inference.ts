@@ -27,6 +27,7 @@ interface InferenceClientOptions {
   openaiApiKey?: string;
   anthropicApiKey?: string;
   ollamaBaseUrl?: string;
+  forceBackend?: "ollama";
   /** Optional registry lookup — if provided, used before name heuristics */
   getModelProvider?: (modelId: string) => string | undefined;
 }
@@ -48,7 +49,25 @@ function isLoopbackHttpUrl(url: string | undefined): boolean {
 export function createInferenceClient(
   options: InferenceClientOptions,
 ): InferenceClient {
-  const { apiUrl, apiKey, openaiApiKey, anthropicApiKey, ollamaBaseUrl, getModelProvider } = options;
+  const {
+    apiUrl,
+    apiKey,
+    openaiApiKey,
+    anthropicApiKey,
+    ollamaBaseUrl,
+    forceBackend,
+    getModelProvider,
+  } = options;
+
+  if (
+    forceBackend === "ollama" &&
+    !isLoopbackHttpUrl(ollamaBaseUrl)
+  ) {
+    throw new Error(
+      "Forced Ollama inference requires an HTTP loopback OLLAMA_BASE_URL.",
+    );
+  }
+
   const httpClient = new ResilientHttpClient({
     baseTimeout: INFERENCE_TIMEOUT_MS,
     retryableStatuses: [429, 500, 502, 503, 504],
@@ -64,12 +83,14 @@ export function createInferenceClient(
     const model = opts?.model || currentModel;
     const tools = opts?.tools;
 
-    const backend = resolveInferenceBackend(model, {
-      openaiApiKey,
-      anthropicApiKey,
-      ollamaBaseUrl,
-      getModelProvider,
-    });
+    const backend =
+      forceBackend ??
+      resolveInferenceBackend(model, {
+        openaiApiKey,
+        anthropicApiKey,
+        ollamaBaseUrl,
+        getModelProvider,
+      });
 
     // Newer models (o-series, gpt-5.x, gpt-4.1) require max_completion_tokens.
     // Ollama always uses max_tokens.

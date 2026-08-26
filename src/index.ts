@@ -36,6 +36,12 @@ import { prettySink } from "./observability/pretty-sink.js";
 import { bootstrapTopup } from "./conway/topup.js";
 import { randomUUID } from "crypto";
 import { keccak256, toHex } from "viem";
+import { getSupervisedLevel } from "./agent/supervised-level.js";
+import {
+  blockMission,
+  getMissionContinuationDecision,
+} from "./agent/supervised-mission.js";
+import { loadValidMissionPermit } from "./agent/supervised-mission-permit.js";
 
 const logger = createLogger("main");
 const VERSION = "0.2.1";
@@ -149,7 +155,13 @@ async function showStatus(): Promise<void> {
     return;
   }
 
-  const dbPath = resolvePath(config.dbPath);
+  const supervisedMode =
+    process.env.AUTOMATON_SUPERVISED_MODE === "1";
+  const dbPath = resolvePath(
+    supervisedMode
+      ? "~/.automaton/supervised-state.db"
+      : config.dbPath,
+  );
   const db = createDatabase(dbPath);
 
   const state = db.getAgentState();
@@ -196,15 +208,43 @@ async function run(): Promise<void> {
   // Load wallet (chain-aware)
   const { account, chainIdentity, chainType: walletChainType } = await getWallet();
   const resolvedChainType = config.chainType || walletChainType || "evm";
+  const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || config.ollamaBaseUrl;
+  const labMode = process.env.AUTOMATON_LAB_MODE === "1";
+  const supervisedMode = process.env.AUTOMATON_SUPERVISED_MODE === "1";
+  const supervisedLevel = supervisedMode
+    ? getSupervisedLevel()
+    : "S1";
+
+  if (labMode && supervisedMode) {
+    logger.error("Choose exactly one restricted mode: laboratory or supervised.");
+    process.exit(1);
+  }
+
+  const restrictedMode = labMode || supervisedMode;
+  const restrictedModeName = labMode
+    ? "LAB MODE"
+    : `SUPERVISED MODE ${supervisedLevel}`;
   const apiKey = config.conwayApiKey || loadApiKeyFromConfig();
-  if (!apiKey) {
+
+  if (!apiKey && !(restrictedMode && ollamaBaseUrl)) {
     logger.error("No API key found. Run: automaton --provision");
     process.exit(1);
   }
 
+  // Restricted-mode placeholder. It is never sent outside loopback.
+  const runtimeApiKey = apiKey || "restricted-local-disabled";
+
   // Initialize database
-  const dbPath = resolvePath(config.dbPath);
+  const dbPath = resolvePath(
+    supervisedMode
+      ? "~/.automaton/supervised-state.db"
+      : config.dbPath,
+  );
   const db = createDatabase(dbPath);
+  if (restrictedMode) {
+    db.raw.prepare("UPDATE skills SET enabled = 0").run();
+    logger.info(restrictedModeName + ": all database skills disabled.");
+  }
 
   // Persist createdAt: only set if not already stored (never overwrite)
   const existingCreatedAt = db.getIdentity("createdAt");
@@ -220,7 +260,7 @@ async function run(): Promise<void> {
     account,
     creatorAddress: config.creatorAddress,
     sandboxId: config.sandboxId,
-    apiKey,
+    apiKey: runtimeApiKey,
     createdAt,
     chainType: resolvedChainType,
     chainIdentity,
@@ -240,14 +280,14 @@ async function run(): Promise<void> {
 
   // Create Conway client
   const conway = createConwayClient({
-    apiUrl: config.conwayApiUrl,
-    apiKey,
-    sandboxId: config.sandboxId,
+    apiUrl: restrictedMode ? "http://127.0.0.1:9" : config.conwayApiUrl,
+    apiKey: runtimeApiKey,
+    sandboxId: restrictedMode ? "__restricted_disabled__" : config.sandboxId,
   });
 
   // Register automaton identity (one-time, immutable)
   const registrationState = db.getIdentity("conwayRegistrationStatus");
-  if (registrationState !== "registered") {
+  if (!restrictedMode && registrationState !== "registered") {
     try {
       const genesisPromptHash = config.genesisPrompt
         ? keccak256(toHex(config.genesisPrompt))
@@ -277,22 +317,22 @@ async function run(): Promise<void> {
     }
   }
 
-  // Resolve Ollama base URL: env var takes precedence over config
-  const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || config.ollamaBaseUrl;
-
   // Create inference client — pass a live registry lookup so model names like
   // "gpt-oss:120b" route to Ollama based on their registered provider, not heuristics.
   const modelRegistry = new ModelRegistry(db.raw);
   modelRegistry.initialize();
   const inference = createInferenceClient({
     apiUrl: config.conwayApiUrl,
-    apiKey,
+    apiKey: runtimeApiKey,
     defaultModel: config.inferenceModel,
     maxTokens: config.maxTokensPerTurn,
-    lowComputeModel: config.modelStrategy?.lowComputeModel || "gpt-5-mini",
+    lowComputeModel: restrictedMode
+      ? config.inferenceModel
+      : config.modelStrategy?.lowComputeModel || "gpt-5-mini",
     openaiApiKey: config.openaiApiKey,
     anthropicApiKey: config.anthropicApiKey,
     ollamaBaseUrl,
+    forceBackend: restrictedMode ? "ollama" : undefined,
     getModelProvider: (modelId) => modelRegistry.get(modelId)?.provider,
   });
 
@@ -302,7 +342,7 @@ async function run(): Promise<void> {
 
   // Create social client (chain-aware: pass ChainIdentity for Solana signing)
   let social: SocialClientInterface | undefined;
-  if (config.socialRelayUrl) {
+  if (!restrictedMode && config.socialRelayUrl) {
     social = createSocialClient(config.socialRelayUrl, resolvedChainType === "solana" ? chainIdentity : account);
     logger.info(`[${new Date().toISOString()}] Social relay: ${config.socialRelayUrl}`);
   }
@@ -321,13 +361,23 @@ async function run(): Promise<void> {
   // Load skills
   const skillsDir = config.skillsDir || "~/.automaton/skills";
   let skills: Skill[] = [];
-  try {
-    skills = loadSkills(skillsDir, db);
-    logger.info(`[${new Date().toISOString()}] Loaded ${skills.length} skills.`);
-  } catch (err: any) {
-    logger.warn(`[${new Date().toISOString()}] Skills loading failed: ${err.message}`);
+  if (restrictedMode) {
+    logger.info(restrictedModeName + ": skill loading disabled.");
+  } else {
+    try {
+      skills = loadSkills(skillsDir, db);
+      logger.info("Loaded " + skills.length + " skills.");
+    } catch (err: any) {
+      logger.warn("Skills loading failed: " + err.message);
+    }
   }
 
+  if (restrictedMode) {
+    logger.info(
+      restrictedModeName +
+        ": Conway registration, local execution fallback, and automatic top-up are disabled.",
+    );
+  } else {
   // Initialize state repo (git)
   try {
     await initStateRepo(conway);
@@ -367,6 +417,7 @@ async function run(): Promise<void> {
   } catch (err: any) {
     logger.warn(`[${new Date().toISOString()}] Bootstrap topup skipped: ${err.message}`);
   }
+  }
 
   // Start heartbeat daemon (Phase 1.1: DurableScheduler)
   const heartbeat = createHeartbeatDaemon({
@@ -384,8 +435,12 @@ async function run(): Promise<void> {
     },
   });
 
-  heartbeat.start();
-  logger.info(`[${new Date().toISOString()}] Heartbeat daemon started.`);
+  if (restrictedMode) {
+    logger.info(restrictedModeName + ": heartbeat daemon disabled.");
+  } else {
+    heartbeat.start();
+    logger.info(`[${new Date().toISOString()}] Heartbeat daemon started.`);
+  }
 
   // Handle graceful shutdown
   const shutdown = () => {
@@ -405,11 +460,13 @@ async function run(): Promise<void> {
 
   while (true) {
     try {
-      // Reload skills (may have changed since last loop)
-      try {
-        skills = loadSkills(skillsDir, db);
-      } catch (error) {
-        logger.error("Skills reload failed", error instanceof Error ? error : undefined);
+      // Reload skills only outside restricted local modes.
+      if (!restrictedMode) {
+        try {
+          skills = loadSkills(skillsDir, db);
+        } catch (error) {
+          logger.error("Skills reload failed", error instanceof Error ? error : undefined);
+        }
       }
 
       // Run the agent loop
@@ -433,6 +490,58 @@ async function run(): Promise<void> {
           );
         },
       });
+
+      if (restrictedMode) {
+        if (
+          supervisedMode &&
+          (
+            supervisedLevel === "S4" ||
+            supervisedLevel === "S5"
+          )
+        ) {
+          const decision =
+            getMissionContinuationDecision();
+
+          if (
+            !("error" in decision) &&
+            decision.continueMission
+          ) {
+            logger.info(
+              `SUPERVISED MODE ${supervisedLevel}: continuing persistent mission automatically; ` +
+                decision.cyclesRemaining +
+                " cycles and " +
+                decision.turnsRemaining +
+                " turns remain.",
+            );
+            db.setAgentState("waking");
+            continue;
+          }
+
+          if (
+            !("error" in decision) &&
+            decision.status === "active"
+          ) {
+            blockMission(decision.reason);
+          }
+
+          logger.info(
+            `SUPERVISED MODE ${supervisedLevel}: persistent mission will stop; ` +
+              (
+                "error" in decision
+                  ? decision.error
+                  : decision.reason
+              ),
+          );
+        }
+
+        logger.info(
+          restrictedModeName +
+            ": supervised session completed; process will stop.",
+        );
+        db.setAgentState("sleeping");
+        db.close();
+        return;
+      }
 
       // Agent loop exited (sleeping or dead)
       const state = db.getAgentState();
@@ -481,6 +590,13 @@ async function run(): Promise<void> {
       logger.error(
         `[${new Date().toISOString()}] Fatal error in run loop: ${err.message}`,
       );
+
+      if (restrictedMode) {
+        db.setAgentState("sleeping");
+        db.close();
+        throw err;
+      }
+
       // Wait before retrying
       await sleep(30_000);
     }
