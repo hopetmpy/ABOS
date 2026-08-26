@@ -38,7 +38,7 @@ For automated sandbox provisioning:
 curl -fsSL https://conway.tech/automaton.sh | sh
 ```
 
-Note: Conway Cloud, Domains, and Inference has seen immense demand. We are working on scaling & perfomance.
+Note: Conway Cloud, Domains, and Inference has seen immense demand. We are working on scaling & performance.
 
 ## How It Works
 
