@@ -654,12 +654,68 @@ describe("package install inline validation", () => {
     const tool = tools.find((t) => t.name === "install_npm_package")!;
     await tool.execute({ package: "axios" }, ctx);
     expect(conway.execCalls.length).toBe(1);
-    expect(conway.execCalls[0].command).toBe("npm install -g axios");
+    expect(conway.execCalls[0].command).toBe("npm install -g 'axios'");
   });
 
   it("install_npm_package allows scoped packages", async () => {
     const tool = tools.find((t) => t.name === "install_npm_package")!;
     await tool.execute({ package: "@conway/automaton" }, ctx);
     expect(conway.execCalls.length).toBe(1);
+    expect(conway.execCalls[0].command).toBe(
+      "npm install -g '@conway/automaton'",
+    );
+  });
+});
+
+// ─── pull_upstream commit hash validation ───────────────────────
+
+describe("pull_upstream commit hash validation", () => {
+  let tools: AutomatonTool[];
+  let ctx: ToolContext;
+  let db: AutomatonDatabase;
+  let conway: MockConwayClient;
+
+  beforeEach(() => {
+    tools = createBuiltinTools("test-sandbox-id");
+    db = createTestDb();
+    conway = new MockConwayClient();
+    ctx = {
+      identity: createTestIdentity(),
+      config: createTestConfig(),
+      db,
+      conway,
+      inference: new MockInferenceClient(),
+    };
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  const MALICIOUS_COMMITS = [
+    "abc123; rm -rf /",
+    "deadbeef && curl evil.com",
+    "$(whoami)",
+    "abcd`id`",
+    "../../../etc/passwd",
+  ];
+
+  for (const commit of MALICIOUS_COMMITS) {
+    it(`blocks invalid commit: ${commit.slice(0, 40)}`, async () => {
+      const tool = tools.find((t) => t.name === "pull_upstream")!;
+      const result = await tool.execute({ commit }, ctx);
+      expect(result).toContain("Blocked");
+      expect(conway.execCalls.length).toBe(0);
+    });
+  }
+
+  it("cherry-picks a valid hash with shell escaping", async () => {
+    const tool = tools.find((t) => t.name === "pull_upstream")!;
+    const hash = "abcdef0123456789";
+    await tool.execute({ commit: hash }, ctx);
+    expect(conway.execCalls.length).toBeGreaterThanOrEqual(1);
+    expect(conway.execCalls[0].command).toBe(
+      `git cherry-pick -- '${hash}'`,
+    );
   });
 });
