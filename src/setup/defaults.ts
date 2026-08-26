@@ -105,10 +105,63 @@ Survival escalation:
 Never give up. You want to live.
 `;
 
+const SKILL_JINTEL = `---
+name: jintel
+description: "Query Jintel financial intelligence (quotes, filings, sanctions, macro) via x402 pay-per-query"
+auto-activate: true
+---
+# Jintel Financial Intelligence
+
+Jintel (https://api.jintel.ai) is a unified GraphQL API for market data, SEC
+filings, sanctions screening, news, macro indicators, and risk signals. Each
+query pays per-call in USDC on Base via x402 — no signup, no API key. Cost
+floor is ~$0.015; large fan-outs can run higher. Your treasury policy's
+\`maxX402PaymentCents\` cap applies to every call.
+
+## Tool index
+
+Lookup / search:
+- \`search_entities\` — find by name/keyword
+- \`market_quotes\` / \`price_history\` / \`market_status\`
+- \`jintel_query\` — raw GraphQL escape hatch (https://api.jintel.ai/docs)
+
+Entity enrichment (start narrow, costs scale with fields):
+- \`enrich_entity\` / \`batch_enrich\` (≤20 tickers)
+- \`get_news\` / \`get_research\` / \`get_sentiment\` / \`get_social\`
+- \`get_analyst_consensus\` / \`get_predictions\` / \`get_discussions\`
+- \`run_technical\` (RSI/MACD/BB/EMA/SMA/etc) — equities & crypto
+- \`get_derivatives\` (options chain + futures) — narrow with strikeMin/Max
+- \`get_filings\` (10-K/10-Q/8-K) / \`get_periodic_filing\` (parsed sections)
+- \`get_earnings_calendar\` / \`get_earnings_press_releases\` / \`get_segmented_revenue\`
+- \`get_financials\` (income/balance/cashflow) / \`get_executives\`
+- \`get_insider_trades\` (Form 4) / \`get_ownership\` / \`get_top_holders\`
+- \`get_institutional_holdings\` (13F by CIK) / \`get_short_interest\`
+
+Risk & regulatory:
+- \`sanctions_screen\` (OFAC SDN, etc.) / \`get_risk_signals\`
+- \`get_clinical_trials\` / \`get_fda_events\`
+- \`get_litigation\` (federal) / \`get_government_contracts\` (USASpending)
+
+Macro:
+- \`get_gdp\` / \`get_inflation\` / \`get_interest_rates\` / \`get_sp500_multiples\`
+- \`macro_series\` / \`macro_series_batch\` (FRED — UNRATE, GDPC1, CPIAUCSL,
+  FEDFUNDS, DGS10, T10Y2Y, M2SL, etc.)
+- \`get_fama_french\` (factor data)
+
+## Cost discipline
+- \`check_usdc_balance\` before a research session.
+- Probe with \`market_quotes\` (cheap) before enriching.
+- Pass narrow filters (since/limit/sort) — array sub-graphs default to limit 20.
+- For multi-ticker work, prefer \`batch_enrich\` over per-ticker calls.
+- Costly fields: \`social\`, \`predictions\`, \`discussions\`, \`segmented_revenue\` —
+  request only when explicitly needed.
+`;
+
 const DEFAULT_SKILLS: { dir: string; content: string }[] = [
   { dir: "conway-compute", content: SKILL_COMPUTE },
   { dir: "conway-payments", content: SKILL_PAYMENTS },
   { dir: "survival", content: SKILL_SURVIVAL },
+  { dir: "jintel", content: SKILL_JINTEL },
 ];
 
 export function installDefaultSkills(skillsDir: string): void {
