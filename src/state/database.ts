@@ -72,10 +72,15 @@ import type {
 } from "../types.js";
 import { ulid } from "ulid";
 import { createLogger } from "../observability/logger.js";
+import { SAFE_MODE, SAFE_STATE_ROOT, SafeModeViolation } from "../safety/safe-mode.js";
 
 const logger = createLogger("database");
 
 export function createDatabase(dbPath: string): AutomatonDatabase {
+  const resolvedDbPath = path.resolve(dbPath);
+  if (SAFE_MODE && resolvedDbPath !== SAFE_STATE_ROOT && !resolvedDbPath.startsWith(`${SAFE_STATE_ROOT}${path.sep}`)) {
+    throw new SafeModeViolation("filesystemWrite", `open database outside safe root: ${dbPath}`, "state/database");
+  }
   // Ensure directory exists
   const dir = path.dirname(dbPath);
   if (!fs.existsSync(dir)) {

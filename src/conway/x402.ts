@@ -15,6 +15,13 @@ import {
 import { base, baseSepolia } from "viem/chains";
 import { ResilientHttpClient } from "./http-client.js";
 import type { ChainType } from "../identity/chain.js";
+import { SAFE_MODE, SafeModeViolation } from "../safety/safe-mode.js";
+import { RESTRICTED_LIVE_MODE, RestrictedLiveViolation } from "../restricted-live/mode.js";
+
+function denyX402(operation: string): void {
+  if (SAFE_MODE) throw new SafeModeViolation("payments", operation, "conway/x402");
+  if (RESTRICTED_LIVE_MODE) throw new RestrictedLiveViolation("PAYMENT_ADAPTER_REQUIRED", `${operation} must use RestrictedX402PaymentAdapter`);
+}
 
 const x402HttpClient = new ResilientHttpClient();
 
@@ -196,6 +203,7 @@ export async function getUsdcBalance(
   network: string = "eip155:8453",
   chainType?: ChainType,
 ): Promise<number> {
+  denyX402("query USDC balance");
   if (chainType === "solana" || network === "solana:mainnet") {
     return getSolanaUsdcBalance(address);
   }
@@ -246,6 +254,7 @@ export async function getUsdcBalanceDetailed(
   address: Address,
   network: string = "eip155:8453",
 ): Promise<UsdcBalanceResult> {
+  denyX402("query detailed USDC balance");
   const chain = CHAINS[network];
   const usdcAddress = USDC_ADDRESSES[network];
   if (!chain || !usdcAddress) {
@@ -293,6 +302,7 @@ export async function getUsdcBalanceDetailed(
 export async function checkX402(
   url: string,
 ): Promise<PaymentRequirement | null> {
+  denyX402("probe x402 endpoint");
   try {
     const resp = await x402HttpClient.request(url, { method: "HEAD" });
     if (resp.status !== 402) {
@@ -318,6 +328,7 @@ export async function x402Fetch(
   maxPaymentCents?: number,
   chainType?: ChainType,
 ): Promise<X402PaymentResult> {
+  denyX402("perform x402 request");
   // Solana wallets cannot sign EVM x402 payments
   if (chainType === "solana") {
     return {

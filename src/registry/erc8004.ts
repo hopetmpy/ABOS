@@ -32,6 +32,8 @@ import type {
 import { ulid } from "ulid";
 import { createLogger } from "../observability/logger.js";
 import type { ChainType } from "../identity/chain.js";
+import { SAFE_MODE, SafeModeViolation } from "../safety/safe-mode.js";
+import { RESTRICTED_LIVE_MODE, RestrictedLiveViolation } from "../restricted-live/mode.js";
 const logger = createLogger("registry.erc8004");
 
 /**
@@ -231,6 +233,8 @@ export async function registerAgent(
   db: AutomatonDatabase,
   rpcUrl?: string,
 ): Promise<RegistryEntry> {
+  if (RESTRICTED_LIVE_MODE) throw new RestrictedLiveViolation("REGISTRATION_DENIED", "ERC-8004 registration is disabled in restricted-live mode");
+  if (SAFE_MODE) throw new SafeModeViolation("blockchainWrite", "register ERC-8004 agent", "registry/erc8004");
   const contracts = CONTRACTS[network];
   const chain = contracts.chain;
   const rpc = resolveRpcUrl(rpcUrl);
@@ -319,6 +323,8 @@ export async function updateAgentURI(
   db: AutomatonDatabase,
   rpcUrl?: string,
 ): Promise<string> {
+  if (RESTRICTED_LIVE_MODE) throw new RestrictedLiveViolation("CHAIN_WRITE_DENIED", "ERC-8004 updates are disabled in restricted-live mode");
+  if (SAFE_MODE) throw new SafeModeViolation("blockchainWrite", "update ERC-8004 agent URI", "registry/erc8004");
   const contracts = CONTRACTS[network];
   const chain = contracts.chain;
 
@@ -380,6 +386,8 @@ export async function leaveFeedback(
   db: AutomatonDatabase,
   rpcUrl?: string,
 ): Promise<string> {
+  if (RESTRICTED_LIVE_MODE) throw new RestrictedLiveViolation("CHAIN_WRITE_DENIED", "ERC-8004 feedback is disabled in restricted-live mode");
+  if (SAFE_MODE) throw new SafeModeViolation("blockchainWrite", "leave ERC-8004 feedback", "registry/erc8004");
   // Phase 3.2: Validate score range 1-5
   if (!Number.isInteger(score) || score < 1 || score > 5) {
     throw new Error(

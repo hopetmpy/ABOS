@@ -15,6 +15,8 @@ import { ResilientHttpClient } from "../conway/http-client.js";
 import { signSendPayload, signPollPayload, MESSAGE_LIMITS } from "./signing.js";
 import { validateRelayUrl, validateMessage } from "./validation.js";
 import { createLogger } from "../observability/logger.js";
+import { SAFE_MODE, SafeModeViolation } from "../safety/safe-mode.js";
+import { RESTRICTED_LIVE_MODE, RestrictedLiveViolation } from "../restricted-live/mode.js";
 const logger = createLogger("social");
 
 // Request timeout for all fetch calls (30 seconds)
@@ -30,6 +32,8 @@ export function createSocialClient(
   account: PrivateKeyAccount | ChainIdentity,
   db?: import("better-sqlite3").Database,
 ): SocialClientInterface {
+  if (SAFE_MODE) throw new SafeModeViolation("messaging", "create social relay client", "social/client");
+  if (RESTRICTED_LIVE_MODE) throw new RestrictedLiveViolation("MESSAGING_DENIED", "Social messaging is disabled in restricted-live mode");
   // Phase 3.2: Validate relay URL as HTTPS
   validateRelayUrl(relayUrl);
 

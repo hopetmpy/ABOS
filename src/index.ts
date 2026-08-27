@@ -36,12 +36,86 @@ import { prettySink } from "./observability/pretty-sink.js";
 import { bootstrapTopup } from "./conway/topup.js";
 import { randomUUID } from "crypto";
 import { keccak256, toHex } from "viem";
+import { SAFE_MODE, SafeModeViolation } from "./safety/safe-mode.js";
+import { RESTRICTED_LIVE_MODE } from "./restricted-live/mode.js";
 
 const logger = createLogger("main");
 const VERSION = "0.2.1";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
+
+  if (SAFE_MODE && RESTRICTED_LIVE_MODE) throw new Error("LOCAL_SAFE_MODE and RESTRICTED_LIVE_MODE are mutually exclusive");
+
+  if (args.includes("--safe-local")) {
+    const { parseSafeRunnerArgs, runSafeLocal } = await import("./safety/safe-runner.js");
+    const result = await runSafeLocal(parseSafeRunnerArgs(args));
+    logger.info(JSON.stringify({ mode: "local-safe", ...result }));
+    return;
+  }
+
+  if (args.includes("--restricted-live-init")) {
+    const { initializeRestrictedWallet } = await import("./restricted-live/wallet.js");
+    const wallet = initializeRestrictedWallet();
+    logger.info(JSON.stringify({ mode: "restricted-live-init", address: wallet.address }));
+    return;
+  }
+
+  if (args.includes("--restricted-live-pay-x402scan-preview")) {
+    const { createLivePreviewDependencies, runX402scanPreview } = await import("./restricted-live/x402scan-once.js");
+    const result = await runX402scanPreview(createLivePreviewDependencies());
+    process.stdout.write(`${result.preview}\n`);
+    return;
+  }
+
+  if (args.includes("--restricted-live-pay-x402scan-once")) {
+    const { createLiveDependencies, runX402scanOnce } = await import("./restricted-live/x402scan-once.js");
+    await runX402scanOnce(createLiveDependencies());
+    return;
+  }
+
+  if (args.includes("--restricted-live-reconcile-x402scan")) {
+    const { createLiveReconcileDependencies, runX402scanReconciliation } = await import("./restricted-live/x402scan-once.js");
+    const result = await runX402scanReconciliation(createLiveReconcileDependencies());
+    process.stdout.write(`${JSON.stringify({ ...result, observedBalanceBaseUnits: result.observedBalanceBaseUnits.toString() }, null, 2)}\n`);
+    return;
+  }
+
+  if (args.includes("--restricted-live-propose-x402")) {
+    const index = args.indexOf("--restricted-live-propose-x402");
+    const rationale = args[index + 1];
+    if (!rationale) throw new Error("--restricted-live-propose-x402 requires a rationale");
+    const { createLiveProposalDependencies, createPaymentProposal } = await import("./restricted-live/payment-proposals.js");
+    const proposalId = await createPaymentProposal(rationale, createLiveProposalDependencies());
+    process.stdout.write(`${JSON.stringify({ mode: "restricted-live-proposal", proposalId })}\n`);
+    return;
+  }
+
+  if (args.includes("--restricted-live-review-payment")) {
+    const index = args.indexOf("--restricted-live-review-payment");
+    const proposalId = args[index + 1];
+    if (!proposalId) throw new Error("--restricted-live-review-payment requires a proposal ID");
+    const { createLiveReviewDependencies, reviewAndExecuteProposal } = await import("./restricted-live/payment-proposals.js");
+    const { formatReviewPaymentOutput } = await import("./restricted-live/cli-output.js");
+    const result = await reviewAndExecuteProposal(proposalId, createLiveReviewDependencies());
+    logger.info(JSON.stringify(formatReviewPaymentOutput(result)));
+    return;
+  }
+
+  if (args.includes("--restricted-live")) {
+    const { parseRestrictedRunnerArgs, runRestrictedLive } = await import("./restricted-live/runner.js");
+    const result = await runRestrictedLive(parseRestrictedRunnerArgs(args));
+    logger.info(JSON.stringify({ mode: "restricted-live", ...result }));
+    return;
+  }
+
+  if (SAFE_MODE) {
+    const refused = ["--run", "--setup", "--init", "--provision", "--configure", "--pick-model"].find((flag) => args.includes(flag));
+    if (refused) throw new SafeModeViolation("infrastructure", `production CLI command ${refused}`, "index");
+  }
+  if (RESTRICTED_LIVE_MODE) {
+    throw new Error("AUTOMATON_RESTRICTED_LIVE may only be used with a restricted-live command");
+  }
 
   // ─── CLI Commands ────────────────────────────────────────────
 
@@ -56,6 +130,14 @@ Conway Automaton v${VERSION}
 Sovereign AI Agent Runtime
 
 Usage:
+  automaton --safe-local   Run a bounded local-safe foreground experiment
+  automaton --restricted-live-init  Create the isolated experiment wallet (offline)
+  automaton --restricted-live       Run a bounded restricted-live foreground experiment
+  automaton --restricted-live-pay-x402scan-preview  Validate and preview the pinned payment without signing
+  automaton --restricted-live-pay-x402scan-once     Run the confirmed one-shot payment harness
+  automaton --restricted-live-reconcile-x402scan    Reconcile the existing intent using read-only chain evidence
+  automaton --restricted-live-propose-x402 <rationale>  Create a proposal only; never signs or pays
+  automaton --restricted-live-review-payment <proposal-id>  Human approval gate for one proposal
   automaton --run          Start the automaton (first run triggers setup wizard)
   automaton --setup        Re-run the interactive setup wizard
   automaton --configure    Edit configuration (providers, model, treasury, general)

@@ -15,6 +15,13 @@
 
 import type { PrivateKeyAccount, Address } from "viem";
 import { x402Fetch, getUsdcBalance } from "./x402.js";
+import { SAFE_MODE, SafeModeViolation } from "../safety/safe-mode.js";
+import { RESTRICTED_LIVE_MODE, RestrictedLiveViolation } from "../restricted-live/mode.js";
+
+function denyTopup(operation: string): void {
+  if (SAFE_MODE) throw new SafeModeViolation("payments", operation, "conway/topup");
+  if (RESTRICTED_LIVE_MODE) throw new RestrictedLiveViolation("TOPUP_DENIED", "Credit top-ups are disabled in restricted-live mode");
+}
 import { createLogger } from "../observability/logger.js";
 import type { ChainType } from "../identity/chain.js";
 
@@ -42,6 +49,7 @@ export async function topupCredits(
   amountUsd: number,
   recipientAddress?: Address,
 ): Promise<TopupResult> {
+  denyTopup("top up credits");
   const address = recipientAddress || account.address;
   const url = `${apiUrl}/pay/${amountUsd}/${address}`;
 
@@ -84,6 +92,7 @@ export async function topupForSandbox(params: {
   error: Error & { status?: number; responseText?: string };
   chainType?: ChainType;
 }): Promise<TopupResult | null> {
+  denyTopup("top up sandbox");
   const { apiUrl, account, error, chainType } = params;
 
   // Solana wallets cannot use x402 for topup (EVM-only payment protocol)
@@ -152,6 +161,7 @@ export async function bootstrapTopup(params: {
   creditThresholdCents?: number;
   chainType?: ChainType;
 }): Promise<TopupResult | null> {
+  denyTopup("bootstrap top up");
   const { apiUrl, account, creditsCents, creditThresholdCents = 500, chainType } = params;
 
   // Solana wallets cannot use x402 for topup (EVM-only payment protocol)

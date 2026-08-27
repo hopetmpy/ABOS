@@ -15,6 +15,8 @@ import type {
   InferenceToolDefinition,
 } from "../types.js";
 import { ResilientHttpClient } from "./http-client.js";
+import { SAFE_MODE, SafeModeViolation } from "../safety/safe-mode.js";
+import { RESTRICTED_LIVE_MODE, RestrictedLiveViolation, assertAllowedUrl } from "../restricted-live/mode.js";
 
 const INFERENCE_TIMEOUT_MS = 60_000;
 
@@ -48,6 +50,13 @@ function isLoopbackHttpUrl(url: string | undefined): boolean {
 export function createInferenceClient(
   options: InferenceClientOptions,
 ): InferenceClient {
+  if (RESTRICTED_LIVE_MODE) {
+    assertAllowedUrl(options.apiUrl, "conwayOrigins");
+    if (options.openaiApiKey || options.anthropicApiKey || options.ollamaBaseUrl) throw new RestrictedLiveViolation("INFERENCE_PROVIDER_DENIED", "Only Conway inference is allowed in restricted-live mode");
+  }
+  if (SAFE_MODE && !isLoopbackHttpUrl(options.ollamaBaseUrl)) {
+    throw new SafeModeViolation("remoteInference", "construct remote inference client", "conway/inference");
+  }
   const { apiUrl, apiKey, openaiApiKey, anthropicApiKey, ollamaBaseUrl, getModelProvider } = options;
   const httpClient = new ResilientHttpClient({
     baseTimeout: INFERENCE_TIMEOUT_MS,

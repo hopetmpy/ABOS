@@ -22,6 +22,7 @@ import type {
 import type { PolicyEngine } from "./policy-engine.js";
 import { sanitizeToolResult, sanitizeInput } from "./injection-defense.js";
 import { createLogger } from "../observability/logger.js";
+import { SAFE_MODE, RUNTIME_CAPABILITIES } from "../safety/safe-mode.js";
 
 const logger = createLogger("tools");
 
@@ -109,7 +110,7 @@ function isForbiddenCommand(command: string, sandboxId: string): string | null {
 // ─── Built-in Tools ────────────────────────────────────────────
 
 export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
-  return [
+  const tools: AutomatonTool[] = [
     // ── VM/Sandbox Tools ──
     {
       name: "exec",
@@ -3209,7 +3210,18 @@ Model: ${ctx.inference.getDefaultModel()}
       },
     },
   ];
+  return SAFE_MODE ? tools.filter((tool) => !SAFE_MODE_HIDDEN_TOOLS.has(tool.name)) : tools;
 }
+
+export const SAFE_MODE_HIDDEN_TOOLS = new Set([
+  "exec", "expose_port", "remove_port", "create_sandbox", "delete_sandbox",
+  "topup_credits", "transfer_credits", "fund_child", "x402_fetch",
+  "send_message", "message_child", "spawn_child", "start_child",
+  "register_domain", "manage_dns", "register_erc8004", "update_agent_card", "give_feedback",
+  "install_npm_package", "install_mcp_server", "install_skill", "pull_upstream",
+  "review_upstream_changes", "reset_to_upstream", "git_push", "git_commit", "git_clone",
+  "edit_own_file", "revert_last_edit", "prune_dead_children",
+]);
 
 /**
  * Load installed tools from the database and return as AutomatonTool[].
@@ -3276,7 +3288,7 @@ function createInstalledToolExecutor(tool: {
 export function toolsToInferenceFormat(
   tools: AutomatonTool[],
 ): InferenceToolDefinition[] {
-  return tools.map((t) => ({
+  return tools.filter((t) => !SAFE_MODE || !SAFE_MODE_HIDDEN_TOOLS.has(t.name)).map((t) => ({
     type: "function" as const,
     function: {
       name: t.name,
@@ -3316,8 +3328,15 @@ export async function executeTool(
     };
   }
 
-  // Policy evaluation (if engine is provided)
-  if (policyEngine && turnContext) {
+  if (!policyEngine || !turnContext || (SAFE_MODE && context.runtimeCapabilities !== RUNTIME_CAPABILITIES)) {
+    return {
+      id: ulid(), name: toolName, arguments: args, result: "", durationMs: Date.now() - startTime,
+      error: "Policy denied: POLICY_CONTEXT_REQUIRED — policy engine, turn context, and safe-mode context are mandatory",
+    };
+  }
+
+  // Policy evaluation is mandatory and fail-closed.
+  {
     const request: PolicyRequest = {
       tool,
       args,

@@ -65,6 +65,7 @@ import { createWorkerInferenceBridge } from "./worker-inference-bridge.js";
 import { ProviderRegistry } from "../inference/provider-registry.js";
 import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import { isIdleOnlyTool } from "./idle-only-tools.js";
+import { OFFLINE_TEST, RUNTIME_CAPABILITIES, SAFE_MODE } from "../safety/safe-mode.js";
 
 const logger = createLogger("loop");
 const MAX_TOOL_CALLS_PER_TURN = 10;
@@ -106,6 +107,7 @@ export async function runAgentLoop(
     conway,
     inference,
     social,
+    runtimeCapabilities: RUNTIME_CAPABILITIES,
   };
 
   // Initialize inference router (Phase 2.3)
@@ -983,7 +985,7 @@ async function getFinancialState(
     };
   }
 
-  try {
+  if (!SAFE_MODE && !OFFLINE_TEST) try {
     const network = chainType === "solana" ? "solana:mainnet" : "eip155:8453";
     usdcBalance = await getUsdcBalance(address, network, chainType as any);
     if (usdcBalance > 0) _lastKnownUsdc = usdcBalance;

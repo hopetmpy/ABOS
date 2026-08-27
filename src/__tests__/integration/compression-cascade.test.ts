@@ -16,13 +16,19 @@ import type { ContextUtilization } from "../../memory/context-manager.js";
 // ---------------------------------------------------------------------------
 // Mock node:fs so Stage 4 checkpoint writes are no-ops
 // ---------------------------------------------------------------------------
-vi.mock("node:fs", () => ({
-  promises: {
-    mkdir: vi.fn().mockResolvedValue(undefined),
-    writeFile: vi.fn().mockResolvedValue(undefined),
-    readFile: vi.fn().mockResolvedValue("{}"),
-  },
-}));
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...actual,
+    default: actual,
+    promises: {
+      ...actual.promises,
+      mkdir: vi.fn().mockResolvedValue(undefined),
+      writeFile: vi.fn().mockResolvedValue(undefined),
+      readFile: vi.fn().mockResolvedValue("{}"),
+    },
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Helpers

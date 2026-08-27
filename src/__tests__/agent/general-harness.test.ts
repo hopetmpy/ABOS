@@ -56,6 +56,7 @@ describe("agent/GeneralHarness", () => {
       wisdom: { conventions: [], successes: [], failures: [], gotchas: [] },
       abortSignal: new AbortController().signal,
       goalId: "goal-1",
+      policyEngine: new PolicyEngine(appDb.raw, []),
       toolCatalog,
       toolContext: {
         identity,
@@ -120,7 +121,14 @@ describe("agent/GeneralHarness", () => {
   });
 
   it("routes the web_fetch SPEC alias through the current x402_fetch surface", async () => {
-    const { harness, appDb } = await createHarness();
+    const identity = createTestIdentity();
+    const fakeFetch: AutomatonTool = {
+      name: "x402_fetch", description: "offline fetch fake",
+      parameters: { type: "object", properties: { url: { type: "string" } } },
+      riskLevel: "safe", category: "conway", execute: async () => "offline-result",
+    };
+    const toolCatalog = [...createBuiltinTools(identity.sandboxId).filter((tool) => tool.name !== "x402_fetch"), fakeFetch];
+    const { harness, appDb } = await createHarness({ toolCatalog });
     const aliasTool = harness.getToolDefs().find((tool) => tool.name === "web_fetch");
     const wrappedTool = harness.getToolDefs().find((tool) => tool.name === "x402_fetch");
 

@@ -17,6 +17,8 @@ import type {
 import type { ChildLifecycle } from "./lifecycle.js";
 import { ulid } from "ulid";
 import { propagateConstitution } from "./constitution.js";
+import { SAFE_MODE, SafeModeViolation } from "../safety/safe-mode.js";
+import { RESTRICTED_LIVE_MODE, RestrictedLiveViolation } from "../restricted-live/mode.js";
 
 /** Valid Conway sandbox pricing tiers. */
 const SANDBOX_TIERS = [
@@ -59,6 +61,8 @@ export async function spawnChild(
   genesis: GenesisConfig,
   lifecycle?: ChildLifecycle,
 ): Promise<ChildAutomaton> {
+  if (RESTRICTED_LIVE_MODE) throw new RestrictedLiveViolation("REPLICATION_DENIED", "Replication is disabled in restricted-live mode");
+  if (SAFE_MODE) throw new SafeModeViolation("replication", "spawn child automaton", "replication/spawn");
   // Check child limit from config
   const existing = db
     .getChildren()
