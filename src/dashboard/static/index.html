@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Automaton Dashboard</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <!-- Login Screen (shown when auth required) -->
+  <div class="login-screen" id="login-screen" style="display:none">
+    <div class="login-card">
+      <h1 class="logo" style="font-size:1.6rem; margin-bottom:8px;">Automaton</h1>
+      <p class="login-subtitle">Sales & Marketing Dashboard</p>
+      <div id="login-content">
+        <div class="form-group" style="margin-top:20px;">
+          <label>Dashboard Token</label>
+          <input type="password" id="login-token" placeholder="Paste your dashboard token here">
+        </div>
+        <button class="btn btn-primary" style="width:100%; margin-top:12px;" onclick="submitLogin()">Sign In</button>
+        <div id="login-error" style="color:var(--danger); font-size:0.8rem; margin-top:8px;"></div>
+        <p class="login-help">First time? <button class="btn-link" onclick="setupAuth()">Generate a token</button></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main App -->
+  <div id="app-wrapper" style="display:flex; min-height:100vh;">
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h1 class="logo">Automaton</h1>
+        <span class="agent-status" id="agent-status-badge">--</span>
+      </div>
+      <ul class="nav-links">
+        <li><a href="#/overview" data-page="overview" class="nav-link active">
+          <span class="nav-icon">&#9634;</span> Overview
+        </a></li>
+
+        <li class="nav-section">Sales</li>
+        <li><a href="#/pipeline" data-page="pipeline" class="nav-link">
+          <span class="nav-icon">&#9783;</span> Pipeline
+        </a></li>
+        <li><a href="#/prospects" data-page="prospects" class="nav-link">
+          <span class="nav-icon">&#9823;</span> Prospects
+        </a></li>
+        <li><a href="#/campaigns" data-page="campaigns" class="nav-link">
+          <span class="nav-icon">&#9993;</span> Campaigns
+        </a></li>
+
+        <li class="nav-section">Outreach</li>
+        <li><a href="#/linkedin" data-page="linkedin" class="nav-link">
+          <span class="nav-icon">&#128101;</span> LinkedIn
+        </a></li>
+        <li><a href="#/email-settings" data-page="email-settings" class="nav-link">
+          <span class="nav-icon">&#9993;</span> Email
+        </a></li>
+
+        <li class="nav-section">Content</li>
+        <li><a href="#/ai-generate" data-page="ai-generate" class="nav-link">
+          <span class="nav-icon">&#10024;</span> AI Generate
+        </a></li>
+        <li><a href="#/brand" data-page="brand" class="nav-link">
+          <span class="nav-icon">&#9733;</span> Brand Voice
+        </a></li>
+        <li><a href="#/ab-testing" data-page="ab-testing" class="nav-link">
+          <span class="nav-icon">&#8596;</span> A/B Testing
+        </a></li>
+        <li><a href="#/content" data-page="content" class="nav-link">
+          <span class="nav-icon">&#9997;</span> Content Library
+        </a></li>
+
+        <li class="nav-section">Analytics</li>
+        <li><a href="#/reports" data-page="reports" class="nav-link">
+          <span class="nav-icon">&#9776;</span> Reports
+        </a></li>
+        <li><a href="#/activity" data-page="activity" class="nav-link">
+          <span class="nav-icon">&#8635;</span> Activity
+        </a></li>
+        <li><a href="#/competitive" data-page="competitive" class="nav-link">
+          <span class="nav-icon">&#9878;</span> Competitive
+        </a></li>
+
+        <li class="nav-section">Agent Brain</li>
+        <li><a href="#/memory" data-page="memory" class="nav-link">
+          <span class="nav-icon">&#129504;</span> Agent Memory
+        </a></li>
+        <li><a href="#/orchestration" data-page="orchestration" class="nav-link">
+          <span class="nav-icon">&#127919;</span> Goals & Tasks
+        </a></li>
+        <li><a href="#/soul" data-page="soul" class="nav-link">
+          <span class="nav-icon">&#128161;</span> Agent Identity
+        </a></li>
+        <li><a href="#/tools" data-page="tools" class="nav-link">
+          <span class="nav-icon">&#128295;</span> Tool Logs
+        </a></li>
+
+        <li class="nav-section">System</li>
+        <li><a href="#/wallet" data-page="wallet" class="nav-link">
+          <span class="nav-icon">&#128176;</span> Wallet
+        </a></li>
+        <li><a href="#/health" data-page="health" class="nav-link">
+          <span class="nav-icon">&#9829;</span> Health
+        </a></li>
+        <li><a href="#/settings" data-page="settings" class="nav-link">
+          <span class="nav-icon">&#9881;</span> Settings
+        </a></li>
+      </ul>
+      <div class="sidebar-footer">
+        <div class="credit-display" id="credit-display">
+          Credits: <span id="credit-amount">--</span>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme">&#9681;</button>
+          <button class="theme-toggle-btn" onclick="toggleNotifications()" title="Alerts" id="notif-btn">&#128276;<span id="notif-count" class="notif-badge" style="display:none">0</span></button>
+        </div>
+      </div>
+    </nav>
+
+    <div class="global-search-bar" id="global-search-bar">
+      <input type="text" id="global-search-input" placeholder="Search prospects, campaigns, content..." onkeyup="handleGlobalSearch(event)">
+      <div id="global-search-results" class="global-search-results" style="display:none"></div>
+    </div>
+
+    <main class="content" id="main-content">
+      <div class="page-loading" id="page-loading">
+        <div class="spinner"></div>
+        <p>Loading dashboard...</p>
+      </div>
+    </main>
+  </div>
+
+  <div class="mobile-nav" id="mobile-nav">
+    <button class="mobile-nav-toggle" id="mobile-nav-toggle">&#9776;</button>
+  </div>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Core -->
+  <script src="/js/app.js"></script>
+  <!-- Sprint 1-7 pages -->
+  <script src="/js/overview.js"></script>
+  <script src="/js/pipeline.js"></script>
+  <script src="/js/campaigns.js"></script>
+  <script src="/js/activity.js"></script>
+  <script src="/js/prospects.js"></script>
+  <script src="/js/content.js"></script>
+  <script src="/js/reports.js"></script>
+  <script src="/js/health.js"></script>
+  <script src="/js/competitive.js"></script>
+  <script src="/js/settings.js"></script>
+  <!-- New pages -->
+  <script src="/js/linkedin.js"></script>
+  <script src="/js/email-settings.js"></script>
+  <script src="/js/ai-generate.js"></script>
+  <script src="/js/brand.js"></script>
+  <script src="/js/ab-testing.js"></script>
+  <!-- Agent Brain pages -->
+  <script src="/js/memory.js"></script>
+  <script src="/js/orchestration.js"></script>
+  <script src="/js/soul.js"></script>
+  <script src="/js/tools.js"></script>
+  <script src="/js/wallet.js"></script>
+</body>
+</html>

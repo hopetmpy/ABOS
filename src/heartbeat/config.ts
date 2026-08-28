@@ -55,6 +55,49 @@ const DEFAULT_HEARTBEAT_CONFIG: HeartbeatConfig = {
       task: "check_social_inbox",
       enabled: true,
     },
+    // Sales & Marketing tasks (disabled by default, enabled when mode is sales/marketing)
+    {
+      name: "prospect_pipeline_review",
+      schedule: "0 */6 * * *",
+      task: "prospect_pipeline_review",
+      enabled: false,
+    },
+    {
+      name: "warm_lead_followup",
+      schedule: "0 9 * * MON,WED,FRI",
+      task: "warm_lead_followup",
+      enabled: false,
+    },
+    {
+      name: "campaign_performance_snapshot",
+      schedule: "0 */12 * * *",
+      task: "campaign_performance_snapshot",
+      enabled: false,
+    },
+    {
+      name: "sequence_executor",
+      schedule: "*/5 * * * *",
+      task: "sequence_executor",
+      enabled: false,
+    },
+    {
+      name: "check_email_inbox",
+      schedule: "*/5 * * * *",
+      task: "check_email_inbox",
+      enabled: false,
+    },
+    {
+      name: "outreach_campaign_executor",
+      schedule: "*/5 * * * *",
+      task: "outreach_campaign_executor",
+      enabled: false,
+    },
+    {
+      name: "disc_effectiveness_update",
+      schedule: "0 */12 * * *",
+      task: "disc_effectiveness_update",
+      enabled: false,
+    },
   ],
   defaultIntervalMs: 60_000,
   lowComputeMultiplier: 4,
@@ -122,6 +165,31 @@ export function saveHeartbeatConfig(
  */
 export function writeDefaultHeartbeatConfig(configPath?: string): void {
   saveHeartbeatConfig(DEFAULT_HEARTBEAT_CONFIG, configPath);
+}
+
+const SALES_MARKETING_TASK_NAMES = new Set([
+  "prospect_pipeline_review",
+  "warm_lead_followup",
+  "campaign_performance_snapshot",
+  "sequence_executor",
+  "check_email_inbox",
+  "outreach_campaign_executor",
+  "disc_effectiveness_update",
+]);
+
+/**
+ * Enable sales/marketing heartbeat tasks in a config.
+ * Called during setup when the user selects a sales/marketing agent mode.
+ */
+export function enableSalesMarketingTasks(config: HeartbeatConfig): HeartbeatConfig {
+  return {
+    ...config,
+    entries: config.entries.map((entry) =>
+      SALES_MARKETING_TASK_NAMES.has(entry.name)
+        ? { ...entry, enabled: true }
+        : entry,
+    ),
+  };
 }
 
 /**

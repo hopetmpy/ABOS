@@ -75,6 +75,8 @@ export interface AutomatonConfig {
   rpcUrl?: string;
   /** Chain type for this automaton. Defaults to "evm" if absent. */
   chainType?: ChainType;
+  /** Agent operating mode. Controls which skills and heartbeat tasks are active. */
+  agentMode?: "general" | "sales" | "marketing" | "content" | "sales_marketing";
 }
 
 export const DEFAULT_CONFIG: Partial<AutomatonConfig> = {

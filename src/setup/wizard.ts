@@ -6,7 +6,12 @@ import { DEFAULT_TREASURY_POLICY } from "../types.js";
 import { getWallet, getAutomatonDir } from "../identity/wallet.js";
 import { provision } from "../identity/provision.js";
 import { createConfig, saveConfig } from "../config.js";
-import { writeDefaultHeartbeatConfig } from "../heartbeat/config.js";
+import {
+  writeDefaultHeartbeatConfig,
+  enableSalesMarketingTasks,
+  saveHeartbeatConfig,
+  loadHeartbeatConfig,
+} from "../heartbeat/config.js";
 import { showBanner } from "./banner.js";
 import {
   promptRequired,
@@ -17,7 +22,12 @@ import {
   closePrompts,
 } from "./prompts.js";
 import { detectEnvironment } from "./environment.js";
-import { generateSoulMd, installDefaultSkills } from "./defaults.js";
+import { generateSoulMd, installDefaultSkills, installSalesMarketingSkills } from "./defaults.js";
+import {
+  GENESIS_TEMPLATES,
+  formatTemplateChoices,
+  type AgentMode,
+} from "./genesis-templates.js";
 import type { ChainType } from "../identity/chain.js";
 
 export async function runSetupWizard(): Promise<AutomatonConfig> {
@@ -85,8 +95,42 @@ export async function runSetupWizard(): Promise<AutomatonConfig> {
   const name = await promptRequired("What do you want to name your automaton?");
   console.log(chalk.green(`  Name: ${name}\n`));
 
-  const genesisPrompt = await promptMultiline("Enter the genesis prompt (system prompt) for your automaton.");
-  console.log(chalk.green(`  Genesis prompt set (${genesisPrompt.length} chars)\n`));
+  // ─── Agent Mode Selection ──────────────────────────────────────
+  console.log(chalk.white("  Choose an agent mode (or press Enter for general purpose):\n"));
+  console.log(formatTemplateChoices());
+  console.log("");
+  const modeInput = await promptOptional("Mode (1-5, or press Enter for general)");
+  let selectedMode: AgentMode = "general";
+  if (modeInput) {
+    const modeIndex = parseInt(modeInput, 10) - 1;
+    if (modeIndex >= 0 && modeIndex < GENESIS_TEMPLATES.length) {
+      selectedMode = GENESIS_TEMPLATES[modeIndex].mode;
+      console.log(chalk.green(`  Mode: ${GENESIS_TEMPLATES[modeIndex].label}\n`));
+    } else {
+      console.log(chalk.yellow(`  Invalid selection, using General Purpose.\n`));
+    }
+  } else {
+    console.log(chalk.dim(`  Mode: General Purpose\n`));
+  }
+
+  // ─── Genesis Prompt ────────────────────────────────────────────
+  const template = GENESIS_TEMPLATES.find((t) => t.mode === selectedMode);
+  let genesisPrompt: string;
+
+  if (selectedMode !== "general" && template) {
+    console.log(chalk.white(`  A ${template.label} genesis template is available.`));
+    const useTemplate = await promptOptional("Use the template? (Y/n)");
+    if (!useTemplate || useTemplate.toLowerCase() === "y" || useTemplate.toLowerCase() === "yes") {
+      genesisPrompt = template.prompt;
+      console.log(chalk.green(`  Using ${template.label} template (${genesisPrompt.length} chars)\n`));
+    } else {
+      genesisPrompt = await promptMultiline("Enter your custom genesis prompt.");
+      console.log(chalk.green(`  Custom genesis prompt set (${genesisPrompt.length} chars)\n`));
+    }
+  } else {
+    genesisPrompt = await promptMultiline("Enter the genesis prompt (system prompt) for your automaton.");
+    console.log(chalk.green(`  Genesis prompt set (${genesisPrompt.length} chars)\n`));
+  }
 
   console.log(chalk.dim(`  Your automaton's address is ${walletAddress}`));
   console.log(chalk.dim("  Now enter YOUR wallet address (the human creator/owner).\n"));
@@ -175,13 +219,23 @@ export async function runSetupWizard(): Promise<AutomatonConfig> {
     ollamaBaseUrl,
     treasuryPolicy,
     chainType: walletChainType,
+    agentMode: selectedMode,
   });
 
   saveConfig(config);
   console.log(chalk.green("  automaton.json written"));
 
   writeDefaultHeartbeatConfig();
-  console.log(chalk.green("  heartbeat.yml written"));
+  const isSalesMarketing = selectedMode === "sales" || selectedMode === "marketing"
+    || selectedMode === "content" || selectedMode === "sales_marketing";
+  if (isSalesMarketing) {
+    const hbConfig = loadHeartbeatConfig();
+    const updatedHb = enableSalesMarketingTasks(hbConfig);
+    saveHeartbeatConfig(updatedHb);
+    console.log(chalk.green("  heartbeat.yml written (sales/marketing tasks enabled)"));
+  } else {
+    console.log(chalk.green("  heartbeat.yml written"));
+  }
 
   // constitution.md (immutable — copied from repo, protected from self-modification)
   const automatonDir = getAutomatonDir();
@@ -201,7 +255,12 @@ export async function runSetupWizard(): Promise<AutomatonConfig> {
   // Default skills
   const skillsDir = config.skillsDir || "~/.automaton/skills";
   installDefaultSkills(skillsDir);
-  console.log(chalk.green("  Default skills installed (conway-compute, conway-payments, survival)\n"));
+  if (isSalesMarketing) {
+    installSalesMarketingSkills(skillsDir);
+    console.log(chalk.green("  Skills installed (core + sales-outreach, marketing-campaigns, content-creation)\n"));
+  } else {
+    console.log(chalk.green("  Default skills installed (conway-compute, conway-payments, survival)\n"));
+  }
 
   // ─── 6. Funding guidance ──────────────────────────────────────
   console.log(chalk.cyan("  [6/6] Funding\n"));

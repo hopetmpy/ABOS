@@ -46,6 +46,16 @@ import {
   MIGRATION_V9_ALTER_CHILDREN_ROLE,
   MIGRATION_V10,
   MIGRATION_V11,
+  MIGRATION_V12,
+  MIGRATION_V13,
+  MIGRATION_V14,
+  MIGRATION_V15,
+  MIGRATION_V16,
+  MIGRATION_V17,
+  MIGRATION_V18,
+  MIGRATION_V19,
+  MIGRATION_V20,
+  MIGRATION_V21,
 } from "./schema.js";
 import type {
   RiskLevel,
@@ -624,6 +634,48 @@ function applyMigrations(db: DatabaseType): void {
       apply: () => {
         try { db.exec(MIGRATION_V11); } catch { /* column may already exist */ }
       },
+    },
+    {
+      version: 12,
+      apply: () => db.exec(MIGRATION_V12),
+    },
+    {
+      version: 13,
+      apply: () => db.exec(MIGRATION_V13),
+    },
+    {
+      version: 14,
+      apply: () => db.exec(MIGRATION_V14),
+    },
+    {
+      version: 15,
+      apply: () => db.exec(MIGRATION_V15),
+    },
+    {
+      version: 16,
+      apply: () => db.exec(MIGRATION_V16),
+    },
+    {
+      version: 17,
+      apply: () => {
+        try { db.exec(MIGRATION_V17); } catch { /* columns may already exist */ }
+      },
+    },
+    {
+      version: 18,
+      apply: () => db.exec(MIGRATION_V18),
+    },
+    {
+      version: 19,
+      apply: () => db.exec(MIGRATION_V19),
+    },
+    {
+      version: 20,
+      apply: () => db.exec(MIGRATION_V20),
+    },
+    {
+      version: 21,
+      apply: () => db.exec(MIGRATION_V21),
     },
   ];
 
