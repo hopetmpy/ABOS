@@ -13,8 +13,13 @@ const accent = chalk.rgb(131, 127, 255);
 const args = process.argv.slice(3);
 let limit = 20;
 const tailIdx = args.indexOf("--tail");
-if (tailIdx !== -1 && args[tailIdx + 1]) {
-  limit = parseInt(args[tailIdx + 1], 10) || 20;
+if (tailIdx !== -1) {
+  const rawLimit = args[tailIdx + 1];
+  if (!rawLimit || !/^\d+$/.test(rawLimit) || Number(rawLimit) < 1) {
+    console.log(chalk.red("Invalid --tail value. Expected a positive integer."));
+    process.exit(1);
+  }
+  limit = Number(rawLimit);
 }
 
 const config = loadConfig();
