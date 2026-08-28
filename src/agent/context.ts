@@ -25,6 +25,9 @@ let tokenCounter: ReturnType<typeof createTokenCounter> | null = null;
 /** Maximum size for individual tool results in characters */
 export const MAX_TOOL_RESULT_SIZE = 10_000;
 
+// Upper bound on how much text is fed to the BPE tokenizer in one call.
+const TOKENIZER_SAMPLE_CHARS = 2_000;
+
 // Re-export for external use
 export type { TokenBudget };
 export { DEFAULT_TOKEN_BUDGET };
@@ -40,7 +43,16 @@ export function estimateTokens(text: string): number {
     if (!tokenCounter) {
       tokenCounter = createTokenCounter();
     }
-    const tokens = tokenCounter.countTokens(content);
+    // BPE cost is superlinear in the length of an unbroken run of one character:
+    // 50k identical chars takes ~113s, versus ~6ms for 50k chars of prose. Sample
+    // a prefix and scale so a pathological tool result cannot stall the agent loop.
+    const sample = content.length > TOKENIZER_SAMPLE_CHARS
+      ? content.slice(0, TOKENIZER_SAMPLE_CHARS)
+      : content;
+    const sampleTokens = tokenCounter.countTokens(sample);
+    const tokens = sample.length === content.length
+      ? sampleTokens
+      : Math.ceil(sampleTokens * (content.length / sample.length));
     if (Number.isFinite(tokens) && tokens > 0) {
       // Keep a conservative floor to avoid under-budgeting context.
       return Math.max(tokens, legacyEstimate);
