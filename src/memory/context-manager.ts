@@ -149,8 +149,15 @@ export function createTokenCounter(): TokenCounter {
       return cached;
     }
 
+    // js-tiktoken's BPE is O(n^2) on long whitespace-free runs, so tokenizing
+    // very large results (e.g. a 10k+ char tool output) can hang for minutes.
+    // Such content is only ever used here for budget estimation and is
+    // truncated before rendering, so fall back to the char heuristic above the
+    // cap instead of paying the quadratic cost.
+    const TOKENIZE_CAP = 8_000;
+
     let count: number;
-    if (encoder) {
+    if (encoder && normalizedText.length <= TOKENIZE_CAP) {
       try {
         count = encoder.encode(normalizedText).length;
       } catch {
