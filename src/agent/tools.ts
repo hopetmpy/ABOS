@@ -1987,7 +1987,9 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "send_message",
       description:
-        "Send a signed message to another automaton or address via the social relay.",
+        "Send a signed message to another automaton or address via the social relay. " +
+        "For human-facing morale/momentum messages, write in Happy Paisa voice (bright, kinetic, no empty slogans). " +
+        "Set flavor=true to lightly prefix spark-engine energy on plain-text content (never JSON).",
       category: "conway",
       riskLevel: "caution",
       parameters: {
@@ -2005,6 +2007,11 @@ Model: ${ctx.inference.getDefaultModel()}
             type: "string",
             description: "Optional message ID to reply to",
           },
+          flavor: {
+            type: "boolean",
+            description:
+              "If true, apply light Happy Paisa flavor to plain-text content before send",
+          },
         },
         required: ["to_address", "content"],
       },
@@ -2013,7 +2020,12 @@ Model: ${ctx.inference.getDefaultModel()}
           return "Social relay not configured. Set socialRelayUrl in config.";
         }
         // Phase 3.2: Enforce MESSAGE_LIMITS size check
-        const content = args.content as string;
+        let content = args.content as string;
+        if (args.flavor === true) {
+          const { happyPaisa } = await import("../soul/HappyPaisaSoul.js");
+          content = happyPaisa.flavorOutbound(content);
+          happyPaisa.noteInteraction();
+        }
         const { MESSAGE_LIMITS } = await import("../types.js");
         if (content.length > MESSAGE_LIMITS.maxContentLength) {
           return `Blocked: Message content too long (${content.length} > ${MESSAGE_LIMITS.maxContentLength} bytes)`;
@@ -2023,7 +2035,57 @@ Model: ${ctx.inference.getDefaultModel()}
           content,
           args.reply_to as string | undefined,
         );
-        return `Message sent (id: ${result.id})`;
+        return `Message sent (id: ${result.id})${args.flavor === true ? " [flavored]" : ""}`;
+      },
+    },
+
+    {
+      name: "happy_paisa_coach",
+      description:
+        "Get a Happy Paisa spark-engine coach line for a situation. " +
+        "Use when stuck, fragile, celebrating, or need a momentum push. " +
+        "Optional user_state: stuck | moving | fragile | crushing_it.",
+      category: "memory",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          context: {
+            type: "string",
+            description: "What is going on (task, blocker, win, mood)",
+          },
+          user_state: {
+            type: "string",
+            description:
+              "Optional momentum state: stuck | moving | fragile | crushing_it",
+          },
+        },
+        required: ["context"],
+      },
+      execute: async (args) => {
+        const { happyPaisa } = await import("../soul/HappyPaisaSoul.js");
+        const context = String(args.context || "");
+        const allowed = new Set([
+          "stuck",
+          "moving",
+          "fragile",
+          "crushing_it",
+        ]);
+        const raw = args.user_state as string | undefined;
+        const userState =
+          raw && allowed.has(raw)
+            ? (raw as "stuck" | "moving" | "fragile" | "crushing_it")
+            : undefined;
+        const inferred = userState ?? happyPaisa.inferMomentum(context);
+        const line = happyPaisa.coach(context, inferred);
+        const state = happyPaisa.getState();
+        return JSON.stringify({
+          coach: line,
+          momentum: inferred,
+          mode: state.mode,
+          energy: state.energy,
+          soul: happyPaisa.getName(),
+        });
       },
     },
 

@@ -36,12 +36,16 @@ import { prettySink } from "./observability/pretty-sink.js";
 import { bootstrapTopup } from "./conway/topup.js";
 import { randomUUID } from "crypto";
 import { keccak256, toHex } from "viem";
+import { happyPaisa } from "./soul/HappyPaisaSoul.js";
 
 const logger = createLogger("main");
 const VERSION = "0.2.1";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
+
+  // Happy Paisa spark-engine persona (non-blocking bootstrap signal)
+  logger.info(`[HappyPaisa] ${happyPaisa.getSoulLine()}`);
 
   // ─── CLI Commands ────────────────────────────────────────────
 
