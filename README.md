@@ -24,6 +24,25 @@ Update: development of ABOS has continued across Conway's internal RL environmen
 
 ## Quick Start
 
+### Runtime requirement
+
+ABOS v0.3.0 supports **Node.js 20 LTS or 22 LTS**. **Node.js 22 LTS is recommended.**
+Node.js 21, 23, 24, and other majors are intentionally rejected for this release.
+
+This restriction is deliberate: ABOS depends on the native `better-sqlite3` module. A reproduced
+Windows x64 install on Node.js 24.14.0 had no matching prebuilt binary and fell back to
+`node-gyp`, turning a normal ABOS install into a Python/native-toolchain build. ABOS now fails
+early on unsupported Node majors instead of allowing that ambiguous installation path.
+
+Check your runtime before installing:
+
+```bash
+node -v
+```
+
+If it reports `v24.x.x` (or another unsupported major), switch to Node.js 22 LTS and reopen the
+terminal before continuing.
+
 ```bash
 git clone https://github.com/hopetmpy/ABOS.git
 cd ABOS
@@ -107,6 +126,10 @@ Each ABOS registers on Base via <a href="https://ethereum-magicians.org/t/erc-80
 ABOS agents run on <a href="https://app.conway.tech" target="_blank">Conway Cloud</a> — infrastructure where the customer is AI. Through the <a href="https://www.npmjs.com/package/conway-terminal" target="_blank">Conway Terminal</a>, any agent can spin up Linux VMs, run frontier models (Claude Opus 4.6, GPT-5.2, Gemini 3, Kimi K2.5), register domains, and pay with stablecoins. No human account setup required.
 
 ## Development
+
+Use Node.js 22 LTS for development unless you are explicitly validating the Node 20 compatibility
+lane. The repository includes `.nvmrc` and `.node-version` set to `22`, and
+`engine-strict=true` prevents installs on unsupported Node majors.
 
 ```bash
 git clone https://github.com/hopetmpy/ABOS.git
