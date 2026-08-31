@@ -85,6 +85,77 @@ describe("legacy Automaton state migration", () => {
     expect(walletModule.walletExists()).toBe(true);
   });
 
+  it("migrates legacy identity when an early ABOS runtime already occupies ~/.abos/runtime", async () => {
+    const home = useTempHome();
+    const legacyDir = path.join(home, ".automaton");
+    const abosDir = path.join(home, ".abos");
+
+    fs.mkdirSync(path.join(legacyDir, "runtime"), { recursive: true });
+    fs.mkdirSync(path.join(abosDir, "runtime"), { recursive: true });
+
+    fs.writeFileSync(path.join(legacyDir, "runtime", "old-runtime.txt"), "legacy-code");
+    fs.writeFileSync(path.join(abosDir, "runtime", "new-runtime.txt"), "abos-code");
+
+    const wallet = {
+      privateKey: `0x${"5".padStart(64, "0")}`,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    };
+    fs.writeFileSync(path.join(legacyDir, "wallet.json"), JSON.stringify(wallet));
+    fs.writeFileSync(
+      path.join(legacyDir, "automaton.json"),
+      JSON.stringify({
+        name: "legacy-agent",
+        heartbeatConfigPath: "~/.automaton/heartbeat.yml",
+        dbPath: "~/.automaton/state.db",
+        skillsDir: "~/.automaton/skills",
+      }),
+    );
+    fs.writeFileSync(path.join(legacyDir, "state.db"), "legacy-db");
+
+    vi.resetModules();
+    const walletModule = await import("../identity/wallet.js");
+
+    expect(walletModule.getAbosDir()).toBe(abosDir);
+    expect(walletModule.walletExists()).toBe(true);
+    expect(
+      JSON.parse(fs.readFileSync(path.join(abosDir, "wallet.json"), "utf-8")),
+    ).toEqual(wallet);
+    expect(fs.readFileSync(path.join(abosDir, "state.db"), "utf-8")).toBe("legacy-db");
+
+    // New ABOS executable source is never overwritten by legacy state migration.
+    expect(fs.readFileSync(path.join(abosDir, "runtime", "new-runtime.txt"), "utf-8")).toBe("abos-code");
+
+    // Historical Automaton executable source is not treated as identity state.
+    expect(fs.readFileSync(path.join(legacyDir, "runtime", "old-runtime.txt"), "utf-8")).toBe("legacy-code");
+    expect(fs.existsSync(path.join(legacyDir, "wallet.json"))).toBe(false);
+    expect(fs.existsSync(path.join(legacyDir, "automaton.json"))).toBe(false);
+  });
+
+  it("validates legacy config before moving identity state", async () => {
+    const home = useTempHome();
+    const legacyDir = path.join(home, ".automaton");
+    const abosDir = path.join(home, ".abos");
+
+    fs.mkdirSync(legacyDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(legacyDir, "wallet.json"),
+      JSON.stringify({
+        privateKey: `0x${"6".padStart(64, "0")}`,
+        createdAt: "2026-01-01T00:00:00.000Z",
+      }),
+    );
+    fs.writeFileSync(path.join(legacyDir, "state.db"), "must-not-move");
+    fs.writeFileSync(path.join(legacyDir, "automaton.json"), "{broken-json");
+
+    vi.resetModules();
+    const walletModule = await import("../identity/wallet.js");
+
+    expect(() => walletModule.getAbosDir()).toThrow(/configuration is invalid/);
+    expect(fs.existsSync(path.join(legacyDir, "wallet.json"))).toBe(true);
+    expect(fs.readFileSync(path.join(legacyDir, "state.db"), "utf-8")).toBe("must-not-move");
+    expect(fs.existsSync(abosDir)).toBe(false);
+  });
+
   it("fails closed on every call when legacy identity conflicts with a nonempty ~/.abos without a wallet", async () => {
     const home = useTempHome();
     const legacyDir = path.join(home, ".automaton");
