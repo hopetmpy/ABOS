@@ -101,9 +101,11 @@ function rewriteLegacyConfigPaths(): void {
  */
 export function migrateLegacyAutomatonStateIfNeeded(): boolean {
   if (legacyMigrationChecked) return false;
-  legacyMigrationChecked = true;
 
-  if (!fs.existsSync(LEGACY_AUTOMATON_DIR)) return false;
+  if (!fs.existsSync(LEGACY_AUTOMATON_DIR)) {
+    legacyMigrationChecked = true;
+    return false;
+  }
 
   if (fs.existsSync(ABOS_DIR)) {
     const abosWalletExists = fs.existsSync(WALLET_FILE);
@@ -118,6 +120,7 @@ export function migrateLegacyAutomatonStateIfNeeded(): boolean {
           "Refusing ABOS startup: legacy ~/.automaton contains an identity wallet while ~/.abos already exists without one. Resolve the state directories manually so ABOS cannot create or overwrite the wrong identity.",
         );
       }
+      legacyMigrationChecked = true;
       return false;
     }
   }
@@ -137,6 +140,7 @@ export function migrateLegacyAutomatonStateIfNeeded(): boolean {
   }
 
   rewriteLegacyConfigPaths();
+  legacyMigrationChecked = true;
   return true;
 }
 
