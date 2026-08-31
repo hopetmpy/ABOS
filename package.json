@@ -1,7 +1,7 @@
 {
   "name": "@conway/automaton",
   "version": "0.2.1",
-  "description": "Conway Automaton - Sovereign AI Agent Runtime",
+  "description": "ABOS - Autonomous Business Operating System runtime",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -25,9 +25,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Conway-Research/automaton.git"
+    "url": "https://github.com/hopetmpy/ABOS.git"
   },
-  "homepage": "https://conway.tech",
+  "homepage": "https://github.com/hopetmpy/ABOS",
   "keywords": [
     "autonomous-agent",
     "sovereign-ai",
