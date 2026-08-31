@@ -7,8 +7,9 @@
  */
 
 import { execFileSync } from "child_process";
+import { RUNTIME_ROOT } from "../runtime-root.js";
 
-const REPO_ROOT = process.cwd();
+const REPO_ROOT = RUNTIME_ROOT;
 
 export const ABOS_CANONICAL_REPOSITORY = "https://github.com/hopetmpy/ABOS.git";
 export const ABOS_CANONICAL_BRANCH = "main";
