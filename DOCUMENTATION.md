@@ -55,7 +55,7 @@ This clones the repo, builds, and launches the setup wizard inside a Conway sand
 ### Manual install
 
 ```bash
-git clone https://github.com/Conway-Research/automaton.git
+git clone https://github.com/hopetmpy/ABOS.git
 cd automaton
 pnpm install
 pnpm build
@@ -77,7 +77,7 @@ On first run, the interactive setup wizard walks you through wallet generation, 
 ### From source
 
 ```bash
-git clone https://github.com/Conway-Research/automaton.git
+git clone https://github.com/hopetmpy/ABOS.git
 cd automaton
 pnpm install
 pnpm build
