@@ -319,7 +319,7 @@ describe("orchestration/LocalWorkerPool harness integration", () => {
     ).all("goal-1", "task-orchestrator-run") as Array<{ parentId: string; title: string; agentRole: string | null }>;
     expect(delegated.some((entry) => entry.title === "Implement planned subtask" && entry.agentRole === "executor")).toBe(true);
 
-    const planDir = path.join(tempHome, ".automaton", "workspace", "goal-1", "subplans", "task-orchestrator-run");
+    const planDir = path.join(tempHome, ".abos", "workspace", "goal-1", "subplans", "task-orchestrator-run");
     expect(fs.existsSync(path.join(planDir, "plan.json"))).toBe(true);
     expect(fs.existsSync(path.join(planDir, "plan.md"))).toBe(true);
   });

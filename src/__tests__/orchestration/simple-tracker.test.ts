@@ -3,7 +3,7 @@ import { SimpleAgentTracker, SimpleFundingProtocol } from "../../orchestration/s
 import { createInMemoryDb } from "./test-db.js";
 import type BetterSqlite3 from "better-sqlite3";
 
-function createMockAutomatonDb(db: BetterSqlite3.Database) {
+function createMockAbosDb(db: BetterSqlite3.Database) {
   return {
     raw: db,
     getChildren: () => {
@@ -33,12 +33,12 @@ function insertChild(
 
 describe("orchestration/simple-tracker", () => {
   let db: BetterSqlite3.Database;
-  let mockDb: ReturnType<typeof createMockAutomatonDb>;
+  let mockDb: ReturnType<typeof createMockAbosDb>;
   let tracker: SimpleAgentTracker;
 
   beforeEach(() => {
     db = createInMemoryDb();
-    mockDb = createMockAutomatonDb(db);
+    mockDb = createMockAbosDb(db);
     tracker = new SimpleAgentTracker(mockDb);
   });
 

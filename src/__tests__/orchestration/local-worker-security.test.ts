@@ -21,7 +21,7 @@ function createConwayStub(overrides?: Partial<ConwayClient>): ConwayClient {
     getCreditsBalance: async () => 0,
     getCreditsPricing: async () => [],
     transferCredits: async () => ({ id: "", fromAddress: "", toAddress: "", amountCents: 0, status: "completed", timestamp: "" }),
-    registerAutomaton: async () => ({ automaton: {} }),
+    registerAbos: async () => ({ registration: {} }),
     searchDomains: async () => [],
     registerDomain: async () => ({ domain: "", status: "pending", registrationDate: "", expirationDate: "", nameservers: [] }),
     listDnsRecords: async () => [],
@@ -147,7 +147,7 @@ describe("agent/general-harness security", () => {
 
   it("blocks forbidden shell commands", async () => {
     const out = await runTool(createConwayStub(), "exec", {
-      command: "cat ~/.automaton/wallet.json",
+      command: "cat ~/.abos/wallet.json",
     });
     expect(out).toContain("Blocked:");
   });

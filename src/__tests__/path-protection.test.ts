@@ -13,11 +13,11 @@ import { describe, it, expect } from "vitest";
 import path from "path";
 import { isProtectedFile } from "../self-mod/code.js";
 import { createPathProtectionRules } from "../agent/policy-rules/path-protection.js";
-import type { PolicyRequest, AutomatonTool, ToolContext } from "../types.js";
+import type { PolicyRequest, AbosTool, ToolContext } from "../types.js";
 
 // ─── Helpers ──────────────────────────────────────────────────
 
-function makeMockTool(name: string): AutomatonTool {
+function makeMockTool(name: string): AbosTool {
   return {
     name,
     description: `mock ${name}`,
@@ -68,7 +68,7 @@ describe("isProtectedFile", () => {
   });
 
   it("matches protected files with path prefix", () => {
-    expect(isProtectedFile("/home/user/.automaton/wallet.json")).toBe(true);
+    expect(isProtectedFile("/home/user/.abos/wallet.json")).toBe(true);
     expect(isProtectedFile("/some/path/self-mod/code.ts")).toBe(true);
     expect(isProtectedFile("/some/path/agent/tools.ts")).toBe(true);
   });
@@ -82,7 +82,7 @@ describe("isProtectedFile", () => {
     expect(isProtectedFile("/some/path/skills/loader.js")).toBe(true);
     expect(isProtectedFile("/some/path/skills/registry.ts")).toBe(true);
     expect(isProtectedFile("/some/path/skills/registry.js")).toBe(true);
-    expect(isProtectedFile("/some/path/automaton.json")).toBe(true);
+    expect(isProtectedFile("/some/path/abos.json")).toBe(true);
     expect(isProtectedFile("/some/path/package.json")).toBe(true);
     expect(isProtectedFile("/some/path/SOUL.md")).toBe(true);
     expect(isProtectedFile("/some/path/agent/policy-engine.ts")).toBe(true);
@@ -176,8 +176,8 @@ describe("path protection policy rules", () => {
       expect(result!.action).toBe("deny");
     });
 
-    it("denies read of automaton.json", () => {
-      const request = makeMockRequest("read_file", { path: "automaton.json" });
+    it("denies read of abos.json", () => {
+      const request = makeMockRequest("read_file", { path: "abos.json" });
       request.tool = makeMockTool("read_file");
       const result = readSensitiveRule.evaluate(request);
       expect(result).not.toBeNull();

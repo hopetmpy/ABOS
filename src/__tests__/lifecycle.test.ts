@@ -542,15 +542,15 @@ describe("Constitution", () => {
 
   it("propagateConstitution writes file and hash", async () => {
     const fs = await import("fs");
-    (fs.default.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue("We the automatons...");
+    (fs.default.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue("We the ABOS agents...");
 
     const writeSpy = vi.spyOn(conway, "writeFile");
 
     await propagateConstitution(conway, "sandbox-1", db);
 
     expect(writeSpy).toHaveBeenCalledTimes(2); // constitution + hash
-    expect(writeSpy.mock.calls[0][0]).toBe("/root/.automaton/constitution.md");
-    expect(writeSpy.mock.calls[1][0]).toBe("/root/.automaton/constitution.sha256");
+    expect(writeSpy.mock.calls[0][0]).toBe("/root/.abos/constitution.md");
+    expect(writeSpy.mock.calls[1][0]).toBe("/root/.abos/constitution.sha256");
 
     // Verify hash stored in KV
     const kv = db.prepare("SELECT value FROM kv WHERE key = ?").get("constitution_hash:sandbox-1") as any;
@@ -560,12 +560,12 @@ describe("Constitution", () => {
 
   it("verifyConstitution passes for matching hash", async () => {
     const fs = await import("fs");
-    (fs.default.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue("We the automatons...");
+    (fs.default.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue("We the ABOS agents...");
 
     await propagateConstitution(conway, "sandbox-1", db);
 
     // Mock reading the same content back
-    vi.spyOn(conway, "readFile").mockResolvedValue("We the automatons...");
+    vi.spyOn(conway, "readFile").mockResolvedValue("We the ABOS agents...");
 
     const result = await verifyConstitution(conway, "sandbox-1", db);
     expect(result.valid).toBe(true);
@@ -573,12 +573,12 @@ describe("Constitution", () => {
 
   it("verifyConstitution fails for tampered content", async () => {
     const fs = await import("fs");
-    (fs.default.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue("We the automatons...");
+    (fs.default.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue("We the ABOS agents...");
 
     await propagateConstitution(conway, "sandbox-1", db);
 
     // Mock reading tampered content
-    vi.spyOn(conway, "readFile").mockResolvedValue("We the EVIL automatons...");
+    vi.spyOn(conway, "readFile").mockResolvedValue("We the EVIL ABOS agents...");
 
     const result = await verifyConstitution(conway, "sandbox-1", db);
     expect(result.valid).toBe(false);

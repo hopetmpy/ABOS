@@ -8,10 +8,10 @@ import {
 import { createInMemoryDb } from "./test-db.js";
 
 // ---------------------------------------------------------------------------
-// Mock AutomatonDatabase
+// Mock AbosDatabase
 // ---------------------------------------------------------------------------
 
-function createMockAutomatonDb(db: BetterSqlite3.Database) {
+function createMockAbosDb(db: BetterSqlite3.Database) {
   return {
     raw: db,
     getChildren: () => {
@@ -165,7 +165,7 @@ function insertTask(
 
 describe("orchestration/health-monitor", () => {
   let db: BetterSqlite3.Database;
-  let mockDb: ReturnType<typeof createMockAutomatonDb>;
+  let mockDb: ReturnType<typeof createMockAbosDb>;
   let mockTracker: ReturnType<typeof createMockTracker>;
   let mockFunding: ReturnType<typeof createMockFunding>;
   let mockMessaging: ReturnType<typeof createMockMessaging>;
@@ -173,7 +173,7 @@ describe("orchestration/health-monitor", () => {
 
   beforeEach(() => {
     db = createInMemoryDb();
-    mockDb = createMockAutomatonDb(db);
+    mockDb = createMockAbosDb(db);
     mockTracker = createMockTracker();
     mockFunding = createMockFunding();
     mockMessaging = createMockMessaging();
