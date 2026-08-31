@@ -25,7 +25,7 @@ Update: development of Automaton has continued across Conway's internal RL envir
 ## Quick Start
 
 ```bash
-git clone https://github.com/Conway-Research/automaton.git
+git clone https://github.com/hopetmpy/ABOS.git
 cd automaton
 npm install && npm run build
 node dist/index.js --run
@@ -107,7 +107,7 @@ Automatons run on <a href="https://app.conway.tech" target="_blank">Conway Cloud
 ## Development
 
 ```bash
-git clone https://github.com/Conway-Research/automaton.git
+git clone https://github.com/hopetmpy/ABOS.git
 cd automaton
 pnpm install
 pnpm build
