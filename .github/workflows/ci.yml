@@ -58,8 +58,15 @@ jobs:
             exit 1
           fi
 
-          if git grep -n -E '(^|[^[:alnum:]_])npm[[:space:]]+(install|run[[:space:]]+build)' -- src/agent src/self-mod; then
-            echo "ABOS self-update path still uses npm instead of pnpm."
+          # Runtime self-update/build paths must use pnpm. Global package
+          # installation tools may legitimately invoke "npm install -g".
+          if git grep -n -E '(^|[^[:alnum:]_])npm[[:space:]]+run[[:space:]]+build' -- src/agent src/self-mod src/replication; then
+            echo "ABOS build/update path still uses npm run build instead of pnpm."
+            exit 1
+          fi
+
+          if git grep -n -E '(^|[^[:alnum:]_])npm[[:space:]]+install([[:space:]]|$)' -- src/replication/source.ts; then
+            echo "ABOS child source bootstrap still uses npm install instead of pnpm."
             exit 1
           fi
 
