@@ -240,7 +240,8 @@ export async function getWallet(chainType?: ChainType): Promise<{
 /**
  * Get the wallet address without loading the full account.
  */
-export function getWalletAddress(): string | null {\n  migrateLegacyAutomatonStateIfNeeded();
+export function getWalletAddress(): string | null {
+  migrateLegacyAutomatonStateIfNeeded();
   if (!fs.existsSync(WALLET_FILE)) {
     return null;
   }
@@ -263,7 +264,8 @@ export function getWalletAddress(): string | null {\n  migrateLegacyAutomatonSta
  * Load the full wallet account (needed for signing).
  * For Solana wallets, returns a proxy account.
  */
-export function loadWalletAccount(): PrivateKeyAccount | null {\n  migrateLegacyAutomatonStateIfNeeded();
+export function loadWalletAccount(): PrivateKeyAccount | null {
+  migrateLegacyAutomatonStateIfNeeded();
   if (!fs.existsSync(WALLET_FILE)) {
     return null;
   }
@@ -283,7 +285,8 @@ export function loadWalletAccount(): PrivateKeyAccount | null {\n  migrateLegacy
 /**
  * Get the chain type from the wallet file.
  */
-export function getWalletChainType(): ChainType {\n  migrateLegacyAutomatonStateIfNeeded();
+export function getWalletChainType(): ChainType {
+  migrateLegacyAutomatonStateIfNeeded();
   if (!fs.existsSync(WALLET_FILE)) {
     return "evm";
   }
@@ -297,6 +300,7 @@ export function getWalletChainType(): ChainType {\n  migrateLegacyAutomatonState
   }
 }
 
-export function walletExists(): boolean {\n  migrateLegacyAutomatonStateIfNeeded();
+export function walletExists(): boolean {
+  migrateLegacyAutomatonStateIfNeeded();
   return fs.existsSync(WALLET_FILE);
 }
