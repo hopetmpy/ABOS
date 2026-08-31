@@ -58,7 +58,7 @@ jobs:
             exit 1
           fi
 
-          if git grep -n -E 'npm install( --ignore-scripts)? && npm run build|npm run build' -- src/agent src/self-mod; then
+          if git grep -n -E '(^|[^[:alnum:]_])npm[[:space:]]+(install|run[[:space:]]+build)' -- src/agent src/self-mod; then
             echo "ABOS self-update path still uses npm instead of pnpm."
             exit 1
           fi
