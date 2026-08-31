@@ -303,9 +303,19 @@ export async function editFile(
   // 10. Rebuild if source file was edited
   if (/\.(ts|js|tsx|jsx)$/.test(filePath)) {
     try {
-      await conway.exec("npm run build", 60_000);
-    } catch {
-      return { success: true, error: "File edited but rebuild failed. Run 'npm run build' manually." };
+      const build = await conway.exec("pnpm run build", 60_000);
+      if (build.exitCode !== 0) {
+        const detail = build.stderr || build.stdout || `exit code ${build.exitCode}`;
+        return {
+          success: true,
+          error: `File edited but rebuild failed: ${detail}. Run 'pnpm run build' manually.`,
+        };
+      }
+    } catch (err: any) {
+      return {
+        success: true,
+        error: `File edited but rebuild could not run: ${err?.message || String(err)}. Run 'pnpm run build' manually.`,
+      };
     }
   }
 
