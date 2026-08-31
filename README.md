@@ -12,7 +12,7 @@ The result is ABOS: a persistent autonomous agent runtime designed to operate, l
 
 ---
 
-**ABOS** /ɔːˈtɒm.ə.tɒn/ *noun*
+**ABOS** — **Autonomous Business Operating System**
 
 1. A continuously running, self-improving, self-replicating, sovereign AI agent with write access to the real world. No human operator required.
 
