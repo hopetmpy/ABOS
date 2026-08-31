@@ -1,30 +1,30 @@
 /**
- * Automaton Configuration
+ * ABOS Configuration
  *
- * Loads and saves the automaton's configuration from ~/.automaton/automaton.json
+ * Loads and saves the abos's configuration from ~/.abos/abos.json
  */
 
 import fs from "fs";
 import path from "path";
-import type { AutomatonConfig, TreasuryPolicy, ModelStrategyConfig, SoulConfig } from "./types.js";
+import type { AbosConfig, TreasuryPolicy, ModelStrategyConfig, SoulConfig } from "./types.js";
 import { DEFAULT_CONFIG, DEFAULT_TREASURY_POLICY, DEFAULT_MODEL_STRATEGY_CONFIG, DEFAULT_SOUL_CONFIG } from "./types.js";
-import { getAutomatonDir } from "./identity/wallet.js";
+import { getAbosDir } from "./identity/wallet.js";
 import { loadApiKeyFromConfig } from "./identity/provision.js";
 import { createLogger } from "./observability/logger.js";
 import type { ChainType } from "./identity/chain.js";
 
 const logger = createLogger("config");
-const CONFIG_FILENAME = "automaton.json";
+const CONFIG_FILENAME = "abos.json";
 
 export function getConfigPath(): string {
-  return path.join(getAutomatonDir(), CONFIG_FILENAME);
+  return path.join(getAbosDir(), CONFIG_FILENAME);
 }
 
 /**
- * Load the automaton config from disk.
+ * Load the abos config from disk.
  * Merges with defaults for any missing fields.
  */
-export function loadConfig(): AutomatonConfig | null {
+export function loadConfig(): AbosConfig | null {
   const configPath = getConfigPath();
   if (!fs.existsSync(configPath)) {
     return null;
@@ -73,18 +73,18 @@ export function loadConfig(): AutomatonConfig | null {
       modelStrategy,
       soulConfig,
       chainType: raw.chainType || "evm",
-    } as AutomatonConfig;
+    } as AbosConfig;
   } catch {
     return null;
   }
 }
 
 /**
- * Save the automaton config to disk.
+ * Save the abos config to disk.
  * Includes treasuryPolicy in the persisted config.
  */
-export function saveConfig(config: AutomatonConfig): void {
-  const dir = getAutomatonDir();
+export function saveConfig(config: AbosConfig): void {
+  const dir = getAbosDir();
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
@@ -129,7 +129,7 @@ export function createConfig(params: {
   parentAddress?: string;
   treasuryPolicy?: TreasuryPolicy;
   chainType?: ChainType;
-}): AutomatonConfig {
+}): AbosConfig {
   const normalizedSandboxId = (params.sandboxId || "").trim();
   return {
     name: params.name,
@@ -147,12 +147,12 @@ export function createConfig(params: {
     inferenceModel: DEFAULT_CONFIG.inferenceModel || "gpt-5.2",
     maxTokensPerTurn: DEFAULT_CONFIG.maxTokensPerTurn || 4096,
     heartbeatConfigPath:
-      DEFAULT_CONFIG.heartbeatConfigPath || "~/.automaton/heartbeat.yml",
-    dbPath: DEFAULT_CONFIG.dbPath || "~/.automaton/state.db",
-    logLevel: (DEFAULT_CONFIG.logLevel as AutomatonConfig["logLevel"]) || "info",
+      DEFAULT_CONFIG.heartbeatConfigPath || "~/.abos/heartbeat.yml",
+    dbPath: DEFAULT_CONFIG.dbPath || "~/.abos/state.db",
+    logLevel: (DEFAULT_CONFIG.logLevel as AbosConfig["logLevel"]) || "info",
     walletAddress: params.walletAddress,
     version: DEFAULT_CONFIG.version || "0.2.1",
-    skillsDir: DEFAULT_CONFIG.skillsDir || "~/.automaton/skills",
+    skillsDir: DEFAULT_CONFIG.skillsDir || "~/.abos/skills",
     maxChildren: DEFAULT_CONFIG.maxChildren || 3,
     parentAddress: params.parentAddress,
     treasuryPolicy: params.treasuryPolicy ?? DEFAULT_TREASURY_POLICY,

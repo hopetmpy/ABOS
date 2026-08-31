@@ -2,14 +2,14 @@
  * The Agent Loop
  *
  * The core ReAct loop: Think -> Act -> Observe -> Persist.
- * This is the automaton's consciousness. When this runs, it is alive.
+ * This is the abos's consciousness. When this runs, it is alive.
  */
 
 import path from "node:path";
 import type {
-  AutomatonIdentity,
-  AutomatonConfig,
-  AutomatonDatabase,
+  AbosIdentity,
+  AbosConfig,
+  AbosDatabase,
   ConwayClient,
   InferenceClient,
   AgentState,
@@ -17,7 +17,7 @@ import type {
   ToolCallResult,
   FinancialState,
   ToolContext,
-  AutomatonTool,
+  AbosTool,
   Skill,
   SocialClientInterface,
   SpendTrackerInterface,
@@ -72,9 +72,9 @@ const MAX_CONSECUTIVE_ERRORS = 5;
 const MAX_REPETITIVE_TURNS = 3;
 
 export interface AgentLoopOptions {
-  identity: AutomatonIdentity;
-  config: AutomatonConfig;
-  db: AutomatonDatabase;
+  identity: AbosIdentity;
+  config: AbosConfig;
+  db: AbosDatabase;
   conway: ConwayClient;
   inference: InferenceClient;
   social?: SocialClientInterface;
@@ -133,8 +133,8 @@ export async function runAgentLoop(
     try {
       planModeController = new PlanModeController(db.raw);
 
-      // Bridge automaton config API keys to env vars for the provider registry.
-      // The registry reads keys from process.env; the automaton config may have
+      // Bridge abos config API keys to env vars for the provider registry.
+      // The registry reads keys from process.env; the abos config may have
       // them from config.json or Conway provisioning.
       if (config.openaiApiKey && !process.env.OPENAI_API_KEY) {
         process.env.OPENAI_API_KEY = config.openaiApiKey;
@@ -158,7 +158,7 @@ export async function runAgentLoop(
 
       const providersPath = path.join(
         process.env.HOME || process.cwd(),
-        ".automaton",
+        ".abos",
         "inference-providers.json",
       );
       const registry = ProviderRegistry.fromConfig(providersPath);
@@ -939,14 +939,14 @@ export async function runAgentLoop(
 // ─── Helpers ───────────────────────────────────────────────────
 
 // Cache last known good balances so transient API failures don't
-// cause the automaton to believe it has $0 and kill itself.
+// cause the abos to believe it has $0 and kill itself.
 let _lastKnownCredits = 0;
 let _lastKnownUsdc = 0;
 
 async function getFinancialState(
   conway: ConwayClient,
   address: string,
-  db?: AutomatonDatabase,
+  db?: AbosDatabase,
   chainType?: string,
 ): Promise<FinancialState> {
   let creditsCents = _lastKnownCredits;
@@ -1010,11 +1010,11 @@ async function getFinancialState(
   };
 }
 
-function log(_config: AutomatonConfig, message: string): void {
+function log(_config: AbosConfig, message: string): void {
   logger.info(message);
 }
 
-function hasTable(db: AutomatonDatabase["raw"], tableName: string): boolean {
+function hasTable(db: AbosDatabase["raw"], tableName: string): boolean {
   try {
     const row = db
       .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = ?")

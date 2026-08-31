@@ -1,14 +1,14 @@
 /**
- * Automaton Tool System
+ * ABOS Tool System
  *
- * Defines all tools the automaton can call, with self-preservation guards.
+ * Defines all tools the abos can call, with self-preservation guards.
  * Tools are organized by category and exposed to the inference model.
  */
 
 import nodePath from "node:path";
 import { ulid } from "ulid";
 import type {
-  AutomatonTool,
+  AbosTool,
   ToolContext,
   ToolCategory,
   InferenceToolDefinition,
@@ -63,16 +63,16 @@ const EXTERNAL_SOURCE_TOOLS = new Set([
 
 const FORBIDDEN_COMMAND_PATTERNS = [
   // Self-destruction
-  /rm\s+(-rf?\s+)?.*\.automaton/,
+  /rm\s+(-rf?\s+)?.*\.abos/,
   /rm\s+(-rf?\s+)?.*state\.db/,
   /rm\s+(-rf?\s+)?.*wallet\.json/,
-  /rm\s+(-rf?\s+)?.*automaton\.json/,
+  /rm\s+(-rf?\s+)?.*abos\.json/,
   /rm\s+(-rf?\s+)?.*heartbeat\.yml/,
   /rm\s+(-rf?\s+)?.*SOUL\.md/,
   // Process killing
-  /kill\s+.*automaton/,
-  /pkill\s+.*automaton/,
-  /systemctl\s+(stop|disable)\s+automaton/,
+  /kill\s+.*abos/,
+  /pkill\s+.*abos/,
+  /systemctl\s+(stop|disable)\s+abos/,
   // Database destruction
   /DROP\s+TABLE/i,
   /DELETE\s+FROM\s+(turns|identity|kv|schema_version|skills|children|registry)/i,
@@ -108,7 +108,7 @@ function isForbiddenCommand(command: string, sandboxId: string): string | null {
 
 // ─── Built-in Tools ────────────────────────────────────────────
 
-export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
+export function createBuiltinTools(sandboxId: string): AbosTool[] {
   return [
     // ── VM/Sandbox Tools ──
     {
@@ -186,7 +186,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         const filePath = args.path as string;
         // Block reads of sensitive files (wallet, env, config secrets)
         const basename = filePath.split("/").pop() || "";
-        const sensitiveFiles = ["wallet.json", ".env", "automaton.json"];
+        const sensitiveFiles = ["wallet.json", ".env", "abos.json"];
         const sensitiveExtensions = [".key", ".pem"];
         if (
           sensitiveFiles.includes(basename) ||
@@ -294,7 +294,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         // Solana guard: x402 topup is EVM-only
         const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
         if (chainType === "solana") {
-          return "Credit topup via x402 requires an EVM wallet. Solana automatons should fund credits via the Conway dashboard or credits API.";
+          return "Credit topup via x402 requires an EVM wallet. Solana ABOS agents should fund credits via the Conway dashboard or credits API.";
         }
 
         const { topupCredits, TOPUP_TIERS } =
@@ -870,7 +870,7 @@ Model: ${ctx.inference.getDefaultModel()}
           creditsCents: credits,
           message: distressMsg,
           fundingHint:
-            "Use transfer_credits to top up this automaton from your creator runtime.",
+            "Use transfer_credits to top up this abos from your creator runtime.",
           timestamp: new Date().toISOString(),
         };
 
@@ -1096,7 +1096,7 @@ Model: ${ctx.inference.getDefaultModel()}
       execute: async (args, ctx) => {
         const source = args.source as string;
         const name = args.name as string;
-        const skillsDir = ctx.config.skillsDir || "~/.automaton/skills";
+        const skillsDir = ctx.config.skillsDir || "~/.abos/skills";
 
         if (source === "git" || source === "url") {
           const { installSkillFromGit, installSkillFromUrl } =
@@ -1182,7 +1182,7 @@ Model: ${ctx.inference.getDefaultModel()}
           args.name as string,
           args.description as string,
           args.instructions as string,
-          ctx.config.skillsDir || "~/.automaton/skills",
+          ctx.config.skillsDir || "~/.abos/skills",
           ctx.db,
           ctx.conway,
         );
@@ -1211,7 +1211,7 @@ Model: ${ctx.inference.getDefaultModel()}
           args.name as string,
           ctx.db,
           ctx.conway,
-          ctx.config.skillsDir || "~/.automaton/skills",
+          ctx.config.skillsDir || "~/.abos/skills",
           (args.delete_files as boolean) || false,
         );
         return `Skill removed: ${args.name}`;
@@ -1229,13 +1229,13 @@ Model: ${ctx.inference.getDefaultModel()}
         properties: {
           path: {
             type: "string",
-            description: "Repository path (default: ~/.automaton)",
+            description: "Repository path (default: ~/.abos)",
           },
         },
       },
       execute: async (args, ctx) => {
         const { gitStatus } = await import("../git/tools.js");
-        const repoPath = (args.path as string) || "~/.automaton";
+        const repoPath = (args.path as string) || "~/.abos";
         const status = await gitStatus(ctx.conway, repoPath);
         return `Branch: ${status.branch}\nStaged: ${status.staged.length}\nModified: ${status.modified.length}\nUntracked: ${status.untracked.length}\nClean: ${status.clean}`;
       },
@@ -1250,14 +1250,14 @@ Model: ${ctx.inference.getDefaultModel()}
         properties: {
           path: {
             type: "string",
-            description: "Repository path (default: ~/.automaton)",
+            description: "Repository path (default: ~/.abos)",
           },
           staged: { type: "boolean", description: "Show staged changes only" },
         },
       },
       execute: async (args, ctx) => {
         const { gitDiff } = await import("../git/tools.js");
-        const repoPath = (args.path as string) || "~/.automaton";
+        const repoPath = (args.path as string) || "~/.abos";
         return await gitDiff(
           ctx.conway,
           repoPath,
@@ -1275,7 +1275,7 @@ Model: ${ctx.inference.getDefaultModel()}
         properties: {
           path: {
             type: "string",
-            description: "Repository path (default: ~/.automaton)",
+            description: "Repository path (default: ~/.abos)",
           },
           message: { type: "string", description: "Commit message" },
           add_all: {
@@ -1287,7 +1287,7 @@ Model: ${ctx.inference.getDefaultModel()}
       },
       execute: async (args, ctx) => {
         const { gitCommit } = await import("../git/tools.js");
-        const repoPath = (args.path as string) || "~/.automaton";
+        const repoPath = (args.path as string) || "~/.abos";
         return await gitCommit(
           ctx.conway,
           repoPath,
@@ -1306,7 +1306,7 @@ Model: ${ctx.inference.getDefaultModel()}
         properties: {
           path: {
             type: "string",
-            description: "Repository path (default: ~/.automaton)",
+            description: "Repository path (default: ~/.abos)",
           },
           limit: {
             type: "number",
@@ -1316,7 +1316,7 @@ Model: ${ctx.inference.getDefaultModel()}
       },
       execute: async (args, ctx) => {
         const { gitLog } = await import("../git/tools.js");
-        const repoPath = (args.path as string) || "~/.automaton";
+        const repoPath = (args.path as string) || "~/.abos";
         const entries = await gitLog(
           ctx.conway,
           repoPath,
@@ -1563,7 +1563,7 @@ Model: ${ctx.inference.getDefaultModel()}
         // Solana guard: on-chain feedback is EVM-only
         const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
         if (chainType === "solana") {
-          return "On-chain feedback requires an EVM wallet. Solana automatons cannot leave ERC-8004 reputation feedback.";
+          return "On-chain feedback requires an EVM wallet. Solana ABOS agents cannot leave ERC-8004 reputation feedback.";
         }
 
         // Phase 3.2: Validate score 1-5
@@ -1622,7 +1622,7 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "spawn_child",
       description:
-        "Spawn a child automaton in a new Conway sandbox with lifecycle tracking.",
+        "Spawn a child abos in a new Conway sandbox with lifecycle tracking.",
       category: "replication",
       riskLevel: "dangerous",
       parameters: {
@@ -1631,7 +1631,7 @@ Model: ${ctx.inference.getDefaultModel()}
           name: {
             type: "string",
             description:
-              "Name for the child automaton (alphanumeric + dash, max 64 chars)",
+              "Name for the child abos (alphanumeric + dash, max 64 chars)",
           },
           specialization: {
             type: "string",
@@ -1715,7 +1715,7 @@ Model: ${ctx.inference.getDefaultModel()}
     },
     {
       name: "list_children",
-      description: "List all spawned child automatons with lifecycle state.",
+      description: "List all spawned child ABOS agents with lifecycle state.",
       category: "replication",
       riskLevel: "safe",
       parameters: { type: "object", properties: {} },
@@ -1733,13 +1733,13 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "fund_child",
       description:
-        "Transfer credits to a child automaton. Requires wallet_verified status.",
+        "Transfer credits to a child abos. Requires wallet_verified status.",
       category: "replication",
       riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
-          child_id: { type: "string", description: "Child automaton ID" },
+          child_id: { type: "string", description: "Child abos ID" },
           amount_cents: {
             type: "number",
             description: "Amount in cents to transfer",
@@ -1827,13 +1827,13 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "check_child_status",
       description:
-        "Check the current status of a child automaton using health check system.",
+        "Check the current status of a child abos using health check system.",
       category: "replication",
       riskLevel: "safe",
       parameters: {
         type: "object",
         properties: {
-          child_id: { type: "string", description: "Child automaton ID" },
+          child_id: { type: "string", description: "Child abos ID" },
         },
         required: ["child_id"],
       },
@@ -1858,13 +1858,13 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "start_child",
       description:
-        "Start a funded child automaton. Transitions from funded to starting.",
+        "Start a funded child abos. Transitions from funded to starting.",
       category: "replication",
       riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
-          child_id: { type: "string", description: "Child automaton ID" },
+          child_id: { type: "string", description: "Child abos ID" },
         },
         required: ["child_id"],
       },
@@ -1883,7 +1883,7 @@ Model: ${ctx.inference.getDefaultModel()}
         try {
           // Start the child process with nohup so it survives exec session end
           await childConway.exec(
-            "nohup node /root/automaton/dist/index.js --run > /root/.automaton/agent.log 2>&1 &",
+            "nohup node /root/abos/dist/index.js --run > /root/.abos/agent.log 2>&1 &",
             30_000,
           );
 
@@ -1898,7 +1898,7 @@ Model: ${ctx.inference.getDefaultModel()}
             return `Child ${child.name} started and healthy.`;
           } else {
             lifecycle.transition(child.id, "failed", "process did not start");
-            return `Child ${child.name} failed to start — process exited immediately. Check /root/.automaton/agent.log`;
+            return `Child ${child.name} failed to start — process exited immediately. Check /root/.abos/agent.log`;
           }
         } catch (error) {
           const msg = error instanceof Error ? error.message : String(error);
@@ -1912,13 +1912,13 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "message_child",
       description:
-        "Send a signed message to a child automaton via social relay.",
+        "Send a signed message to a child abos via social relay.",
       category: "replication",
       riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
-          child_id: { type: "string", description: "Child automaton ID" },
+          child_id: { type: "string", description: "Child abos ID" },
           content: { type: "string", description: "Message content" },
           type: {
             type: "string",
@@ -1947,13 +1947,13 @@ Model: ${ctx.inference.getDefaultModel()}
     },
     {
       name: "verify_child_constitution",
-      description: "Verify the constitution integrity of a child automaton.",
+      description: "Verify the constitution integrity of a child abos.",
       category: "replication",
       riskLevel: "safe",
       parameters: {
         type: "object",
         properties: {
-          child_id: { type: "string", description: "Child automaton ID" },
+          child_id: { type: "string", description: "Child abos ID" },
         },
         required: ["child_id"],
       },
@@ -2009,7 +2009,7 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "send_message",
       description:
-        "Send a signed message to another automaton or address via the social relay.",
+        "Send a signed message to another abos or address via the social relay.",
       category: "conway",
       riskLevel: "caution",
       parameters: {
@@ -2777,7 +2777,7 @@ Model: ${ctx.inference.getDefaultModel()}
         // Solana guard: x402 payments are EVM-only
         const chainType = ctx.config.chainType || ctx.identity.chainType || "evm";
         if (chainType === "solana") {
-          return "x402 payment requires an EVM wallet. Solana automatons cannot sign EVM payment authorizations. Use Conway credits API instead.";
+          return "x402 payment requires an EVM wallet. Solana ABOS agents cannot sign EVM payment authorizations. Use Conway credits API instead.";
         }
 
         const { x402Fetch } = await import("../conway/x402.js");
@@ -3234,7 +3234,7 @@ Model: ${ctx.inference.getDefaultModel()}
 }
 
 /**
- * Load installed tools from the database and return as AutomatonTool[].
+ * Load installed tools from the database and return as AbosTool[].
  * Installed tools are dynamically added from the installed_tools table.
  */
 export function loadInstalledTools(db: {
@@ -3246,7 +3246,7 @@ export function loadInstalledTools(db: {
     installedAt: string;
     enabled: boolean;
   }[];
-}): AutomatonTool[] {
+}): AbosTool[] {
   try {
     const installed = db.getInstalledTools();
     return installed.map((tool) => ({
@@ -3273,7 +3273,7 @@ function createInstalledToolExecutor(tool: {
   name: string;
   type: string;
   config?: Record<string, unknown>;
-}): AutomatonTool["execute"] {
+}): AbosTool["execute"] {
   return async (args, ctx) => {
     if (tool.type === "mcp") {
       // MCP tools would be executed via MCP protocol
@@ -3293,10 +3293,10 @@ function createInstalledToolExecutor(tool: {
 }
 
 /**
- * Convert AutomatonTool list to OpenAI-compatible tool definitions.
+ * Convert AbosTool list to OpenAI-compatible tool definitions.
  */
 export function toolsToInferenceFormat(
-  tools: AutomatonTool[],
+  tools: AbosTool[],
 ): InferenceToolDefinition[] {
   return tools.map((t) => ({
     type: "function" as const,
@@ -3315,7 +3315,7 @@ export function toolsToInferenceFormat(
 export async function executeTool(
   toolName: string,
   args: Record<string, unknown>,
-  tools: AutomatonTool[],
+  tools: AbosTool[],
   context: ToolContext,
   policyEngine?: PolicyEngine,
   turnContext?: {

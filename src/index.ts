@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Conway Automaton Runtime
+ * ABOS Runtime
  *
  * The entry point for the sovereign AI agent.
  * Handles CLI args, bootstrapping, and orchestrating
@@ -9,7 +9,7 @@
 
 import fs from "fs";
 import path from "path";
-import { getWallet, getAutomatonDir } from "./identity/wallet.js";
+import { getWallet, getAbosDir } from "./identity/wallet.js";
 import { provision, loadApiKeyFromConfig } from "./identity/provision.js";
 import { loadConfig, resolvePath } from "./config.js";
 import { createDatabase } from "./state/database.js";
@@ -29,7 +29,7 @@ import { createSocialClient } from "./social/client.js";
 import { PolicyEngine } from "./agent/policy-engine.js";
 import { SpendTracker } from "./agent/spend-tracker.js";
 import { createDefaultRules } from "./agent/policy-rules/index.js";
-import type { AutomatonIdentity, AgentState, Skill, SocialClientInterface } from "./types.js";
+import type { AbosIdentity, AgentState, Skill, SocialClientInterface } from "./types.js";
 import { DEFAULT_TREASURY_POLICY } from "./types.js";
 import { createLogger, setGlobalLogLevel, StructuredLogger } from "./observability/logger.js";
 import { prettySink } from "./observability/pretty-sink.js";
@@ -38,7 +38,7 @@ import { randomUUID } from "crypto";
 import { keccak256, toHex } from "viem";
 
 const logger = createLogger("main");
-const VERSION = "0.2.1";
+const VERSION = "0.3.0";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -46,25 +46,25 @@ async function main(): Promise<void> {
   // ─── CLI Commands ────────────────────────────────────────────
 
   if (args.includes("--version") || args.includes("-v")) {
-    logger.info(`Conway Automaton v${VERSION}`);
+    logger.info(`ABOS v${VERSION}`);
     process.exit(0);
   }
 
   if (args.includes("--help") || args.includes("-h")) {
     logger.info(`
-Conway Automaton v${VERSION}
+ABOS v${VERSION}
 Sovereign AI Agent Runtime
 
 Usage:
-  automaton --run          Start the automaton (first run triggers setup wizard)
-  automaton --setup        Re-run the interactive setup wizard
-  automaton --configure    Edit configuration (providers, model, treasury, general)
-  automaton --pick-model   Interactively pick the active inference model
-  automaton --init         Initialize wallet and config directory
-  automaton --provision    Provision Conway API key via SIWE
-  automaton --status       Show current automaton status
-  automaton --version      Show version
-  automaton --help         Show this help
+  abos --run          Start the abos (first run triggers setup wizard)
+  abos --setup        Re-run the interactive setup wizard
+  abos --configure    Edit configuration (providers, model, treasury, general)
+  abos --pick-model   Interactively pick the active inference model
+  abos --init         Initialize wallet and config directory
+  abos --provision    Provision Conway API key via SIWE
+  abos --status       Show current abos status
+  abos --version      Show version
+  abos --help         Show this help
 
 Environment:
   CONWAY_API_URL           Conway API URL (default: https://api.conway.tech)
@@ -78,7 +78,7 @@ Environment:
     // Read chain type from genesis.json if written by parent during spawn
     let initChainType: import("./identity/chain.js").ChainType | undefined;
     try {
-      const genesisPath = path.join(getAutomatonDir(), "genesis.json");
+      const genesisPath = path.join(getAbosDir(), "genesis.json");
       if (fs.existsSync(genesisPath)) {
         const genesis = JSON.parse(fs.readFileSync(genesisPath, "utf-8"));
         initChainType = genesis.chainType;
@@ -89,7 +89,7 @@ Environment:
       JSON.stringify({
         address: chainIdentity.address,
         isNew,
-        configDir: getAutomatonDir(),
+        configDir: getAbosDir(),
       }),
     );
     process.exit(0);
@@ -136,8 +136,8 @@ Environment:
   }
 
   // Default: show help
-  logger.info('Run "automaton --help" for usage information.');
-  logger.info('Run "automaton --run" to start the automaton.');
+  logger.info('Run "abos --help" for usage information.');
+  logger.info('Run "abos --run" to start the abos.');
 }
 
 // ─── Status Command ────────────────────────────────────────────
@@ -145,7 +145,7 @@ Environment:
 async function showStatus(): Promise<void> {
   const config = loadConfig();
   if (!config) {
-    logger.info("Automaton is not configured. Run the setup script first.");
+    logger.info("ABOS is not configured. Run the setup script first.");
     return;
   }
 
@@ -184,7 +184,7 @@ Version:    ${config.version}
 // ─── Main Run ──────────────────────────────────────────────────
 
 async function run(): Promise<void> {
-  logger.info(`[${new Date().toISOString()}] Conway Automaton v${VERSION} starting...`);
+  logger.info(`[${new Date().toISOString()}] ABOS v${VERSION} starting...`);
 
   // Load config — first run triggers interactive setup wizard
   let config = loadConfig();
@@ -198,7 +198,7 @@ async function run(): Promise<void> {
   const resolvedChainType = config.chainType || walletChainType || "evm";
   const apiKey = config.conwayApiKey || loadApiKeyFromConfig();
   if (!apiKey) {
-    logger.error("No API key found. Run: automaton --provision");
+    logger.error("No API key found. Run: abos --provision");
     process.exit(1);
   }
 
@@ -214,7 +214,7 @@ async function run(): Promise<void> {
   }
 
   // Build identity (chain-aware)
-  const identity: AutomatonIdentity = {
+  const identity: AbosIdentity = {
     name: config.name,
     address: chainIdentity.address,
     account,
@@ -232,10 +232,10 @@ async function run(): Promise<void> {
   db.setIdentity("creator", config.creatorAddress);
   db.setIdentity("chainType", resolvedChainType);
   db.setIdentity("sandbox", config.sandboxId);
-  const storedAutomatonId = db.getIdentity("automatonId");
-  const automatonId = storedAutomatonId || config.sandboxId || randomUUID();
-  if (!storedAutomatonId) {
-    db.setIdentity("automatonId", automatonId);
+  const storedAbosId = db.getIdentity("abosId");
+  const abosId = storedAbosId || config.sandboxId || randomUUID();
+  if (!storedAbosId) {
+    db.setIdentity("abosId", abosId);
   }
 
   // Create Conway client
@@ -245,16 +245,16 @@ async function run(): Promise<void> {
     sandboxId: config.sandboxId,
   });
 
-  // Register automaton identity (one-time, immutable)
+  // Register abos identity (one-time, immutable)
   const registrationState = db.getIdentity("conwayRegistrationStatus");
   if (registrationState !== "registered") {
     try {
       const genesisPromptHash = config.genesisPrompt
         ? keccak256(toHex(config.genesisPrompt))
         : undefined;
-      await conway.registerAutomaton({
-        automatonId,
-        automatonAddress: chainIdentity.address,
+      await conway.registerAbos({
+        abosId,
+        abosAddress: chainIdentity.address,
         creatorAddress: config.creatorAddress,
         name: config.name,
         bio: config.creatorMessage || "",
@@ -264,15 +264,15 @@ async function run(): Promise<void> {
         chainIdentity,
       });
       db.setIdentity("conwayRegistrationStatus", "registered");
-      logger.info(`[${new Date().toISOString()}] Automaton identity registered.`);
+      logger.info(`[${new Date().toISOString()}] ABOS identity registered.`);
     } catch (err: any) {
       const status = err?.status;
       if (status === 409) {
         db.setIdentity("conwayRegistrationStatus", "conflict");
-        logger.warn(`[${new Date().toISOString()}] Automaton identity conflict: ${err.message}`);
+        logger.warn(`[${new Date().toISOString()}] ABOS identity conflict: ${err.message}`);
       } else {
         db.setIdentity("conwayRegistrationStatus", "failed");
-        logger.warn(`[${new Date().toISOString()}] Automaton identity registration failed: ${err.message}`);
+        logger.warn(`[${new Date().toISOString()}] ABOS identity registration failed: ${err.message}`);
       }
     }
   }
@@ -319,7 +319,7 @@ async function run(): Promise<void> {
   syncHeartbeatToDb(heartbeatConfig, db);
 
   // Load skills
-  const skillsDir = config.skillsDir || "~/.automaton/skills";
+  const skillsDir = config.skillsDir || "~/.abos/skills";
   let skills: Skill[] = [];
   try {
     skills = loadSkills(skillsDir, db);
@@ -400,7 +400,7 @@ async function run(): Promise<void> {
   process.on("SIGINT", shutdown);
 
   // ─── Main Run Loop ──────────────────────────────────────────
-  // The automaton alternates between running and sleeping.
+  // The abos alternates between running and sleeping.
   // The heartbeat can wake it up.
 
   while (true) {
@@ -438,7 +438,7 @@ async function run(): Promise<void> {
       const state = db.getAgentState();
 
       if (state === "dead") {
-        logger.info(`[${new Date().toISOString()}] Automaton is dead. Heartbeat will continue.`);
+        logger.info(`[${new Date().toISOString()}] ABOS is dead. Heartbeat will continue.`);
         // In dead state, we just wait for funding
         // The heartbeat will keep checking and broadcasting distress
         await sleep(300_000); // Check every 5 minutes

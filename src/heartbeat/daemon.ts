@@ -3,7 +3,7 @@
  *
  * Runs periodic tasks on cron schedules inside the same Node.js process.
  * The heartbeat runs even when the agent is sleeping.
- * It IS the automaton's pulse. When it stops, the automaton is dead.
+ * It IS the abos's pulse. When it stops, the abos is dead.
  *
  * Phase 1.1: Replaced fragile setInterval with DurableScheduler.
  * - No setInterval remains; uses recursive setTimeout for overlap protection
@@ -12,10 +12,10 @@
  */
 
 import type {
-  AutomatonConfig,
-  AutomatonDatabase,
+  AbosConfig,
+  AbosDatabase,
   ConwayClient,
-  AutomatonIdentity,
+  AbosIdentity,
   HeartbeatConfig,
   HeartbeatTaskFn,
   HeartbeatLegacyContext,
@@ -32,10 +32,10 @@ const logger = createLogger("heartbeat");
 type DatabaseType = BetterSqlite3.Database;
 
 export interface HeartbeatDaemonOptions {
-  identity: AutomatonIdentity;
-  config: AutomatonConfig;
+  identity: AbosIdentity;
+  config: AbosConfig;
   heartbeatConfig: HeartbeatConfig;
-  db: AutomatonDatabase;
+  db: AbosDatabase;
   rawDb: DatabaseType;
   conway: ConwayClient;
   social?: SocialClientInterface;

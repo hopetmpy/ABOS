@@ -1,7 +1,7 @@
 import { exec as execCb } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { AutomatonTool, SpendTrackerInterface } from "../../types.js";
+import type { AbosTool, SpendTrackerInterface } from "../../types.js";
 import { isProtectedFile } from "../../self-mod/code.js";
 import { BaseHarness } from "./base-harness.js";
 import type { HarnessTool } from "../harness-types.js";
@@ -291,7 +291,7 @@ When calling task_done, provide:
     return [...customTools, ...aliasTools, ...wrappedTools];
   }
 
-  private createWrappedTool(tool: AutomatonTool, toolCatalog: AutomatonTool[]): HarnessTool {
+  private createWrappedTool(tool: AbosTool, toolCatalog: AbosTool[]): HarnessTool {
     return {
       name: tool.name,
       description: tool.description,
@@ -329,7 +329,7 @@ When calling task_done, provide:
   }
 
   private createSpecAliasTools(
-    toolCatalog: AutomatonTool[],
+    toolCatalog: AbosTool[],
     reservedToolNames: Set<string>,
   ): HarnessTool[] {
     return Object.entries(GENERAL_SPEC_ALIAS_TARGETS)

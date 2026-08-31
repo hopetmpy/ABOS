@@ -9,7 +9,7 @@
 import type {
   ChatMessage,
   AgentTurn,
-  AutomatonDatabase,
+  AbosDatabase,
   InferenceClient,
   TokenBudget,
   MemoryRetrievalResult,

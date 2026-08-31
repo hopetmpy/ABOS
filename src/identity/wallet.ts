@@ -1,9 +1,9 @@
 /**
- * Automaton Wallet Management
+ * ABOS Wallet Management
  *
- * Creates and manages wallets for the automaton's identity and payments.
+ * Creates and manages wallets for the abos's identity and payments.
  * Supports both EVM (secp256k1/viem) and Solana (Ed25519/tweetnacl) wallets.
- * The private key is the automaton's sovereign identity.
+ * The private key is the abos's sovereign identity.
  * Chain type is chosen at genesis and never changes.
  */
 
@@ -41,14 +41,14 @@ function createSolanaStubAccount(solanaAddress: string): PrivateKeyAccount {
   } as unknown as PrivateKeyAccount;
 }
 
-const AUTOMATON_DIR = path.join(
+const ABOS_DIR = path.join(
   process.env.HOME || "/root",
-  ".automaton",
+  ".abos",
 );
-const WALLET_FILE = path.join(AUTOMATON_DIR, "wallet.json");
+const WALLET_FILE = path.join(ABOS_DIR, "wallet.json");
 
-export function getAutomatonDir(): string {
-  return AUTOMATON_DIR;
+export function getAbosDir(): string {
+  return ABOS_DIR;
 }
 
 export function getWalletPath(): string {
@@ -69,8 +69,8 @@ export function generateSolanaKeypair(): { secretKey: Uint8Array; publicKey: Uin
 }
 
 /**
- * Get or create the automaton's wallet.
- * The private key IS the automaton's identity -- protect it.
+ * Get or create the abos's wallet.
+ * The private key IS the abos's identity -- protect it.
  *
  * @param chainType - If creating a new wallet, which chain to use. Defaults to "evm".
  */
@@ -80,8 +80,8 @@ export async function getWallet(chainType?: ChainType): Promise<{
   chainType: ChainType;
   isNew: boolean;
 }> {
-  if (!fs.existsSync(AUTOMATON_DIR)) {
-    fs.mkdirSync(AUTOMATON_DIR, { recursive: true, mode: 0o700 });
+  if (!fs.existsSync(ABOS_DIR)) {
+    fs.mkdirSync(ABOS_DIR, { recursive: true, mode: 0o700 });
   }
 
   if (fs.existsSync(WALLET_FILE)) {

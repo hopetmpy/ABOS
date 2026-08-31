@@ -1,5 +1,5 @@
 /**
- * Conway Automaton - Type Definitions
+ * ABOS - Type Definitions
  *
  * All shared interfaces for the sovereign AI agent runtime.
  */
@@ -9,7 +9,7 @@ import type { ChainType, ChainIdentity } from "./identity/chain.js";
 
 // ─── Identity ────────────────────────────────────────────────────
 
-export interface AutomatonIdentity {
+export interface AbosIdentity {
   name: string;
   address: string;
   account: PrivateKeyAccount;
@@ -17,7 +17,7 @@ export interface AutomatonIdentity {
   sandboxId: string;
   apiKey: string;
   createdAt: string;
-  /** Chain type for this automaton's wallet identity. Defaults to "evm". */
+  /** Chain type for this abos's wallet identity. Defaults to "evm". */
   chainType?: ChainType;
   /** Chain-agnostic identity wrapper. Parallel to `account` for backward compat. */
   chainIdentity?: ChainIdentity;
@@ -40,7 +40,7 @@ export interface ProvisionResult {
 
 // ─── Configuration ───────────────────────────────────────────────
 
-export interface AutomatonConfig {
+export interface AbosConfig {
   name: string;
   genesisPrompt: string;
   creatorMessage?: string;
@@ -73,19 +73,19 @@ export interface AutomatonConfig {
   modelStrategy?: ModelStrategyConfig;
   /** Custom RPC endpoint for Base chain interactions (overrides default public RPC) */
   rpcUrl?: string;
-  /** Chain type for this automaton. Defaults to "evm" if absent. */
+  /** Chain type for this abos. Defaults to "evm" if absent. */
   chainType?: ChainType;
 }
 
-export const DEFAULT_CONFIG: Partial<AutomatonConfig> = {
+export const DEFAULT_CONFIG: Partial<AbosConfig> = {
   conwayApiUrl: "https://api.conway.tech",
   inferenceModel: "gpt-5.2",
   maxTokensPerTurn: 4096,
-  heartbeatConfigPath: "~/.automaton/heartbeat.yml",
-  dbPath: "~/.automaton/state.db",
+  heartbeatConfigPath: "~/.abos/heartbeat.yml",
+  dbPath: "~/.abos/state.db",
   logLevel: "info",
   version: "0.2.1",
-  skillsDir: "~/.automaton/skills",
+  skillsDir: "~/.abos/skills",
   maxChildren: 3,
   maxTurnsPerCycle: 25,
   childSandboxMemoryMb: 1024,
@@ -139,7 +139,7 @@ export interface TokenUsage {
 
 // ─── Tool System ─────────────────────────────────────────────────
 
-export interface AutomatonTool {
+export interface AbosTool {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
@@ -164,9 +164,9 @@ export type ToolCategory =
   | "memory";
 
 export interface ToolContext {
-  identity: AutomatonIdentity;
-  config: AutomatonConfig;
-  db: AutomatonDatabase;
+  identity: AbosIdentity;
+  config: AbosConfig;
+  db: AbosDatabase;
   conway: ConwayClient;
   inference: InferenceClient;
   social?: SocialClientInterface;
@@ -370,9 +370,9 @@ export interface ConwayClient {
     amountCents: number,
     note?: string,
   ): Promise<CreditTransferResult>;
-  registerAutomaton(params: {
-    automatonId: string;
-    automatonAddress: string;
+  registerAbos(params: {
+    abosId: string;
+    abosAddress: string;
     creatorAddress: string;
     name: string;
     bio?: string;
@@ -381,7 +381,7 @@ export interface ConwayClient {
     nonce?: string;
     chainType?: ChainType;
     chainIdentity?: ChainIdentity;
-  }): Promise<{ automaton: Record<string, unknown> }>;
+  }): Promise<{ registration: Record<string, unknown> }>;
   // Domain operations
   searchDomains(query: string, tlds?: string): Promise<DomainSearchResult[]>;
   registerDomain(domain: string, years?: number): Promise<DomainRegistration>;
@@ -511,7 +511,7 @@ export interface PolicyRule {
 }
 
 export interface PolicyRequest {
-  tool: AutomatonTool;
+  tool: AbosTool;
   args: Record<string, unknown>;
   context: ToolContext;
   turnContext: {
@@ -623,7 +623,7 @@ export const DEFAULT_HTTP_CLIENT_CONFIG: HttpClientConfig = {
 
 // ─── Database ────────────────────────────────────────────────────
 
-export interface AutomatonDatabase {
+export interface AbosDatabase {
   // Identity
   getIdentity(key: string): string | undefined;
   setIdentity(key: string, value: string): void;
@@ -668,9 +668,9 @@ export interface AutomatonDatabase {
   removeSkill(name: string): void;
 
   // Children
-  getChildren(): ChildAutomaton[];
-  getChildById(id: string): ChildAutomaton | undefined;
-  insertChild(child: ChildAutomaton): void;
+  getChildren(): ChildAbosAgent[];
+  getChildById(id: string): ChildAbosAgent | undefined;
+  insertChild(child: ChildAbosAgent): void;
   updateChildStatus(id: string, status: ChildStatus): void;
 
   // Registry
@@ -813,7 +813,7 @@ export interface DiscoveredAgent {
 
 // ─── Replication ────────────────────────────────────────────────
 
-export interface ChildAutomaton {
+export interface ChildAbosAgent {
   id: string;
   name: string;
   address: string;
@@ -896,9 +896,9 @@ export type HeartbeatTaskFn = (
 ) => Promise<{ shouldWake: boolean; message?: string }>;
 
 export interface HeartbeatLegacyContext {
-  identity: AutomatonIdentity;
-  config: AutomatonConfig;
-  db: AutomatonDatabase;
+  identity: AbosIdentity;
+  config: AbosConfig;
+  db: AbosDatabase;
   conway: ConwayClient;
   social?: SocialClientInterface;
 }

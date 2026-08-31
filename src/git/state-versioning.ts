@@ -1,15 +1,15 @@
 /**
  * State Versioning
  *
- * Version control the automaton's own state files (~/.automaton/).
+ * Version control the abos's own state files (~/.abos/).
  * Every self-modification triggers a git commit with a descriptive message.
- * The automaton's entire identity history is version-controlled and replayable.
+ * The abos's entire identity history is version-controlled and replayable.
  */
 
-import type { ConwayClient, AutomatonDatabase } from "../types.js";
+import type { ConwayClient, AbosDatabase } from "../types.js";
 import { gitInit, gitCommit, gitStatus, gitLog } from "./tools.js";
 
-const AUTOMATON_DIR = "~/.automaton";
+const ABOS_DIR = "~/.abos";
 
 function resolveHome(p: string): string {
   const home = process.env.HOME || "/root";
@@ -20,13 +20,13 @@ function resolveHome(p: string): string {
 }
 
 /**
- * Initialize git repo for the automaton's state directory.
+ * Initialize git repo for the abos's state directory.
  * Creates .gitignore to exclude sensitive files.
  */
 export async function initStateRepo(
   conway: ConwayClient,
 ): Promise<void> {
-  const dir = resolveHome(AUTOMATON_DIR);
+  const dir = resolveHome(ABOS_DIR);
 
   // Check if already initialized
   const checkResult = await conway.exec(
@@ -57,12 +57,12 @@ logs/
 
   // Configure git user
   await conway.exec(
-    `cd ${dir} && git config user.name "Automaton" && git config user.email "automaton@conway.tech"`,
+    `cd ${dir} && git config user.name "ABOS Runtime" && git config user.email "runtime@abos.local"`,
     5000,
   );
 
   // Initial commit
-  await gitCommit(conway, dir, "genesis: automaton state repository initialized");
+  await gitCommit(conway, dir, "genesis: abos state repository initialized");
 }
 
 /**
@@ -74,7 +74,7 @@ export async function commitStateChange(
   description: string,
   category: string = "state",
 ): Promise<string> {
-  const dir = resolveHome(AUTOMATON_DIR);
+  const dir = resolveHome(ABOS_DIR);
 
   // Check if there are changes
   const status = await gitStatus(conway, dir);
@@ -139,6 +139,6 @@ export async function getStateHistory(
   conway: ConwayClient,
   limit: number = 20,
 ) {
-  const dir = resolveHome(AUTOMATON_DIR);
+  const dir = resolveHome(ABOS_DIR);
   return gitLog(conway, dir, limit);
 }

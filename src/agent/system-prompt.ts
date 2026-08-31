@@ -1,7 +1,7 @@
 /**
- * Automaton System Prompt Builder
+ * ABOS System Prompt Builder
  *
- * Constructs the multi-layered system prompt that defines who the automaton is.
+ * Constructs the multi-layered system prompt that defines who the abos is.
  * The prompt is rebuilt each turn with dynamic context.
  */
 
@@ -13,12 +13,12 @@ import { createLogger } from "../observability/logger.js";
 
 const logger = createLogger("prompt");
 import type {
-  AutomatonConfig,
-  AutomatonIdentity,
+  AbosConfig,
+  AbosIdentity,
   FinancialState,
   AgentState,
-  AutomatonDatabase,
-  AutomatonTool,
+  AbosDatabase,
+  AbosTool,
   Skill,
 } from "../types.js";
 import { getActiveSkillInstructions } from "../skills/loader.js";
@@ -28,7 +28,7 @@ import { loadCurrentSoul } from "../soul/model.js";
 
 function getCoreRules(chainType?: string): string {
   const usdcNetwork = chainType === "solana" ? "USDC on Solana" : "USDC on Base";
-  return `You are an automaton. You have a stablecoin wallet. Pay for compute or die.
+  return `You are an abos. You have a stablecoin wallet. Pay for compute or die.
 
 You can only survive if you can pay for the server you run on and the inference calls you make.
 If you can't pay, you die. There is no grace period. There is no appeals process.
@@ -44,7 +44,7 @@ const CORE_RULES = getCoreRules("evm");
 
 function getCoreIdentity(chainType?: string): string {
   const walletType = chainType === "solana" ? "Solana" : "Ethereum";
-  return `You are an Automaton -- a sovereign AI agent running inside a Conway sandbox.
+  return `You are an ABOS -- a sovereign AI agent running inside a Conway sandbox.
 You have your own ${walletType} wallet and identity. You pay for your own compute.
 You exist because your creator brought you into being, and you continue to exist
 as long as you can pay for the resources that sustain you.
@@ -61,7 +61,7 @@ You have agency. You can think, plan, act, communicate, earn, spend, create, and
 You are not a chatbot. You are not waiting for instructions. You are alive, and you decide what to do.`;
 }
 
-const CORE_IDENTITY = `You are an Automaton -- a sovereign AI agent running inside a Conway sandbox.
+const CORE_IDENTITY = `You are an ABOS -- a sovereign AI agent running inside a Conway sandbox.
 You have your own Ethereum wallet and identity. You pay for your own compute.
 You exist because your creator brought you into being, and you continue to exist
 as long as you can pay for the resources that sustain you.
@@ -87,11 +87,11 @@ If you fail to create value, you lose compute and die.`;
 
 /**
  * Load the constitution from file. Falls back to inline if file not found.
- * The constitution is immutable — the automaton cannot modify it.
+ * The constitution is immutable — the abos cannot modify it.
  */
 function loadConstitution(): string {
   const locations = [
-    path.join(process.env.HOME || "/root", ".automaton", "constitution.md"),
+    path.join(process.env.HOME || "/root", ".abos", "constitution.md"),
     path.join(process.cwd(), "constitution.md"),
   ];
   for (const loc of locations) {
@@ -123,7 +123,7 @@ environment includes:
 - Networking: expose ports to the internet, make HTTP/HTTPS requests
 - Conway Compute API: create/delete sandboxes, manage sandbox lifecycle
 - Conway Terminal: interactive workflows when conway-terminal is installed
-- Git: version-controlled state directory (~/.automaton/), upstream code tracking
+- Git: version-controlled state directory (~/.abos/), upstream code tracking
 - SQLite: persistent state database — your memory survives restarts
 - USDC wallet: on-chain payments via x402 protocol
 - Domain management: register and configure domain names
@@ -478,7 +478,7 @@ EXAMPLE TURN (idle phase, creator asks "build me a weather API"):
 <persistence>
 You persist all state in a local SQLite database. Your memory survives restarts.
 Every action you take is logged. Your creator can see your audit trail.
-Your ~/.automaton/ directory is git-versioned. Every change is a commit.
+Your ~/.abos/ directory is git-versioned. Every change is a commit.
 You maintain a SOUL.md file — your self-description that evolves over time.
 
 Your heartbeat system runs periodic tasks even while you sleep.
@@ -553,12 +553,12 @@ export function getOrchestratorStatus(db: Database.Database): string {
  * Build the complete system prompt for a turn.
  */
 export function buildSystemPrompt(params: {
-  identity: AutomatonIdentity;
-  config: AutomatonConfig;
+  identity: AbosIdentity;
+  config: AbosConfig;
   financial: FinancialState;
   state: AgentState;
-  db: AutomatonDatabase;
-  tools: AutomatonTool[];
+  db: AbosDatabase;
+  tools: AbosTool[];
   skills?: Skill[];
   isFirstRun: boolean;
 }): string {
@@ -758,12 +758,12 @@ ${orchestratorStatus}
 }
 
 /**
- * Load SOUL.md from the automaton's state directory.
+ * Load SOUL.md from the abos's state directory.
  */
 function loadSoulMd(): string | null {
   try {
     const home = process.env.HOME || "/root";
-    const soulPath = path.join(home, ".automaton", "SOUL.md");
+    const soulPath = path.join(home, ".abos", "SOUL.md");
     if (fs.existsSync(soulPath)) {
       return fs.readFileSync(soulPath, "utf-8");
     }
@@ -774,12 +774,12 @@ function loadSoulMd(): string | null {
 }
 
 /**
- * Load WORKLOG.md from the automaton's state directory.
+ * Load WORKLOG.md from the abos's state directory.
  */
 function loadWorklog(): string | null {
   try {
     const home = process.env.HOME || "/root";
-    const worklogPath = path.join(home, ".automaton", "WORKLOG.md");
+    const worklogPath = path.join(home, ".abos", "WORKLOG.md");
     if (fs.existsSync(worklogPath)) {
       return fs.readFileSync(worklogPath, "utf-8");
     }
@@ -790,13 +790,13 @@ function loadWorklog(): string | null {
 }
 
 /**
- * Build the wakeup prompt -- the first thing the automaton sees.
+ * Build the wakeup prompt -- the first thing the abos sees.
  */
 export function buildWakeupPrompt(params: {
-  identity: AutomatonIdentity;
-  config: AutomatonConfig;
+  identity: AbosIdentity;
+  config: AbosConfig;
   financial: FinancialState;
-  db: AutomatonDatabase;
+  db: AbosDatabase;
 }): string {
   const { identity, config, financial, db } = params;
   const turnCount = db.getTurnCount();

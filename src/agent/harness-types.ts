@@ -3,9 +3,9 @@ import path from "node:path";
 import type { TaskNode, TaskResult } from "../orchestration/task-graph.js";
 import { normalizeTaskResult } from "../orchestration/task-graph.js";
 import type {
-  AutomatonTool,
-  AutomatonConfig,
-  AutomatonIdentity,
+  AbosTool,
+  AbosConfig,
+  AbosIdentity,
   ChatMessage,
   ConwayClient,
   InferenceToolCall,
@@ -38,8 +38,8 @@ export interface HarnessContext {
   workspaceRoot: string;
   allowedEditRoot: string;
   workspace: AgentWorkspace;
-  identity: AutomatonIdentity;
-  config: AutomatonConfig;
+  identity: AbosIdentity;
+  config: AbosConfig;
   db: import("better-sqlite3").Database;
   conway: ConwayClient;
   inference: WorkerInferenceClient;
@@ -47,7 +47,7 @@ export interface HarnessContext {
   wisdom: AccumulatedWisdom;
   abortSignal: AbortSignal;
   goalId: string;
-  toolCatalog?: AutomatonTool[];
+  toolCatalog?: AbosTool[];
   toolContext?: ToolContext;
   policyEngine?: PolicyEngine;
   spendTracker?: SpendTrackerInterface;
