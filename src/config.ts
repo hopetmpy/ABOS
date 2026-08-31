@@ -151,7 +151,7 @@ export function createConfig(params: {
     dbPath: DEFAULT_CONFIG.dbPath || "~/.abos/state.db",
     logLevel: (DEFAULT_CONFIG.logLevel as AbosConfig["logLevel"]) || "info",
     walletAddress: params.walletAddress,
-    version: DEFAULT_CONFIG.version || "0.2.1",
+    version: DEFAULT_CONFIG.version || "0.3.0",
     skillsDir: DEFAULT_CONFIG.skillsDir || "~/.abos/skills",
     maxChildren: DEFAULT_CONFIG.maxChildren || 3,
     parentAddress: params.parentAddress,
