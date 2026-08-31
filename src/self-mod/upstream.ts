@@ -21,7 +21,7 @@ const MIGRATABLE_ORIGINS = new Set([
 ]);
 
 function stripCredentials(rawUrl: string): string {
-  return rawUrl.replace(/\\/\\/[^@]+@/, "//");
+  return rawUrl.replace(/\/\/[^@]+@/, "//");
 }
 
 function normalizeRepoUrl(rawUrl: string): string {
@@ -29,10 +29,10 @@ function normalizeRepoUrl(rawUrl: string): string {
   if (sanitized.startsWith("git@github.com:")) {
     return sanitized
       .replace("git@github.com:", "https://github.com/")
-      .replace(/\\.git$/, "")
+      .replace(/\.git$/, "")
       .toLowerCase();
   }
-  return sanitized.replace(/\\.git$/, "").replace(/\\/$/, "").toLowerCase();
+  return sanitized.replace(/\.git$/, "").replace(/\/$/, "").toLowerCase();
 }
 
 /**
