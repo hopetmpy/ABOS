@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Conway Automaton CLI
+ * ABOS CLI
  *
- * Creator-facing CLI for interacting with an automaton.
- * Usage: automaton-cli <command> [args]
+ * Creator-facing CLI for interacting with an abos.
+ * Usage: abos-cli <command> [args]
  */
 
 const args = process.argv.slice(2);
@@ -25,13 +25,13 @@ async function main(): Promise<void> {
       break;
     default:
       console.log(`
-Conway Automaton CLI - Creator Tools
+ABOS CLI - Creator Tools
 
 Usage:
-  automaton-cli status              Show automaton status
-  automaton-cli logs [--tail N]     View automaton logs
-  automaton-cli fund <amount> [--to 0x...]  Transfer Conway credits
-  automaton-cli send <to-address> <message> Send a social message
+  abos-cli status              Show abos status
+  abos-cli logs [--tail N]     View abos logs
+  abos-cli fund <amount> [--to 0x...]  Transfer Conway credits
+  abos-cli send <to-address> <message> Send a social message
 `);
   }
 }

@@ -1,12 +1,12 @@
 /**
- * automaton-cli logs
+ * abos-cli logs
  *
- * View the automaton's turn log.
+ * View the abos's turn log.
  */
 
 import chalk from "chalk";
-import { loadConfig, resolvePath } from "@conway/automaton/config.js";
-import { createDatabase } from "@conway/automaton/state/database.js";
+import { loadConfig, resolvePath } from "@conway/abos/config.js";
+import { createDatabase } from "@conway/abos/state/database.js";
 
 const accent = chalk.rgb(131, 127, 255);
 
@@ -19,7 +19,7 @@ if (tailIdx !== -1 && args[tailIdx + 1]) {
 
 const config = loadConfig();
 if (!config) {
-  console.log(chalk.red("No automaton configuration found."));
+  console.log(chalk.red("No abos configuration found."));
   process.exit(1);
 }
 

@@ -1,10 +1,10 @@
 /**
- * automaton-cli fund <amount> [--to 0x...]
+ * abos-cli fund <amount> [--to 0x...]
  *
  * Transfer Conway credits using the configured Conway API key.
  */
 
-import { loadConfig } from "@conway/automaton/config.js";
+import { loadConfig } from "@conway/abos/config.js";
 
 const args = process.argv.slice(3);
 const amount = args[0];
@@ -12,21 +12,21 @@ const toIndex = args.indexOf("--to");
 const toAddress = toIndex >= 0 ? args[toIndex + 1] : undefined;
 
 if (!amount) {
-  console.log("Usage: automaton-cli fund <amount> [--to 0x...]");
+  console.log("Usage: abos-cli fund <amount> [--to 0x...]");
   console.log("Examples:");
-  console.log("  automaton-cli fund 5.00");
-  console.log("  automaton-cli fund 500 --to 0xabc...");
+  console.log("  abos-cli fund 5.00");
+  console.log("  abos-cli fund 500 --to 0xabc...");
   process.exit(1);
 }
 
 const config = loadConfig();
 if (!config) {
-  console.log("No automaton configuration found.");
+  console.log("No abos configuration found.");
   process.exit(1);
 }
 
 if (!config.conwayApiKey) {
-  console.log("No Conway API key found in automaton config.");
+  console.log("No Conway API key found in abos config.");
   process.exit(1);
 }
 
@@ -41,7 +41,7 @@ const destination = toAddress || config.walletAddress;
 const payload = {
   to_address: destination,
   amount_cents: amountCents,
-  note: `fund via automaton-cli (${config.name})`,
+  note: `fund via abos-cli (${config.name})`,
 };
 
 const apiUrl = config.conwayApiUrl || "https://api.conway.tech";

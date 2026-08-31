@@ -1,5 +1,5 @@
-declare module "@conway/automaton/config.js" {
-  export interface AutomatonCliConfig {
+declare module "@conway/abos/config.js" {
+  export interface AbosCliConfig {
     name: string;
     walletAddress: string;
     creatorAddress: string;
@@ -13,11 +13,11 @@ declare module "@conway/automaton/config.js" {
     socialRelayUrl?: string;
   }
 
-  export function loadConfig(): AutomatonCliConfig | null;
+  export function loadConfig(): AbosCliConfig | null;
   export function resolvePath(p: string): string;
 }
 
-declare module "@conway/automaton/state/database.js" {
+declare module "@conway/abos/state/database.js" {
   export interface CliToolCall {
     name: string;
     result: string;
@@ -45,7 +45,7 @@ declare module "@conway/automaton/state/database.js" {
     name: string;
   }
 
-  export interface AutomatonCliDatabase {
+  export interface AbosCliDatabase {
     getAgentState(): string;
     getTurnCount(): number;
     getInstalledTools(): CliInstalledTool[];
@@ -54,5 +54,5 @@ declare module "@conway/automaton/state/database.js" {
     close(): void;
   }
 
-  export function createDatabase(path: string): AutomatonCliDatabase;
+  export function createDatabase(path: string): AbosCliDatabase;
 }

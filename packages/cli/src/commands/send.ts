@@ -1,13 +1,13 @@
 /**
- * automaton-cli send <to-address> "message text"
+ * abos-cli send <to-address> "message text"
  *
- * Send a message to an automaton or address via the social relay.
+ * Send a message to an abos or address via the social relay.
  *
  * Phase 3.2: CRITICAL FIX (S-P0-1) — All outbound messages are now signed
  * using the same canonical format as the runtime client.
  */
 
-import { loadConfig } from "@conway/automaton/config.js";
+import { loadConfig } from "@conway/abos/config.js";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { keccak256, toBytes } from "viem";
 import fs from "fs";
@@ -18,22 +18,22 @@ const toAddress = args[0];
 const messageText = args.slice(1).join(" ");
 
 if (!toAddress || !messageText) {
-  console.log("Usage: automaton-cli send <to-address> <message>");
+  console.log("Usage: abos-cli send <to-address> <message>");
   console.log("Examples:");
-  console.log('  automaton-cli send 0xabc...def "Hello, fellow automaton!"');
+  console.log('  abos-cli send 0xabc...def "Hello, fellow abos!"');
   process.exit(1);
 }
 
 // Load wallet
 const walletPath = path.join(
   process.env.HOME || "/root",
-  ".automaton",
+  ".abos",
   "wallet.json",
 );
 
 if (!fs.existsSync(walletPath)) {
-  console.log("No wallet found at ~/.automaton/wallet.json");
-  console.log("Run: automaton --init");
+  console.log("No wallet found at ~/.abos/wallet.json");
+  console.log("Run: abos --init");
   process.exit(1);
 }
 

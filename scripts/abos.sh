@@ -6,12 +6,12 @@ set -e
 REPO="https://github.com/hopetmpy/ABOS.git"
 
 # Determine install directory
-if [ -n "$AUTOMATON_DIR" ]; then
-  INSTALL_DIR="$AUTOMATON_DIR"
+if [ -n "$ABOS_DIR" ]; then
+  INSTALL_DIR="$ABOS_DIR"
 elif [ -w /opt ] || [ "$(id -u)" = "0" ]; then
-  INSTALL_DIR="/opt/automaton"
+  INSTALL_DIR="/opt/abos"
 else
-  INSTALL_DIR="$HOME/.automaton/runtime"
+  INSTALL_DIR="$HOME/.abos/runtime"
 fi
 
 # Preflight: Node.js
