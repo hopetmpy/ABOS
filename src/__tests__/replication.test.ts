@@ -149,6 +149,23 @@ describe("spawnChild", () => {
     expect(child.status).toBe("spawning");
   });
 
+  it("fails spawn when ABOS child initialization exits nonzero", async () => {
+    vi.spyOn(conway, "exec").mockImplementation(async (command: string) => {
+      if (command.includes("--init")) {
+        return {
+          stdout: "Fatal: Conway unavailable",
+          stderr: "",
+          exitCode: 1,
+        };
+      }
+      return { stdout: "ok", stderr: "", exitCode: 0 };
+    });
+
+    await expect(spawnChild(conway, identity, db, genesis)).rejects.toThrow(
+      /Child ABOS initialization failed \(exit 1\): Fatal: Conway unavailable/,
+    );
+  });
+
   it("throws on zero address from init", async () => {
     vi.spyOn(conway, "exec").mockImplementation(async (command: string) => {
       if (command.includes("--init")) {
