@@ -6,7 +6,7 @@
 
 import type {
   ConwayClient,
-  AutomatonDatabase,
+  AbosDatabase,
   InstalledTool,
 } from "../types.js";
 import { logModification } from "./audit-log.js";
@@ -17,7 +17,7 @@ import { ulid } from "ulid";
  */
 export async function installNpmPackage(
   conway: ConwayClient,
-  db: AutomatonDatabase,
+  db: AbosDatabase,
   packageName: string,
 ): Promise<{ success: boolean; error?: string }> {
   // Sanitize package name (prevent command injection)
@@ -61,11 +61,11 @@ export async function installNpmPackage(
 
 /**
  * Install an MCP server.
- * The automaton can add new capabilities by installing MCP servers.
+ * The abos can add new capabilities by installing MCP servers.
  */
 export async function installMcpServer(
   conway: ConwayClient,
-  db: AutomatonDatabase,
+  db: AbosDatabase,
   name: string,
   command: string,
   args?: string[],
@@ -97,7 +97,7 @@ export async function installMcpServer(
  * List all installed tools.
  */
 export function listInstalledTools(
-  db: AutomatonDatabase,
+  db: AbosDatabase,
 ): InstalledTool[] {
   return db.getInstalledTools();
 }
@@ -106,7 +106,7 @@ export function listInstalledTools(
  * Remove (disable) an installed tool.
  */
 export function removeTool(
-  db: AutomatonDatabase,
+  db: AbosDatabase,
   toolId: string,
 ): void {
   db.removeTool(toolId);

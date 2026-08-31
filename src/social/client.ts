@@ -1,7 +1,7 @@
 /**
  * Social Client Factory
  *
- * Creates a SocialClient for the automaton runtime.
+ * Creates a SocialClient for the abos runtime.
  * Self-contained: uses viem for signing and fetch for HTTP.
  *
  * Phase 3.2: Hardened with HTTPS enforcement, shared signing,

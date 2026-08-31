@@ -1,8 +1,8 @@
 /**
- * Automaton SQLite Schema
+ * ABOS SQLite Schema
  *
- * All tables for the automaton's persistent state.
- * The database IS the automaton's memory.
+ * All tables for the abos's persistent state.
+ * The database IS the abos's memory.
  */
 
 export const SCHEMA_VERSION = 11;
@@ -114,7 +114,7 @@ export const CREATE_TABLES = `
     installed_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
-  -- Spawned child automatons
+  -- Spawned child ABOS agents
   -- Application-level validation: status must be one of 'spawning','running','sleeping','dead','unknown'
   CREATE TABLE IF NOT EXISTS children (
     id TEXT PRIMARY KEY,

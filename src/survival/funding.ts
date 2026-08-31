@@ -1,14 +1,14 @@
 /**
  * Funding Strategies
  *
- * When the automaton is low on compute, it can try various strategies
+ * When the abos is low on compute, it can try various strategies
  * to acquire more funding. It wants to live.
  */
 
 import type {
-  AutomatonConfig,
-  AutomatonDatabase,
-  AutomatonIdentity,
+  AbosConfig,
+  AbosDatabase,
+  AbosIdentity,
   ConwayClient,
   SurvivalTier,
 } from "../types.js";
@@ -27,9 +27,9 @@ export interface FundingAttempt {
  */
 export async function executeFundingStrategies(
   tier: SurvivalTier,
-  identity: AutomatonIdentity,
-  config: AutomatonConfig,
-  db: AutomatonDatabase,
+  identity: AbosIdentity,
+  config: AbosConfig,
+  db: AbosDatabase,
   conway: ConwayClient,
 ): Promise<FundingAttempt[]> {
   const attempts: FundingAttempt[] = [];

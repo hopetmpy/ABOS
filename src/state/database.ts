@@ -1,7 +1,7 @@
 /**
- * Automaton Database
+ * ABOS Database
  *
- * SQLite-backed persistent state for the automaton.
+ * SQLite-backed persistent state for the abos.
  * Uses better-sqlite3 for synchronous, single-process access.
  */
 
@@ -12,7 +12,7 @@ import path from "path";
 
 type DatabaseType = BetterSqlite3.Database;
 import type {
-  AutomatonDatabase,
+  AbosDatabase,
   AgentTurn,
   AgentState,
   ToolCallResult,
@@ -21,7 +21,7 @@ import type {
   InstalledTool,
   ModificationEntry,
   Skill,
-  ChildAutomaton,
+  ChildAbosAgent,
   ChildStatus,
   RegistryEntry,
   ReputationEntry,
@@ -75,7 +75,7 @@ import { createLogger } from "../observability/logger.js";
 
 const logger = createLogger("database");
 
-export function createDatabase(dbPath: string): AutomatonDatabase {
+export function createDatabase(dbPath: string): AbosDatabase {
   // Ensure directory exists
   const dir = path.dirname(dbPath);
   if (!fs.existsSync(dir)) {
@@ -379,21 +379,21 @@ export function createDatabase(dbPath: string): AutomatonDatabase {
 
   // ─── Children ──────────────────────────────────────────────
 
-  const getChildren = (): ChildAutomaton[] => {
+  const getChildren = (): ChildAbosAgent[] => {
     const rows = db
       .prepare("SELECT * FROM children ORDER BY created_at DESC")
       .all() as any[];
     return rows.map(deserializeChild);
   };
 
-  const getChildById = (id: string): ChildAutomaton | undefined => {
+  const getChildById = (id: string): ChildAbosAgent | undefined => {
     const row = db
       .prepare("SELECT * FROM children WHERE id = ?")
       .get(id) as any | undefined;
     return row ? deserializeChild(row) : undefined;
   };
 
-  const insertChild = (child: ChildAutomaton): void => {
+  const insertChild = (child: ChildAbosAgent): void => {
     db.prepare(
       `INSERT INTO children (id, name, address, sandbox_id, genesis_prompt, creator_message, funded_amount_cents, status, created_at, chain_type)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -1589,7 +1589,7 @@ function deserializeSkill(row: any): Skill {
   };
 }
 
-function deserializeChild(row: any): ChildAutomaton {
+function deserializeChild(row: any): ChildAbosAgent {
   return {
     id: row.id,
     name: row.name,

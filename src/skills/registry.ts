@@ -2,9 +2,9 @@
  * Skills Registry
  *
  * Install skills from remote sources:
- * - Git repos: git clone <url> ~/.automaton/skills/<name>
+ * - Git repos: git clone <url> ~/.abos/skills/<name>
  * - URLs: fetch a SKILL.md from any URL
- * - Self-created: the automaton writes its own SKILL.md files
+ * - Self-created: the abos writes its own SKILL.md files
  *
  * All shell commands use execFileSync with argument arrays to prevent injection.
  * Directory operations use fs.* to avoid shell interpolation entirely.
@@ -17,7 +17,7 @@ import * as yaml from "yaml";
 import type {
   Skill,
   SkillSource,
-  AutomatonDatabase,
+  AbosDatabase,
   ConwayClient,
 } from "../types.js";
 import { parseSkillMd } from "./format.js";
@@ -44,14 +44,14 @@ function validateSkillPath(skillsDir: string, name: string): string {
 
 /**
  * Install a skill from a git repository.
- * Clones the repo into ~/.automaton/skills/<name>/
+ * Clones the repo into ~/.abos/skills/<name>/
  * Uses execFileSync with argument arrays to prevent shell injection.
  */
 export async function installSkillFromGit(
   repoUrl: string,
   name: string,
   skillsDir: string,
-  db: AutomatonDatabase,
+  db: AbosDatabase,
   _conway: ConwayClient,
 ): Promise<Skill | null> {
   // Validate inputs to prevent injection
@@ -99,7 +99,7 @@ export async function installSkillFromUrl(
   url: string,
   name: string,
   skillsDir: string,
-  db: AutomatonDatabase,
+  db: AbosDatabase,
   _conway: ConwayClient,
 ): Promise<Skill | null> {
   // Validate inputs to prevent injection
@@ -139,7 +139,7 @@ export async function installSkillFromUrl(
 }
 
 /**
- * Create a new skill authored by the automaton itself.
+ * Create a new skill authored by the abos itself.
  * Uses fs.* for directory creation and file writing (no shell needed).
  */
 export async function createSkill(
@@ -147,7 +147,7 @@ export async function createSkill(
   description: string,
   instructions: string,
   skillsDir: string,
-  db: AutomatonDatabase,
+  db: AbosDatabase,
   conway: ConwayClient,
 ): Promise<Skill> {
   // Validate name to prevent path traversal/injection
@@ -197,7 +197,7 @@ export async function createSkill(
  */
 export async function removeSkill(
   name: string,
-  db: AutomatonDatabase,
+  db: AbosDatabase,
   _conway: ConwayClient,
   skillsDir: string,
   deleteFiles: boolean = false,
@@ -219,7 +219,7 @@ export async function removeSkill(
 /**
  * List all installed skills.
  */
-export function listSkills(db: AutomatonDatabase): Skill[] {
+export function listSkills(db: AbosDatabase): Skill[] {
   return db.getSkills();
 }
 
