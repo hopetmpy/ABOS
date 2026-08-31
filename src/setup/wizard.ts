@@ -57,8 +57,27 @@ export async function runSetupWizard(): Promise<AbosConfig> {
     apiKey = result.apiKey;
     console.log(chalk.green(`  API key provisioned: ${result.keyPrefix}...\n`));
   } catch (err: any) {
-    console.log(chalk.yellow(`  Auto-provision failed: ${err.message}`));
-    console.log(chalk.yellow("  You can enter a key manually, or press Enter to skip.\n"));
+    const message = err?.message || String(err);
+    console.log(chalk.yellow(`  Auto-provision failed: ${message}`));
+    if (/Invalid or expired nonce|Database error/i.test(message)) {
+      console.log(
+        chalk.yellow(
+          "  Conway rejected the freshly signed login. Your ABOS wallet is preserved; this is not a reason to regenerate it.",
+        ),
+      );
+      console.log(
+        chalk.yellow(
+          "  Retry provisioning later or enter an existing Conway API key below.",
+        ),
+      );
+    } else {
+      console.log(
+        chalk.yellow(
+          "  You can enter an existing Conway API key below, or press Enter to continue setup without one.",
+        ),
+      );
+    }
+    console.log("");
     const manual = await promptOptional("Conway API key (cnwy_k_..., optional)");
     if (manual) {
       apiKey = manual;
@@ -77,7 +96,11 @@ export async function runSetupWizard(): Promise<AbosConfig> {
   }
 
   if (!apiKey) {
-    console.log(chalk.yellow("  No API key set. The abos will have limited functionality.\n"));
+    console.log(
+      chalk.yellow(
+        "  No Conway API key set. Setup can continue, but Conway-backed runtime services cannot start until authentication succeeds.\n",
+      ),
+    );
   }
 
   // ─── 3. Interactive questions ─────────────────────────────────
