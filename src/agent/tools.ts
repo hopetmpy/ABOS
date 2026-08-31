@@ -482,7 +482,7 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
 
         // Rebuild
         const build = await ctx.conway.exec(
-          `cd '${repoRoot}' && npm run build`,
+          `cd '${repoRoot}' && pnpm run build`,
           60_000,
         );
 
@@ -537,7 +537,7 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
 
         // Reinstall + rebuild
         const build = await ctx.conway.exec(
-          `cd '${repoRoot}' && npm install && npm run build`,
+          `cd '${repoRoot}' && pnpm install --frozen-lockfile && pnpm run build`,
           120_000,
         );
 
@@ -679,7 +679,7 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
 
         // Rebuild
         try {
-          await run("npm install --ignore-scripts && npm run build");
+          await run("pnpm install --frozen-lockfile --ignore-scripts && pnpm run build");
         } catch (err: any) {
           return `${appliedSummary} — but rebuild failed: ${err.message}. The code is applied but not compiled.`;
         }
