@@ -41,17 +41,112 @@ function createSolanaStubAccount(solanaAddress: string): PrivateKeyAccount {
   } as unknown as PrivateKeyAccount;
 }
 
-const ABOS_DIR = path.join(
-  process.env.HOME || "/root",
-  ".abos",
-);
+const HOME_DIR = process.env.HOME || "/root";
+const ABOS_DIR = path.join(HOME_DIR, ".abos");
+const LEGACY_AUTOMATON_DIR = path.join(HOME_DIR, ".automaton");
 const WALLET_FILE = path.join(ABOS_DIR, "wallet.json");
+const LEGACY_WALLET_FILE = path.join(LEGACY_AUTOMATON_DIR, "wallet.json");
+const LEGACY_CONFIG_FILE = path.join(LEGACY_AUTOMATON_DIR, "automaton.json");
+const ABOS_CONFIG_FILE = path.join(ABOS_DIR, "abos.json");
+
+let legacyMigrationChecked = false;
+
+function rewriteLegacyConfigPaths(): void {
+  if (!fs.existsSync(ABOS_CONFIG_FILE)) return;
+
+  try {
+    const raw = JSON.parse(fs.readFileSync(ABOS_CONFIG_FILE, "utf-8")) as Record<string, unknown>;
+    let changed = false;
+
+    for (const key of ["heartbeatConfigPath", "dbPath", "skillsDir"] as const) {
+      const value = raw[key];
+      if (typeof value !== "string") continue;
+
+      let migrated = value;
+      if (migrated === "~/.automaton" || migrated.startsWith("~/.automaton/")) {
+        migrated = "~/.abos" + migrated.slice("~/.automaton".length);
+      }
+      if (
+        migrated === LEGACY_AUTOMATON_DIR
+        || migrated.startsWith(LEGACY_AUTOMATON_DIR + path.sep)
+      ) {
+        migrated = ABOS_DIR + migrated.slice(LEGACY_AUTOMATON_DIR.length);
+      }
+
+      if (migrated !== value) {
+        raw[key] = migrated;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      fs.writeFileSync(ABOS_CONFIG_FILE, JSON.stringify(raw, null, 2), {
+        mode: 0o600,
+      });
+    }
+  } catch (error: any) {
+    throw new Error(
+      `Legacy Automaton state moved to ~/.abos but its configuration could not be migrated safely: ${error?.message || String(error)}`,
+    );
+  }
+}
+
+/**
+ * Preserve an existing Automaton identity during the ABOS rename.
+ *
+ * If only ~/.automaton exists, move the complete state directory atomically,
+ * rename automaton.json -> abos.json, and rewrite known persisted paths.
+ * If both directories exist and the legacy directory still owns a wallet while
+ * ~/.abos does not, fail closed instead of generating or overwriting identity.
+ */
+export function migrateLegacyAutomatonStateIfNeeded(): boolean {
+  if (legacyMigrationChecked) return false;
+  legacyMigrationChecked = true;
+
+  if (!fs.existsSync(LEGACY_AUTOMATON_DIR)) return false;
+
+  if (fs.existsSync(ABOS_DIR)) {
+    const abosWalletExists = fs.existsSync(WALLET_FILE);
+    const legacyWalletExists = fs.existsSync(LEGACY_WALLET_FILE);
+    const entries = fs.readdirSync(ABOS_DIR);
+
+    if (entries.length === 0) {
+      fs.rmdirSync(ABOS_DIR);
+    } else {
+      if (legacyWalletExists && !abosWalletExists) {
+        throw new Error(
+          "Refusing ABOS startup: legacy ~/.automaton contains an identity wallet while ~/.abos already exists without one. Resolve the state directories manually so ABOS cannot create or overwrite the wrong identity.",
+        );
+      }
+      return false;
+    }
+  }
+
+  const futureLegacyConfig = path.join(LEGACY_AUTOMATON_DIR, "abos.json");
+  if (fs.existsSync(LEGACY_CONFIG_FILE) && fs.existsSync(futureLegacyConfig)) {
+    throw new Error(
+      "Refusing ABOS state migration: both automaton.json and abos.json exist in ~/.automaton.",
+    );
+  }
+
+  fs.renameSync(LEGACY_AUTOMATON_DIR, ABOS_DIR);
+
+  const movedLegacyConfig = path.join(ABOS_DIR, "automaton.json");
+  if (fs.existsSync(movedLegacyConfig) && !fs.existsSync(ABOS_CONFIG_FILE)) {
+    fs.renameSync(movedLegacyConfig, ABOS_CONFIG_FILE);
+  }
+
+  rewriteLegacyConfigPaths();
+  return true;
+}
 
 export function getAbosDir(): string {
+  migrateLegacyAutomatonStateIfNeeded();
   return ABOS_DIR;
 }
 
 export function getWalletPath(): string {
+  migrateLegacyAutomatonStateIfNeeded();
   return WALLET_FILE;
 }
 
@@ -80,6 +175,8 @@ export async function getWallet(chainType?: ChainType): Promise<{
   chainType: ChainType;
   isNew: boolean;
 }> {
+  migrateLegacyAutomatonStateIfNeeded();
+
   if (!fs.existsSync(ABOS_DIR)) {
     fs.mkdirSync(ABOS_DIR, { recursive: true, mode: 0o700 });
   }
@@ -143,7 +240,7 @@ export async function getWallet(chainType?: ChainType): Promise<{
 /**
  * Get the wallet address without loading the full account.
  */
-export function getWalletAddress(): string | null {
+export function getWalletAddress(): string | null {\n  migrateLegacyAutomatonStateIfNeeded();
   if (!fs.existsSync(WALLET_FILE)) {
     return null;
   }
@@ -166,7 +263,7 @@ export function getWalletAddress(): string | null {
  * Load the full wallet account (needed for signing).
  * For Solana wallets, returns a proxy account.
  */
-export function loadWalletAccount(): PrivateKeyAccount | null {
+export function loadWalletAccount(): PrivateKeyAccount | null {\n  migrateLegacyAutomatonStateIfNeeded();
   if (!fs.existsSync(WALLET_FILE)) {
     return null;
   }
@@ -186,7 +283,7 @@ export function loadWalletAccount(): PrivateKeyAccount | null {
 /**
  * Get the chain type from the wallet file.
  */
-export function getWalletChainType(): ChainType {
+export function getWalletChainType(): ChainType {\n  migrateLegacyAutomatonStateIfNeeded();
   if (!fs.existsSync(WALLET_FILE)) {
     return "evm";
   }
@@ -200,6 +297,6 @@ export function getWalletChainType(): ChainType {
   }
 }
 
-export function walletExists(): boolean {
+export function walletExists(): boolean {\n  migrateLegacyAutomatonStateIfNeeded();
   return fs.existsSync(WALLET_FILE);
 }
