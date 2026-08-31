@@ -659,7 +659,7 @@ describe("package install inline validation", () => {
 
   it("install_npm_package allows scoped packages", async () => {
     const tool = tools.find((t) => t.name === "install_npm_package")!;
-    await tool.execute({ package: "@conway/abos" }, ctx);
+    await tool.execute({ package: "@abos/runtime" }, ctx);
     expect(conway.execCalls.length).toBe(1);
   });
 });
