@@ -25,9 +25,10 @@ import type {
 } from "../types.js";
 import type { Database } from "better-sqlite3";
 import type { PolicyEngine } from "../agent/policy-engine.js";
+import { RUNTIME_ROOT } from "../runtime-root.js";
 
 const logger = createLogger("orchestration.local-worker");
-const DEFAULT_ALLOWED_EDIT_ROOT = process.cwd();
+const DEFAULT_ALLOWED_EDIT_ROOT = RUNTIME_ROOT;
 
 interface LocalWorkerConfig {
   db: Database;
