@@ -19,6 +19,7 @@ import {
 import { detectEnvironment } from "./environment.js";
 import { generateSoulMd, installDefaultSkills } from "./defaults.js";
 import type { ChainType } from "../identity/chain.js";
+import { RUNTIME_ROOT } from "../runtime-root.js";
 
 export async function runSetupWizard(): Promise<AbosConfig> {
   showBanner();
@@ -185,7 +186,7 @@ export async function runSetupWizard(): Promise<AbosConfig> {
 
   // constitution.md (immutable — copied from repo, protected from self-modification)
   const abosDir = getAbosDir();
-  const constitutionSrc = path.join(process.cwd(), "constitution.md");
+  const constitutionSrc = path.join(RUNTIME_ROOT, "constitution.md");
   const constitutionDst = path.join(abosDir, "constitution.md");
   if (fs.existsSync(constitutionSrc)) {
     fs.copyFileSync(constitutionSrc, constitutionDst);
