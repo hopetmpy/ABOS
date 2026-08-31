@@ -29,6 +29,31 @@ describe("ABOS installation and state separation", () => {
     expect(result.status, result.stderr || result.stdout).toBe(0);
   });
 
+  it("locks ABOS to the validated Node 20/22 LTS runtime lanes", () => {
+    const root = process.cwd();
+    const packageJson = JSON.parse(
+      fs.readFileSync(path.join(root, "package.json"), "utf-8"),
+    );
+    const npmrc = fs.readFileSync(path.join(root, ".npmrc"), "utf-8").trim();
+    const nvmrc = fs.readFileSync(path.join(root, ".nvmrc"), "utf-8").trim();
+    const nodeVersion = fs
+      .readFileSync(path.join(root, ".node-version"), "utf-8")
+      .trim();
+    const installer = fs.readFileSync(
+      path.join(root, "scripts", "abos.sh"),
+      "utf-8",
+    );
+
+    expect(packageJson.engines?.node).toBe(">=20 <21 || >=22 <23");
+    expect(npmrc).toBe("engine-strict=true");
+    expect(nvmrc).toBe("22");
+    expect(nodeVersion).toBe("22");
+    expect(installer).toContain(
+      '[ "$NODE_MAJOR" -ne 20 ] && [ "$NODE_MAJOR" -ne 22 ]',
+    );
+    expect(installer).toContain("Node 22 LTS is recommended");
+  });
+
   it("prevents legacy runtime checkout from entering the state Git repository", async () => {
     const conway = new MockConwayClient();
 
