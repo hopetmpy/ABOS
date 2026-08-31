@@ -1,15 +1,15 @@
 /**
  * Resource Monitor
  *
- * Continuously monitors the automaton's resources and triggers
+ * Continuously monitors the ABOS's resources and triggers
  * survival mode transitions when needed.
  */
 
 import type {
-  AutomatonConfig,
-  AutomatonDatabase,
+  AbosConfig,
+  AbosDatabase,
   ConwayClient,
-  AutomatonIdentity,
+  AbosIdentity,
   FinancialState,
   SurvivalTier,
 } from "../types.js";
@@ -28,9 +28,9 @@ export interface ResourceStatus {
  * Check all resources and return current status.
  */
 export async function checkResources(
-  identity: AutomatonIdentity,
+  identity: AbosIdentity,
   conway: ConwayClient,
-  db: AutomatonDatabase,
+  db: AbosDatabase,
 ): Promise<ResourceStatus> {
   // Check credits
   let creditsCents = 0;

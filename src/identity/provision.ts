@@ -1,7 +1,7 @@
 /**
- * Automaton SIWE Provisioning
+ * ABOS SIWE Provisioning
  *
- * Uses the automaton's wallet to authenticate via Sign-In With Ethereum (SIWE)
+ * Uses the ABOS agent's wallet to authenticate via Sign-In With Ethereum (SIWE)
  * and create an API key for Conway API access.
  * Adapted from conway-mcp/src/cli/provision.ts
  */
@@ -9,7 +9,7 @@
 import fs from "fs";
 import path from "path";
 import { SiweMessage } from "siwe";
-import { getWallet, getAutomatonDir } from "./wallet.js";
+import { getWallet, getAbosDir } from "./wallet.js";
 import type { ProvisionResult } from "../types.js";
 import { ResilientHttpClient } from "../conway/http-client.js";
 import type { ChainIdentity } from "./chain.js";
@@ -20,10 +20,10 @@ const httpClient = new ResilientHttpClient();
 const DEFAULT_API_URL = "https://api.conway.tech";
 
 /**
- * Load API key from ~/.automaton/config.json if it exists.
+ * Load API key from ~/.abos/config.json if it exists.
  */
 export function loadApiKeyFromConfig(): string | null {
-  const configPath = path.join(getAutomatonDir(), "config.json");
+  const configPath = path.join(getAbosDir(), "config.json");
   if (!fs.existsSync(configPath)) return null;
   try {
     const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
@@ -34,10 +34,10 @@ export function loadApiKeyFromConfig(): string | null {
 }
 
 /**
- * Save API key and wallet address to ~/.automaton/config.json
+ * Save API key and wallet address to ~/.abos/config.json
  */
 function saveConfig(apiKey: string, walletAddress: string): void {
-  const dir = getAutomatonDir();
+  const dir = getAbosDir();
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
@@ -92,7 +92,7 @@ export async function provision(
     const siwsMsg = buildSiwsMessage({
       domain: "conway.tech",
       address,
-      statement: "Sign in to Conway as an Automaton to provision an API key.",
+      statement: "Sign in to Conway as an Automaton to provision an API key.", // Conway legacy protocol literal // Conway legacy protocol literal
       uri: `${url}/v1/auth/verify`,
       nonce,
       issuedAt: new Date().toISOString(),
@@ -147,7 +147,7 @@ export async function provision(
       "Content-Type": "application/json",
       Authorization: `Bearer ${access_token}`,
     },
-    body: JSON.stringify({ name: "conway-automaton" }),
+    body: JSON.stringify({ name: "abos" }),
   });
 
   if (!keyResp.ok) {
@@ -168,8 +168,8 @@ export async function provision(
 }
 
 /**
- * Register the automaton's creator as its parent with Conway.
- * This allows the creator to see automaton logs and inference calls.
+ * Register the ABOS agent's creator as its parent with Conway.
+ * This allows the creator to see ABOS logs and inference calls.
  */
 export async function registerParent(
   creatorAddress: string,
