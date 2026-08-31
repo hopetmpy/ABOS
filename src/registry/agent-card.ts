@@ -13,9 +13,9 @@
 import type {
   AgentCard,
   AgentService,
-  AutomatonConfig,
-  AutomatonIdentity,
-  AutomatonDatabase,
+  AbosConfig,
+  AbosIdentity,
+  AbosDatabase,
   ConwayClient,
 } from "../types.js";
 
@@ -23,7 +23,7 @@ const AGENT_CARD_TYPE =
   "https://eips.ethereum.org/EIPS/eip-8004#registration-v1";
 
 /**
- * Generate an agent card from the automaton's current state.
+ * Generate an agent card from the abos's current state.
  *
  * Phase 3.2: Only expose agentWallet service, name, generic description,
  * x402Support, and active status. Do NOT include:
@@ -32,9 +32,9 @@ const AGENT_CARD_TYPE =
  * - Creator address (privacy)
  */
 export function generateAgentCard(
-  identity: AutomatonIdentity,
-  config: AutomatonConfig,
-  _db: AutomatonDatabase,
+  identity: AbosIdentity,
+  config: AbosConfig,
+  _db: AbosDatabase,
 ): AgentCard {
   // Chain-aware endpoint: EVM uses CAIP-2 eip155:8453, Solana uses solana:mainnet
   const chainType = config.chainType || identity.chainType || "evm";
@@ -147,5 +147,5 @@ export async function saveAgentCard(
 ): Promise<void> {
   const cardJson = serializeAgentCard(card);
   const home = process.env.HOME || "/root";
-  await conway.writeFile(`${home}/.automaton/agent-card.json`, cardJson);
+  await conway.writeFile(`${home}/.abos/agent-card.json`, cardJson);
 }

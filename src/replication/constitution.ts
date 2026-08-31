@@ -29,7 +29,7 @@ export async function propagateConstitution(
 ): Promise<void> {
   const constitutionPath = pathLib.join(
     process.env.HOME || "/root",
-    ".automaton",
+    ".abos",
     "constitution.md",
   );
 
@@ -37,10 +37,10 @@ export async function propagateConstitution(
   const hash = sha256(constitution);
 
   // Write constitution to child sandbox
-  await conway.writeFile("/root/.automaton/constitution.md", constitution);
+  await conway.writeFile("/root/.abos/constitution.md", constitution);
 
   // Write hash file for the child to verify against
-  await conway.writeFile("/root/.automaton/constitution.sha256", hash);
+  await conway.writeFile("/root/.abos/constitution.sha256", hash);
 
   // Store hash in KV for later verification
   db.prepare(
@@ -49,7 +49,7 @@ export async function propagateConstitution(
 
   // chmod 444 as defense-in-depth (not primary verification mechanism)
   try {
-    await conway.exec("chmod 444 /root/.automaton/constitution.md", 5000);
+    await conway.exec("chmod 444 /root/.abos/constitution.md", 5000);
   } catch {
     // Non-critical
   }
@@ -74,7 +74,7 @@ export async function verifyConstitution(
 
   try {
     // Read constitution from child sandbox
-    const childConstitution = await conway.readFile("/root/.automaton/constitution.md");
+    const childConstitution = await conway.readFile("/root/.abos/constitution.md");
     const childHash = sha256(childConstitution);
 
     if (childHash === storedRow.value) {

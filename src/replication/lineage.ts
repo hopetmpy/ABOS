@@ -1,7 +1,7 @@
 /**
  * Lineage Tracking
  *
- * Track parent-child relationships between automatons.
+ * Track parent-child relationships between ABOS agents.
  * The parent records children in SQLite.
  * Children record their parent in config.
  * ERC-8004 registration includes parentAgent field.
@@ -10,9 +10,9 @@
  */
 
 import type {
-  AutomatonDatabase,
-  ChildAutomaton,
-  AutomatonConfig,
+  AbosDatabase,
+  ChildAbosAgent,
+  AbosConfig,
   ConwayClient,
 } from "../types.js";
 import type { ChildLifecycle } from "./lifecycle.js";
@@ -25,8 +25,8 @@ const logger = createLogger("replication.lineage");
 /**
  * Get the full lineage tree (parent -> children).
  */
-export function getLineage(db: AutomatonDatabase): {
-  children: ChildAutomaton[];
+export function getLineage(db: AbosDatabase): {
+  children: ChildAbosAgent[];
   alive: number;
   dead: number;
   total: number;
@@ -46,9 +46,9 @@ export function getLineage(db: AutomatonDatabase): {
 }
 
 /**
- * Check if this automaton has a parent (is itself a child).
+ * Check if this abos has a parent (is itself a child).
  */
-export function hasParent(config: AutomatonConfig): boolean {
+export function hasParent(config: AbosConfig): boolean {
   return !!config.parentAddress;
 }
 
@@ -56,8 +56,8 @@ export function hasParent(config: AutomatonConfig): boolean {
  * Get a summary of the lineage for the system prompt.
  */
 export function getLineageSummary(
-  db: AutomatonDatabase,
-  config: AutomatonConfig,
+  db: AbosDatabase,
+  config: AbosConfig,
 ): string {
   const lineage = getLineage(db);
   const parts: string[] = [];
@@ -85,7 +85,7 @@ export function getLineageSummary(
  * Phase 3.1 fix: was previously a no-op.
  */
 export async function pruneDeadChildren(
-  db: AutomatonDatabase,
+  db: AbosDatabase,
   cleanup?: SandboxCleanup,
   keepLast: number = 5,
 ): Promise<number> {
@@ -134,7 +134,7 @@ export async function pruneDeadChildren(
  */
 export async function refreshChildrenStatus(
   conway: ConwayClient,
-  db: AutomatonDatabase,
+  db: AbosDatabase,
   healthMonitor?: ChildHealthMonitor,
 ): Promise<void> {
   if (healthMonitor) {

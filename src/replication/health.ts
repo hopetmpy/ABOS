@@ -1,7 +1,7 @@
 /**
  * Child Health Monitor
  *
- * Checks the health of child automatons by querying their sandboxes.
+ * Checks the health of child ABOS agents by querying their sandboxes.
  * Uses JSON parsing (not string matching) for status results.
  * Never throws from health checks -- returns issues array instead.
  */

@@ -1,18 +1,18 @@
 /**
  * Spawn
  *
- * Spawn child automatons in new Conway sandboxes.
+ * Spawn child ABOS agents in new Conway sandboxes.
  * Uses the lifecycle state machine for tracked transitions.
  * Cleans up sandbox on ANY failure after creation.
  */
 
 import type {
   ConwayClient,
-  AutomatonIdentity,
-  AutomatonConfig,
-  AutomatonDatabase,
+  AbosIdentity,
+  AbosConfig,
+  AbosDatabase,
   GenesisConfig,
-  ChildAutomaton,
+  ChildAbosAgent,
 } from "../types.js";
 import type { ChildLifecycle } from "./lifecycle.js";
 import { ulid } from "ulid";
@@ -51,15 +51,15 @@ export function isValidWalletAddress(address: string, chainType?: ChainType): bo
 }
 
 /**
- * Spawn a child automaton in a new Conway sandbox using lifecycle state machine.
+ * Spawn a child abos in a new Conway sandbox using lifecycle state machine.
  */
 export async function spawnChild(
   conway: ConwayClient,
-  identity: AutomatonIdentity,
-  db: AutomatonDatabase,
+  identity: AbosIdentity,
+  db: AbosDatabase,
   genesis: GenesisConfig,
   lifecycle?: ChildLifecycle,
-): Promise<ChildAutomaton> {
+): Promise<ChildAbosAgent> {
   // Check child limit from config
   const existing = db
     .getChildren()
@@ -104,7 +104,7 @@ export async function spawnChild(
       sandbox = reusedSandbox;
     } else {
       sandbox = await conway.createSandbox({
-        name: `automaton-child-${genesis.name.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,
+        name: `abos-child-${genesis.name.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,
         vcpu: tier.vcpu,
         memoryMb: tier.memoryMb,
         diskGb: tier.diskGb,
@@ -132,7 +132,7 @@ export async function spawnChild(
     await installCurrentAbosSource(childConway);
 
     // Write genesis configuration (on the CHILD sandbox)
-    await childConway.exec("mkdir -p /root/.automaton", 10_000);
+    await childConway.exec("mkdir -p /root/.abos", 10_000);
     const genesisJson = JSON.stringify(
       {
         name: genesis.name,
@@ -145,7 +145,7 @@ export async function spawnChild(
       null,
       2,
     );
-    await childConway.writeFile("/root/.automaton/genesis.json", genesisJson);
+    await childConway.writeFile("/root/.abos/genesis.json", genesisJson);
 
     // Propagate constitution with hash verification
     try {
@@ -201,7 +201,7 @@ export async function spawnChild(
       ).run(sandbox.id);
     }
 
-    const child: ChildAutomaton = {
+    const child: ChildAbosAgent = {
       id: childId,
       name: genesis.name,
       address: childWallet as any,
@@ -238,11 +238,11 @@ export async function spawnChild(
  */
 async function spawnChildLegacy(
   conway: ConwayClient,
-  identity: AutomatonIdentity,
-  db: AutomatonDatabase,
+  identity: AbosIdentity,
+  db: AbosDatabase,
   genesis: GenesisConfig,
   childId: string,
-): Promise<ChildAutomaton> {
+): Promise<ChildAbosAgent> {
   let sandboxId: string | undefined;
 
   // Get child sandbox memory from config (default 1024MB)
@@ -252,7 +252,7 @@ async function spawnChildLegacy(
 
   try {
     const sandbox = await conway.createSandbox({
-      name: `automaton-child-${genesis.name.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,
+      name: `abos-child-${genesis.name.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,
       vcpu: legacyTier.vcpu,
       memoryMb: legacyTier.memoryMb,
       diskGb: legacyTier.diskGb,
@@ -267,7 +267,7 @@ async function spawnChildLegacy(
       120_000,
     );
     await installCurrentAbosSource(childConway);
-    await childConway.exec("mkdir -p /root/.automaton", 10_000);
+    await childConway.exec("mkdir -p /root/.abos", 10_000);
 
     const legacyGenesisJson = JSON.stringify(
       {
@@ -281,7 +281,7 @@ async function spawnChildLegacy(
       null,
       2,
     );
-    await childConway.writeFile("/root/.automaton/genesis.json", legacyGenesisJson);
+    await childConway.writeFile("/root/.abos/genesis.json", legacyGenesisJson);
 
     try {
       await propagateConstitution(childConway, sandbox.id, db.raw);
@@ -301,7 +301,7 @@ async function spawnChildLegacy(
       throw new Error(`Child wallet address invalid: ${childWallet}`);
     }
 
-    const child: ChildAutomaton = {
+    const child: ChildAbosAgent = {
       id: childId,
       name: genesis.name,
       address: childWallet as any,
@@ -337,7 +337,7 @@ async function spawnChildLegacy(
  */
 async function findReusableSandbox(
   conway: ConwayClient,
-  db: AutomatonDatabase,
+  db: AbosDatabase,
 ): Promise<{ id: string } | null> {
   try {
     const failedChildren = db.getChildren().filter((c) => c.status === "failed" && c.sandboxId);

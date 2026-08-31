@@ -1,7 +1,7 @@
 import { ulid } from "ulid";
 import type {
-  AutomatonDatabase,
-  AutomatonIdentity,
+  AbosDatabase,
+  AbosIdentity,
   ChildStatus,
   ConwayClient,
 } from "../types.js";
@@ -10,7 +10,7 @@ import type { AgentTracker, FundingProtocol } from "./types.js";
 const IDLE_STATUSES = new Set<ChildStatus>(["running", "healthy"]);
 
 export class SimpleAgentTracker implements AgentTracker {
-  constructor(private readonly db: AutomatonDatabase) {}
+  constructor(private readonly db: AbosDatabase) {}
 
   getIdle(): { address: string; name: string; role: string; status: string }[] {
     const assignedRows = this.db.raw.prepare(
@@ -81,8 +81,8 @@ export class SimpleAgentTracker implements AgentTracker {
 export class SimpleFundingProtocol implements FundingProtocol {
   constructor(
     private readonly conway: ConwayClient,
-    private readonly identity: AutomatonIdentity,
-    private readonly db: AutomatonDatabase,
+    private readonly identity: AbosIdentity,
+    private readonly db: AbosDatabase,
   ) {}
 
   async fundChild(childAddress: string, amountCents: number): Promise<{ success: boolean }> {
