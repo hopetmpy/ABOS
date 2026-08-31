@@ -72,6 +72,25 @@ jobs:
 
           git grep -n 'https://github.com/hopetmpy/ABOS.git' package.json scripts src
 
+          sh -n scripts/abos.sh
+          bash -n scripts/soak-test.sh
+
+          if git grep -n -F 'INSTALL_DIR="$HOME/.abos/runtime"' -- scripts/abos.sh; then
+            echo "ABOS runtime must not default inside ~/.abos state."
+            exit 1
+          fi
+
+          if git grep -n -F 'process.cwd()' -- \
+            src/agent/tools.ts \
+            src/self-mod/code.ts \
+            src/self-mod/upstream.ts \
+            src/replication/source.ts \
+            src/setup/wizard.ts \
+            src/orchestration/local-worker.ts; then
+            echo "Critical runtime paths must not depend on caller cwd."
+            exit 1
+          fi
+
   security-audit:
     runs-on: ubuntu-latest
     steps:
