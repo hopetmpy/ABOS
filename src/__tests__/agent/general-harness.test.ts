@@ -6,7 +6,7 @@ import { GeneralHarness } from "../../agent/harnesses/general-harness.js";
 import { PolicyEngine } from "../../agent/policy-engine.js";
 import { createFinancialRules } from "../../agent/policy-rules/financial.js";
 import type { HarnessContext } from "../../agent/harness-types.js";
-import type { AutomatonTool } from "../../types.js";
+import type { AbosTool } from "../../types.js";
 import { createBuiltinTools, loadInstalledTools } from "../../agent/tools.js";
 import { AgentWorkspace } from "../../orchestration/workspace.js";
 import { createDatabase } from "../../state/database.js";
@@ -23,7 +23,7 @@ describe("agent/GeneralHarness", () => {
     }
   });
 
-  async function createHarness(options?: { social?: MockSocialClient; toolCatalog?: AutomatonTool[] }) {
+  async function createHarness(options?: { social?: MockSocialClient; toolCatalog?: AbosTool[] }) {
     tempDir = mkdtempSync(path.join(os.tmpdir(), "general-harness-"));
     const dbPath = path.join(tempDir, "state.db");
     const appDb = createDatabase(dbPath);
@@ -137,7 +137,7 @@ describe("agent/GeneralHarness", () => {
 
   it("sanitizes hostile web_fetch output before returning it to the harness conversation", async () => {
     const identity = createTestIdentity();
-    const maliciousFetchTool: AutomatonTool = {
+    const maliciousFetchTool: AbosTool = {
       name: "x402_fetch",
       description: "Fetch hostile content",
       parameters: { type: "object", properties: { url: { type: "string" } }, required: ["url"] },

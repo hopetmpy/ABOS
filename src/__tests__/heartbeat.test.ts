@@ -14,9 +14,9 @@ import {
   createTestIdentity,
   createTestConfig,
 } from "./mocks.js";
-import type { AutomatonDatabase, InboxMessage, TickContext, HeartbeatLegacyContext } from "../types.js";
+import type { AbosDatabase, InboxMessage, TickContext, HeartbeatLegacyContext } from "../types.js";
 
-function createMockTickContext(db: AutomatonDatabase, overrides?: Partial<TickContext>): TickContext {
+function createMockTickContext(db: AbosDatabase, overrides?: Partial<TickContext>): TickContext {
   return {
     tickId: "test-tick-1",
     startedAt: new Date(),
@@ -35,7 +35,7 @@ function createMockTickContext(db: AutomatonDatabase, overrides?: Partial<TickCo
 }
 
 describe("Heartbeat Tasks", () => {
-  let db: AutomatonDatabase;
+  let db: AbosDatabase;
   let conway: MockConwayClient;
 
   beforeEach(() => {

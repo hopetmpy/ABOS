@@ -16,7 +16,7 @@ import path from "path";
 import os from "os";
 import fs from "fs";
 import type {
-  AutomatonTool,
+  AbosTool,
   PolicyRule,
   PolicyRequest,
   PolicyRuleResult,
@@ -96,7 +96,7 @@ function createMockSpendTracker(overrides: Partial<SpendTrackerInterface> = {}):
   };
 }
 
-function createMockTool(overrides: Partial<AutomatonTool> = {}): AutomatonTool {
+function createMockTool(overrides: Partial<AbosTool> = {}): AbosTool {
   return {
     name: "test_tool",
     description: "A test tool",
@@ -119,7 +119,7 @@ function createMockContext(rawDb?: Database.Database): ToolContext {
 }
 
 function createRequest(
-  tool: AutomatonTool,
+  tool: AbosTool,
   args: Record<string, unknown>,
   inputSource: InputSource | undefined,
   rawDb?: Database.Database,
@@ -316,7 +316,7 @@ describe("Authority Rules", () => {
         riskLevel: "dangerous",
         category: "self_mod",
       });
-      const request = createRequest(tool, { path: "~/.automaton/SOUL.md" }, undefined);
+      const request = createRequest(tool, { path: "~/.abos/SOUL.md" }, undefined);
 
       const decision = engine.evaluate(request);
       expect(decision.action).toBe("deny");
@@ -363,7 +363,7 @@ describe("Authority Rules", () => {
         riskLevel: "dangerous",
         category: "self_mod",
       });
-      const request = createRequest(tool, { path: "~/.automaton/SOUL.md" }, "agent");
+      const request = createRequest(tool, { path: "~/.abos/SOUL.md" }, "agent");
 
       const decision = engine.evaluate(request);
       expect(decision.action).toBe("allow");

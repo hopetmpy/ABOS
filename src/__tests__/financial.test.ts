@@ -21,7 +21,7 @@ import { createFinancialRules } from "../agent/policy-rules/financial.js";
 import { PolicyEngine } from "../agent/policy-engine.js";
 import { SpendTracker } from "../agent/spend-tracker.js";
 import type {
-  AutomatonTool,
+  AbosTool,
   PolicyRequest,
   PolicyRule,
   TreasuryPolicy,
@@ -77,7 +77,7 @@ function createTestDb(): Database.Database {
   return db;
 }
 
-function mockTransferTool(): AutomatonTool {
+function mockTransferTool(): AbosTool {
   return {
     name: "transfer_credits",
     description: "Transfer credits",
@@ -88,7 +88,7 @@ function mockTransferTool(): AutomatonTool {
   };
 }
 
-function mockX402Tool(): AutomatonTool {
+function mockX402Tool(): AbosTool {
   return {
     name: "x402_fetch",
     description: "x402 fetch",
@@ -99,7 +99,7 @@ function mockX402Tool(): AutomatonTool {
   };
 }
 
-function mockFundChildTool(): AutomatonTool {
+function mockFundChildTool(): AbosTool {
   return {
     name: "fund_child",
     description: "Fund child",
@@ -111,7 +111,7 @@ function mockFundChildTool(): AutomatonTool {
 }
 
 function createRequest(
-  tool: AutomatonTool,
+  tool: AbosTool,
   args: Record<string, unknown>,
   spendTracker: SpendTrackerInterface,
   turnToolCallCount = 0,

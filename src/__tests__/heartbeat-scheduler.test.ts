@@ -30,7 +30,7 @@ import {
   isDeduplicated,
 } from "../state/database.js";
 import type {
-  AutomatonDatabase,
+  AbosDatabase,
   HeartbeatConfig,
   HeartbeatTaskFn,
   HeartbeatLegacyContext,
@@ -48,7 +48,7 @@ const DEFAULT_HB_CONFIG: HeartbeatConfig = {
 };
 
 function createLegacyContext(
-  db: AutomatonDatabase,
+  db: AbosDatabase,
   conway: MockConwayClient,
 ): HeartbeatLegacyContext {
   return {
@@ -86,7 +86,7 @@ function seedScheduleRow(
 }
 
 describe("DurableScheduler", () => {
-  let db: AutomatonDatabase;
+  let db: AbosDatabase;
   let rawDb: DatabaseType;
   let conway: MockConwayClient;
 

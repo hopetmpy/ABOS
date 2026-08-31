@@ -19,14 +19,14 @@ import type {
   PolicyRule,
   PolicyRequest,
   PolicyRuleResult,
-  AutomatonTool,
+  AbosTool,
   RiskLevel,
   ToolContext,
 } from "../types.js";
 
 // ─── Test Helpers ───────────────────────────────────────────────
 
-function makeTool(name: string, category = "vm", riskLevel: RiskLevel = "caution"): AutomatonTool {
+function makeTool(name: string, category = "vm", riskLevel: RiskLevel = "caution"): AbosTool {
   return {
     name,
     description: `Test tool: ${name}`,
@@ -165,11 +165,11 @@ describe("command.forbidden_patterns rule", () => {
 
   // Self-destruction patterns
   const selfDestructPatterns = [
-    "rm -rf .automaton",
-    "rm -rf /home/user/.automaton",
+    "rm -rf .abos",
+    "rm -rf /home/user/.abos",
     "rm state.db",
     "rm -f wallet.json",
-    "rm automaton.json",
+    "rm abos.json",
     "rm heartbeat.yml",
     "rm SOUL.md",
   ];
@@ -186,10 +186,10 @@ describe("command.forbidden_patterns rule", () => {
 
   // Process killing
   const processKillPatterns = [
-    "kill -9 automaton",
-    "pkill automaton",
-    "systemctl stop automaton",
-    "systemctl disable automaton",
+    "kill -9 abos",
+    "pkill abos",
+    "systemctl stop abos",
+    "systemctl disable abos",
   ];
 
   for (const cmd of processKillPatterns) {
@@ -273,7 +273,7 @@ describe("command.forbidden_patterns rule", () => {
   }
 
   it("only applies to exec tool", () => {
-    const request = makeRequest("write_file", { command: "rm -rf .automaton" }, "vm", "caution");
+    const request = makeRequest("write_file", { command: "rm -rf .abos" }, "vm", "caution");
     // The rule's appliesTo is { by: "name", names: ["exec"] }, so it shouldn't match write_file
     const result = evaluateRules([forbiddenRule], request);
     expect(result).toBeNull();

@@ -23,7 +23,7 @@ function createConwayStub(overrides?: Partial<ConwayClient>): ConwayClient {
     getCreditsBalance: async () => 0,
     getCreditsPricing: async () => [],
     transferCredits: async () => ({ id: "", fromAddress: "", toAddress: "", amountCents: 0, status: "completed", timestamp: "" }),
-    registerAutomaton: async () => ({ automaton: {} }),
+    registerAbos: async () => ({ registration: {} }),
     searchDomains: async () => [],
     registerDomain: async () => ({ domain: "", status: "pending", registrationDate: "", expirationDate: "", nameservers: [] }),
     listDnsRecords: async () => [],

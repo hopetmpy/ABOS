@@ -12,10 +12,10 @@ import {
   createTestIdentity,
   createTestConfig,
 } from "./mocks.js";
-import type { AutomatonDatabase } from "../types.js";
+import type { AbosDatabase } from "../types.js";
 
 describe("executeFundingStrategies", () => {
-  let db: AutomatonDatabase;
+  let db: AbosDatabase;
   let conway: MockConwayClient;
 
   beforeEach(() => {
