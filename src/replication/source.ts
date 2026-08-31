@@ -11,6 +11,7 @@ import { mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import type { ConwayClient } from "../types.js";
+import { RUNTIME_ROOT } from "../runtime-root.js";
 import {
   ABOS_CANONICAL_REPOSITORY,
   ABOS_CANONICAL_BRANCH,
@@ -28,7 +29,7 @@ export interface AbosSourceSnapshot {
 
 function runLocalGitText(args: string[]): string {
   return execFileSync("git", args, {
-    cwd: process.cwd(),
+    cwd: RUNTIME_ROOT,
     encoding: "utf-8",
     timeout: 30_000,
     maxBuffer: 64 * 1024 * 1024,
@@ -68,7 +69,7 @@ export function createCurrentAbosSourceSnapshot(): AbosSourceSnapshot {
 
   try {
     execFileSync("git", ["bundle", "create", bundlePath, branchName], {
-      cwd: process.cwd(),
+      cwd: RUNTIME_ROOT,
       encoding: "utf-8",
       timeout: 60_000,
       maxBuffer: 64 * 1024 * 1024,
