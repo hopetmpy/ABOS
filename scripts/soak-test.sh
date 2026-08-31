@@ -5,7 +5,7 @@ set -euo pipefail
 # Usage: ./scripts/soak-test.sh [duration_hours] [db_path]
 
 DURATION_HOURS=${1:-72}
-DB_PATH=${2:-./data/abos.db}
+DB_PATH=${2:-${HOME}/.abos/state.db}
 CHECK_INTERVAL=300  # 5 minutes
 LOG_FILE="soak-test-$(date +%Y%m%d%H%M%S).log"
 ABOS_PID=""
@@ -121,7 +121,7 @@ summarize() {
 log "Starting soak test: duration=${DURATION_HOURS}h, db=${DB_PATH}, interval=${CHECK_INTERVAL}s"
 
 # Start abos in background
-NODE_ENV=test node dist/index.js >> "$LOG_FILE" 2>&1 &
+NODE_ENV=test node dist/index.js --run >> "$LOG_FILE" 2>&1 &
 ABOS_PID=$!
 log "Started abos process (PID: ${ABOS_PID})"
 
