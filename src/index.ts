@@ -217,7 +217,9 @@ async function run(): Promise<void> {
   const resolvedChainType = config.chainType || walletChainType || "evm";
   const apiKey = config.conwayApiKey || loadApiKeyFromConfig();
   if (!apiKey) {
-    logger.error("No API key found. Run: abos --provision");
+    logger.error(
+      "No Conway API key found. Your ABOS wallet/config remain saved. Retry with: node dist/index.js --provision, or provide CONWAY_API_KEY / an existing key in setup.",
+    );
     process.exit(1);
   }
 
