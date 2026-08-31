@@ -171,6 +171,11 @@ export function migrateLegacyAutomatonStateIfNeeded(): boolean {
   if (!fs.existsSync(ABOS_DIR)) {
     fs.mkdirSync(ABOS_DIR, { recursive: true, mode: 0o700 });
   }
+  // Early installers may have created ~/.abos as a parent for runtime source.
+  // Once identity/state is stored here, enforce private directory permissions.
+  try {
+    fs.chmodSync(ABOS_DIR, 0o700);
+  } catch {}
 
   const moved: Array<{ source: string; target: string }> = [];
   let wroteConfig = false;
