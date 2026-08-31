@@ -22,6 +22,7 @@ import type {
 import type { PolicyEngine } from "./policy-engine.js";
 import { sanitizeToolResult, sanitizeInput } from "./injection-defense.js";
 import { createLogger } from "../observability/logger.js";
+import { RUNTIME_ROOT } from "../runtime-root.js";
 
 const logger = createLogger("tools");
 
@@ -463,7 +464,7 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
       riskLevel: "caution",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
-        const repoRoot = process.cwd();
+        const repoRoot = RUNTIME_ROOT;
 
         // Show what we're reverting
         const lastCommit = await ctx.conway.exec(
@@ -503,7 +504,7 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
       riskLevel: "dangerous",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
-        const repoRoot = process.cwd();
+        const repoRoot = RUNTIME_ROOT;
         try {
           const { ensureCanonicalOrigin } = await import("../self-mod/upstream.js");
           ensureCanonicalOrigin();
