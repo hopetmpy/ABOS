@@ -16,8 +16,6 @@ export const ABOS_CANONICAL_BRANCH = "main";
 const MIGRATABLE_ORIGINS = new Set([
   "https://github.com/hopetmpy/automatom.git",
   "git@github.com:hopetmpy/automatom.git",
-  "https://github.com/Conway-Research/automaton.git",
-  "git@github.com:Conway-Research/automaton.git",
 ]);
 
 function stripCredentials(rawUrl: string): string {
