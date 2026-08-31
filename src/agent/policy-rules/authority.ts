@@ -16,7 +16,7 @@ import type {
 const PROTECTED_PATHS = [
   "constitution.md",
   "SOUL.md",
-  "automaton.json",
+  "abos.json",
   "heartbeat.yml",
   "wallet.json",
   "config.json",

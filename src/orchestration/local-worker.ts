@@ -15,9 +15,9 @@ import { completeTask, failTask } from "./task-graph.js";
 import type { TaskNode } from "./task-graph.js";
 import { AgentWorkspace } from "./workspace.js";
 import type {
-  AutomatonConfig,
-  AutomatonIdentity,
-  AutomatonTool,
+  AbosConfig,
+  AbosIdentity,
+  AbosTool,
   ConwayClient,
   InputSource,
   SpendTrackerInterface,
@@ -35,10 +35,10 @@ interface LocalWorkerConfig {
   conway: ConwayClient;
   maxTurns?: number;
   harnessRegistry: HarnessRegistry;
-  identity: AutomatonIdentity;
-  config: AutomatonConfig;
+  identity: AbosIdentity;
+  config: AbosConfig;
   allowedEditRoot?: string;
-  tools?: AutomatonTool[];
+  tools?: AbosTool[];
   toolContext?: ToolContext;
   policyEngine?: PolicyEngine;
   spendTracker?: SpendTrackerInterface;
@@ -173,10 +173,10 @@ export class LocalWorkerPool {
 }
 
 function createWorkerIdentity(
-  parentIdentity: AutomatonIdentity,
+  parentIdentity: AbosIdentity,
   workerId: string,
   role: string | null,
-): AutomatonIdentity {
+): AbosIdentity {
   return {
     ...parentIdentity,
     name: `worker-${role ?? "generalist"}-${workerId.slice(-6)}`,

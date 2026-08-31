@@ -1,7 +1,7 @@
 /**
  * Conway Credits Management
  *
- * Monitors the automaton's compute credit balance and triggers
+ * Monitors the abos's compute credit balance and triggers
  * survival mode transitions.
  */
 
@@ -13,7 +13,7 @@ import type {
 import { SURVIVAL_THRESHOLDS } from "../types.js";
 
 /**
- * Check the current financial state of the automaton.
+ * Check the current financial state of the abos.
  */
 export async function checkFinancialState(
   conway: ConwayClient,

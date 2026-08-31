@@ -15,7 +15,7 @@ const SENSITIVE_READ_PATTERNS: string[] = [
   "wallet.json",
   "config.json",
   ".env",
-  "automaton.json",
+  "abos.json",
 ];
 
 /** Glob-like suffix patterns that block reads */
