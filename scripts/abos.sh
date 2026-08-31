@@ -23,6 +23,13 @@ fi
 
 # Early ABOS installers used ~/.abos/runtime, mixing executable source with
 # identity/state. Move only a real Git checkout out of the state directory.
+case "$INSTALL_DIR" in
+  "$HOME/.abos"|"$HOME/.abos/"*)
+    echo "[ERROR] Refusing runtime install inside ~/.abos; that directory is reserved for ABOS identity/state." >&2
+    echo "[ERROR] Choose ABOS_RUNTIME_DIR outside ~/.abos." >&2
+    exit 1
+    ;;
+esac
 LEGACY_ABOS_RUNTIME="$HOME/.abos/runtime"
 if [ "$INSTALL_DIR" != "$LEGACY_ABOS_RUNTIME" ] &&
    [ ! -e "$INSTALL_DIR" ] &&
