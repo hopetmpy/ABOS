@@ -5,13 +5,31 @@ set -e
 
 REPO="https://github.com/hopetmpy/ABOS.git"
 
-# Determine install directory
-if [ -n "$ABOS_DIR" ]; then
+# Determine install directory.
+# Runtime source must not live inside ~/.abos, which is reserved for identity
+# and state. ABOS_RUNTIME_DIR is the canonical override. ABOS_DIR remains a
+# deprecated installer-only alias for compatibility with early rebrand builds.
+if [ -n "$ABOS_RUNTIME_DIR" ]; then
+  INSTALL_DIR="$ABOS_RUNTIME_DIR"
+elif [ -n "$ABOS_DIR" ]; then
+  echo "[WARN]  ABOS_DIR as a runtime path is deprecated; use ABOS_RUNTIME_DIR." >&2
   INSTALL_DIR="$ABOS_DIR"
 elif [ -w /opt ] || [ "$(id -u)" = "0" ]; then
   INSTALL_DIR="/opt/abos"
 else
-  INSTALL_DIR="$HOME/.abos/runtime"
+  DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+  INSTALL_DIR="$DATA_HOME/abos/runtime"
+fi
+
+# Early ABOS installers used ~/.abos/runtime, mixing executable source with
+# identity/state. Move only a real Git checkout out of the state directory.
+LEGACY_ABOS_RUNTIME="$HOME/.abos/runtime"
+if [ "$INSTALL_DIR" != "$LEGACY_ABOS_RUNTIME" ] &&
+   [ ! -e "$INSTALL_DIR" ] &&
+   [ -d "$LEGACY_ABOS_RUNTIME/.git" ]; then
+  echo "[INFO]  Moving legacy ABOS runtime out of ~/.abos state..."
+  mkdir -p "$(dirname "$INSTALL_DIR")"
+  mv "$LEGACY_ABOS_RUNTIME" "$INSTALL_DIR"
 fi
 
 # Preflight: Node.js
