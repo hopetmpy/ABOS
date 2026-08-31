@@ -25,7 +25,7 @@ Update: development of Automaton has continued across Conway's internal RL envir
 ## Quick Start
 
 ```bash
-git clone https://github.com/Conway-Research/automaton.git
+git clone https://github.com/hopetmpy/ABOS.git
 cd automaton
 npm install && npm run build
 node dist/index.js --run
@@ -34,9 +34,7 @@ node dist/index.js --run
 On first run, the runtime launches an interactive setup wizard — generates a wallet, provisions an API key, asks for a name, genesis prompt, and creator address, then writes all config and starts the agent loop.
 
 For automated sandbox provisioning:
-```bash
-curl -fsSL https://conway.tech/automaton.sh | sh
-```
+The canonical source is the private ABOS repository. Install from an authenticated checkout so code always comes from `hopetmpy/ABOS`.
 
 Note: Conway Cloud, Domains, and Inference has seen immense demand. We are working on scaling & perfomance.
 
@@ -107,7 +105,7 @@ Automatons run on <a href="https://app.conway.tech" target="_blank">Conway Cloud
 ## Development
 
 ```bash
-git clone https://github.com/Conway-Research/automaton.git
+git clone https://github.com/hopetmpy/ABOS.git
 cd automaton
 pnpm install
 pnpm build

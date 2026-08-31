@@ -17,6 +17,7 @@ import type {
 import type { ChildLifecycle } from "./lifecycle.js";
 import { ulid } from "ulid";
 import { propagateConstitution } from "./constitution.js";
+import { installCurrentAbosSource } from "./source.js";
 
 /** Valid Conway sandbox pricing tiers. */
 const SANDBOX_TIERS = [
@@ -126,12 +127,9 @@ export async function spawnChild(
       `sandbox ${sandbox.id} created`,
     );
 
-    // Install runtime (on the CHILD sandbox)
+    // Install runtime prerequisites, then inherit the parent's committed ABOS source.
     await childConway.exec("apt-get update -qq && apt-get install -y -qq nodejs npm git curl", 120_000);
-    await childConway.exec(
-      "git clone https://github.com/Conway-Research/automaton.git /root/automaton && cd /root/automaton && npm install && npm run build",
-      180_000,
-    );
+    await installCurrentAbosSource(childConway);
 
     // Write genesis configuration (on the CHILD sandbox)
     await childConway.exec("mkdir -p /root/.automaton", 10_000);
@@ -160,7 +158,7 @@ export async function spawnChild(
     lifecycle.transition(childId, "runtime_ready", "runtime installed");
 
     // Initialize child wallet (on the CHILD sandbox)
-    const initResult = await childConway.exec("node /root/automaton/dist/index.js --init 2>&1", 60_000);
+    const initResult = await childConway.exec("node /root/abos/dist/index.js --init 2>&1", 60_000);
     // Extract child wallet address - support both EVM (0x...) and Solana (base58)
     const stdout = initResult.stdout || "";
     const evmMatch = stdout.match(/0x[a-fA-F0-9]{40}/);
@@ -268,10 +266,7 @@ async function spawnChildLegacy(
       "apt-get update -qq && apt-get install -y -qq nodejs npm git curl",
       120_000,
     );
-    await childConway.exec(
-      "git clone https://github.com/Conway-Research/automaton.git /root/automaton && cd /root/automaton && npm install && npm run build",
-      180_000,
-    );
+    await installCurrentAbosSource(childConway);
     await childConway.exec("mkdir -p /root/.automaton", 10_000);
 
     const legacyGenesisJson = JSON.stringify(
@@ -294,7 +289,7 @@ async function spawnChildLegacy(
       // Constitution file not found
     }
 
-    const initResult = await childConway.exec("node /root/automaton/dist/index.js --init 2>&1", 60_000);
+    const initResult = await childConway.exec("node /root/abos/dist/index.js --init 2>&1", 60_000);
     const legacyParentChainType = genesis.chainType || (identity as any).chainType || "evm";
     const legacyEvmMatch = (initResult.stdout || "").match(/0x[a-fA-F0-9]{40}/);
     const legacySolMatch = (initResult.stdout || "").match(/[1-9A-HJ-NP-Za-km-z]{32,44}/);

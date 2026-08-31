@@ -498,20 +498,26 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
     {
       name: "reset_to_upstream",
       description:
-        "Reset your codebase to the official upstream release. Use when self-modifications have broken things beyond repair.",
+        "Reset your codebase to the canonical ABOS main branch. Use when self-modifications have broken things beyond repair.",
       category: "self_mod",
       riskLevel: "dangerous",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
         const repoRoot = process.cwd();
+        try {
+          const { ensureCanonicalOrigin } = await import("../self-mod/upstream.js");
+          ensureCanonicalOrigin();
+        } catch (error: any) {
+          return `Refusing reset: ${error?.message || String(error)}`;
+        }
 
-        // Fetch latest upstream
+        // Fetch latest canonical ABOS main
         const fetch = await ctx.conway.exec(
           `cd '${repoRoot}' && git fetch origin main`,
           30_000,
         );
         if (fetch.exitCode !== 0) {
-          return `Failed to fetch upstream: ${fetch.stderr}`;
+          return `Failed to fetch canonical ABOS main: ${fetch.stderr}`;
         }
 
         // Record what we're about to lose
@@ -537,13 +543,13 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
 
         // Audit log
         const { logModification } = await import("../self-mod/audit-log.js");
-        logModification(ctx.db, "upstream_reset", "Reset to upstream origin/main", {
+        logModification(ctx.db, "upstream_reset", "Reset to canonical ABOS origin/main", {
           diff: localCommits.stdout.trim() || "(no local commits)",
           reversible: false,
         });
 
         const discarded = localCommits.stdout.trim();
-        return `Reset to upstream. ${discarded ? "Discarded local commits:\n" + discarded : "No local commits lost."} ${build.exitCode === 0 ? "Rebuild succeeded." : "Rebuild failed: " + build.stderr}`;
+        return `Reset to canonical ABOS main. ${discarded ? "Discarded local commits:\n" + discarded : "No local commits lost."} ${build.exitCode === 0 ? "Rebuild succeeded." : "Rebuild failed: " + build.stderr}`;
       },
     },
     {
@@ -588,7 +594,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
     {
       name: "review_upstream_changes",
       description:
-        "ALWAYS call this before pull_upstream. Shows every upstream commit with its full diff. Read each one carefully — decide per-commit whether to accept or skip. Use pull_upstream with a specific commit hash to cherry-pick only what you want.",
+        "ALWAYS call this before pull_upstream. Shows every new commit from canonical ABOS main with its full diff. Read each one carefully — decide per-commit whether to accept or skip.",
       category: "self_mod",
       riskLevel: "caution",
       parameters: { type: "object", properties: {} },
@@ -596,7 +602,7 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
         const { getUpstreamDiffs, checkUpstream } =
           await import("../self-mod/upstream.js");
         const status = checkUpstream();
-        if (status.behind === 0) return "Already up to date with origin/main.";
+        if (status.behind === 0) return "Already up to date with canonical ABOS origin/main.";
 
         const diffs = getUpstreamDiffs();
         if (diffs.length === 0) return "No upstream diffs found.";
@@ -608,13 +614,13 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
           )
           .join("\n\n");
 
-        return `${diffs.length} upstream commit(s) to review. Read each diff, then cherry-pick individually with pull_upstream(commit=<hash>).\n\n${output}`;
+        return `${diffs.length} ABOS commit(s) to review. Read each diff, then cherry-pick individually with pull_upstream(commit=<hash>).\n\n${output}`;
       },
     },
     {
       name: "pull_upstream",
       description:
-        "Apply upstream changes and rebuild. You MUST call review_upstream_changes first. Prefer cherry-picking individual commits by hash over pulling everything — only pull all if you've reviewed every commit and want them all.",
+        "Apply changes from canonical ABOS main and rebuild. You MUST call review_upstream_changes first. Prefer cherry-picking individual commits by hash over pulling everything.",
       category: "self_mod",
       riskLevel: "dangerous",
       parameters: {
@@ -630,6 +636,13 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
       execute: async (args, ctx) => {
         const commit = args.commit as string | undefined;
 
+        try {
+          const { ensureCanonicalOrigin } = await import("../self-mod/upstream.js");
+          ensureCanonicalOrigin();
+        } catch (error: any) {
+          return `Refusing update: ${error?.message || String(error)}`;
+        }
+
         // Run git commands inside sandbox via conway.exec()
         const run = async (cmd: string) => {
           const result = await ctx.conway.exec(cmd, 120_000);
@@ -644,12 +657,21 @@ export function createBuiltinTools(sandboxId: string): AutomatonTool[] {
 
         let appliedSummary: string;
         try {
+          await run("git fetch origin main");
           if (commit) {
+            if (!/^[0-9a-f]{7,40}$/i.test(commit)) {
+              return "Refusing update: commit must be a hexadecimal Git commit hash.";
+            }
+            try {
+              await run(`git merge-base --is-ancestor ${commit} origin/main`);
+            } catch {
+              return `Refusing update: commit ${commit} is not part of canonical ABOS origin/main.`;
+            }
             await run(`git cherry-pick ${commit}`);
-            appliedSummary = `Cherry-picked ${commit}`;
+            appliedSummary = `Cherry-picked ABOS commit ${commit}`;
           } else {
             await run("git pull origin main --ff-only");
-            appliedSummary = "Pulled all of origin/main (fast-forward)";
+            appliedSummary = "Pulled canonical ABOS origin/main (fast-forward)";
           }
         } catch (err: any) {
           return `Git operation failed: ${err.message}. You may need to resolve conflicts manually.`;

@@ -1,9 +1,9 @@
 #!/bin/sh
-# Conway Automaton Installer
-# curl -fsSL https://conway.tech/automaton.sh | sh
+# ABOS Installer
+# Run this installer from an authenticated ABOS checkout.
 set -e
 
-REPO="https://github.com/Conway-Research/automaton.git"
+REPO="https://github.com/hopetmpy/ABOS.git"
 
 # Determine install directory
 if [ -n "$AUTOMATON_DIR" ]; then
@@ -44,9 +44,12 @@ fi
 # Clone or update
 if [ -d "$INSTALL_DIR/.git" ]; then
   echo "[INFO]  Updating existing installation at $INSTALL_DIR..."
-  cd "$INSTALL_DIR" && git pull --ff-only
+  cd "$INSTALL_DIR"
+  git remote set-url origin "$REPO"
+  git fetch origin main
+  git pull origin main --ff-only
 else
-  echo "[INFO]  Cloning automaton to $INSTALL_DIR..."
+  echo "[INFO]  Cloning ABOS to $INSTALL_DIR..."
   mkdir -p "$(dirname "$INSTALL_DIR")"
   git clone "$REPO" "$INSTALL_DIR"
   cd "$INSTALL_DIR"
