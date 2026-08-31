@@ -48,6 +48,14 @@ jobs:
           test -f scripts/abos.sh
           test ! -e scripts/automaton.sh
 
+          # Runtime compatibility contract: CI validates Node 20/22, Node 22 is
+          # the repository default, and package managers must reject other majors.
+          grep -Fq '"node": ">=20 <21 || >=22 <23"' package.json
+          grep -Fxq 'engine-strict=true' .npmrc
+          test "$(tr -d '\r\n' < .nvmrc)" = "22"
+          test "$(tr -d '\r\n' < .node-version)" = "22"
+          grep -Fq '[ "$NODE_MAJOR" -ne 20 ] && [ "$NODE_MAJOR" -ne 22 ]' scripts/abos.sh
+
           if git grep -n -E '@conway/(abos|automaton)' -- packages src ':!src/__tests__/**'; then
             echo "Legacy runtime package import found."
             exit 1
