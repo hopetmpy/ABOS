@@ -50,43 +50,37 @@ const LEGACY_CONFIG_FILE = path.join(LEGACY_AUTOMATON_DIR, "automaton.json");
 const ABOS_CONFIG_FILE = path.join(ABOS_DIR, "abos.json");
 
 let legacyMigrationChecked = false;
+const LEGACY_RUNTIME_DIRNAME = "runtime";
 
-function rewriteLegacyConfigPaths(): void {
-  if (!fs.existsSync(ABOS_CONFIG_FILE)) return;
+function migratePersistedPath(value: string): string {
+  let migrated = value;
+  if (migrated === "~/.automaton" || migrated.startsWith("~/.automaton/")) {
+    migrated = "~/.abos" + migrated.slice("~/.automaton".length);
+  }
+  if (
+    migrated === LEGACY_AUTOMATON_DIR
+    || migrated.startsWith(LEGACY_AUTOMATON_DIR + path.sep)
+  ) {
+    migrated = ABOS_DIR + migrated.slice(LEGACY_AUTOMATON_DIR.length);
+  }
+  return migrated;
+}
 
+function prepareMigratedLegacyConfig(sourcePath: string): string {
   try {
-    const raw = JSON.parse(fs.readFileSync(ABOS_CONFIG_FILE, "utf-8")) as Record<string, unknown>;
-    let changed = false;
+    const raw = JSON.parse(fs.readFileSync(sourcePath, "utf-8")) as Record<string, unknown>;
 
     for (const key of ["heartbeatConfigPath", "dbPath", "skillsDir"] as const) {
       const value = raw[key];
-      if (typeof value !== "string") continue;
-
-      let migrated = value;
-      if (migrated === "~/.automaton" || migrated.startsWith("~/.automaton/")) {
-        migrated = "~/.abos" + migrated.slice("~/.automaton".length);
-      }
-      if (
-        migrated === LEGACY_AUTOMATON_DIR
-        || migrated.startsWith(LEGACY_AUTOMATON_DIR + path.sep)
-      ) {
-        migrated = ABOS_DIR + migrated.slice(LEGACY_AUTOMATON_DIR.length);
-      }
-
-      if (migrated !== value) {
-        raw[key] = migrated;
-        changed = true;
+      if (typeof value === "string") {
+        raw[key] = migratePersistedPath(value);
       }
     }
 
-    if (changed) {
-      fs.writeFileSync(ABOS_CONFIG_FILE, JSON.stringify(raw, null, 2), {
-        mode: 0o600,
-      });
-    }
+    return JSON.stringify(raw, null, 2);
   } catch (error: any) {
     throw new Error(
-      `Legacy Automaton state moved to ~/.abos but its configuration could not be migrated safely: ${error?.message || String(error)}`,
+      `Refusing ABOS state migration: legacy Automaton configuration is invalid or cannot be migrated safely: ${error?.message || String(error)}`,
     );
   }
 }
@@ -94,10 +88,17 @@ function rewriteLegacyConfigPaths(): void {
 /**
  * Preserve an existing Automaton identity during the ABOS rename.
  *
- * If only ~/.automaton exists, move the complete state directory atomically,
- * rename automaton.json -> abos.json, and rewrite known persisted paths.
- * If both directories exist and the legacy directory still owns a wallet while
- * ~/.abos does not, fail closed instead of generating or overwriting identity.
+ * State and runtime are deliberately separated. Historical installers placed
+ * executable source in ~/.automaton/runtime, while an early ABOS installer
+ * could place source in ~/.abos/runtime. Neither runtime directory is identity
+ * state and neither is moved/overwritten here.
+ *
+ * Migration is fail-closed:
+ * - an existing ABOS wallet always wins and legacy state is left untouched;
+ * - a non-runtime ABOS state directory is never merged with legacy state;
+ * - legacy config is parsed and rewritten before any state is moved;
+ * - source/target collisions are rejected before mutation;
+ * - moved entries are rolled back if a filesystem move fails.
  */
 export function migrateLegacyAutomatonStateIfNeeded(): boolean {
   if (legacyMigrationChecked) return false;
@@ -107,22 +108,10 @@ export function migrateLegacyAutomatonStateIfNeeded(): boolean {
     return false;
   }
 
-  if (fs.existsSync(ABOS_DIR)) {
-    const abosWalletExists = fs.existsSync(WALLET_FILE);
-    const legacyWalletExists = fs.existsSync(LEGACY_WALLET_FILE);
-    const entries = fs.readdirSync(ABOS_DIR);
-
-    if (entries.length === 0) {
-      fs.rmdirSync(ABOS_DIR);
-    } else {
-      if (legacyWalletExists && !abosWalletExists) {
-        throw new Error(
-          "Refusing ABOS startup: legacy ~/.automaton contains an identity wallet while ~/.abos already exists without one. Resolve the state directories manually so ABOS cannot create or overwrite the wrong identity.",
-        );
-      }
-      legacyMigrationChecked = true;
-      return false;
-    }
+  const abosWalletExists = fs.existsSync(WALLET_FILE);
+  if (abosWalletExists) {
+    legacyMigrationChecked = true;
+    return false;
   }
 
   const futureLegacyConfig = path.join(LEGACY_AUTOMATON_DIR, "abos.json");
@@ -132,14 +121,100 @@ export function migrateLegacyAutomatonStateIfNeeded(): boolean {
     );
   }
 
-  fs.renameSync(LEGACY_AUTOMATON_DIR, ABOS_DIR);
+  const legacyConfigPath = fs.existsSync(LEGACY_CONFIG_FILE)
+    ? LEGACY_CONFIG_FILE
+    : fs.existsSync(futureLegacyConfig)
+      ? futureLegacyConfig
+      : null;
+  const migratedConfigContent = legacyConfigPath
+    ? prepareMigratedLegacyConfig(legacyConfigPath)
+    : null;
 
-  const movedLegacyConfig = path.join(ABOS_DIR, "automaton.json");
-  if (fs.existsSync(movedLegacyConfig) && !fs.existsSync(ABOS_CONFIG_FILE)) {
-    fs.renameSync(movedLegacyConfig, ABOS_CONFIG_FILE);
+  const legacyEntries = fs
+    .readdirSync(LEGACY_AUTOMATON_DIR)
+    .filter((entry) => entry !== LEGACY_RUNTIME_DIRNAME)
+    .filter((entry) => !legacyConfigPath || path.join(LEGACY_AUTOMATON_DIR, entry) !== legacyConfigPath);
+
+  const hasLegacyState = legacyEntries.length > 0 || migratedConfigContent !== null;
+  if (!hasLegacyState) {
+    legacyMigrationChecked = true;
+    return false;
   }
 
-  rewriteLegacyConfigPaths();
+  if (fs.existsSync(ABOS_DIR)) {
+    const existingStateEntries = fs
+      .readdirSync(ABOS_DIR)
+      .filter((entry) => entry !== LEGACY_RUNTIME_DIRNAME);
+
+    if (existingStateEntries.length > 0) {
+      throw new Error(
+        "Refusing ABOS startup: legacy ~/.automaton state exists while ~/.abos already contains non-runtime state. Resolve the state directories manually so ABOS cannot merge or overwrite identities.",
+      );
+    }
+  }
+
+  // Preflight every target before moving anything.
+  for (const entry of legacyEntries) {
+    const target = path.join(ABOS_DIR, entry);
+    if (fs.existsSync(target)) {
+      throw new Error(
+        `Refusing ABOS state migration: target already exists: ${target}`,
+      );
+    }
+  }
+  if (migratedConfigContent !== null && fs.existsSync(ABOS_CONFIG_FILE)) {
+    throw new Error(
+      "Refusing ABOS state migration: ~/.abos/abos.json already exists.",
+    );
+  }
+
+  if (!fs.existsSync(ABOS_DIR)) {
+    fs.mkdirSync(ABOS_DIR, { recursive: true, mode: 0o700 });
+  }
+
+  const moved: Array<{ source: string; target: string }> = [];
+  let wroteConfig = false;
+
+  try {
+    for (const entry of legacyEntries) {
+      const source = path.join(LEGACY_AUTOMATON_DIR, entry);
+      const target = path.join(ABOS_DIR, entry);
+      fs.renameSync(source, target);
+      moved.push({ source, target });
+    }
+
+    if (legacyConfigPath && migratedConfigContent !== null) {
+      fs.writeFileSync(ABOS_CONFIG_FILE, migratedConfigContent, { mode: 0o600 });
+      wroteConfig = true;
+      fs.rmSync(legacyConfigPath);
+    }
+  } catch (error: any) {
+    if (wroteConfig) {
+      try {
+        fs.rmSync(ABOS_CONFIG_FILE, { force: true });
+      } catch {}
+    }
+
+    for (const entry of moved.reverse()) {
+      try {
+        if (fs.existsSync(entry.target) && !fs.existsSync(entry.source)) {
+          fs.renameSync(entry.target, entry.source);
+        }
+      } catch {}
+    }
+
+    throw new Error(
+      `ABOS state migration failed and was rolled back where possible: ${error?.message || String(error)}`,
+    );
+  }
+
+  // Remove the legacy directory only when no historical runtime remains.
+  try {
+    if (fs.readdirSync(LEGACY_AUTOMATON_DIR).length === 0) {
+      fs.rmdirSync(LEGACY_AUTOMATON_DIR);
+    }
+  } catch {}
+
   legacyMigrationChecked = true;
   return true;
 }
