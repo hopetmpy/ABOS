@@ -84,7 +84,7 @@ export const DEFAULT_CONFIG: Partial<AbosConfig> = {
   heartbeatConfigPath: "~/.abos/heartbeat.yml",
   dbPath: "~/.abos/state.db",
   logLevel: "info",
-  version: "0.2.1",
+  version: "0.3.0",
   skillsDir: "~/.abos/skills",
   maxChildren: 3,
   maxTurnsPerCycle: 25,
