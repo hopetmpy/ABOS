@@ -35,6 +35,8 @@ node dist/index.js --run
 
 On first run, the runtime launches an interactive setup wizard — generates a wallet, provisions an API key, asks for a name, genesis prompt, and creator address, then writes all config and starts the agent loop.
 
+Runtime source and identity/state are deliberately separate. ABOS state lives in `~/.abos`. Do not place the runtime checkout inside that directory. The installer uses `/opt/abos` for root installs and `${XDG_DATA_HOME:-$HOME/.local/share}/abos/runtime` for non-root installs; override with `ABOS_RUNTIME_DIR` when needed.
+
 For automated sandbox provisioning:
 The canonical source is the private ABOS repository. Install from an authenticated checkout so code always comes from `hopetmpy/ABOS`.
 
@@ -109,8 +111,8 @@ ABOS agents run on <a href="https://app.conway.tech" target="_blank">Conway Clou
 ```bash
 git clone https://github.com/hopetmpy/ABOS.git
 cd ABOS
-pnpm install
-pnpm build
+pnpm install --frozen-lockfile
+pnpm run build
 ```
 
 Run the runtime:
