@@ -58,9 +58,15 @@ export function ensureCanonicalOrigin(): {
   );
 
   if (isKnownHistoricalOrigin) {
-    git(["remote", "set-url", "origin", ABOS_CANONICAL_REPOSITORY]);
+    // Preserve the clone's authentication transport when migrating the old
+    // repository name. An SSH-authenticated install must not be silently
+    // converted to HTTPS, which may have no credentials configured.
+    const migratedUrl = rawUrl.trim().startsWith("git@github.com:")
+      ? "git@github.com:hopetmpy/ABOS.git"
+      : ABOS_CANONICAL_REPOSITORY;
+    git(["remote", "set-url", "origin", migratedUrl]);
     return {
-      originUrl: ABOS_CANONICAL_REPOSITORY,
+      originUrl: migratedUrl,
       migrated: true,
       previousUrl: stripCredentials(rawUrl),
     };
