@@ -17,6 +17,7 @@ describe("ABOS installation and state separation", () => {
     // ~/.abos/runtime is compatibility input only, never the new default.
     expect(script).not.toContain('else\n  INSTALL_DIR="$HOME/.abos/runtime"');
     expect(script).toContain('LEGACY_ABOS_RUNTIME="$HOME/.abos/runtime"');
+    expect(script).toContain("Refusing runtime install inside ~/.abos");
   });
 
   it("has valid POSIX shell syntax", () => {
