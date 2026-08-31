@@ -5,8 +5,8 @@
  */
 
 import chalk from "chalk";
-import { loadConfig, resolvePath } from "@conway/abos/config.js";
-import { createDatabase } from "@conway/abos/state/database.js";
+import { loadConfig, resolvePath } from "@abos/runtime/config.js";
+import { createDatabase } from "@abos/runtime/state/database.js";
 
 const accent = chalk.rgb(131, 127, 255);
 

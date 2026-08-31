@@ -7,7 +7,7 @@
  * using the same canonical format as the runtime client.
  */
 
-import { loadConfig } from "@conway/abos/config.js";
+import { loadConfig } from "@abos/runtime/config.js";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { keccak256, toBytes } from "viem";
 import fs from "fs";

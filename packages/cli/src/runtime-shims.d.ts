@@ -1,4 +1,4 @@
-declare module "@conway/abos/config.js" {
+declare module "@abos/runtime/config.js" {
   export interface AbosCliConfig {
     name: string;
     walletAddress: string;
@@ -17,7 +17,7 @@ declare module "@conway/abos/config.js" {
   export function resolvePath(p: string): string;
 }
 
-declare module "@conway/abos/state/database.js" {
+declare module "@abos/runtime/state/database.js" {
   export interface CliToolCall {
     name: string;
     result: string;

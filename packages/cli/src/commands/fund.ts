@@ -4,7 +4,7 @@
  * Transfer Conway credits using the configured Conway API key.
  */
 
-import { loadConfig } from "@conway/abos/config.js";
+import { loadConfig } from "@abos/runtime/config.js";
 
 const args = process.argv.slice(3);
 const amount = args[0];
