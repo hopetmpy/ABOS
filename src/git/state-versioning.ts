@@ -28,6 +28,7 @@ const REQUIRED_STATE_GITIGNORE = [
   "state.db-wal",
   "state.db-shm",
   "logs/",
+  "runtime/",
   "*.log",
   "*.err",
 ];
@@ -70,7 +71,7 @@ async function ensureSensitiveStateIgnore(
     5000,
   );
   await conway.exec(
-    `cd '${dir}' && git rm -r --cached --ignore-unmatch logs >/dev/null 2>&1 || true`,
+    `cd '${dir}' && git rm -r --cached --ignore-unmatch logs runtime >/dev/null 2>&1 || true`,
     5000,
   );
 }
