@@ -1,6 +1,6 @@
 #!/bin/sh
 # ABOS Installer
-# curl -fsSL https://conway.tech/automaton.sh | sh
+# Run this installer from an authenticated ABOS checkout.
 set -e
 
 REPO="https://github.com/hopetmpy/ABOS.git"
