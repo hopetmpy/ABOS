@@ -17,6 +17,7 @@ import type { WalletData } from "../types.js";
 import type { ChainType } from "./chain.js";
 import { EvmChainIdentity, SolanaChainIdentity } from "./chain.js";
 import type { ChainIdentity } from "./chain.js";
+import { getHomeDir } from "../platform/home.js";
 
 /**
  * Create a stub PrivateKeyAccount for Solana wallets.
@@ -41,7 +42,7 @@ function createSolanaStubAccount(solanaAddress: string): PrivateKeyAccount {
   } as unknown as PrivateKeyAccount;
 }
 
-const HOME_DIR = process.env.HOME || "/root";
+const HOME_DIR = getHomeDir();
 const ABOS_DIR = path.join(HOME_DIR, ".abos");
 const LEGACY_AUTOMATON_DIR = path.join(HOME_DIR, ".automaton");
 const WALLET_FILE = path.join(ABOS_DIR, "wallet.json");
@@ -50,7 +51,75 @@ const LEGACY_CONFIG_FILE = path.join(LEGACY_AUTOMATON_DIR, "automaton.json");
 const ABOS_CONFIG_FILE = path.join(ABOS_DIR, "abos.json");
 
 let legacyMigrationChecked = false;
+let brokenRootFallbackMigrationChecked = false;
 const LEGACY_RUNTIME_DIRNAME = "runtime";
+
+/**
+ * Early Windows runs inherited the historical "/root" fallback when HOME was
+ * unset, which resolves to C:\\root on Windows. Preserve that identity by
+ * moving the complete state directory to the platform-correct user home when
+ * there is no competing ABOS state.
+ */
+function migrateBrokenRootFallbackStateIfNeeded(): boolean {
+  if (brokenRootFallbackMigrationChecked) return false;
+
+  // This migration is only relevant when HOME was absent and Windows-style
+  // USERPROFILE resolution is what corrected the state root.
+  if (process.env.HOME || !process.env.USERPROFILE) {
+    brokenRootFallbackMigrationChecked = true;
+    return false;
+  }
+
+  const brokenDir = path.resolve("/root/.abos");
+  if (
+    path.resolve(brokenDir) === path.resolve(ABOS_DIR)
+    || !fs.existsSync(brokenDir)
+  ) {
+    brokenRootFallbackMigrationChecked = true;
+    return false;
+  }
+
+  const brokenEntries = fs.readdirSync(brokenDir);
+  if (brokenEntries.length === 0) {
+    try {
+      fs.rmdirSync(brokenDir);
+    } catch {}
+    brokenRootFallbackMigrationChecked = true;
+    return false;
+  }
+
+  if (!fs.existsSync(ABOS_DIR)) {
+    fs.mkdirSync(path.dirname(ABOS_DIR), { recursive: true });
+    fs.renameSync(brokenDir, ABOS_DIR);
+    try {
+      fs.chmodSync(ABOS_DIR, 0o700);
+    } catch {}
+    brokenRootFallbackMigrationChecked = true;
+    return true;
+  }
+
+  const targetEntries = fs.readdirSync(ABOS_DIR);
+  if (targetEntries.length === 0) {
+    fs.rmdirSync(ABOS_DIR);
+    fs.renameSync(brokenDir, ABOS_DIR);
+    try {
+      fs.chmodSync(ABOS_DIR, 0o700);
+    } catch {}
+    brokenRootFallbackMigrationChecked = true;
+    return true;
+  }
+
+  // A current wallet wins. Leave the historical fallback untouched so no
+  // identity is silently overwritten.
+  if (fs.existsSync(WALLET_FILE)) {
+    brokenRootFallbackMigrationChecked = true;
+    return false;
+  }
+
+  throw new Error(
+    "Refusing ABOS startup: state exists in both the corrected user home and the historical /root fallback. Resolve the directories manually so ABOS cannot merge or overwrite identities.",
+  );
+}
 
 function migratePersistedPath(value: string): string {
   let migrated = value;
@@ -101,6 +170,7 @@ function prepareMigratedLegacyConfig(sourcePath: string): string {
  * - moved entries are rolled back if a filesystem move fails.
  */
 export function migrateLegacyAutomatonStateIfNeeded(): boolean {
+  migrateBrokenRootFallbackStateIfNeeded();
   if (legacyMigrationChecked) return false;
 
   if (!fs.existsSync(LEGACY_AUTOMATON_DIR)) {
