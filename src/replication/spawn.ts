@@ -289,7 +289,7 @@ async function spawnChildLegacy(
       // Constitution file not found
     }
 
-    const initResult = await childConway.exec("node /root/automaton/dist/index.js --init 2>&1", 60_000);
+    const initResult = await childConway.exec("node /root/abos/dist/index.js --init 2>&1", 60_000);
     const legacyParentChainType = genesis.chainType || (identity as any).chainType || "evm";
     const legacyEvmMatch = (initResult.stdout || "").match(/0x[a-fA-F0-9]{40}/);
     const legacySolMatch = (initResult.stdout || "").match(/[1-9A-HJ-NP-Za-km-z]{32,44}/);
