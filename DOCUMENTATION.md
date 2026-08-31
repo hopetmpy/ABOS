@@ -204,7 +204,7 @@ node dist/index.js --status
 ```
 
 ```
-=== AUTOMATON STATUS ===
+=== ABOS STATUS ===
 Name:       Atlas
 Address:    0x1234...abcd
 Creator:    0x5678...efgh
