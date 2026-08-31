@@ -57,6 +57,30 @@ if ! command -v git >/dev/null 2>&1; then
   exit 1
 fi
 
+# If this installer is running from an authenticated ABOS SSH checkout,
+# reuse that SSH transport for a fresh private-repository clone. HTTPS keeps
+# using the canonical URL so credentials are supplied by the user's Git helper
+# rather than copied into this script or child process arguments.
+SCRIPT_DIR="$(CDPATH= cd "$(dirname "$0")" 2>/dev/null && pwd || true)"
+SOURCE_ROOT=""
+SOURCE_ORIGIN=""
+if [ -n "$SCRIPT_DIR" ]; then
+  SOURCE_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
+fi
+if [ -n "$SOURCE_ROOT" ]; then
+  SOURCE_ORIGIN="$(git -C "$SOURCE_ROOT" remote get-url origin 2>/dev/null || true)"
+  SOURCE_NORMALIZED="$(printf '%s' "$SOURCE_ORIGIN" | sed \
+    -e 's#^git@github.com:#https://github.com/#' \
+    -e 's#^https://[^/@]*@github.com/#https://github.com/#' \
+    -e 's#\.git$##' \
+    -e 's#/$##' | tr '[:upper:]' '[:lower:]')"
+  if [ "$SOURCE_NORMALIZED" = "https://github.com/hopetmpy/abos" ]; then
+    case "$SOURCE_ORIGIN" in
+      git@github.com:*) REPO="$SOURCE_ORIGIN" ;;
+    esac
+  fi
+fi
+
 # Enable pnpm via corepack
 if ! command -v pnpm >/dev/null 2>&1; then
   echo "[INFO]  Enabling pnpm via corepack..."
