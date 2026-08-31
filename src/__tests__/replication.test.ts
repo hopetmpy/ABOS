@@ -18,7 +18,7 @@ import {
   createTestDb,
   createTestIdentity,
 } from "./mocks.js";
-import type { AutomatonDatabase, GenesisConfig } from "../types.js";
+import type { AbosDatabase, GenesisConfig } from "../types.js";
 import { MIGRATION_V7 } from "../state/schema.js";
 
 // Mock fs for constitution propagation
@@ -88,11 +88,11 @@ describe("isValidWalletAddress", () => {
 
 describe("spawnChild", () => {
   let conway: MockConwayClient;
-  let db: AutomatonDatabase;
+  let db: AbosDatabase;
   const identity = createTestIdentity();
   const genesis: GenesisConfig = {
     name: "test-child",
-    genesisPrompt: "You are a test child automaton.",
+    genesisPrompt: "You are a test child abos.",
     creatorMessage: "Hello child!",
     creatorAddress: identity.address,
     parentAddress: identity.address,
@@ -205,7 +205,7 @@ describe("spawnChild", () => {
 
 describe("SandboxCleanup", () => {
   let conway: MockConwayClient;
-  let db: AutomatonDatabase;
+  let db: AbosDatabase;
   let lifecycle: ChildLifecycle;
 
   beforeEach(() => {
@@ -260,7 +260,7 @@ describe("SandboxCleanup", () => {
 // ─── pruneDeadChildren ──────────────────────────────────────
 
 describe("pruneDeadChildren", () => {
-  let db: AutomatonDatabase;
+  let db: AbosDatabase;
   let conway: MockConwayClient;
 
   beforeEach(() => {

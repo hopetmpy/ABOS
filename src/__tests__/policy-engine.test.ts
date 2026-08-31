@@ -25,7 +25,7 @@ import {
   MockInferenceClient,
 } from "./mocks.js";
 import type {
-  AutomatonTool,
+  AbosTool,
   PolicyRule,
   PolicyRequest,
   PolicyRuleResult,
@@ -33,7 +33,7 @@ import type {
   ToolContext,
   InputSource,
   RiskLevel,
-  AutomatonDatabase,
+  AbosDatabase,
   SpendTrackerInterface,
   SpendCategory,
   SpendEntry,
@@ -106,7 +106,7 @@ function createMockSpendTracker(): SpendTrackerInterface {
   };
 }
 
-function createMockTool(overrides: Partial<AutomatonTool> = {}): AutomatonTool {
+function createMockTool(overrides: Partial<AbosTool> = {}): AbosTool {
   return {
     name: "test_tool",
     description: "A test tool",
@@ -624,7 +624,7 @@ describe("Tool call IDs", () => {
 
 describe("executeTool with PolicyEngine", () => {
   let db: Database.Database;
-  let appDb: AutomatonDatabase;
+  let appDb: AbosDatabase;
 
   beforeEach(() => {
     db = createRawTestDb();

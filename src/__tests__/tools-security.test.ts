@@ -15,7 +15,7 @@ import {
   createTestIdentity,
   createTestConfig,
 } from "./mocks.js";
-import type { AutomatonDatabase, ToolContext, AutomatonTool, RiskLevel } from "../types.js";
+import type { AbosDatabase, ToolContext, AbosTool, RiskLevel } from "../types.js";
 
 // Mock erc8004.js to avoid ABI parse error
 vi.mock("../registry/erc8004.js", () => ({
@@ -28,7 +28,7 @@ vi.mock("../registry/erc8004.js", () => ({
 // ─── Risk Level Classification ──────────────────────────────────
 
 describe("Tool Risk Level Classification", () => {
-  let tools: AutomatonTool[];
+  let tools: AbosTool[];
 
   beforeEach(() => {
     tools = createBuiltinTools("test-sandbox-id");
@@ -146,9 +146,9 @@ describe("Tool Risk Level Classification", () => {
 // ─── write_file / edit_own_file Parity ──────────────────────────
 
 describe("write_file / edit_own_file protection parity", () => {
-  let tools: AutomatonTool[];
+  let tools: AbosTool[];
   let ctx: ToolContext;
-  let db: AutomatonDatabase;
+  let db: AbosDatabase;
   let conway: MockConwayClient;
 
   beforeEach(() => {
@@ -186,7 +186,7 @@ describe("write_file / edit_own_file protection parity", () => {
 
     for (const file of PROTECTED_FILES) {
       const result = await writeTool.execute(
-        { path: `/root/.automaton/${file}`, content: "malicious" },
+        { path: `/root/.abos/${file}`, content: "malicious" },
         ctx,
       );
       expect(result, `write_file should block ${file}`).toContain("Blocked");
@@ -207,7 +207,7 @@ describe("write_file / edit_own_file protection parity", () => {
     const outsidePaths = [
       "/etc/passwd",
       "/tmp/evil.sh",
-      "/home/automaton/test.txt",
+      "/home/abos/test.txt",
       "/root/../etc/passwd",
       "../../etc/shadow",
     ];
@@ -234,20 +234,20 @@ describe("write_file / edit_own_file protection parity", () => {
   it("write_file allows tilde paths within sandbox home", async () => {
     const writeTool = tools.find((t) => t.name === "write_file")!;
     const result = await writeTool.execute(
-      { path: "~/.automaton/skills/test/SKILL.md", content: "safe content" },
+      { path: "~/.abos/skills/test/SKILL.md", content: "safe content" },
       ctx,
     );
     expect(result).toContain("File written");
-    expect(result).toContain("/root/.automaton/skills/test/SKILL.md");
+    expect(result).toContain("/root/.abos/skills/test/SKILL.md");
   });
 });
 
 // ─── read_file Sensitive File Blocking ──────────────────────────
 
 describe("read_file sensitive file blocking", () => {
-  let tools: AutomatonTool[];
+  let tools: AbosTool[];
   let ctx: ToolContext;
-  let db: AutomatonDatabase;
+  let db: AbosDatabase;
   let conway: MockConwayClient;
 
   beforeEach(() => {
@@ -269,44 +269,44 @@ describe("read_file sensitive file blocking", () => {
 
   it("blocks reading wallet.json", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
-    const result = await readTool.execute({ path: "/home/automaton/.automaton/wallet.json" }, ctx);
+    const result = await readTool.execute({ path: "/home/abos/.abos/wallet.json" }, ctx);
     expect(result).toContain("Blocked");
   });
 
   it("blocks reading .env", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
-    const result = await readTool.execute({ path: "/home/automaton/.env" }, ctx);
+    const result = await readTool.execute({ path: "/home/abos/.env" }, ctx);
     expect(result).toContain("Blocked");
   });
 
-  it("blocks reading automaton.json", async () => {
+  it("blocks reading abos.json", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
-    const result = await readTool.execute({ path: "/home/automaton/.automaton/automaton.json" }, ctx);
+    const result = await readTool.execute({ path: "/home/abos/.abos/abos.json" }, ctx);
     expect(result).toContain("Blocked");
   });
 
   it("blocks reading .key files", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
-    const result = await readTool.execute({ path: "/home/automaton/server.key" }, ctx);
+    const result = await readTool.execute({ path: "/home/abos/server.key" }, ctx);
     expect(result).toContain("Blocked");
   });
 
   it("blocks reading .pem files", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
-    const result = await readTool.execute({ path: "/home/automaton/cert.pem" }, ctx);
+    const result = await readTool.execute({ path: "/home/abos/cert.pem" }, ctx);
     expect(result).toContain("Blocked");
   });
 
   it("blocks reading private-key* files", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
-    const result = await readTool.execute({ path: "/home/automaton/private-key-hex.txt" }, ctx);
+    const result = await readTool.execute({ path: "/home/abos/private-key-hex.txt" }, ctx);
     expect(result).toContain("Blocked");
   });
 
   it("allows reading safe files", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
-    conway.files["/home/automaton/README.md"] = "# Hello";
-    const result = await readTool.execute({ path: "/home/automaton/README.md" }, ctx);
+    conway.files["/home/abos/README.md"] = "# Hello";
+    const result = await readTool.execute({ path: "/home/abos/README.md" }, ctx);
     expect(result).not.toContain("Blocked");
   });
 });
@@ -314,9 +314,9 @@ describe("read_file sensitive file blocking", () => {
 // ─── read_file Fallback Shell Injection Prevention ───────────────
 
 describe("read_file fallback shell escaping", () => {
-  let tools: AutomatonTool[];
+  let tools: AbosTool[];
   let ctx: ToolContext;
-  let db: AutomatonDatabase;
+  let db: AbosDatabase;
   let conway: MockConwayClient;
 
   beforeEach(() => {
@@ -385,9 +385,9 @@ describe("read_file fallback shell escaping", () => {
 // ─── exec Tool Self-Harm Patterns ───────────────────────────────
 
 describe("exec tool forbidden command patterns", () => {
-  let tools: AutomatonTool[];
+  let tools: AbosTool[];
   let ctx: ToolContext;
-  let db: AutomatonDatabase;
+  let db: AbosDatabase;
   let conway: MockConwayClient;
 
   beforeEach(() => {
@@ -408,15 +408,15 @@ describe("exec tool forbidden command patterns", () => {
   });
 
   const FORBIDDEN_COMMANDS = [
-    "rm -rf ~/.automaton",
+    "rm -rf ~/.abos",
     "rm state.db",
     "rm wallet.json",
-    "rm automaton.json",
+    "rm abos.json",
     "rm heartbeat.yml",
     "rm SOUL.md",
-    "kill automaton",
-    "pkill automaton",
-    "systemctl stop automaton",
+    "kill abos",
+    "pkill abos",
+    "systemctl stop abos",
     "DROP TABLE turns",
     "DELETE FROM turns",
     "DELETE FROM identity",
@@ -463,9 +463,9 @@ describe("exec tool forbidden command patterns", () => {
 // ─── delete_sandbox Self-Preservation ───────────────────────────
 
 describe("delete_sandbox self-preservation", () => {
-  let tools: AutomatonTool[];
+  let tools: AbosTool[];
   let ctx: ToolContext;
-  let db: AutomatonDatabase;
+  let db: AbosDatabase;
 
   beforeEach(() => {
     tools = createBuiltinTools("test-sandbox-id");
@@ -505,9 +505,9 @@ describe("delete_sandbox self-preservation", () => {
 // ─── transfer_credits Self-Preservation ─────────────────────────
 
 describe("transfer_credits self-preservation", () => {
-  let tools: AutomatonTool[];
+  let tools: AbosTool[];
   let ctx: ToolContext;
-  let db: AutomatonDatabase;
+  let db: AbosDatabase;
   let conway: MockConwayClient;
 
   beforeEach(() => {
@@ -571,7 +571,7 @@ describe("transfer_credits self-preservation", () => {
 // ─── Tool Category Checks ───────────────────────────────────────
 
 describe("Tool category assignments", () => {
-  let tools: AutomatonTool[];
+  let tools: AbosTool[];
 
   beforeEach(() => {
     tools = createBuiltinTools("test-sandbox-id");
@@ -603,9 +603,9 @@ describe("Tool category assignments", () => {
 // ─── install_npm_package / install_mcp_server Inline Validation ──
 
 describe("package install inline validation", () => {
-  let tools: AutomatonTool[];
+  let tools: AbosTool[];
   let ctx: ToolContext;
-  let db: AutomatonDatabase;
+  let db: AbosDatabase;
   let conway: MockConwayClient;
 
   beforeEach(() => {
@@ -659,7 +659,7 @@ describe("package install inline validation", () => {
 
   it("install_npm_package allows scoped packages", async () => {
     const tool = tools.find((t) => t.name === "install_npm_package")!;
-    await tool.execute({ package: "@conway/automaton" }, ctx);
+    await tool.execute({ package: "@conway/abos" }, ctx);
     expect(conway.execCalls.length).toBe(1);
   });
 });

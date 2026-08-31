@@ -14,7 +14,7 @@ describe("SIWS", () => {
       const msg = buildSiwsMessage({
         domain: "conway.tech",
         address: "DRpbCBMxVnDK7maPM5tGv6MvB3v1sRMC86PZ8okm21hy",
-        statement: "Sign in to Conway as an Automaton.",
+        statement: "Sign in to Conway as an ABOS.",
         uri: "https://api.conway.tech/v1/auth/verify",
         nonce: "abc123",
         issuedAt: "2025-01-01T00:00:00.000Z",
@@ -23,7 +23,7 @@ describe("SIWS", () => {
 
       expect(msg).toContain("conway.tech wants you to sign in with your Solana account:");
       expect(msg).toContain("DRpbCBMxVnDK7maPM5tGv6MvB3v1sRMC86PZ8okm21hy");
-      expect(msg).toContain("Sign in to Conway as an Automaton.");
+      expect(msg).toContain("Sign in to Conway as an ABOS.");
       expect(msg).toContain("URI: https://api.conway.tech/v1/auth/verify");
       expect(msg).toContain("Nonce: abc123");
       expect(msg).toContain("Issued At: 2025-01-01T00:00:00.000Z");
