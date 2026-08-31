@@ -45,7 +45,31 @@ fi
 if [ -d "$INSTALL_DIR/.git" ]; then
   echo "[INFO]  Updating existing installation at $INSTALL_DIR..."
   cd "$INSTALL_DIR"
-  git remote set-url origin "$REPO"
+
+  CURRENT_ORIGIN="$(git remote get-url origin 2>/dev/null || true)"
+  NORMALIZED_ORIGIN="$(printf '%s' "$CURRENT_ORIGIN" | sed \
+    -e 's#^git@github.com:#https://github.com/#' \
+    -e 's#^https://[^/@]*@github.com/#https://github.com/#' \
+    -e 's#\.git$##' \
+    -e 's#/$##' | tr '[:upper:]' '[:lower:]')"
+
+  case "$NORMALIZED_ORIGIN" in
+    "https://github.com/hopetmpy/abos")
+      # Already canonical. Preserve the existing HTTPS/SSH transport.
+      ;;
+    "https://github.com/hopetmpy/automatom")
+      # Migrate only the known historical repository while preserving
+      # the authentication transport/credentials already configured.
+      MIGRATED_ORIGIN="$(printf '%s' "$CURRENT_ORIGIN" | sed -E 's#hopetmpy/automatom(\.git)?$#hopetmpy/ABOS.git#')"
+      git remote set-url origin "$MIGRATED_ORIGIN"
+      ;;
+    *)
+      echo "[ERROR] Refusing to update: $INSTALL_DIR is a Git repository whose origin is not the canonical ABOS repository." >&2
+      echo "[ERROR] Origin: ${CURRENT_ORIGIN:-<missing>}" >&2
+      exit 1
+      ;;
+  esac
+
   git fetch origin main
   git pull origin main --ff-only
 else
