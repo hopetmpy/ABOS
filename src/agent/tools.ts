@@ -1883,7 +1883,7 @@ Model: ${ctx.inference.getDefaultModel()}
         try {
           // Start the child process with nohup so it survives exec session end
           await childConway.exec(
-            "nohup node /root/abos/dist/index.js --run > /root/.abos/agent.log 2>&1 &",
+            "cd /root/abos && nohup node dist/index.js --run > /root/.abos/agent.log 2>&1 &",
             30_000,
           );
 
