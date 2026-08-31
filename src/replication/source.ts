@@ -167,7 +167,7 @@ export async function installCurrentAbosSource(
   }
 
   const install = await childConway.exec(
-    `cd '${CHILD_REPO_ROOT}' && npm install && npm run build`,
+    `cd '${CHILD_REPO_ROOT}' && (command -v pnpm >/dev/null 2>&1 || corepack enable pnpm) && pnpm install --frozen-lockfile && pnpm run build`,
     180_000,
   );
   if (install.exitCode !== 0) {

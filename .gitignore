@@ -10,4 +10,12 @@ dist
 *.tgz
 .automaton/wallet.json
 .automaton/state.db
+.abos/wallet.json
+.abos/config.json
+.abos/abos.json
+.abos/state.db
+.abos/state.db-wal
+.abos/state.db-shm
+.automaton/config.json
+.automaton/automaton.json
 

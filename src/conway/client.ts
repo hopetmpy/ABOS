@@ -373,7 +373,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     nonce?: string;
     chainType?: ChainType;
     chainIdentity?: ChainIdentity;
-  }): Promise<{ automaton: Record<string, unknown> }> => {
+  }): Promise<{ registration: Record<string, unknown> }> => {
     const {
       abosId,
       abosAddress,

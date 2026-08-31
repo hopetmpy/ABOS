@@ -92,7 +92,7 @@ export async function provision(
     const siwsMsg = buildSiwsMessage({
       domain: "conway.tech",
       address,
-      statement: "Sign in to Conway as an Automaton to provision an API key.", // Conway legacy protocol literal // Conway legacy protocol literal
+      statement: "Sign in to Conway as an Automaton to provision an API key.", // Conway legacy protocol literal
       uri: `${url}/v1/auth/verify`,
       nonce,
       issuedAt: new Date().toISOString(),

@@ -27,7 +27,9 @@ Update: development of ABOS has continued across Conway's internal RL environmen
 ```bash
 git clone https://github.com/hopetmpy/ABOS.git
 cd ABOS
-npm install && npm run build
+corepack enable pnpm
+pnpm install --frozen-lockfile
+pnpm run build
 node dist/index.js --run
 ```
 

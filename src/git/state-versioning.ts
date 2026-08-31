@@ -45,6 +45,7 @@ export async function initStateRepo(
   const gitignore = `# Sensitive files - never commit
 wallet.json
 config.json
+abos.json
 state.db
 state.db-wal
 state.db-shm

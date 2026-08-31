@@ -65,7 +65,7 @@ On first run, the interactive setup wizard walks you through wallet generation, 
 ### Prerequisites
 
 - Node.js >= 20.0.0
-- pnpm (recommended) or npm
+- pnpm 10.28.1 via Corepack (canonical package manager)
 - Internet access (for Conway API, USDC on-chain operations)
 
 ---

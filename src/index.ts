@@ -161,7 +161,7 @@ async function showStatus(): Promise<void> {
   const registry = db.getRegistryEntry();
 
   logger.info(`
-=== AUTOMATON STATUS ===
+=== ABOS STATUS ===
 Name:       ${config.name}
 Address:    ${config.walletAddress}
 Creator:    ${config.creatorAddress}

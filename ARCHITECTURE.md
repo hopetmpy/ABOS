@@ -43,7 +43,7 @@ ABOS is a sovereign AI agent runtime. An ABOS owns an Ethereum wallet, pays for 
                     REST + x402 payment protocol
                                  |
 +----------------------------------------------------------------------+
-|  AUTOMATON RUNTIME                                                    |
+|  ABOS RUNTIME                                                         |
 |                                                                       |
 |  +-----------+    +-------------+    +-----------+    +----------+   |
 |  | Heartbeat |    | Agent Loop  |    | Inference |    | Memory   |   |
