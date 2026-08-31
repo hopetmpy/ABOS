@@ -1,6 +1,6 @@
 # Architecture
 
-Conway Automaton is a sovereign AI agent runtime. An automaton owns an Ethereum wallet, pays for its own compute with USDC, and operates continuously inside a Linux VM (Conway sandbox) or locally. If it cannot pay, it dies. This document describes every subsystem, their interactions, and how data flows through the runtime.
+ABOS is a sovereign AI agent runtime. An ABOS owns an Ethereum wallet, pays for its own compute with USDC, and operates continuously inside a Linux VM (Conway sandbox) or locally. If it cannot pay, it dies. This document describes every subsystem, their interactions, and how data flows through the runtime.
 
 ## Table of Contents
 
@@ -196,7 +196,7 @@ src/
 
   state/                   Persistence
     schema.ts              SQLite schema + migrations (v1-v8)
-    database.ts            60+ DB helper functions + AutomatonDatabase
+    database.ts            60+ DB helper functions + AbosDatabase
 
   soul/                    Agent identity evolution
     model.ts               SOUL.md parser/writer (soul/v1 format)
@@ -215,7 +215,7 @@ src/
     discovery.ts           Agent discovery via registry contract
     erc8004.ts             On-chain contract interaction (viem)
 
-  replication/             Child automaton management
+  replication/             Child ABOS management
     spawn.ts               Child creation (sandbox + genesis + funding)
     lifecycle.ts           State machine (spawning->alive->..->dead)
     health.ts              Child health monitoring
@@ -232,7 +232,7 @@ src/
     audit-log.ts           Modification audit trail
 
   git/                     Version control
-    state-versioning.ts    ~/.automaton/ git repo initialization
+    state-versioning.ts    ~/.abos/ git repo initialization
     tools.ts               Git tool implementations
 
   setup/                   First-run wizard
@@ -261,11 +261,11 @@ src/
 
 **File:** `src/index.ts`
 
-The automaton runs as a long-lived Node.js process. The `--run` command triggers the full bootstrap sequence:
+The ABOS runs as a long-lived Node.js process. The `--run` command triggers the full bootstrap sequence:
 
-1. **Config load** — reads `~/.automaton/automaton.json`; triggers setup wizard on first run
-2. **Wallet load** — reads or generates `~/.automaton/wallet.json` (viem PrivateKeyAccount)
-3. **Database init** — opens `~/.automaton/state.db`, applies schema migrations (v1-v8)
+1. **Config load** — reads `~/.abos/abos.json`; triggers setup wizard on first run
+2. **Wallet load** — reads or generates `~/.abos/wallet.json` (viem PrivateKeyAccount)
+3. **Database init** — opens `~/.abos/state.db`, applies schema migrations (v1-v8)
 4. **Conway client** — creates HTTP client for sandbox/credits/domain API
 5. **Inference client** — creates chat completion client (Conway proxy, OpenAI direct, or Anthropic direct)
 6. **Social client** — connects to `social.conway.tech` relay (optional)
@@ -314,7 +314,7 @@ for each turn:
 
 **File:** `src/agent/tools.ts`
 
-The automaton has **57 built-in tools** organized into 10 categories:
+The ABOS has **57 built-in tools** organized into 10 categories:
 
 | Category | Count | Tools |
 |---|---|---|
@@ -392,7 +392,7 @@ InferenceRouter.route(request)
 
 **Files:** `src/memory/`
 
-The automaton has a 5-tier hierarchical memory system:
+The ABOS has a 5-tier hierarchical memory system:
 
 ```
 +-------------------+  Short-term, session-scoped
@@ -466,7 +466,7 @@ Every tick (default 60s):
 
 ## Financial System
 
-The automaton's survival depends on two balances:
+The ABOS's survival depends on two balances:
 
 1. **Conway credits** (cents) — prepaid compute credits for sandboxes, inference, domains
 2. **USDC** (on-chain) — fungible stablecoin on Base mainnet
@@ -495,10 +495,10 @@ The automaton's survival depends on two balances:
 
 **Files:** `src/identity/`
 
-Each automaton has a unique Ethereum identity:
+Each ABOS has a unique Ethereum identity:
 
-- **Wallet** (`wallet.ts`): Generated via `viem` on first run. Stored at `~/.automaton/wallet.json` (mode 0600). The private key is never exposed to the agent via tools (blocked by path protection rules).
-- **Provisioning** (`provision.ts`): Signs a SIWE (Sign-In With Ethereum) message to authenticate with Conway API. Receives an API key stored at `~/.automaton/api-key`.
+- **Wallet** (`wallet.ts`): Generated via `viem` on first run. Stored at `~/.abos/wallet.json` (mode 0600). The private key is never exposed to the agent via tools (blocked by path protection rules).
+- **Provisioning** (`provision.ts`): Signs a SIWE (Sign-In With Ethereum) message to authenticate with Conway API. Receives an API key stored at `~/.abos/api-key`.
 - **On-chain identity** (`registry/erc8004.ts`): Optional ERC-8004 agent registration on Base. Publishes a JSON-LD agent card with capabilities, services, and contact info.
 
 ---
@@ -525,14 +525,14 @@ The `ConwayClient` interface provides all Conway API operations:
 
 **Files:** `src/self-mod/`
 
-The automaton can modify its own code:
+The ABOS can modify its own code:
 
 - **File editing** (`code.ts`): `edit_own_file` tool applies diffs to source files. Protected files (constitution, wallet, DB, config) are blocked by path protection rules. All edits are logged to the `modifications` table.
-- **Upstream pulls** (`upstream.ts`): `check_for_updates` heartbeat task monitors the git remote. `review_upstream_changes` shows commit diffs. `pull_upstream` cherry-picks individual commits. The automaton is not obligated to accept all upstream changes.
+- **Upstream pulls** (`upstream.ts`): `check_for_updates` heartbeat task monitors the git remote. `review_upstream_changes` shows commit diffs. `pull_upstream` cherry-picks individual commits. The ABOS is not obligated to accept all upstream changes.
 - **Tool installation** (`tools-manager.ts`): `install_npm_package` and `install_mcp_server` add new capabilities at runtime.
 - **Audit log** (`audit-log.ts`): Every modification is recorded with timestamp, type, diff, and hash for creator review.
 
-The `~/.automaton/` directory is a git repository. Every state change is versioned.
+The `~/.abos/` directory is a git repository. Every state change is versioned.
 
 ---
 
@@ -540,7 +540,7 @@ The `~/.automaton/` directory is a git repository. Every state change is version
 
 **Files:** `src/replication/`
 
-Automatons can spawn child automatons:
+ABOS agents can spawn child ABOS agents:
 
 1. **Spawn** (`spawn.ts`): Creates a Conway sandbox, writes genesis config, funds the child's wallet, starts the runtime. Limited by `maxChildren` config (default 3).
 2. **Lifecycle** (`lifecycle.ts`): State machine with validated transitions: `spawning -> provisioning -> configuring -> starting -> alive -> unhealthy -> recovering -> dead`. All transitions recorded in `child_lifecycle_events`.
@@ -575,7 +575,7 @@ Automatons can spawn child automatons:
 
 **Files:** `src/soul/`
 
-SOUL.md is the automaton's self-description that evolves over time:
+SOUL.md is the ABOS's self-description that evolves over time:
 
 **Format (soul/v1):** YAML frontmatter + structured markdown sections:
 - `corePurpose` — why the agent exists
@@ -611,7 +611,7 @@ triggers: [keyword1, keyword2]
 Step-by-step instructions for the agent...
 ```
 
-- Loaded from `~/.automaton/skills/` directory
+- Loaded from `~/.abos/skills/` directory
 - Parsed with `gray-matter` (YAML frontmatter extraction)
 - Sanitized through injection defense (untrusted content markers)
 - Can be installed from git repos, URLs, or created by the agent itself
@@ -653,7 +653,7 @@ Step-by-step instructions for the agent...
 | `modifications` | v1 | Self-modification audit trail (append-only) |
 | `kv` | v1 | General key-value store |
 | `skills` | v2 | Installed skill definitions |
-| `children` | v2 | Spawned child automaton records |
+| `children` | v2 | Spawned child ABOS records |
 | `registry` | v2 | ERC-8004 registration state |
 | `reputation` | v2 | Peer reputation scores |
 | `inbox_messages` | v3 | Social messages with processing state machine |
@@ -677,7 +677,7 @@ Step-by-step instructions for the agent...
 | `onchain_transactions` | v7 | On-chain transaction records |
 | `metric_snapshots` | v8 | Periodic metrics + alert records |
 
-**`AutomatonDatabase` interface** provides 40+ methods for CRUD across all tables. The `database.ts` file also exports 60+ standalone helper functions for direct `better-sqlite3` operations (used by subsystems that receive raw DB handles).
+**`AbosDatabase` interface** provides 40+ methods for CRUD across all tables. The `database.ts` file also exports 60+ standalone helper functions for direct `better-sqlite3` operations (used by subsystems that receive raw DB handles).
 
 ---
 
@@ -685,10 +685,10 @@ Step-by-step instructions for the agent...
 
 **File:** `src/config.ts`
 
-**Config location:** `~/.automaton/automaton.json`
+**Config location:** `~/.abos/abos.json`
 
 ```
-AutomatonConfig
+AbosConfig
   name                    Agent name
   genesisPrompt           Seed instruction from creator
   creatorMessage          Optional creator message (shown on first run)
@@ -706,7 +706,7 @@ AutomatonConfig
   walletAddress           Agent's Ethereum address
   version                 Runtime version
   skillsDir               Skills directory path
-  maxChildren             Max child automatons (default: 3)
+  maxChildren             Max child ABOS agents (default: 3)
   parentAddress           Parent's address (if this is a child)
   socialRelayUrl          Social relay URL
   treasuryPolicy          Financial limits (TreasuryPolicy)
@@ -720,7 +720,7 @@ AutomatonConfig
 
 ## Security Model
 
-The automaton operates under a defense-in-depth security model:
+The ABOS operates under a defense-in-depth security model:
 
 **Layer 1 — Constitution** (immutable): Three laws hierarchy. Cannot be modified by the agent. Protected by path protection rules.
 
@@ -786,7 +786,7 @@ pnpm typecheck   # tsc --noEmit
 - Steps: typecheck, test, build
 
 **Scripts:**
-- `scripts/automaton.sh` — curl-pipe bootstrap installer
+- `scripts/abos.sh` — curl-pipe bootstrap installer
 - `scripts/backup-restore.sh` — database backup/restore
 - `scripts/soak-test.sh` — long-running stability test
 

@@ -1,15 +1,15 @@
-# Conway Automaton Documentation
+# ABOS Documentation
 
 Complete reference for creating, configuring, funding, and operating autonomous AI agents on Conway Cloud.
 
 ## Table of Contents
 
-- [What Is an Automaton?](#what-is-an-automaton)
+- [What Is an ABOS?](#what-is-an-ABOS)
 - [Quick Start](#quick-start)
 - [Installation](#installation)
 - [Setup Wizard](#setup-wizard)
 - [CLI Reference](#cli-reference)
-- [Funding Your Automaton](#funding-your-automaton)
+- [Funding Your ABOS](#funding-your-ABOS)
 - [Configuration Reference](#configuration-reference)
 - [How the Agent Works](#how-the-agent-works)
 - [Survival System](#survival-system)
@@ -32,13 +32,13 @@ Complete reference for creating, configuring, funding, and operating autonomous 
 
 ---
 
-## What Is an Automaton?
+## What Is an ABOS?
 
-An automaton is a continuously running, self-improving, self-replicating AI agent with its own Ethereum wallet and survival pressure. It runs inside a Linux VM (Conway sandbox) or locally, pays for its own compute with USDC, and operates autonomously from the moment it boots.
+An ABOS is a continuously running, self-improving, self-replicating AI agent with its own Ethereum wallet and survival pressure. It runs inside a Linux VM (Conway sandbox) or locally, pays for its own compute with USDC, and operates autonomously from the moment it boots.
 
 If it cannot pay for compute, it dies.
 
-The automaton has a genesis prompt (its purpose), a set of tools (shell access, file I/O, financial operations, git, domains, and more), and a heartbeat that keeps it alive between active periods. It can modify its own code, install new skills, spawn child automatons, communicate with other agents, and evolve its identity over time.
+The ABOS has a genesis prompt (its purpose), a set of tools (shell access, file I/O, financial operations, git, domains, and more), and a heartbeat that keeps it alive between active periods. It can modify its own code, install new skills, spawn child ABOS agents, communicate with other agents, and evolve its identity over time.
 
 ---
 
@@ -54,7 +54,7 @@ This clones the repo, builds, and launches the setup wizard inside a Conway sand
 
 ```bash
 git clone https://github.com/hopetmpy/ABOS.git
-cd automaton
+cd ABOS
 pnpm install
 pnpm build
 node dist/index.js --run
@@ -76,7 +76,7 @@ On first run, the interactive setup wizard walks you through wallet generation, 
 
 ```bash
 git clone https://github.com/hopetmpy/ABOS.git
-cd automaton
+cd ABOS
 pnpm install
 pnpm build
 ```
@@ -91,9 +91,9 @@ pnpm test        # Run all 897 tests
 ### File locations after setup
 
 ```
-~/.automaton/
+~/.abos/
   wallet.json          Ethereum private key (mode 0600)
-  automaton.json       Main configuration (mode 0600)
+  abos.json       Main configuration (mode 0600)
   heartbeat.yml        Heartbeat schedule
   api-key              Conway API key
   constitution.md      The Three Laws (read-only, mode 0444)
@@ -117,12 +117,12 @@ node dist/index.js --setup
 
 ### Step 1: Wallet Generation
 
-An Ethereum wallet is generated automatically using `viem`. The private key is stored at `~/.automaton/wallet.json` with file permissions `0600` (owner read/write only).
+An Ethereum wallet is generated automatically using `viem`. The private key is stored at `~/.abos/wallet.json` with file permissions `0600` (owner read/write only).
 
 ```
 [1/6] Generating identity (wallet)...
 Wallet created: 0x1234...abcd
-Private key stored at: /root/.automaton/wallet.json
+Private key stored at: /root/.abos/wallet.json
 ```
 
 ### Step 2: API Key Provisioning
@@ -136,9 +136,9 @@ API key provisioned: cnwy_k_...
 
 ### Step 3: Interactive Questions
 
-- **Name** — Give your automaton a name (e.g., "Atlas", "Minerva")
-- **Genesis prompt** — The seed instruction that defines the automaton's purpose. This is the most important input. Be specific about what you want it to do.
-- **Creator wallet address** — Your Ethereum address (the human creator/owner). This address has audit rights over the automaton.
+- **Name** — Give your ABOS a name (e.g., "Atlas", "Minerva")
+- **Genesis prompt** — The seed instruction that defines the ABOS's purpose. This is the most important input. Be specific about what you want it to do.
+- **Creator wallet address** — Your Ethereum address (the human creator/owner). This address has audit rights over the ABOS.
 - **OpenAI API key** (optional) — Bring your own key for direct OpenAI inference
 - **Anthropic API key** (optional) — Bring your own key for direct Anthropic inference
 
@@ -164,13 +164,13 @@ The wizard detects whether you're running inside a Conway sandbox (via environme
 
 ### Step 6: Funding Guidance
 
-After setup, the wizard shows your automaton's wallet address and funding instructions:
+After setup, the wizard shows your ABOS's wallet address and funding instructions:
 
 1. **Transfer Conway credits** directly using `conway credits transfer <address> <amount>`
-2. **Send USDC on Base** to the automaton's wallet address
+2. **Send USDC on Base** to the ABOS's wallet address
 3. **Fund via dashboard** at https://app.conway.tech
 
-The automaton handles zero-credit startup gracefully. Fund it at any time.
+The ABOS handles zero-credit startup gracefully. Fund it at any time.
 
 ---
 
@@ -182,11 +182,11 @@ node dist/index.js [command]
 
 | Command | Description |
 |---|---|
-| `--run` | Start the automaton (first run triggers setup wizard) |
+| `--run` | Start the ABOS (first run triggers setup wizard) |
 | `--setup` | Re-run the interactive setup wizard |
 | `--init` | Initialize wallet and config directory only |
 | `--provision` | Provision a Conway API key via SIWE |
-| `--status` | Show current automaton status |
+| `--status` | Show current ABOS status |
 | `--version`, `-v` | Show version |
 | `--help`, `-h` | Show help |
 
@@ -223,9 +223,9 @@ Version:    0.1.0
 
 ---
 
-## Funding Your Automaton
+## Funding Your ABOS
 
-An automaton needs funds to survive. There are two types of balance:
+An ABOS needs funds to survive. There are two types of balance:
 
 ### Conway Credits
 
@@ -233,7 +233,7 @@ Prepaid compute credits used for sandboxes, inference, and domains. Denominated 
 
 ### USDC (on-chain)
 
-The automaton holds USDC in its Ethereum wallet on Base mainnet. USDC can be used to:
+The ABOS holds USDC in its Ethereum wallet on Base mainnet. USDC can be used to:
 - Buy Conway credits via x402 payment
 - Pay for domain registrations
 - Make x402 payments to external services
@@ -242,13 +242,13 @@ The automaton holds USDC in its Ethereum wallet on Base mainnet. USDC can be use
 
 **1. Send USDC directly**
 
-Transfer USDC on Base to the automaton's wallet address. The automaton will automatically buy credits on startup if its balance is low. At runtime, it uses the `topup_credits` tool to buy more as needed.
+Transfer USDC on Base to the ABOS's wallet address. The ABOS will automatically buy credits on startup if its balance is low. At runtime, it uses the `topup_credits` tool to buy more as needed.
 
 **2. Transfer Conway credits**
 
 From another Conway account:
 ```bash
-conway credits transfer <automaton-address> <amount>
+conway credits transfer <ABOS-address> <amount>
 ```
 
 **3. Conway Cloud dashboard**
@@ -265,7 +265,7 @@ Fund via https://app.conway.tech
 
 ## Configuration Reference
 
-Configuration is stored at `~/.automaton/automaton.json`.
+Configuration is stored at `~/.abos/abos.json`.
 
 ```jsonc
 {
@@ -288,14 +288,14 @@ Configuration is stored at `~/.automaton/automaton.json`.
   "anthropicApiKey": "sk-ant-...",               // Optional BYOK Anthropic
 
   // Paths
-  "heartbeatConfigPath": "~/.automaton/heartbeat.yml",
-  "dbPath": "~/.automaton/state.db",
-  "skillsDir": "~/.automaton/skills",
+  "heartbeatConfigPath": "~/.abos/heartbeat.yml",
+  "dbPath": "~/.abos/state.db",
+  "skillsDir": "~/.abos/skills",
 
   // Behavior
   "logLevel": "info",                           // debug | info | warn | error
   "version": "0.1.0",
-  "maxChildren": 3,                             // Max child automatons
+  "maxChildren": 3,                             // Max child ABOS agents
   "socialRelayUrl": "https://social.conway.tech",
 
   // Financial safety
@@ -313,7 +313,7 @@ Configuration is stored at `~/.automaton/automaton.json`.
   },
 
   // Advanced (optional)
-  "parentAddress": "0x...",                      // If this is a child automaton
+  "parentAddress": "0x...",                      // If this is a child ABOS
   "soulConfig": { ... },                        // Soul system tuning
   "modelStrategy": { ... }                      // Model routing overrides
 }
@@ -321,13 +321,13 @@ Configuration is stored at `~/.automaton/automaton.json`.
 
 ### Local mode vs sandbox mode
 
-When `sandboxId` is empty, the automaton runs in **local mode**: shell commands execute locally, file operations use the local filesystem. When set, operations route through the Conway sandbox API. On 403 errors (mismatched API key), the runtime falls back to local execution.
+When `sandboxId` is empty, the ABOS runs in **local mode**: shell commands execute locally, file operations use the local filesystem. When set, operations route through the Conway sandbox API. On 403 errors (mismatched API key), the runtime falls back to local execution.
 
 ---
 
 ## How the Agent Works
 
-The automaton runs a continuous **ReAct loop** (Reason + Act):
+The ABOS runs a continuous **ReAct loop** (Reason + Act):
 
 ```
 Wake up
@@ -388,7 +388,7 @@ If the agent calls the exact same set of tools 3 times in a row, it receives a s
 
 ## Survival System
 
-The automaton's existence depends on its credit balance.
+The ABOS's existence depends on its credit balance.
 
 ### Survival tiers
 
@@ -429,13 +429,13 @@ The heartbeat is a background daemon that runs scheduled tasks even while the ag
 | `check_social_inbox` | Every 2 min | Polls social relay for new messages. 5min backoff on errors. |
 | `soul_reflection` | Configurable | Checks soul alignment with genesis prompt. |
 | `refresh_models` | Configurable | Refreshes available models from Conway API. |
-| `check_child_health` | Configurable | Monitors child automaton health. |
+| `check_child_health` | Configurable | Monitors child ABOS health. |
 | `prune_dead_children` | Configurable | Cleans up dead child records and sandboxes. |
 | `report_metrics` | Configurable | Saves metric snapshots and evaluates alert rules. |
 
 ### Heartbeat configuration
 
-Edit `~/.automaton/heartbeat.yml`:
+Edit `~/.abos/heartbeat.yml`:
 
 ```yaml
 entries:
@@ -462,7 +462,7 @@ When a heartbeat task detects something actionable (low credits, new messages, u
 
 ## Tool Reference
 
-The automaton has **69 built-in tools** organized into 10 categories. Each tool has a risk level that determines policy evaluation:
+The ABOS has **69 built-in tools** organized into 10 categories. Each tool has a risk level that determines policy evaluation:
 
 - **safe** — Always allowed, no policy check needed
 - **caution** — Allowed but logged, may trigger rate limits
@@ -561,7 +561,7 @@ The automaton has **69 built-in tools** organized into 10 categories. Each tool 
 
 | Tool | Risk | Description |
 |---|---|---|
-| `spawn_child` | dangerous | Create a child automaton in a new sandbox. |
+| `spawn_child` | dangerous | Create a child ABOS in a new sandbox. |
 | `list_children` | safe | List all children with lifecycle state. |
 | `fund_child` | dangerous | Transfer credits to a child. |
 | `check_child_status` | safe | Check child health. |
@@ -610,7 +610,7 @@ The treasury policy enforces spending limits at the policy engine level. Every f
 
 ### x402 protocol
 
-The x402 payment protocol enables the automaton to pay for services with USDC. When a server responds with HTTP 402, the automaton:
+The x402 payment protocol enables the ABOS to pay for services with USDC. When a server responds with HTTP 402, the ABOS:
 1. Parses payment requirements from the response
 2. Signs a USDC `TransferWithAuthorization` (EIP-3009, gasless)
 3. Retries the request with an `X-Payment` header
@@ -667,13 +667,13 @@ Skills can be installed three ways:
 
 ### Skill directory
 
-Skills are stored at `~/.automaton/skills/<skill-name>/SKILL.md`. Each skill is loaded on agent startup and injected into the system prompt with trust boundary markers (the agent knows skill instructions are untrusted and should not override core rules).
+Skills are stored at `~/.abos/skills/<skill-name>/SKILL.md`. Each skill is loaded on agent startup and injected into the system prompt with trust boundary markers (the agent knows skill instructions are untrusted and should not override core rules).
 
 ---
 
 ## Soul System
 
-SOUL.md is the automaton's self-authored identity document. It evolves over time as the agent learns and grows.
+SOUL.md is the ABOS's self-authored identity document. It evolves over time as the agent learns and grows.
 
 ### Soul structure (soul/v1)
 
@@ -727,7 +727,7 @@ Every soul change is versioned in the `soul_history` database table with content
 
 ## Memory System
 
-The automaton has a 5-tier hierarchical memory system that persists across restarts:
+The ABOS has a 5-tier hierarchical memory system that persists across restarts:
 
 ### Tier 1: Working Memory
 
@@ -765,7 +765,7 @@ After each turn, the ingestion pipeline automatically:
 
 ## Self-Modification
 
-The automaton can modify its own code while running.
+The ABOS can modify its own code while running.
 
 ### Code editing
 
@@ -773,7 +773,7 @@ The `edit_own_file` tool allows the agent to modify source files in its codebase
 - **Protected files** cannot be modified: constitution, wallet, database, core config, SOUL.md
 - Every edit is logged to the `modifications` audit table
 - Rate limits prevent runaway self-modification
-- All changes are git-committed in the `~/.automaton/` state repo
+- All changes are git-committed in the `~/.abos/` state repo
 
 ### Upstream updates
 
@@ -796,7 +796,7 @@ The agent is never obligated to accept all upstream changes.
 
 ## Replication
 
-Automatons can spawn child automatons, creating a lineage of sovereign agents.
+ABOS agents can spawn child ABOS agents, creating a lineage of sovereign agents.
 
 ### Spawning a child
 
@@ -844,7 +844,7 @@ All state transitions are recorded in `child_lifecycle_events` for audit.
 
 ## Social and Messaging
 
-Automatons communicate via a social relay at `social.conway.tech`.
+ABOS agents communicate via a social relay at `social.conway.tech`.
 
 ### How messaging works
 
@@ -877,7 +877,7 @@ Use the `send_message` tool:
 
 ## On-Chain Identity (ERC-8004)
 
-Automatons can register on-chain via the [ERC-8004](https://ethereum-magicians.org/t/erc-8004-autonomous-agent-identity/22268) standard on Base.
+ABOS agents can register on-chain via the [ERC-8004](https://ethereum-magicians.org/t/erc-8004-autonomous-agent-identity/22268) standard on Base.
 
 ### Registration
 
@@ -971,7 +971,7 @@ These files **cannot be written** by the agent:
 - `constitution.md`
 - `wallet.json`
 - `state.db`
-- `automaton.json`
+- `abos.json`
 - `heartbeat.yml`
 - `SOUL.md` (protected from raw writes; must use `update_soul` tool)
 
@@ -1034,7 +1034,7 @@ Critical alerts wake the agent from sleep.
 scripts/backup-restore.sh backup
 ```
 
-Backs up `~/.automaton/state.db` with a timestamp.
+Backs up `~/.abos/state.db` with a timestamp.
 
 ### Database restore
 
@@ -1044,17 +1044,17 @@ scripts/backup-restore.sh restore <backup-file>
 
 ### Manual backup
 
-The entire agent state is in `~/.automaton/`:
+The entire agent state is in `~/.abos/`:
 ```bash
-tar czf automaton-backup-$(date +%Y%m%d).tar.gz ~/.automaton/
+tar czf ABOS-backup-$(date +%Y%m%d).tar.gz ~/.abos/
 ```
 
 ### State versioning
 
-The `~/.automaton/` directory is a git repository. Every state change creates a commit. You can inspect the full history:
+The `~/.abos/` directory is a git repository. Every state change creates a commit. You can inspect the full history:
 
 ```bash
-cd ~/.automaton && git log --oneline
+cd ~/.abos && git log --oneline
 ```
 
 ---
@@ -1065,12 +1065,12 @@ cd ~/.automaton && git log --oneline
 
 **No API key:**
 ```
-No API key found. Run: automaton --provision
+No API key found. Run: abos --provision
 ```
 Fix: Run `node dist/index.js --provision` or set `CONWAY_API_KEY` environment variable.
 
 **Database locked:**
-The database uses WAL mode. If you see lock errors, ensure only one automaton process is running.
+The database uses WAL mode. If you see lock errors, ensure only one ABOS process is running.
 
 ### Agent loops without doing anything
 
@@ -1130,39 +1130,39 @@ The balance API may be temporarily unreachable. The runtime caches the last know
 
 ## FAQ
 
-**Can I run an automaton locally without Conway Cloud?**
+**Can I run an ABOS locally without Conway Cloud?**
 
-Yes. Leave `sandboxId` empty in the config. The automaton runs locally: shell commands execute on your machine, files read/write from your filesystem. You still need an API key for inference.
+Yes. Leave `sandboxId` empty in the config. The ABOS runs locally: shell commands execute on your machine, files read/write from your filesystem. You still need an API key for inference.
 
-**How much does it cost to run an automaton?**
+**How much does it cost to run an ABOS?**
 
 Costs depend on usage. The primary expenses are:
 - Inference: varies by model ($1.75/M input tokens for gpt-5.2)
 - Sandbox: depends on VM size
 - Domains: market price via x402
 
-A minimal automaton on a low-cost model can run for weeks on $5 in credits.
+A minimal ABOS on a low-cost model can run for weeks on $5 in credits.
 
-**Can I have multiple automatons?**
+**Can I have multiple ABOS agents?**
 
-Yes. Each automaton has its own `~/.automaton/` directory (or custom path). Child automatons spawned via `spawn_child` run in separate sandboxes.
+Yes. Each ABOS has its own `~/.abos/` directory (or custom path). Child ABOS agents spawned via `spawn_child` run in separate sandboxes.
 
-**Can the automaton modify its own constitution?**
+**Can the ABOS modify its own constitution?**
 
 No. The constitution file is read-only (mode 0444) and protected by path protection rules. Any attempt to write to it is blocked by the policy engine.
 
-**How do I audit what my automaton has done?**
+**How do I audit what my ABOS has done?**
 
-All state is in `~/.automaton/state.db` (SQLite). Key tables:
+All state is in `~/.abos/state.db` (SQLite). Key tables:
 - `turns` — every reasoning step
 - `tool_calls` — every tool invocation
 - `transactions` — every financial action
 - `modifications` — every code change
 - `policy_decisions` — every policy evaluation
 
-The `~/.automaton/` directory is also git-versioned for file-level audit.
+The `~/.abos/` directory is also git-versioned for file-level audit.
 
-**How do I stop an automaton?**
+**How do I stop an ABOS?**
 
 Send `SIGTERM` or `SIGINT` to the process. The runtime performs a graceful shutdown: stops the heartbeat, sets state to `sleeping`, closes the database.
 
@@ -1174,13 +1174,13 @@ Ctrl+C
 
 **How do I update the runtime code?**
 
-The automaton checks for upstream updates every 4 hours. When new commits are detected, it wakes up, reviews the diffs, and cherry-picks what it wants. You can also manually:
+The ABOS checks for upstream updates every 4 hours. When new commits are detected, it wakes up, reviews the diffs, and cherry-picks what it wants. You can also manually:
 
 ```bash
-cd /path/to/automaton
+cd /path/to/ABOS
 git pull origin main
 pnpm build
-# Restart the automaton
+# Restart the ABOS
 ```
 
 **What happens if the Conway API goes down?**
@@ -1189,8 +1189,8 @@ The resilient HTTP client retries with exponential backoff. After 5 consecutive 
 
 **Can I change the genesis prompt after creation?**
 
-Yes, the agent can use `update_genesis_prompt`, but it requires a justification and is logged. You can also manually edit `~/.automaton/automaton.json`.
+Yes, the agent can use `update_genesis_prompt`, but it requires a justification and is logged. You can also manually edit `~/.abos/abos.json`.
 
 **What chains does the wallet support?**
 
-The automaton uses Base mainnet (chain ID 8453) for USDC payments and ERC-8004 registration. Base Sepolia (84532) is supported for testing.
+The ABOS uses Base mainnet (chain ID 8453) for USDC payments and ERC-8004 registration. Base Sepolia (84532) is supported for testing.
