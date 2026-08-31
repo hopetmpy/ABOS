@@ -7,12 +7,13 @@
  */
 
 import type { ConwayClient, AbosDatabase } from "../types.js";
+import { getHomeDir } from "../platform/home.js";
 import { gitInit, gitCommit, gitStatus, gitLog } from "./tools.js";
 
 const ABOS_DIR = "~/.abos";
 
 function resolveHome(p: string): string {
-  const home = process.env.HOME || "/root";
+  const home = getHomeDir();
   if (p.startsWith("~")) {
     return `${home}${p.slice(1)}`;
   }
