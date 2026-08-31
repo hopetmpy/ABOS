@@ -85,11 +85,20 @@ Environment:
       }
     } catch {}
     const { chainIdentity, isNew } = await getWallet(initChainType);
+
+    // Parent-provisioned children carry genesis.json and must complete setup
+    // non-interactively before they can be considered initialized.
+    const { bootstrapFromGenesisIfPresent } = await import(
+      "./setup/genesis-bootstrap.js"
+    );
+    const bootstrappedConfig = await bootstrapFromGenesisIfPresent();
+
     logger.info(
       JSON.stringify({
         address: chainIdentity.address,
         isNew,
         configDir: getAbosDir(),
+        configured: !!bootstrappedConfig,
       }),
     );
     process.exit(0);
@@ -188,6 +197,15 @@ async function run(): Promise<void> {
 
   // Load config — first run triggers interactive setup wizard
   let config = loadConfig();
+  if (!config) {
+    // Replicated children have genesis.json and run headlessly. Recover or
+    // complete their canonical setup without ever entering an interactive
+    // prompt. Human first-run installs without genesis.json still use wizard.
+    const { bootstrapFromGenesisIfPresent } = await import(
+      "./setup/genesis-bootstrap.js"
+    );
+    config = await bootstrapFromGenesisIfPresent();
+  }
   if (!config) {
     const { runSetupWizard } = await import("./setup/wizard.js");
     config = await runSetupWizard();
