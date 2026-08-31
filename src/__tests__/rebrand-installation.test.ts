@@ -18,6 +18,8 @@ describe("ABOS installation and state separation", () => {
     expect(script).not.toContain('else\n  INSTALL_DIR="$HOME/.abos/runtime"');
     expect(script).toContain('LEGACY_ABOS_RUNTIME="$HOME/.abos/runtime"');
     expect(script).toContain("Refusing runtime install inside ~/.abos");
+    expect(script).toContain("SOURCE_ORIGIN");
+    expect(script).toContain('git@github.com:*) REPO="$SOURCE_ORIGIN"');
   });
 
   it("has valid POSIX shell syntax", () => {
