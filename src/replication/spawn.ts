@@ -159,6 +159,11 @@ export async function spawnChild(
 
     // Initialize child wallet (on the CHILD sandbox)
     const initResult = await childConway.exec("cd /root/abos && node dist/index.js --init 2>&1", 60_000);
+    if (initResult.exitCode !== 0) {
+      throw new Error(
+        `Child ABOS initialization failed (exit ${initResult.exitCode}): ${initResult.stderr || initResult.stdout || "no output"}`,
+      );
+    }
     // Extract child wallet address - support both EVM (0x...) and Solana (base58)
     const stdout = initResult.stdout || "";
     const evmMatch = stdout.match(/0x[a-fA-F0-9]{40}/);
@@ -290,6 +295,11 @@ async function spawnChildLegacy(
     }
 
     const initResult = await childConway.exec("cd /root/abos && node dist/index.js --init 2>&1", 60_000);
+    if (initResult.exitCode !== 0) {
+      throw new Error(
+        `Child ABOS initialization failed (exit ${initResult.exitCode}): ${initResult.stderr || initResult.stdout || "no output"}`,
+      );
+    }
     const legacyParentChainType = genesis.chainType || (identity as any).chainType || "evm";
     const legacyEvmMatch = (initResult.stdout || "").match(/0x[a-fA-F0-9]{40}/);
     const legacySolMatch = (initResult.stdout || "").match(/[1-9A-HJ-NP-Za-km-z]{32,44}/);
