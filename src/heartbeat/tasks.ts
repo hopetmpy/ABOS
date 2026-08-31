@@ -291,7 +291,7 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
           taskCtx.db.setKV("upstream_prev_behind", behindStr);
           return {
             shouldWake: true,
-            message: `${upstream.behind} new commit(s) on origin/main. Review with review_upstream_changes, then cherry-pick what you want with pull_upstream.`,
+            message: `${upstream.behind} new commit(s) on canonical ABOS origin/main. Review with review_upstream_changes, then cherry-pick what you want with pull_upstream.`,
           };
         }
       } else {
