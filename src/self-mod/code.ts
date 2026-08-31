@@ -20,6 +20,7 @@ import type {
   AbosDatabase,
 } from "../types.js";
 import { logModification } from "./audit-log.js";
+import { RUNTIME_ROOT } from "../runtime-root.js";
 
 // ─── IMMUTABLE SAFETY INVARIANTS ─────────────────────────────
 // These are hard-coded and CANNOT be changed by the agent.
@@ -132,7 +133,7 @@ function resolveAndValidatePath(filePath: string): string | null {
     resolved = path.resolve(resolved);
 
     // Step 3: Check resolved path is within the base directory (cwd)
-    const baseDir = path.resolve(process.cwd());
+    const baseDir = RUNTIME_ROOT;
     if (!resolved.startsWith(baseDir + path.sep) && resolved !== baseDir) {
       return null;
     }
@@ -268,7 +269,7 @@ export async function editFile(
   // 6. Pre-modification git snapshot (in repo root, not ~/.abos/)
   try {
     const { gitCommit } = await import("../git/tools.js");
-    await gitCommit(conway, process.cwd(), `pre-modify: ${reason}`);
+    await gitCommit(conway, RUNTIME_ROOT, `pre-modify: ${reason}`);
   } catch {
     // Git not available -- proceed without snapshot
   }
@@ -295,7 +296,7 @@ export async function editFile(
   // 9. Post-modification git commit (in repo root)
   try {
     const { gitCommit } = await import("../git/tools.js");
-    await gitCommit(conway, process.cwd(), `self-mod: ${reason}`);
+    await gitCommit(conway, RUNTIME_ROOT, `self-mod: ${reason}`);
   } catch {
     // Git not available -- proceed without commit
   }
