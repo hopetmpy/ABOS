@@ -46,9 +46,7 @@ The automaton has a genesis prompt (its purpose), a set of tools (shell access, 
 
 ### One-line install (Conway sandbox)
 
-```bash
-curl -fsSL https://conway.tech/automaton.sh | sh
-```
+The canonical source is the private ABOS repository. Install from an authenticated checkout so code always comes from `hopetmpy/ABOS`.
 
 This clones the repo, builds, and launches the setup wizard inside a Conway sandbox.
 
