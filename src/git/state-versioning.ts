@@ -19,51 +19,92 @@ function resolveHome(p: string): string {
   return p;
 }
 
+const REQUIRED_STATE_GITIGNORE = [
+  "wallet.json",
+  "config.json",
+  "abos.json",
+  "automaton.json",
+  "state.db",
+  "state.db-wal",
+  "state.db-shm",
+  "logs/",
+  "*.log",
+  "*.err",
+];
+
+async function ensureSensitiveStateIgnore(
+  conway: ConwayClient,
+  dir: string,
+): Promise<void> {
+  const ignorePath = `${dir}/.gitignore`;
+  let existing = "";
+
+  try {
+    existing = await conway.readFile(ignorePath);
+  } catch {
+    // Missing .gitignore is repaired below.
+  }
+
+  const present = new Set(
+    existing
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean),
+  );
+
+  const missing = REQUIRED_STATE_GITIGNORE.filter((line) => !present.has(line));
+  if (!existing.trim() || missing.length > 0) {
+    const prefix = existing.trim()
+      ? existing.trimEnd()
+      : "# Sensitive files - never commit";
+    const next = `${prefix}\n${missing.join("\n")}\n`;
+    await conway.writeFile(ignorePath, next);
+  }
+
+  // A legacy state repo may already track secrets because its historical
+  // .gitignore did not include automaton.json. Stop tracking sensitive files
+  // without deleting them from the working tree. Existing Git history is left
+  // untouched; history rewriting must be an explicit operator action.
+  await conway.exec(
+    `cd '${dir}' && git rm --cached --ignore-unmatch wallet.json config.json abos.json automaton.json state.db state.db-wal state.db-shm >/dev/null 2>&1 || true`,
+    5000,
+  );
+  await conway.exec(
+    `cd '${dir}' && git rm -r --cached --ignore-unmatch logs >/dev/null 2>&1 || true`,
+    5000,
+  );
+}
+
 /**
- * Initialize git repo for the abos's state directory.
- * Creates .gitignore to exclude sensitive files.
+ * Initialize or harden the git repo for the abos's state directory.
+ * Existing legacy repos are repaired idempotently instead of being skipped.
  */
 export async function initStateRepo(
   conway: ConwayClient,
 ): Promise<void> {
   const dir = resolveHome(ABOS_DIR);
 
-  // Check if already initialized
   const checkResult = await conway.exec(
-    `test -d ${dir}/.git && echo "exists" || echo "nope"`,
+    `test -d '${dir}/.git' && echo "exists" || echo "nope"`,
     5000,
   );
+  const alreadyInitialized = checkResult.stdout.trim() === "exists";
 
-  if (checkResult.stdout.trim() === "exists") {
-    return;
+  if (!alreadyInitialized) {
+    await gitInit(conway, dir);
   }
 
-  // Initialize
-  await gitInit(conway, dir);
+  await ensureSensitiveStateIgnore(conway, dir);
 
-  // Create .gitignore for sensitive files
-  const gitignore = `# Sensitive files - never commit
-wallet.json
-config.json
-abos.json
-state.db
-state.db-wal
-state.db-shm
-logs/
-*.log
-*.err
-`;
-
-  await conway.writeFile(`${dir}/.gitignore`, gitignore);
-
-  // Configure git user
+  // Normalize local state-repo identity after the rename.
   await conway.exec(
-    `cd ${dir} && git config user.name "ABOS Runtime" && git config user.email "runtime@abos.local"`,
+    `cd '${dir}' && git config user.name "ABOS Runtime" && git config user.email "runtime@abos.local"`,
     5000,
   );
 
-  // Initial commit
-  await gitCommit(conway, dir, "genesis: abos state repository initialized");
+  if (!alreadyInitialized) {
+    await gitCommit(conway, dir, "genesis: abos state repository initialized");
+  }
 }
 
 /**
