@@ -46,6 +46,7 @@ export interface AiConnectionAdapter {
   configureModel?: (
     config: AbosConfig,
     model: ModelEntry,
+    options?: Record<string, string | undefined>,
   ) => Promise<void>;
 
   /**
