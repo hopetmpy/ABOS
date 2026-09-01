@@ -60,6 +60,7 @@ export class EnvironmentTaskExecutionError extends Error {
     readonly environmentId: string | null,
     message: string,
     readonly evidence: string[] = [],
+    readonly operation: string = "unknown",
   ) {
     super(message);
     this.name = "EnvironmentTaskExecutionError";
@@ -188,6 +189,7 @@ export class EnvironmentExecutionBridge {
         null,
         `Environment unavailable for task ${task.id}: no currently executable registered Task executor. The objective remains eligible for discovery, acquisition, composition, construction, authorization, or a changed environment.`,
         evidence,
+        "selection",
       );
     }
 
@@ -207,6 +209,7 @@ export class EnvironmentExecutionBridge {
         chosen.candidate.environmentId,
         `Environment task execution failed in "${chosen.candidate.environmentId}": ${message}`,
         [...attemptEvidence, `spawn failure: ${message}`],
+        "spawn",
       );
     }
 
@@ -267,6 +270,7 @@ export class EnvironmentExecutionBridge {
           `No Task executor adapter is registered for environment=${environmentId}.`,
           "This is currently unavailable/undiscovered execution capability, not proof that the objective is impossible.",
         ],
+        "dispatch",
       );
     }
 
@@ -278,6 +282,7 @@ export class EnvironmentExecutionBridge {
           `Task dispatch is unavailable for environment=${environmentId}.`,
           "Missing dispatch capability is not proof that the objective is impossible.",
         ],
+        "dispatch",
       );
     }
 
@@ -290,6 +295,7 @@ export class EnvironmentExecutionBridge {
         environmentId,
         `Environment Task dispatch failed in "${environmentId}": ${message}`,
         [`dispatch failure: ${message}`],
+        "dispatch",
       );
     }
 
