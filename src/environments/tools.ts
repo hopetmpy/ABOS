@@ -274,6 +274,27 @@ export function createEnvironmentTools(
         },
       },
       {
+        name: "environment_collect",
+        description:
+          "Collect provider-visible artifacts/evidence for a tracked environment resource. " +
+          "Providers may materialize remote artifacts locally and persist collection state; unavailable collection remains explicit rather than fabricated.",
+        category: "environment",
+        riskLevel: "safe",
+        parameters: {
+          type: "object",
+          properties: {
+            resource_id: { type: "string" },
+          },
+          required: ["resource_id"],
+        },
+        execute: async (args) => {
+          const resourceId = String(args.resource_id ?? "").trim();
+          if (!resourceId) return "BLOCKED: resource_id is required.";
+          const result = await options.lifecycle!.collect(resourceId);
+          return JSON.stringify(result, null, 2);
+        },
+      },
+      {
         name: "environment_reconcile",
         description:
           "Reconcile a tracked resource against provider reality after restart or uncertainty. " +
@@ -308,6 +329,7 @@ function summarizeCandidate(candidate: {
   operations: string[];
   estimate: {
     estimatedCostCents?: number | null;
+    costCoverage?: string;
     startupLatencyMs?: number | null;
     expectedExecutionMs?: number | null;
     reliability?: number | null;
@@ -325,6 +347,7 @@ function summarizeCandidate(candidate: {
     availability: candidate.snapshot.availability,
     operations: candidate.operations,
     estimatedCostCents: candidate.estimate.estimatedCostCents ?? null,
+    costCoverage: candidate.estimate.costCoverage ?? "unknown",
     startupLatencyMs: candidate.estimate.startupLatencyMs ?? null,
     expectedExecutionMs: candidate.estimate.expectedExecutionMs ?? null,
     reliability: candidate.estimate.reliability ?? null,
