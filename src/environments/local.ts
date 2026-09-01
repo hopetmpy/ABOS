@@ -1,5 +1,14 @@
 import os from "node:os";
-import type { EnvironmentProvider, EnvironmentSnapshot } from "./types.js";
+import type {
+  EnvironmentEstimate,
+  EnvironmentHealthResult,
+  EnvironmentPreparationResult,
+  EnvironmentProvider,
+  EnvironmentReconcileResult,
+  EnvironmentRequirements,
+  EnvironmentSatisfaction,
+  EnvironmentSnapshot,
+} from "./types.js";
 
 export class LocalEnvironmentProvider implements EnvironmentProvider {
   readonly id = "local";
@@ -49,6 +58,100 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
           environment: "local",
           available: true,
         },
+      ],
+    };
+  }
+
+  async canSatisfy(
+    requirements: EnvironmentRequirements,
+    snapshot?: EnvironmentSnapshot,
+  ): Promise<EnvironmentSatisfaction> {
+    const observed = snapshot ?? await this.inspect();
+    const required = requirements.requiredCapabilities
+      .map((entry) => entry.trim().toLowerCase())
+      .filter(Boolean);
+
+    const missing = required.filter((requirement) =>
+      !observed.capabilities.some((capability) => {
+        if (!capability.available) return false;
+        const text = [
+          capability.id,
+          capability.description,
+          ...capability.requirements,
+        ].join(" ").toLowerCase();
+        return text.includes(requirement);
+      })
+    );
+
+    return {
+      satisfiable: missing.length === 0,
+      capabilityFit: required.length === 0
+        ? 1
+        : (required.length - missing.length) / required.length,
+      missingCapabilities: missing,
+      evidence: [
+        `local capability fit=${required.length - missing.length}/${required.length}`,
+      ],
+    };
+  }
+
+  async estimate(): Promise<EnvironmentEstimate> {
+    return {
+      estimatedCostCents: 0,
+      reusableResourceCount: 1,
+      evidence: [
+        "Local host is already present; ABOS does not attribute provider billing to host reuse.",
+      ],
+      metadata: {
+        totalMemoryBytes: os.totalmem(),
+        freeMemoryBytes: os.freemem(),
+        cpus: os.cpus().length,
+      },
+    };
+  }
+
+  async prepare(): Promise<EnvironmentPreparationResult> {
+    const snapshot = await this.inspect();
+    return {
+      ready: snapshot.availability === "available" || snapshot.availability === "degraded",
+      evidence: snapshot.evidence,
+      metadata: snapshot.metadata,
+    };
+  }
+
+  async health(): Promise<EnvironmentHealthResult> {
+    return {
+      healthy: true,
+      status: "running",
+      providerState: "process_alive",
+      evidence: [
+        `node=${process.version}`,
+        `freeMemoryBytes=${os.freemem()}`,
+      ],
+      metadata: {
+        platform: process.platform,
+        arch: process.arch,
+        cpus: os.cpus().length,
+      },
+    };
+  }
+
+  async reconcile(resource: Parameters<NonNullable<EnvironmentProvider["reconcile"]>>[0]): Promise<EnvironmentReconcileResult> {
+    const nextStatus = resource.status === "unknown"
+      ? "ready"
+      : resource.status;
+
+    return {
+      resource: {
+        ...resource,
+        status: nextStatus,
+        providerState: "host_present",
+        updatedAt: new Date().toISOString(),
+      },
+      actualExists: true,
+      action: "none",
+      evidence: [
+        "Local host is present in the current ABOS process environment.",
       ],
     };
   }
