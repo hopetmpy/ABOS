@@ -14,7 +14,15 @@ function context(): ExecutionContinuationContext {
       taskId: "task-1",
       pathId: "path-a",
     },
+    goal: {
+      title: "Continue objective",
+      description: "Preserve verified work across environments.",
+      status: "active",
+      strategy: "Continue without duplicating canonical state.",
+    },
     task: {
+      title: "Resume processing",
+      description: "Continue the same Task with verified prior progress.",
       status: "pending",
       result: {
         success: false,
@@ -26,6 +34,19 @@ function context(): ExecutionContinuationContext {
       metadata: {
         retryCount: 1,
       },
+    },
+    path: {
+      id: "path-a",
+      status: "executing",
+      hypothesis: "The same verified strategy can continue elsewhere.",
+      strategy: "Resume verified preprocessing, then complete the Task.",
+      assumptions: ["Collected artifacts remain valid."],
+      requiredCapabilities: ["compute"],
+      environment: "aws",
+      executor: "aws://ec2/i-1",
+      sequence: ["preprocess", "complete"],
+      expectedOutcome: "Task completes without restarting preprocessing.",
+      evidence: ["Preprocessing completed before the environment failed."],
     },
     history: {
       failures: [
@@ -131,6 +152,9 @@ describe("ExecutionContinuationContext contract", () => {
       taskId: "task-1",
       pathId: "path-a",
     });
+    expect(scoped.goal).toEqual(original.goal);
+    expect(scoped.task.title).toBe("Resume processing");
+    expect(scoped.path).toEqual(original.path);
     expect(scoped.checkpoint).toEqual(original.checkpoint);
     expect(scoped.history.failures).toEqual(original.history.failures);
     expect(scoped.artifacts).toEqual(original.artifacts);
