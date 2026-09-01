@@ -98,6 +98,7 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
   async estimate(): Promise<EnvironmentEstimate> {
     return {
       estimatedCostCents: 0,
+      costCoverage: "complete",
       reusableResourceCount: 1,
       evidence: [
         "Local host is already present; ABOS does not attribute provider billing to host reuse.",
