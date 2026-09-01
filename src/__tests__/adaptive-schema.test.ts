@@ -17,6 +17,7 @@ describe("adaptive schema migration", () => {
       ).all() as Array<{ name: string }>;
 
       expect(names.map((row) => row.name)).toEqual([
+        "adaptive_assumptions",
         "adaptive_attempts",
         "adaptive_opportunities",
         "adaptive_paths",
