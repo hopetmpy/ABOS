@@ -5,7 +5,7 @@
  * The database IS the abos's memory.
  */
 
-export const SCHEMA_VERSION = 13;
+export const SCHEMA_VERSION = 14;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -900,4 +900,61 @@ export const MIGRATION_V13 = `
     ON environment_resource_events(resource_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_environment_resource_events_provider
     ON environment_resource_events(provider, created_at);
+`;
+
+
+// === Cross-Environment Recovery / Reuse / Migration v1 ===
+
+export const MIGRATION_V14 = `
+  -- Schema version: 14
+  -- Provider-neutral mobility transaction authority.
+  -- Status/action strings intentionally remain open-ended: core runtime values
+  -- are conventions, not a provider or strategy allowlist.
+
+  CREATE TABLE IF NOT EXISTS environment_migrations (
+    id TEXT PRIMARY KEY,
+    goal_id TEXT REFERENCES goals(id),
+    path_id TEXT REFERENCES adaptive_paths(id),
+    task_id TEXT REFERENCES task_graph(id),
+    source_resource_id TEXT REFERENCES environment_resources(id),
+    source_provider TEXT,
+    target_resource_id TEXT REFERENCES environment_resources(id),
+    target_provider TEXT,
+    status TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    requirements TEXT NOT NULL DEFAULT '{}',
+    attempted_environments TEXT NOT NULL DEFAULT '[]',
+    condition_fingerprints TEXT NOT NULL DEFAULT '{}',
+    evidence TEXT NOT NULL DEFAULT '[]',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    completed_at TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_environment_migrations_task
+    ON environment_migrations(task_id, status, updated_at);
+  CREATE INDEX IF NOT EXISTS idx_environment_migrations_path
+    ON environment_migrations(path_id, status, updated_at);
+  CREATE INDEX IF NOT EXISTS idx_environment_migrations_goal
+    ON environment_migrations(goal_id, status, updated_at);
+  CREATE INDEX IF NOT EXISTS idx_environment_migrations_source
+    ON environment_migrations(source_resource_id, status);
+  CREATE INDEX IF NOT EXISTS idx_environment_migrations_target
+    ON environment_migrations(target_resource_id, status);
+
+  CREATE TABLE IF NOT EXISTS environment_migration_events (
+    id TEXT PRIMARY KEY,
+    migration_id TEXT NOT NULL REFERENCES environment_migrations(id) ON DELETE CASCADE,
+    operation TEXT NOT NULL,
+    from_status TEXT,
+    to_status TEXT,
+    reason TEXT,
+    evidence TEXT NOT NULL DEFAULT '[]',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_environment_migration_events_migration
+    ON environment_migration_events(migration_id, created_at);
 `;
