@@ -30,6 +30,7 @@ const DEFAULT_MANAGED_TAG_VALUE = "true";
 const DEFAULT_ABOS_REPOSITORY = "https://github.com/hopetmpy/ABOS.git";
 const DEFAULT_ABOS_REF = "main";
 const DEFAULT_ABOS_INSTALL_ROOT = "/opt/abos";
+const DEFAULT_ARTIFACT_MAX_BYTES = 4 * 1024 * 1024;
 const DEFAULT_ARTIFACT_MAX_COMPRESSED_BYTES = 512 * 1024;
 const DEFAULT_ARTIFACT_CHUNK_BYTES = 15_000;
 const MAX_SSM_ARTIFACT_CHUNK_BYTES = 16_000;
@@ -62,6 +63,7 @@ export interface AwsEnvironmentProviderOptions {
   commandTimeoutMs?: number;
   ssmReadyAttempts?: number;
   ssmReadyIntervalMs?: number;
+  artifactMaxBytes?: number;
   artifactMaxCompressedBytes?: number;
   artifactChunkBytes?: number;
   /** Primarily useful for tests/embedders; defaults to ~/.abos/workspace. */
@@ -730,6 +732,11 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     const installRoot =
       metadataString(resource.metadata, "installRoot") ??
       DEFAULT_ABOS_INSTALL_ROOT;
+    const maxBytes = configuredPositiveInteger(
+      this.options.artifactMaxBytes ??
+        process.env.ABOS_AWS_ARTIFACT_MAX_BYTES,
+      DEFAULT_ARTIFACT_MAX_BYTES,
+    );
     const maxCompressedBytes = configuredPositiveInteger(
       this.options.artifactMaxCompressedBytes ??
         process.env.ABOS_AWS_ARTIFACT_MAX_COMPRESSED_BYTES,
@@ -768,6 +775,8 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
             resource,
             remotePath,
             artifactIndex: index,
+            installRoot,
+            maxBytes,
             maxCompressedBytes,
             chunkBytes,
           });
@@ -820,6 +829,8 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     resource: EnvironmentResource;
     remotePath: string;
     artifactIndex: number;
+    installRoot: string;
+    maxBytes: number;
     maxCompressedBytes: number;
     chunkBytes: number;
   }): Promise<{
@@ -841,9 +852,13 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         input.instanceId,
         [[
           "set -euo pipefail",
-          `test -f ${shellQuote(input.remotePath)}`,
-          `gzip -c -- ${shellQuote(input.remotePath)} > ${shellQuote(remoteArchive)}`,
-          `printf 'ABOS_ARTIFACT_SIZE=%s\\n' "$(stat -c %s ${shellQuote(remoteArchive)})"`,
+          `ROOT=${shellQuote(path.posix.resolve(input.installRoot))}`,
+          `REAL="$(readlink -f -- ${shellQuote(input.remotePath)})"`,
+          'case "$REAL" in "$ROOT"|"$ROOT"/*) ;; *) echo "artifact path escapes runtime root" >&2; exit 73 ;; esac',
+          'test -f "$REAL"',
+          'RAW_SIZE="$(stat -c %s "$REAL")"',
+          `gzip -c -- "$REAL" > ${shellQuote(remoteArchive)}`,
+          `printf 'ABOS_ARTIFACT_RAW_SIZE=%s\\nABOS_ARTIFACT_SIZE=%s\\n' "$RAW_SIZE" "$(stat -c %s ${shellQuote(remoteArchive)})"`,
         ].join("\n")],
         input.region,
         this.commandTimeoutMs(),
@@ -854,12 +869,18 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         );
       }
 
-      const compressedBytes = parseArtifactSize(
+      const sizes = parseArtifactSizes(
         prepared.StandardOutputContent ?? "",
       );
-      if (compressedBytes == null) {
+      if (!sizes) {
         throw new Error(
-          "artifact preparation returned no valid compressed-size marker",
+          "artifact preparation returned no valid raw/compressed size markers",
+        );
+      }
+      const { rawBytes, compressedBytes } = sizes;
+      if (rawBytes > input.maxBytes) {
+        throw new Error(
+          `artifact size=${rawBytes} exceeds current automatic collection budget=${input.maxBytes} bytes. Increase ABOS_AWS_ARTIFACT_MAX_BYTES or use another collection route; the artifact remains preserved, not impossible.`,
         );
       }
       if (compressedBytes > input.maxCompressedBytes) {
@@ -913,6 +934,11 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       }
 
       const body = gunzipSync(compressed);
+      if (body.length !== rawBytes) {
+        throw new Error(
+          `artifact decompression length mismatch: expected=${rawBytes} received=${body.length}`,
+        );
+      }
       const goalSegment = safeFilesystemSegment(
         input.resource.goalId ?? "unbound-goal",
       );
@@ -936,7 +962,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         artifactDir,
         `${digest.slice(0, 12)}-${basename}`,
       );
-      fs.writeFileSync(localPath, body);
+      fs.writeFileSync(localPath, body, { mode: 0o600 });
 
       return {
         localPath,
@@ -1868,11 +1894,23 @@ function resolveRemoteRuntimeArtifact(
   return resolved;
 }
 
-function parseArtifactSize(output: string): number | null {
-  const match = /(?:^|\n)ABOS_ARTIFACT_SIZE=(\d+)(?:\n|$)/.exec(output);
-  if (!match) return null;
-  const parsed = Number(match[1]);
-  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+function parseArtifactSizes(
+  output: string,
+): { rawBytes: number; compressedBytes: number } | null {
+  const rawMatch =
+    /(?:^|\n)ABOS_ARTIFACT_RAW_SIZE=(\d+)(?:\n|$)/.exec(output);
+  const compressedMatch =
+    /(?:^|\n)ABOS_ARTIFACT_SIZE=(\d+)(?:\n|$)/.exec(output);
+  if (!rawMatch || !compressedMatch) return null;
+
+  const rawBytes = Number(rawMatch[1]);
+  const compressedBytes = Number(compressedMatch[1]);
+  return Number.isSafeInteger(rawBytes) &&
+    rawBytes >= 0 &&
+    Number.isSafeInteger(compressedBytes) &&
+    compressedBytes >= 0
+    ? { rawBytes, compressedBytes }
+    : null;
 }
 
 function configuredPositiveInteger(
