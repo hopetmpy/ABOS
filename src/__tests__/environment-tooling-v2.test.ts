@@ -49,6 +49,7 @@ describe("environment lifecycle agent tools", () => {
       }),
       estimate: async () => ({
         estimatedCostCents: 0,
+        costCoverage: "complete",
         reliability: 0.9,
       }),
     });
