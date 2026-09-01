@@ -278,7 +278,7 @@ without further planning decisions.
 7. Explicitly prohibited paths are excluded. Do not invent prohibitions or arbitrary method allowlists.
 8. Prefer evidence-driven replanning over retry counters.
 9. When a path fails, use the supplied adaptive history to generate a materially different route unless conditions genuinely changed.
-10. Every plan should expose its strategic hypothesis, assumptions, required capabilities, preferred environment, and expected outcome through the optional `path` field.
+10. Every plan should expose its strategic hypothesis, assumptions, required capabilities, preferred environment, and expected outcome through the optional \`path\` field.
 </adaptive_path_principles>
 
 <state_machine>
