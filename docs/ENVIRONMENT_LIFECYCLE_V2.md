@@ -1,6 +1,6 @@
 # ABOS Environment Execution & Lifecycle v2
 
-Status: active development on `abos/environment-lifecycle-v2`.
+Status: provider-neutral foundation merged to `main`; AWS/EC2 execution is active development on `abos/aws-ec2-lifecycle-v1`.
 
 ## Purpose
 
@@ -70,9 +70,11 @@ reference to an authorized credential source.
 - reusable resources when reported;
 - optional external policy evaluation.
 
-An explicit budget fails closed when cost is unknown. A candidate that is unavailable,
-unauthorized, over budget, or missing required operations remains visible as evidence but
-is not selected for immediate execution.
+An explicit budget fails closed unless the provider estimate declares complete cost coverage.
+A partial or unknown estimate remains useful evidence for ranking/telemetry, but it is not
+treated as proof that execution fits inside a hard budget. A candidate that is unavailable,
+unauthorized, over budget, incompletely costed, or missing required operations remains visible
+as evidence but is not selected for immediate execution.
 
 No candidate being executable is not proof of objective impossibility. It becomes discovery,
 authorization, acquisition, composition, construction, or alternate-path work.
@@ -101,6 +103,10 @@ encoding a Conway-first, Local-second provider order.
 Successful executor resources are rebound to Goal, Path, and Task ownership and dispatch evidence
 is written into the generic environment resource event stream.
 
+Synchronous transports may return a semantic `TaskResult` directly from dispatch. Those results
+enter the same canonical Orchestrator completion/failure path as asynchronous Colony messages;
+transport success is not confused with Task success.
+
 ## Lifecycle manager
 
 `EnvironmentLifecycleManager` is provider-neutral. It:
@@ -111,10 +117,70 @@ is written into the generic environment resource event stream.
 4. distinguishes unsupported operation from impossible objective;
 5. supports adoption of already-existing resources;
 6. records health observations;
-7. preserves unknown state when destructive/reconciliation operations cannot be verified.
+7. preserves unknown state when destructive/reconciliation operations cannot be verified;
+8. supports provider-neutral retention sweeps after Task/Goal terminal state;
+9. gates destructive retries behind fresh provider observation instead of blindly repeating them.
 
 Local, Conway, AWS, and future providers can progressively implement this contract without
 creating new central orchestration authorities.
+
+## AWS / EC2 execution status
+
+The AWS provider now implements real EC2 lifecycle control through the AWS CLI:
+
+- STS authorization discovery and region resolution;
+- EC2 create with deterministic client token + ABOS ownership tags;
+- Amazon Linux 2023 AMI discovery when no image is pinned;
+- optional subnet, security groups, key name, and IAM instance profile;
+- EC2 waiters for running/stopped/terminated state;
+- SSM-online readiness observation before bootstrap;
+- Node.js 22 + pnpm build bootstrap;
+- runtime checkout pinned to the current ABOS git revision by default;
+- one-shot Task execution through SSM using the canonical ABOS harness layer;
+- semantic `TaskResult` returned to the parent Orchestrator;
+- executor-local artifact paths are not reported as if they existed on the parent host;
+- automatic artifact collection can materialize bounded runtime files through chunked SSM transfer;
+- remote collection validates resolved paths against the runtime root, bounds raw/compressed sizes,
+  writes parent-side materializations with restrictive permissions, and preserves pending state on uncertainty;
+- health, collect, resize, suspend, resume, recover, destroy, and reconcile;
+- restart recovery by `abos:resource-id` tag if provisioning succeeded before the InstanceId was persisted;
+- compute-only price estimates kept explicitly separate from actual AWS billing;
+- AWS cost coverage is marked `partial`; an explicit budget fails closed unless a provider estimate declares `complete` coverage.
+
+The EC2 Task executor currently requires SSM reachability. In practice the instance needs an IAM
+instance profile that authorizes Systems Manager (for example a profile containing the AWS managed
+`AmazonSSMManagedInstanceCore` policy). ABOS can accept that profile through
+`ABOS_AWS_EC2_INSTANCE_PROFILE` or provider metadata. Missing authorization is classified as
+currently unavailable/requires authorization, not as objective impossibility. New EC2 Task
+executors are blocked before provisioning when this authorization evidence is missing so ABOS
+does not knowingly create a billable instance that it cannot bootstrap.
+
+The current one-shot remote worker intentionally does not claim the `orchestrator` harness because
+that harness requires a live delegated-worker scheduler. Other roles use the same harness registry
+as Local execution. This is an unavailable remote coordination capability to extend later, not a
+closed capability boundary.
+
+## Retention semantics
+
+`EnvironmentRetentionCoordinator` evaluates persisted ownership and declared retention policy:
+
+- `ephemeral`: release after the owning Task reaches completed/failed/cancelled; a failed
+  ephemeral resource is immediately eligible for release even if the Task itself will pursue a new path;
+- `until_goal_complete`: release after the owning Goal reaches completed/failed;
+- `persistent` and `manual_retention`: never auto-destroy;
+- unknown/custom policies: no destructive semantics are invented.
+
+A destroy that cannot be verified becomes `pending_observation`. ABOS reconciles provider state
+before another destructive attempt. If the observed condition is unchanged, it does not blindly
+repeat the same destroy route. Provider-verified absence satisfies the retention boundary without
+fabricating a billing/destruction event.
+
+If an executor reports local artifacts that have not yet been materialized outside the provider,
+retention enters `artifact_hold` instead of destroying the resource. When the provider supports
+suspend, compute is suspended while preserving the artifact state. Collection evidence is persisted
+through the generic lifecycle. Only after collection state is no longer pending can automatic
+retention proceed to destruction. Oversized or unverifiable artifacts remain explicit pending
+evidence rather than being silently dropped.
 
 ## Integration sequence
 
@@ -122,7 +188,10 @@ creating new central orchestration authorities.
 2. **Implemented:** Local lifecycle adapter.
 3. **Implemented:** Conway adapter by reusing `src/replication/*`, not duplicating it.
 4. **Implemented:** provider-neutral Task spawn + dispatch bridge; hardcoded Conway→Local fallback removed.
-5. **Next:** AWS lifecycle foundation and EC2 end-to-end resource management.
-6. Cost/health/retention decisions.
-7. Restart reconciliation and migration across environments.
-8. Full regression and freeze.
+5. **Implemented:** AWS lifecycle foundation and EC2 + SSM one-shot Task execution.
+6. **Implemented:** EC2 health/reconciliation, compute-only cost evidence, and provider-neutral retention.
+7. **Implemented:** restart recovery for owned AWS instances and observation-gated destructive retry.
+8. **Implemented:** pre-spend SSM authorization gating, failed-candidate ephemeral cleanup, remote
+   artifact preservation/collection, artifact-hold retention, and explicit parent/remote artifact identity.
+9. **Next:** remote multi-worker/orchestrator harness support, richer AWS authorization acquisition,
+   cross-environment migration/reuse policy, and final phase freeze.

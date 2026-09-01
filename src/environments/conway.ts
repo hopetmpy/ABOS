@@ -212,6 +212,7 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
 
     return {
       estimatedCostCents,
+      costCoverage: estimatedCostCents == null ? "unknown" : "complete",
       reusableResourceCount,
       evidence,
       metadata,

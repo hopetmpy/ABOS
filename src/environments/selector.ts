@@ -162,7 +162,12 @@ export class EnvironmentSelector {
     }
 
     if (requirements.maxEstimatedCostCents != null) {
-      if (estimate.estimatedCostCents == null) {
+      const coverage = estimate.costCoverage ?? "unknown";
+      if (coverage !== "complete") {
+        blockers.push(
+          `estimated cost coverage=${coverage} is not complete under an explicit budget`,
+        );
+      } else if (estimate.estimatedCostCents == null) {
         blockers.push("estimated cost is unknown under an explicit budget");
       } else if (estimate.estimatedCostCents > requirements.maxEstimatedCostCents) {
         blockers.push(

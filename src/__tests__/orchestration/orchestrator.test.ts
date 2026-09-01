@@ -6,6 +6,7 @@ import type { AgentTracker, FundingProtocol } from "../../orchestration/types.js
 import type { MessageTransport } from "../../orchestration/messaging.js";
 import { ColonyMessaging } from "../../orchestration/messaging.js";
 import type { AbosDatabase } from "../../types.js";
+import type { TaskResult } from "../../orchestration/task-graph.js";
 import { createInMemoryDb } from "./test-db.js";
 
 // ─── Fixtures ───────────────────────────────────────────────────
@@ -83,7 +84,7 @@ function makeOrchestrator(
     dispatchAgentTask?: (
       assignment: { agentAddress: string; agentName: string; spawned: boolean },
       task: any,
-    ) => Promise<void>;
+    ) => Promise<TaskResult | void>;
   } = {},
 ): Orchestrator {
   const { messaging } = makeMessaging(db);
@@ -609,7 +610,56 @@ describe("orchestration/Orchestrator", () => {
       expect((messaging.createMessage as any)).not.toHaveBeenCalled();
       expect((messaging.send as any)).not.toHaveBeenCalled();
     });
-  });
+
+
+    it("routes an immediate environment TaskResult through canonical completion", async () => {
+      const goalId = insertGoal(db);
+      const taskId = insertTask(db, { goalId, title: "Immediate Result Task" });
+      setOrchestratorState(db, {
+        phase: "executing",
+        goalId,
+        replanCount: 0,
+        failedTaskId: null,
+        failedError: null,
+      });
+
+      const agentTracker = makeAgentTracker({
+        getIdle: vi.fn().mockReturnValue([
+          { address: "aws://ec2/i-test", name: "AWS", role: "generalist", status: "healthy" },
+        ]),
+      });
+      const dispatchAgentTask = vi.fn().mockResolvedValue({
+        success: true,
+        output: "remote result",
+        artifacts: ["s3://example/result"],
+        costCents: 4,
+        duration: 25,
+      });
+      const messaging = {
+        processInbox: vi.fn().mockResolvedValue([]),
+        createMessage: vi.fn(),
+        send: vi.fn(),
+      } as unknown as ColonyMessaging;
+
+      const orc = makeOrchestrator(db, {
+        agentTracker,
+        messaging,
+        isWorkerAlive: () => true,
+        resolveAgentEnvironment: () => "aws",
+        dispatchAgentTask,
+      });
+
+      const result = await orc.tick();
+      const row = db.prepare(
+        "SELECT status, result FROM task_graph WHERE id = ?",
+      ).get(taskId) as { status: string; result: string | null };
+
+      expect(dispatchAgentTask).toHaveBeenCalledTimes(1);
+      expect(row.status).toBe("completed");
+      expect(JSON.parse(row.result ?? "{}").output).toBe("remote result");
+      expect(result.tasksCompleted).toBe(1);
+      expect(result.phase).toBe("complete");
+    });  });
 
   // ─── fundAgentForTask ────────────────────────────────────────
 

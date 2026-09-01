@@ -1,4 +1,4 @@
-import type { TaskNode } from "../orchestration/task-graph.js";
+import type { TaskNode, TaskResult } from "../orchestration/task-graph.js";
 import type { EnvironmentLifecycleManager } from "./lifecycle.js";
 import type {
   EnvironmentSelectionCandidate,
@@ -28,6 +28,8 @@ export interface EnvironmentTaskTarget {
 }
 
 export interface EnvironmentTaskDispatchResult {
+  /** Optional immediate semantic result for synchronous transports (SSM, RPC, etc.). */
+  result?: TaskResult;
   evidence?: string[];
   metadata?: Record<string, unknown>;
 }

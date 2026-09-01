@@ -218,6 +218,74 @@ describe("Environment Execution & Lifecycle v2", () => {
     }
   });
 
+  it("persists collection metadata so retention can observe artifact completion", async () => {
+    const db = createDb();
+    try {
+      const registry = new EnvironmentRegistry();
+      registry.register({
+        id: "collector",
+        inspect: async () => ({
+          id: "collector",
+          label: "collector",
+          availability: "available",
+          capabilities: [],
+          evidence: [],
+          constraints: [],
+          observedAt: new Date().toISOString(),
+        }),
+        collect: async () => ({
+          artifacts: ["/parent/materialized.txt"],
+          evidence: ["artifact materialized"],
+          metadata: {
+            artifactCollectionState: "collected",
+            remoteArtifacts: [],
+            collectedArtifacts: [
+              {
+                remotePath: "result.txt",
+                localPath: "/parent/materialized.txt",
+              },
+            ],
+          },
+        }),
+      });
+
+      const store = new EnvironmentResourceStore(db);
+      const lifecycle = new EnvironmentLifecycleManager(
+        registry,
+        store,
+      );
+      const owned = lifecycle.adopt({
+        provider: "collector",
+        externalId: "remote-1",
+        type: "compute",
+        status: "suspended",
+        retentionPolicy: "manual_retention",
+        metadata: {
+          artifactCollectionState: "pending",
+          remoteArtifacts: ["result.txt"],
+        },
+      });
+
+      const result = await lifecycle.collect(owned.id);
+      expect(result.artifacts).toEqual([
+        "/parent/materialized.txt",
+      ]);
+
+      const persisted = store.get(owned.id);
+      expect(persisted?.metadata.artifactCollectionState).toBe(
+        "collected",
+      );
+      expect(persisted?.metadata.remoteArtifacts).toEqual([]);
+      expect(
+        store.listEvents(owned.id).some(
+          (event) => event.operation === "collect",
+        ),
+      ).toBe(true);
+    } finally {
+      db.close();
+    }
+  });
+
   it("keeps destructive failure observable instead of pretending cleanup succeeded", async () => {
     const db = createDb();
     try {

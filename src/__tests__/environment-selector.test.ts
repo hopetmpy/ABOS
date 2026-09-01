@@ -37,6 +37,7 @@ function provider(input: {
     }),
     estimate: async () => ({
       estimatedCostCents: input.cost,
+      costCoverage: input.cost == null ? "unknown" : "complete",
       reliability: input.reliability,
     }),
   };
@@ -156,7 +157,34 @@ describe("EnvironmentSelector", () => {
     });
 
     expect(result.selected).toBeNull();
-    expect(result.candidates[0]?.blockers.join(" ")).toContain("cost is unknown");
+    expect(result.candidates[0]?.blockers.join(" ")).toContain(
+      "coverage=unknown",
+    );
+  });
+
+  it("fails closed on partial cost coverage under an explicit budget", async () => {
+    const registry = new EnvironmentRegistry();
+    const partial = provider({
+      id: "partial-cost",
+      capabilities: ["compute"],
+      cost: 5,
+    });
+    partial.estimate = async () => ({
+      estimatedCostCents: 5,
+      costCoverage: "partial",
+      evidence: ["compute-only estimate"],
+    });
+    registry.register(partial);
+
+    const result = await new EnvironmentSelector(registry).select({
+      requiredCapabilities: ["compute"],
+      maxEstimatedCostCents: 10,
+    });
+
+    expect(result.selected).toBeNull();
+    expect(result.candidates[0]?.blockers.join(" ")).toContain(
+      "coverage=partial",
+    );
   });
 
   it("lets policy exclude a route without treating the objective as impossible", async () => {

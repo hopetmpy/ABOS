@@ -76,9 +76,11 @@ import { EnvironmentRegistry } from "../environments/registry.js";
 import { LocalEnvironmentProvider } from "../environments/local.js";
 import { ConwayEnvironmentProvider } from "../environments/conway.js";
 import { AwsEnvironmentProvider } from "../environments/aws.js";
+import { AwsEc2TaskExecutor } from "../environments/aws-ec2-executor.js";
 import { createEnvironmentTools } from "../environments/tools.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
+import { EnvironmentRetentionCoordinator } from "../environments/retention.js";
 import { EnvironmentSelector } from "../environments/selector.js";
 import {
   EnvironmentExecutionBridge,
@@ -117,9 +119,10 @@ export async function runAgentLoop(
     options;
 
   const environmentRegistry = new EnvironmentRegistry();
+  const awsEnvironment = new AwsEnvironmentProvider();
   environmentRegistry.register(new LocalEnvironmentProvider());
   environmentRegistry.register(new ConwayEnvironmentProvider(conway));
-  environmentRegistry.register(new AwsEnvironmentProvider());
+  environmentRegistry.register(awsEnvironment);
 
   const environmentResources = new EnvironmentResourceStore(db.raw);
   const environmentLifecycle = new EnvironmentLifecycleManager(
@@ -127,6 +130,11 @@ export async function runAgentLoop(
     environmentResources,
   );
   const environmentSelector = new EnvironmentSelector(environmentRegistry);
+  const environmentRetention = new EnvironmentRetentionCoordinator(
+    db.raw,
+    environmentRegistry,
+    environmentLifecycle,
+  );
 
   // Establish canonical ownership for the already-present host.
   environmentLifecycle.adopt({
@@ -146,6 +154,27 @@ export async function runAgentLoop(
   // inventory. This is adoption, not creation: no remote side effect occurs.
   for (const child of db.getChildren()) {
     if (!child.sandboxId) continue;
+
+    // The children table predates provider-neutral environments. Do not
+    // reinterpret a modern aws://, local://, or other provider address as a
+    // Conway sandbox during restart migration.
+    const existingOwned = environmentResources
+      .list({ includeTerminated: true })
+      .find(
+        (resource) =>
+          resource.externalId === child.sandboxId ||
+          resource.metadata.executorAddress === child.address ||
+          resource.metadata.childAddress === child.address,
+      );
+    if (existingOwned && existingOwned.provider !== "conway") {
+      continue;
+    }
+
+    const childScheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(child.address)?.[1]?.toLowerCase();
+    if (childScheme && childScheme !== "conway") {
+      continue;
+    }
+
     environmentLifecycle.adopt({
       provider: "conway",
       externalId: child.sandboxId,
@@ -154,7 +183,7 @@ export async function runAgentLoop(
       capabilities: ["remote compute", "linux", "sandbox"],
       retentionPolicy: "manual_retention",
       evidence: [
-        `Adopted legacy child resource ${child.id} with recorded status=${child.status}.`,
+        `Adopted legacy Conway child resource ${child.id} with recorded status=${child.status}.`,
       ],
       metadata: {
         childId: child.id,
@@ -180,6 +209,26 @@ export async function runAgentLoop(
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  // Terminal Tasks/Goals may have left provider resources behind if the prior
+  // process died between result persistence and cleanup. Sweep retention only
+  // after reconciliation so destructive action is based on current evidence.
+  try {
+    const retention = await environmentRetention.sweep();
+    if (
+      retention.destroyAttempts > 0 ||
+      retention.released > 0 ||
+      retention.pendingObservation > 0 ||
+      retention.unavailable > 0 ||
+      retention.artifactHolds > 0
+    ) {
+      logger.info("Environment retention startup sweep", { retention });
+    }
+  } catch (error) {
+    logger.warn("Environment retention startup sweep failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   const builtinTools = createBuiltinTools(identity.sandboxId);
@@ -512,6 +561,21 @@ export async function runAgentLoop(
         },
       });
 
+      taskExecutors.register(
+        new AwsEc2TaskExecutor({
+          provider: awsEnvironment,
+          lifecycle: environmentLifecycle,
+          identity,
+          config,
+          repositoryUrl:
+            process.env.ABOS_AWS_EXECUTOR_REPOSITORY || undefined,
+          repositoryRef:
+            process.env.ABOS_AWS_EXECUTOR_REF || undefined,
+          installRoot:
+            process.env.ABOS_AWS_EXECUTOR_INSTALL_ROOT || undefined,
+        }),
+      );
+
       const environmentExecution = new EnvironmentExecutionBridge(
         environmentSelector,
         taskExecutors,
@@ -559,14 +623,10 @@ export async function runAgentLoop(
             return initializedWorkerPool.hasWorker(address);
           }
 
-          // Legacy Conway child lifecycle remains authoritative when present.
-          const child = db.raw.prepare(
-            "SELECT status FROM children WHERE sandbox_id = ? OR address = ?",
-          ).get(address, address) as { status: string } | undefined;
-          if (child) {
-            return !["failed", "dead", "cleaned_up"].includes(child.status);
-          }
-
+          // Provider-neutral ownership wins over the legacy children table.
+          // Startup reconciliation has already refreshed providers that expose
+          // reconcile(), so an externally terminated EC2 is not kept alive just
+          // because a historical child row still says "healthy".
           const owned = environmentResources
             .list({ includeTerminated: true })
             .find(
@@ -574,8 +634,19 @@ export async function runAgentLoop(
                 resource.metadata.executorAddress === address ||
                 resource.metadata.childAddress === address,
             );
-          return !!owned &&
-            ["ready", "running", "degraded", "recovering"].includes(owned.status);
+          if (owned) {
+            return ["ready", "running", "degraded", "recovering"].includes(
+              owned.status,
+            );
+          }
+
+          // Legacy Conway child lifecycle remains authoritative only when no
+          // provider-neutral resource ownership exists.
+          const child = db.raw.prepare(
+            "SELECT status FROM children WHERE sandbox_id = ? OR address = ?",
+          ).get(address, address) as { status: string } | undefined;
+          return !!child &&
+            !["failed", "dead", "cleaned_up"].includes(child.status);
         },
         dispatchAgentTask: async (assignment, task) => {
           const environmentId = resolveExecutionEnvironment(
@@ -593,11 +664,16 @@ export async function runAgentLoop(
             );
           }
 
-          await environmentExecution.dispatch(environmentId, task, {
-            address: assignment.agentAddress,
-            name: assignment.agentName,
-            spawned: assignment.spawned,
-          });
+          const dispatched = await environmentExecution.dispatch(
+            environmentId,
+            task,
+            {
+              address: assignment.agentAddress,
+              name: assignment.agentName,
+              spawned: assignment.spawned,
+            },
+          );
+          return dispatched.result;
         },
         environmentRegistry,
         capabilityRegistry,
@@ -832,6 +908,20 @@ export async function runAgentLoop(
       if (orchestrator) {
         const orchestratorTick = await orchestrator.tick();
         db.setKV("orchestrator.last_tick", JSON.stringify(orchestratorTick));
+
+        // Resource retention is intentionally outside the Orchestrator. Goal
+        // execution produces persisted terminal state; this provider-neutral
+        // coordinator then applies each resource's declared retention policy.
+        const retention = await environmentRetention.sweep();
+        if (
+          retention.destroyAttempts > 0 ||
+          retention.released > 0 ||
+          retention.pendingObservation > 0 ||
+          retention.unavailable > 0 ||
+          retention.artifactHolds > 0
+        ) {
+          logger.info("Environment retention sweep", { retention });
+        }
         const localWorkersActive = workerPool?.getActiveCount() ?? 0;
         const hasSelfAssignedParentTask = !!db.raw.prepare(
           `SELECT 1 FROM task_graph WHERE assigned_to = ? AND status IN ('assigned', 'running') LIMIT 1`,
