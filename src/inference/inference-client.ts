@@ -21,6 +21,14 @@ export interface UnifiedInferenceResult {
     totalTokens: number;
   };
   cost: {
+    /** Canonical monetary unit for ABOS budgets. Fractional cents are allowed. */
+    inputCostCents: number;
+    outputCostCents: number;
+    totalCostCents: number;
+    /**
+     * @deprecated Legacy numeric aliases. These values are milli-dollars
+     * (0.1 cent each), despite the historical "Credits" name.
+     */
     inputCostCredits: number;
     outputCostCredits: number;
     totalCostCredits: number;
@@ -386,15 +394,26 @@ export class UnifiedInferenceClient {
       totalTokens: number;
     };
   }): UnifiedInferenceResult {
-    const inputCostCredits = (params.usage.inputTokens / 1000) * params.model.costPerInputToken;
-    const outputCostCredits = (params.usage.outputTokens / 1000) * params.model.costPerOutputToken;
+    // Provider registry prices are USD per 1,000,000 tokens.
+    // Preserve historical "Credits" values as milli-dollars for compatibility,
+    // while exposing cents as the canonical budget/accounting unit.
+    const inputCostCredits =
+      (params.usage.inputTokens / 1000) * params.model.costPerInputToken;
+    const outputCostCredits =
+      (params.usage.outputTokens / 1000) * params.model.costPerOutputToken;
     const totalCostCredits = inputCostCredits + outputCostCredits;
+    const inputCostCents = inputCostCredits / 10;
+    const outputCostCents = outputCostCredits / 10;
+    const totalCostCents = inputCostCents + outputCostCents;
 
     return {
       content: params.content,
       toolCalls: params.toolCalls,
       usage: params.usage,
       cost: {
+        inputCostCents,
+        outputCostCents,
+        totalCostCents,
         inputCostCredits,
         outputCostCredits,
         totalCostCredits,
