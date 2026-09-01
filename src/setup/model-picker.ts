@@ -133,6 +133,21 @@ export async function runModelPicker(
     config.inferenceModel = selected.modelId;
     if (config.modelStrategy) {
       config.modelStrategy.inferenceModel = selected.modelId;
+
+      // An explicit connection route must not later select a fallback model
+      // that the same adapter cannot execute. Preserve compatible fallbacks;
+      // otherwise collapse that slot to the explicitly selected model. The
+      // compatibility decision belongs to the adapter, not a core provider
+      // allowlist.
+      if (adapter?.supportsModel) {
+        for (const key of ["lowComputeModel", "criticalModel"] as const) {
+          const fallbackId = config.modelStrategy[key];
+          const fallback = fallbackId ? modelRegistry.get(fallbackId) : undefined;
+          if (!fallback || !adapter.supportsModel(fallback)) {
+            config.modelStrategy[key] = selected.modelId;
+          }
+        }
+      }
     }
 
     if (adapter) {
