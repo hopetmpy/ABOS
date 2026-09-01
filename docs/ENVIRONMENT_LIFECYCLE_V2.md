@@ -77,6 +77,30 @@ is not selected for immediate execution.
 No candidate being executable is not proof of objective impossibility. It becomes discovery,
 authorization, acquisition, composition, construction, or alternate-path work.
 
+## Task execution bridge
+
+`EnvironmentExecutionBridge` connects planner intent to physical Task execution without
+encoding a Conway-first, Local-second provider order.
+
+- `EnvironmentTaskExecutorRegistry` is open-ended: environment IDs are data, not an allowlist.
+- Selection and Task execution are separate concerns. A provider can exist before a Task
+  executor adapter for it has been discovered or implemented.
+- Task/tool capabilities are not automatically treated as infrastructure SKUs. The full Task
+  remains available to the executor adapter so capability acquisition/composition remains open.
+- A selected environment spawn failure is surfaced as structured evidence. The bridge does not
+  silently try another provider after an actual execution attempt fails.
+- Dispatch is environment-native. Local direct execution and Conway funding/colony messaging
+  live in their respective adapters rather than in the Orchestrator.
+- Missing spawn/dispatch support means currently unavailable or not-yet-discovered execution
+  capability, not objective impossibility.
+- Execution failures are tagged by operation (`selection`, `spawn`, `dispatch`) so Adaptive
+  Path Intelligence can reason from the actual failure stage.
+- Existing Conway child lifecycle, wallet identity, credentials, and sandbox machinery are
+  reused; Environment Lifecycle v2 does not replace or re-key them.
+
+Successful executor resources are rebound to Goal, Path, and Task ownership and dispatch evidence
+is written into the generic environment resource event stream.
+
 ## Lifecycle manager
 
 `EnvironmentLifecycleManager` is provider-neutral. It:
@@ -94,11 +118,11 @@ creating new central orchestration authorities.
 
 ## Integration sequence
 
-1. Foundation contracts + resource persistence + selector.
-2. Local lifecycle adapter.
-3. Conway adapter by reusing `src/replication/*`, not duplicating it.
-4. Replace hardcoded Conway-first/local-fallback spawning with EnvironmentSelector.
-5. AWS lifecycle foundation and EC2 end-to-end resource management.
+1. **Implemented:** foundation contracts + resource persistence + selector.
+2. **Implemented:** Local lifecycle adapter.
+3. **Implemented:** Conway adapter by reusing `src/replication/*`, not duplicating it.
+4. **Implemented:** provider-neutral Task spawn + dispatch bridge; hardcoded Conway→Local fallback removed.
+5. **Next:** AWS lifecycle foundation and EC2 end-to-end resource management.
 6. Cost/health/retention decisions.
 7. Restart reconciliation and migration across environments.
 8. Full regression and freeze.
