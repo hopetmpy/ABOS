@@ -20,6 +20,9 @@ export interface PlannerContextOptions {
   idleAgents?: number;
   busyAgents?: number;
   maxAgents?: number;
+  adaptiveContext?: string;
+  environmentSnapshots?: any[];
+  capabilities?: any[];
 }
 
 export const DEFAULT_PLANNER_AVAILABLE_ROLES = [
@@ -59,6 +62,9 @@ export async function buildPlannerContext(options: PlannerContextOptions): Promi
     busyAgents: clampCount(options.busyAgents),
     maxAgents: Math.max(1, clampCount(options.maxAgents, 1)),
     workspaceFiles: listWorkspaceFiles(options.workspace),
+    adaptiveContext: options.adaptiveContext,
+    environmentSnapshots: options.environmentSnapshots ?? [],
+    capabilities: options.capabilities ?? [],
   };
 }
 
