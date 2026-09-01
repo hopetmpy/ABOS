@@ -209,7 +209,7 @@ export function reconcileAdapterFallbackModels(
   }
 }
 
-function resolveRequestedModel(
+export function resolveRequestedModel(
   requested: string,
   models: ModelEntry[],
 ): ModelEntry | undefined {
