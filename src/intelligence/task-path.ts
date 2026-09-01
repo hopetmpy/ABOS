@@ -1,6 +1,6 @@
 import type { Goal, TaskNode } from "../orchestration/task-graph.js";
 import type { PlannerOutput } from "../orchestration/planner.js";
-import type { PathCandidate } from "./types.js";
+import type { AdaptiveTaskBinding, PathCandidate } from "./types.js";
 
 function inferEnvironment(assignedTo: string | null): string | null {
   if (!assignedTo) return null;
@@ -11,7 +11,11 @@ function inferEnvironment(assignedTo: string | null): string | null {
   return null;
 }
 
-export function taskToPathCandidate(task: TaskNode, goal: Goal): PathCandidate {
+export function taskToPathCandidate(
+  task: TaskNode,
+  goal: Goal,
+  binding?: AdaptiveTaskBinding,
+): PathCandidate {
   return {
     goalId: goal.id,
     taskId: task.id,
@@ -20,10 +24,13 @@ export function taskToPathCandidate(task: TaskNode, goal: Goal): PathCandidate {
     assumptions: [
       `The assigned ${task.agentRole ?? "generalist"} executor can satisfy the task acceptance criteria.`,
     ],
-    requiredCapabilities: [
-      task.agentRole ? `role:${task.agentRole}` : "role:generalist",
-    ],
-    environment: inferEnvironment(task.assignedTo),
+    requiredCapabilities:
+      binding?.requiredCapabilities?.length
+        ? binding.requiredCapabilities
+        : [task.agentRole ? `role:${task.agentRole}` : "role:generalist"],
+    environment:
+      binding?.preferredEnvironment ??
+      inferEnvironment(task.assignedTo),
     executor: task.assignedTo,
     sequence: [task.description],
     expectedOutcome: task.title,
