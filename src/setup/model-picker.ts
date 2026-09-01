@@ -28,6 +28,7 @@ import type {
   ModelProvider,
 } from "../types.js";
 import { promptOptional, closePrompts } from "./prompts.js";
+import { getAiProviderByRuntimeProvider } from "./ai-connection-registry.js";
 
 const PROVIDER_LABEL: Record<string, string> = {
   openai: "OpenAI",
@@ -82,14 +83,25 @@ export async function runModelPicker(
   }
 
   const allModels = registry.getAll().filter((m) => m.enabled);
-  const models =
+
+  const activeConnectionProvider =
+    connectionProvider ?? config.aiConnection?.active?.provider;
+  const activeDefinition = activeConnectionProvider
+    ? getAiProviderByRuntimeProvider(activeConnectionProvider)
+    : undefined;
+  const effectiveProviderFilters =
     providerFilters && providerFilters.length > 0
-      ? allModels.filter((model) => providerFilters.includes(model.provider))
+      ? providerFilters
+      : activeDefinition?.modelProviders;
+
+  const models =
+    effectiveProviderFilters && effectiveProviderFilters.length > 0
+      ? allModels.filter((model) => effectiveProviderFilters.includes(model.provider))
       : allModels;
 
   if (models.length === 0) {
-    const scope = providerFilters?.length
-      ? ` for provider(s): ${providerFilters.join(", ")}`
+    const scope = effectiveProviderFilters?.length
+      ? ` for provider(s): ${effectiveProviderFilters.join(", ")}`
       : "";
     console.log(chalk.yellow(`  No registered models available${scope}.`));
     db.close();
@@ -114,7 +126,7 @@ export async function runModelPicker(
         codexCatalog,
         requestedReasoning,
         false,
-        connectionProvider,
+        activeConnectionProvider,
       );
     } catch (error) {
       console.log(chalk.red(`  ${error instanceof Error ? error.message : String(error)}`));
@@ -161,7 +173,7 @@ export async function runModelPicker(
     codexCatalog,
     requestedReasoning,
     true,
-    connectionProvider,
+    activeConnectionProvider,
   );
   saveConfig(config);
   closePrompts();

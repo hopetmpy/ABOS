@@ -155,3 +155,12 @@ export function isAvailableAiProvider(
 ): provider is AiConnectionProviderDefinition & { runtimeProvider: AiRuntimeProvider } {
   return provider.availability === "available" && !!provider.runtimeProvider;
 }
+
+
+export function getAiProviderByRuntimeProvider(
+  provider: AiRuntimeProvider,
+): AiConnectionProviderDefinition | undefined {
+  return AI_CONNECTION_PROVIDERS.find(
+    (entry) => entry.runtimeProvider === provider && entry.availability === "available",
+  );
+}

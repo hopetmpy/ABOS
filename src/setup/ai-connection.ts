@@ -66,12 +66,12 @@ export async function runAiConnectionFlow(
     }
 
     const next = await promptOptional(
-      "Next: [1] Continue  [2] Add another AI provider  [3] Choose active model from all connected providers",
+      "Next: [1] Continue  [2] Add another AI provider  [3] Choose another model for this active connection",
     );
 
     if (next === "2") continue;
     if (next === "3") {
-      await runModelPicker();
+      await selectModelForConnection(provider);
       working = loadConfig() ?? working;
     }
       return working;
