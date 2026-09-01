@@ -74,6 +74,9 @@ import { LocalEnvironmentProvider } from "../environments/local.js";
 import { ConwayEnvironmentProvider } from "../environments/conway.js";
 import { AwsEnvironmentProvider } from "../environments/aws.js";
 import { createEnvironmentTools } from "../environments/tools.js";
+import { EnvironmentResourceStore } from "../environments/resource-store.js";
+import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
+import { EnvironmentSelector } from "../environments/selector.js";
 
 const logger = createLogger("loop");
 const MAX_TOOL_CALLS_PER_TURN = 10;
@@ -110,9 +113,73 @@ export async function runAgentLoop(
   environmentRegistry.register(new ConwayEnvironmentProvider(conway));
   environmentRegistry.register(new AwsEnvironmentProvider());
 
+  const environmentResources = new EnvironmentResourceStore(db.raw);
+  const environmentLifecycle = new EnvironmentLifecycleManager(
+    environmentRegistry,
+    environmentResources,
+  );
+  const environmentSelector = new EnvironmentSelector(environmentRegistry);
+
+  // Establish canonical ownership for the already-present host.
+  environmentLifecycle.adopt({
+    provider: "local",
+    externalId: "host",
+    type: "local-host",
+    status: "running",
+    capabilities: ["filesystem", "shell", "cli", "process"],
+    retentionPolicy: "persistent",
+    evidence: ["Local host adopted during ABOS runtime initialization."],
+    metadata: {
+      sandboxId: identity.sandboxId || null,
+    },
+  });
+
+  // Import legacy Conway child/sandbox knowledge into the provider-neutral
+  // inventory. This is adoption, not creation: no remote side effect occurs.
+  for (const child of db.getChildren()) {
+    if (!child.sandboxId) continue;
+    environmentLifecycle.adopt({
+      provider: "conway",
+      externalId: child.sandboxId,
+      type: "conway-sandbox",
+      status: "unknown",
+      capabilities: ["remote compute", "linux", "sandbox"],
+      retentionPolicy: "manual_retention",
+      evidence: [
+        `Adopted legacy child resource ${child.id} with recorded status=${child.status}.`,
+      ],
+      metadata: {
+        childId: child.id,
+        childAddress: child.address,
+        childName: child.name,
+        legacyStatus: child.status,
+      },
+    });
+  }
+
+  // Reconcile resources once at runtime start. Providers without a reconcile
+  // operation remain visible as-is rather than being guessed or discarded.
+  for (const resource of environmentResources.list()) {
+    if (!environmentRegistry.supportsOperation(resource.provider, "reconcile")) {
+      continue;
+    }
+    try {
+      await environmentLifecycle.reconcile(resource.id);
+    } catch (error) {
+      logger.warn("Environment startup reconciliation failed", {
+        resourceId: resource.id,
+        provider: resource.provider,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   const builtinTools = createBuiltinTools(identity.sandboxId);
   const installedTools = loadInstalledTools(db);
-  const environmentTools = createEnvironmentTools(environmentRegistry);
+  const environmentTools = createEnvironmentTools(environmentRegistry, {
+    selector: environmentSelector,
+    lifecycle: environmentLifecycle,
+  });
 
   // Unified capability/environment view. Existing tool and skill systems remain
   // authoritative implementations; this registry lets planning reason across
