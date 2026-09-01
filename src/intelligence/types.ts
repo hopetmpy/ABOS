@@ -169,3 +169,24 @@ export interface AdaptiveTaskBinding {
   createdAt: string;
   updatedAt: string;
 }
+
+
+export type EvidenceKind =
+  | "observation"
+  | "error"
+  | "artifact"
+  | "condition"
+  | "fact"
+  | "external";
+
+export interface AdaptiveEvidence {
+  id: string;
+  goalId: string;
+  pathId?: string | null;
+  attemptId?: string | null;
+  kind: EvidenceKind;
+  content: string;
+  source: string;
+  confidence: number;
+  createdAt: string;
+}
