@@ -191,9 +191,10 @@ describe("EnvironmentExecutionBridge", () => {
 
     const executors = new EnvironmentTaskExecutorRegistry();
     const deliveries: string[] = [];
-    const continuationContext = {
-      marker: "continuation",
-    } as unknown as ExecutionContinuationContext;
+    const continuationContext: ExecutionContinuationContext = {
+      ...continuationWithRuntimeArtifact(),
+      artifacts: [],
+    };
     let deliveredContinuation: ExecutionContinuationContext | undefined;
     executors.register({
       environmentId: "alpha",
@@ -235,7 +236,8 @@ describe("EnvironmentExecutionBridge", () => {
     });
 
     expect(result.evidence).toContain("alpha delivery");
-    expect(deliveredContinuation).toBe(continuationContext);
+    expect(deliveredContinuation).toEqual(continuationContext);
+    expect(deliveredContinuation).not.toBe(continuationContext);
     expect(deliveries).toEqual(["alpha:task-1:alpha://existing"]);
   });
 
