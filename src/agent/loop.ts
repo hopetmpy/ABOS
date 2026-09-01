@@ -463,11 +463,43 @@ export async function runAgentLoop(
         messaging,
         inference: unifiedInference,
         identity,
+        resolveAgentEnvironment: (address: string) => {
+          if (address === identity.address || address.startsWith("local://")) {
+            return "local";
+          }
+
+          const owned = environmentResources
+            .list({ includeTerminated: true })
+            .find((resource) => resource.metadata.executorAddress === address);
+          if (owned) {
+            return owned.provider;
+          }
+
+          const child = db.raw.prepare(
+            "SELECT 1 FROM children WHERE address = ? OR sandbox_id = ? LIMIT 1",
+          ).get(address, address);
+          if (child) {
+            return "conway";
+          }
+
+          const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(address)?.[1];
+          return scheme?.toLowerCase() ?? null;
+        },
         isWorkerAlive: (address: string) => {
           if (address.startsWith("local://")) {
             return initializedWorkerPool.hasWorker(address);
           }
-          // Remote workers: check children table
+          const owned = environmentResources
+            .list({ includeTerminated: true })
+            .find((resource) => resource.metadata.executorAddress === address);
+          if (
+            owned &&
+            ["ready", "running", "degraded", "recovering"].includes(owned.status)
+          ) {
+            return true;
+          }
+
+          // Legacy Conway workers remain recoverable from the children table.
           const child = db.raw.prepare(
             "SELECT status FROM children WHERE sandbox_id = ? OR address = ?",
           ).get(address, address) as { status: string } | undefined;

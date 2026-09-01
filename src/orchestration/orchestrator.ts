@@ -42,6 +42,7 @@ import { AdaptivePathEngine } from "../intelligence/adaptive-engine.js";
 import { plannerOutputToPathCandidate, taskToPathCandidate } from "../intelligence/task-path.js";
 import type { EnvironmentRegistry } from "../environments/registry.js";
 import type { CapabilityRegistry } from "../capabilities/registry.js";
+import { EnvironmentTaskExecutionError } from "../environments/task-executor.js";
 import { CapabilityResolver } from "../capabilities/resolver.js";
 import type {
   AgentAssignment,
@@ -87,6 +88,12 @@ interface TickCounters {
   tasksFailed: number;
 }
 
+interface ExecutionFailureContext {
+  evidence?: string[];
+  observations?: string[];
+  conditions?: Record<string, unknown>;
+}
+
 const DEFAULT_STATE: OrchestratorState = {
   phase: "idle",
   goalId: null,
@@ -111,6 +118,8 @@ export class Orchestrator {
     capabilityRegistry?: CapabilityRegistry;
     /** Check if a worker agent is still alive. Used to recover stale tasks. */
     isWorkerAlive?: (address: string) => boolean;
+    /** Resolve an agent address to its execution environment when known. */
+    resolveAgentEnvironment?: (address: string) => string | null;
   }) {
     this.adaptive = new AdaptivePathEngine(params.db);
   }
@@ -205,7 +214,9 @@ export class Orchestrator {
   async matchTaskToAgent(task: TaskNode): Promise<AgentAssignment> {
     const requestedRole = task.agentRole?.trim() || "generalist";
 
-    const idleAgents = this.params.agentTracker.getIdle();
+    const idleAgents = this.params.agentTracker.getIdle().filter((agent) =>
+      this.matchesPreferredEnvironment(agent.address, task.preferredEnvironment),
+    );
     const directRoleMatch = idleAgents.find((agent) => agent.role === requestedRole);
     if (directRoleMatch) {
       return {
@@ -216,7 +227,10 @@ export class Orchestrator {
     }
 
     const bestIdle = this.params.agentTracker.getBestForTask(requestedRole);
-    if (bestIdle) {
+    if (
+      bestIdle &&
+      this.matchesPreferredEnvironment(bestIdle.address, task.preferredEnvironment)
+    ) {
       return {
         agentAddress: bestIdle.address,
         agentName: bestIdle.name,
@@ -229,7 +243,7 @@ export class Orchestrator {
       return spawned;
     }
 
-    const reassigned = this.findBusyAgentForReassign();
+    const reassigned = this.findBusyAgentForReassign(task.preferredEnvironment);
     if (reassigned) {
       return {
         agentAddress: reassigned.address,
@@ -241,7 +255,10 @@ export class Orchestrator {
     // Fallback: assign to the parent agent itself (self-execution mode).
     // This handles local dev environments where spawning child sandboxes
     // is not available, and ensures goals still make progress.
-    if (this.params.identity?.address) {
+    if (
+      this.params.identity?.address &&
+      (!task.preferredEnvironment || task.preferredEnvironment === "local")
+    ) {
       logger.warn("No child agents available, self-assigning task to parent", {
         taskId: task.id,
         role: requestedRole,
@@ -291,7 +308,11 @@ export class Orchestrator {
     return this.pendingTaskResults.map((entry) => entry.result);
   }
 
-  async handleFailure(task: TaskNode, error: string): Promise<void> {
+  async handleFailure(
+    task: TaskNode,
+    error: string,
+    context: ExecutionFailureContext = {},
+  ): Promise<void> {
     const goalRow = getGoalById(this.params.db, task.goalId);
     if (!goalRow) {
       failTask(this.params.db, task.id, error, false);
@@ -307,8 +328,15 @@ export class Orchestrator {
       ),
       pathId: binding?.pathId ?? null,
       error,
-      evidence: task.result?.output ? [task.result.output] : [],
-      conditions: await this.currentConditions(task),
+      observations: context.observations,
+      evidence: [
+        ...(task.result?.output ? [task.result.output] : []),
+        ...(context.evidence ?? []),
+      ],
+      conditions: {
+        ...(await this.currentConditions(task)),
+        ...(context.conditions ?? {}),
+      },
     });
 
     logger.info("Adaptive failure decision", {
@@ -713,7 +741,21 @@ export class Orchestrator {
         const failureTask = previous
           ? taskRowToTaskNode(previous)
           : this.withExecutionIntent(task);
-        await this.handleFailure(failureTask, err.message);
+        const executionFailure =
+          error instanceof EnvironmentTaskExecutionError ? error : null;
+        await this.handleFailure(
+          failureTask,
+          err.message,
+          executionFailure
+            ? {
+                evidence: executionFailure.evidence,
+                conditions: {
+                  executionEnvironment: executionFailure.environmentId,
+                  executionStage: "spawn",
+                },
+              }
+            : {},
+        );
         const latest = getTaskById(this.params.db, task.id);
         if (previous?.status !== "failed" && latest?.status === "failed") {
           counters.tasksFailed += 1;
@@ -992,7 +1034,9 @@ export class Orchestrator {
     }
   }
 
-  private findBusyAgentForReassign(): { address: string; name: string } | null {
+  private findBusyAgentForReassign(
+    preferredEnvironment?: string | null,
+  ): { address: string; name: string } | null {
     const idleAddresses = new Set(this.params.agentTracker.getIdle().map((agent) => agent.address));
 
     const rows = this.params.db.prepare(
@@ -1002,7 +1046,11 @@ export class Orchestrator {
        ORDER BY created_at ASC`,
     ).all() as { name: string; address: string; status: string }[];
 
-    const candidate = rows.find((row) => !idleAddresses.has(row.address));
+    const candidate = rows.find(
+      (row) =>
+        !idleAddresses.has(row.address) &&
+        this.matchesPreferredEnvironment(row.address, preferredEnvironment),
+    );
     if (!candidate) {
       return null;
     }
@@ -1011,6 +1059,19 @@ export class Orchestrator {
       address: candidate.address,
       name: candidate.name,
     };
+  }
+
+  private matchesPreferredEnvironment(
+    address: string,
+    preferredEnvironment?: string | null,
+  ): boolean {
+    if (!preferredEnvironment) return true;
+
+    const resolved = this.params.resolveAgentEnvironment?.(address);
+    if (resolved) return resolved === preferredEnvironment;
+
+    const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(address)?.[1];
+    return scheme?.toLowerCase() === preferredEnvironment.toLowerCase();
   }
 
   private async trySpawnAgent(task: TaskNode): Promise<AgentAssignment | null> {
@@ -1220,6 +1281,8 @@ export class Orchestrator {
     return {
       assignedTo: task?.assignedTo ?? null,
       agentRole: task?.agentRole ?? null,
+      preferredEnvironment: task?.preferredEnvironment ?? null,
+      requiredCapabilities: task?.requiredCapabilities ?? [],
       environments: environmentSnapshots.map((snapshot) => ({
         id: snapshot.id,
         availability: snapshot.availability,

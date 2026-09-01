@@ -78,6 +78,7 @@ function makeOrchestrator(
     inference?: ReturnType<typeof makeInference>;
     config?: any;
     messaging?: ColonyMessaging;
+    resolveAgentEnvironment?: (address: string) => string | null;
   } = {},
 ): Orchestrator {
   const { messaging } = makeMessaging(db);
@@ -89,6 +90,7 @@ function makeOrchestrator(
     inference: overrides.inference ?? (makeInference() as any),
     identity: IDENTITY,
     config: overrides.config ?? {},
+    resolveAgentEnvironment: overrides.resolveAgentEnvironment,
   });
 }
 
@@ -390,7 +392,14 @@ describe("orchestration/Orchestrator", () => {
   // ─── matchTaskToAgent ────────────────────────────────────────
 
   describe("matchTaskToAgent", () => {
-    function makeTask(goalId: string, overrides: Partial<{ agentRole: string; id: string }> = {}) {
+    function makeTask(
+      goalId: string,
+      overrides: Partial<{
+        agentRole: string;
+        id: string;
+        preferredEnvironment: string | null;
+      }> = {},
+    ) {
       return {
         id: overrides.id ?? ulid(),
         parentId: null,
@@ -403,6 +412,7 @@ describe("orchestration/Orchestrator", () => {
         priority: 50,
         dependencies: [],
         result: null,
+        preferredEnvironment: overrides.preferredEnvironment ?? null,
         metadata: {
           estimatedCostCents: 10,
           actualCostCents: 0,
@@ -497,6 +507,57 @@ describe("orchestration/Orchestrator", () => {
       expect(result.agentName).toBe(IDENTITY.name);
       expect(result.spawned).toBe(false);
     });
+
+    it("does not reuse an idle agent from a different preferred environment", async () => {
+      const goalId = insertGoal(db);
+      const agentTracker = makeAgentTracker({
+        getIdle: vi.fn().mockReturnValue([
+          { address: "local://idle", name: "Local", role: "generalist", status: "healthy" },
+        ]),
+        getBestForTask: vi.fn().mockReturnValue({
+          address: "local://idle",
+          name: "Local",
+        }),
+      });
+      const spawnAgent = vi.fn().mockResolvedValue({
+        address: "conway://spawned",
+        name: "Conway",
+        sandboxId: "sb-conway",
+      });
+      const orc = makeOrchestrator(db, {
+        agentTracker,
+        config: { spawnAgent },
+        resolveAgentEnvironment: (address) =>
+          address.startsWith("local://")
+            ? "local"
+            : address.startsWith("conway://")
+              ? "conway"
+              : null,
+      });
+
+      const result = await orc.matchTaskToAgent(
+        makeTask(goalId, { preferredEnvironment: "conway" }),
+      );
+
+      expect(result.agentAddress).toBe("conway://spawned");
+      expect(spawnAgent).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not self-assign across an explicit non-local environment preference", async () => {
+      const goalId = insertGoal(db);
+      const orc = makeOrchestrator(db, {
+        agentTracker: makeAgentTracker(),
+        config: { disableSpawn: true },
+        resolveAgentEnvironment: () => null,
+      });
+
+      await expect(
+        orc.matchTaskToAgent(
+          makeTask(goalId, { preferredEnvironment: "future-cloud" }),
+        ),
+      ).rejects.toThrow("No available agent");
+    });
+
   });
 
   // ─── fundAgentForTask ────────────────────────────────────────
