@@ -125,9 +125,11 @@ function printModelTable(models: ModelEntry[], currentModelId: string): void {
       ? stripCodexRegistryPrefix(m.modelId)
       : m.modelId;
     const cost =
-      m.costPer1kInput === 0
-        ? chalk.green("free     ")
-        : chalk.dim(`$${((m.costPer1kInput / 100 / 1000) * 1_000_000).toFixed(2)}/M in`);
+      m.provider === "codex"
+        ? chalk.dim("external ")
+        : m.costPer1kInput === 0
+          ? chalk.green("free     ")
+          : chalk.dim(`${((m.costPer1kInput / 100 / 1000) * 1_000_000).toFixed(2)}/M in`);
     const active = m.modelId === currentModelId ? chalk.green(" ◀ active") : "";
     const tools = m.supportsTools ? "" : chalk.dim(" (no tools)");
     console.log(
