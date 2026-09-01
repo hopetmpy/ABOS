@@ -472,26 +472,29 @@ export class Orchestrator {
       );
     } catch (error) {
       const err = normalizeError(error);
-      logger.warn("Planner inference failed, falling back to single-task plan", {
+      logger.warn("Planner inference unavailable; preserving objective without inventing a route", {
         goalId: goal.id,
         error: err.message,
       });
-      output = {
-        analysis: `Planner fallback: ${err.message}`,
-        strategy: "Execute goal as a single generalist task",
-        customRoles: [],
-        tasks: [{
-          title: goal.title,
-          description: goal.description,
-          agentRole: "generalist",
-          dependencies: [],
-          estimatedCostCents: 200,
-          priority: 50,
-          timeoutMs: 300_000,
-        }],
-        risks: ["Planner unavailable — executing without decomposition"],
-        estimatedTotalCostCents: 200,
-        estimatedTimeMinutes: 30,
+
+      this.adaptive.store.recordEvidence({
+        goalId: goal.id,
+        kind: "error",
+        content: err.message,
+        source: "planner-inference",
+        confidence: 1,
+      });
+      this.adaptive.store.addOpportunity({
+        goalId: goal.id,
+        description:
+          "Planner inference is currently unavailable. Preserve the objective and retry planning when inference conditions change or an alternate planner capability becomes available.",
+        evidence: [err.message],
+      });
+
+      return {
+        ...state,
+        phase: "planning",
+        failedError: err.message,
       };
     }
 
