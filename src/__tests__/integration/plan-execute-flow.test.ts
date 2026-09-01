@@ -356,6 +356,18 @@ describe("integration/plan-execute-flow", () => {
       expect(result.phase).toBe("plan_review");
       const state = readState(db);
       expect(state?.replanCount).toBe(1);
+
+      const superseded = db.prepare(
+        "SELECT status FROM task_graph WHERE id = ?",
+      ).get(taskId) as { status: string };
+      expect(superseded.status).toBe("cancelled");
+
+      const activeNewTasks = db.prepare(
+        `SELECT COUNT(*) AS count
+         FROM task_graph
+         WHERE goal_id = ? AND status != 'cancelled'`,
+      ).get(goalId) as { count: number };
+      expect(activeNewTasks.count).toBeGreaterThan(0);
     });
 
     it("replan count does not terminate a still-valid objective", async () => {
