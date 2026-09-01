@@ -10,6 +10,8 @@ import type {
   PersistedPath,
   FailureClass,
   WorldFact,
+  TrackedAssumption,
+  AssumptionStatus,
 } from "./types.js";
 
 const stringify = (value: unknown): string => JSON.stringify(value ?? []);
@@ -197,6 +199,85 @@ export class AdaptiveStore {
     return new Map(rows.map((row) => [row.path_id, row.condition_fingerprint]));
   }
 
+  syncAssumptions(
+    goalId: string,
+    pathId: string,
+    assumptions: string[],
+  ): TrackedAssumption[] {
+    const now = new Date().toISOString();
+    const unique = [...new Set(assumptions.map((statement) => statement.trim()).filter(Boolean))];
+
+    for (const statement of unique) {
+      const normalized = normalizeAssumption(statement);
+      const existing = this.db.prepare(
+        "SELECT id FROM adaptive_assumptions WHERE path_id = ? AND normalized_statement = ?",
+      ).get(pathId, normalized) as { id: string } | undefined;
+
+      if (existing) continue;
+
+      this.db.prepare(
+        `INSERT INTO adaptive_assumptions
+         (id, goal_id, path_id, statement, normalized_statement, status,
+          confidence, evidence, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'active', 0.5, '[]', ?, ?)`,
+      ).run(ulid(), goalId, pathId, statement, normalized, now, now);
+    }
+
+    return this.listAssumptions(goalId, pathId);
+  }
+
+  updateAssumptionStatus(
+    id: string,
+    status: AssumptionStatus,
+    evidence: string[] = [],
+    confidence?: number,
+  ): void {
+    const existing = this.db.prepare(
+      "SELECT evidence, confidence FROM adaptive_assumptions WHERE id = ?",
+    ).get(id) as { evidence: string; confidence: number } | undefined;
+    if (!existing) return;
+
+    const mergedEvidence = [...new Set([
+      ...parseArray(existing.evidence),
+      ...evidence.filter(Boolean),
+    ])];
+
+    this.db.prepare(
+      `UPDATE adaptive_assumptions
+       SET status = ?, confidence = ?, evidence = ?, updated_at = ?
+       WHERE id = ?`,
+    ).run(
+      status,
+      confidence ?? existing.confidence,
+      stringify(mergedEvidence),
+      new Date().toISOString(),
+      id,
+    );
+  }
+
+  listAssumptions(goalId: string, pathId?: string): TrackedAssumption[] {
+    const rows = pathId
+      ? this.db.prepare(
+          "SELECT * FROM adaptive_assumptions WHERE goal_id = ? AND path_id = ? ORDER BY created_at ASC",
+        ).all(goalId, pathId) as any[]
+      : this.db.prepare(
+          "SELECT * FROM adaptive_assumptions WHERE goal_id = ? ORDER BY created_at ASC",
+        ).all(goalId) as any[];
+
+    return rows.map((row) => ({
+      id: row.id,
+      goalId: row.goal_id,
+      pathId: row.path_id,
+      statement: row.statement,
+      normalizedStatement: row.normalized_statement,
+      status: row.status,
+      confidence: row.confidence,
+      evidence: parseArray(row.evidence),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  }
+
   upsertFact(input: {
     goalId: string;
     key: string;
@@ -357,4 +438,12 @@ function deserializeFact(row: any): WorldFact {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+
+function normalizeAssumption(statement: string): string {
+  return statement
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 }
