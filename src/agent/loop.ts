@@ -616,7 +616,7 @@ export async function runAgentLoop(
               specialization: `${role}: ${task.title}`,
             });
             const lifecycle = new ChildLifecycle(db.raw);
-            return spawnChild(conway, identity, db, genesis, lifecycle);
+            return spawnChild(conway, identity, db, genesis, lifecycle, config);
           };
 
           try {
