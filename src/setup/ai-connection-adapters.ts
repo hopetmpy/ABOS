@@ -15,7 +15,6 @@ import {
 } from "../codex/catalog.js";
 import { CodexSessionManager } from "../codex/session-manager.js";
 import { stripCodexRegistryPrefix } from "../codex/inference.js";
-import { discoverOllamaModels } from "../ollama/discover.js";
 
 async function promptSecretReplacement(
   label: string,
@@ -88,7 +87,7 @@ export function createBuiltinAiConnectionAdapterRegistry(): AiConnectionAdapterR
       syncCodexCatalogToRegistry(modelRegistry, snapshot);
       return snapshot.models.length;
     },
-    configureModel: async (config, model) => {
+    configureModel: async (config, model, options) => {
       const actualModel = stripCodexRegistryPrefix(model.modelId);
       const snapshot = loadCodexCatalog();
       const descriptor = snapshot
@@ -104,6 +103,21 @@ export function createBuiltinAiConnectionAdapterRegistry(): AiConnectionAdapterR
       };
 
       if (efforts.length > 0) {
+        const requestedReasoning = options?.reasoning;
+        if (
+          requestedReasoning &&
+          efforts.some((effort) => effort.reasoningEffort === requestedReasoning)
+        ) {
+          config.codex.reasoningEffort = requestedReasoning;
+          saveConfig(config);
+          return;
+        }
+        if (requestedReasoning) {
+          throw new Error(
+            `Reasoning effort '${requestedReasoning}' is not advertised for ${actualModel}. Available: ${efforts.map((effort) => effort.reasoningEffort).join(", ")}`,
+          );
+        }
+
         console.log(chalk.cyan("\n  Reasoning Effort\n"));
         efforts.forEach((effort, index) => {
           const active = effort.reasoningEffort === config.codex?.reasoningEffort
@@ -173,15 +187,6 @@ export function createBuiltinAiConnectionAdapterRegistry(): AiConnectionAdapterR
       config.ollamaBaseUrl = input || config.ollamaBaseUrl || "http://localhost:11434";
       saveConfig(config);
       return { configured: true };
-    },
-    discoverModels: async (config, modelRegistry) => {
-      const baseUrl = config.ollamaBaseUrl;
-      if (!baseUrl) return 0;
-      // discoverOllamaModels writes to the same DB authority used by ModelRegistry.
-      const db = (modelRegistry as unknown as { db?: unknown }).db;
-      if (!db) return 0;
-      await discoverOllamaModels(baseUrl, db as any);
-      return modelRegistry.getAll().filter((model) => model.provider === "ollama").length;
     },
   });
 
