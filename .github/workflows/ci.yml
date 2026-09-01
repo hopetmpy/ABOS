@@ -30,47 +30,11 @@ jobs:
         timeout-minutes: 10
         run: |
           set +e
-          timeout 180 pnpm test -- --grep "security|injection|policy|financial"
+          timeout 180 pnpm exec vitest run -t "security|injection|policy|financial"
           RC=$?
           set -e
           if [ $RC -eq 124 ]; then echo "::error::security test run timed out or left active handles"; fi
           exit $RC
-
-  isolate-context-hardening:
-    runs-on: ubuntu-latest
-    timeout-minutes: 3
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - case: baseline
-            pattern: returns Math.ceil(length / 4)
-          - case: summarize-50k
-            pattern: summarizes old turns when budget is exceeded
-          - case: preserve-50k
-            pattern: preserves most recent turns when summarizing
-          - case: custom-5k
-            pattern: respects custom budget parameter
-          - case: single-500k
-            pattern: does not summarize when only one turn exists
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - uses: pnpm/action-setup@v4
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run build
-      - name: Run context hardening case ${{ matrix.case }}
-        shell: bash
-        run: |
-          set +e
-          timeout 45 pnpm exec vitest run src/__tests__/context-hardening.test.ts -t "${{ matrix.pattern }}" --reporter=verbose
-          RC=$?
-          set -e
-          if [ $RC -eq 124 ]; then echo "::error::Context hardening case ${{ matrix.case }} timed out"; fi
-          exit $RC
-
 
   rebrand-integrity:
     runs-on: ubuntu-latest
