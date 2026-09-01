@@ -26,12 +26,14 @@ export interface EnvironmentMobilityPlan {
   migration: EnvironmentMigrationRecord;
   selection: EnvironmentSelectionResult;
   excludedEnvironmentIds: string[];
+  excludedResourceIds: string[];
 }
 
 export interface EnvironmentMobilitySpawnResult
   extends EnvironmentTaskExecutionResult {
   migrationId: string | null;
   mobilityExcludedEnvironmentIds: string[];
+  mobilityExcludedResourceIds: string[];
 }
 
 export interface EnvironmentRecoverySweepResult {
@@ -85,13 +87,18 @@ export class EnvironmentMobilityCoordinator {
       ],
     });
 
-    const excludedEnvironmentIds = uniqueStrings([
-      source.provider,
-      ...(requirements.excludedEnvironmentIds ?? []),
-    ]);
+    const excludedEnvironmentIds = uniqueStrings(
+      requirements.excludedEnvironmentIds ?? [],
+    );
+    const excludedResourceIds = [source.id];
     const selection = await this.selector.select({
       ...requirements,
       excludedEnvironmentIds,
+      metadata: {
+        ...(requirements.metadata ?? {}),
+        mobilitySourceResourceId: source.id,
+        mobilityExcludedResourceIds: excludedResourceIds,
+      },
     });
 
     const selected = selection.selected;
@@ -113,6 +120,7 @@ export class EnvironmentMobilityCoordinator {
           selectedEnvironment: selected?.environmentId ?? null,
           candidateCount: selection.candidates.length,
           excludedEnvironmentIds,
+          excludedResourceIds,
         },
       },
       "plan",
@@ -122,6 +130,7 @@ export class EnvironmentMobilityCoordinator {
       migration: updated,
       selection,
       excludedEnvironmentIds,
+      excludedResourceIds,
     };
   }
 
@@ -137,13 +146,19 @@ export class EnvironmentMobilityCoordinator {
     const exclusions = active
       ? await this.unchangedFailedEnvironmentExclusions(active, task)
       : [];
+    const resourceExclusions = active
+      ? failedResourceIds(active)
+      : [];
 
     try {
       const spawned = await this.execution.spawn(task, {
         excludedEnvironmentIds: exclusions,
+        excludedResourceIds: resourceExclusions,
         metadata: {
           mobilityMigrationId: active?.id ?? null,
           mobilityExcludedEnvironmentIds: exclusions,
+          mobilityExcludedResourceIds: resourceExclusions,
+          mobilitySourceResourceId: active?.sourceResourceId ?? null,
         },
       });
 
@@ -173,6 +188,7 @@ export class EnvironmentMobilityCoordinator {
         ...spawned,
         migrationId: migration?.id ?? null,
         mobilityExcludedEnvironmentIds: exclusions,
+        mobilityExcludedResourceIds: resourceExclusions,
       };
     } catch (error) {
       const executionError =
@@ -189,6 +205,7 @@ export class EnvironmentMobilityCoordinator {
               ],
               metadata: {
                 excludedEnvironmentIds: exclusions,
+                excludedResourceIds: resourceExclusions,
               },
             },
             "selection_blocked",
@@ -212,7 +229,7 @@ export class EnvironmentMobilityCoordinator {
         task,
       );
 
-      this.store.recordAttempt(migration.id, {
+      const afterAttempt = this.store.recordAttempt(migration.id, {
         environmentId: executionError.environmentId,
         conditionFingerprint: fingerprint,
         stage: executionError.operation,
@@ -221,11 +238,25 @@ export class EnvironmentMobilityCoordinator {
           taskId: task.id,
           pathId: task.strategicPathId ?? null,
           sourceResourceId: source?.id ?? null,
+          failureScope: source ? "resource" : "environment",
         },
       });
 
+      const providerFailureEnvironments = source
+        ? stringMetadata(afterAttempt.metadata, "providerFailureEnvironments")
+        : uniqueStrings([
+            ...stringMetadata(afterAttempt.metadata, "providerFailureEnvironments"),
+            executionError.environmentId,
+          ]);
+      const failedResources = source
+        ? uniqueStrings([
+            ...stringMetadata(afterAttempt.metadata, "failedResourceIds"),
+            source.id,
+          ])
+        : stringMetadata(afterAttempt.metadata, "failedResourceIds");
+
       this.store.transition(
-        migration.id,
+        afterAttempt.id,
         "target_failed",
         {
           sourceResourceId:
@@ -234,9 +265,13 @@ export class EnvironmentMobilityCoordinator {
             migration.sourceProvider ?? executionError.environmentId,
           targetProvider: executionError.environmentId,
           evidence: [
-            `Environment attempt failed at stage=${executionError.operation}.`,
+            `Environment attempt failed at stage=${executionError.operation} scope=${source ? "resource" : "environment"}.`,
             ...executionError.evidence,
           ],
+          metadata: {
+            providerFailureEnvironments,
+            failedResourceIds: failedResources,
+          },
         },
         "attempt_failed",
       );
@@ -357,7 +392,7 @@ export class EnvironmentMobilityCoordinator {
         environmentId,
         task,
       );
-      this.store.recordAttempt(migration.id, {
+      const afterAttempt = this.store.recordAttempt(migration.id, {
         environmentId,
         conditionFingerprint: fingerprint,
         stage: executionError.operation,
@@ -365,10 +400,24 @@ export class EnvironmentMobilityCoordinator {
         metadata: {
           sourceResourceId: source?.id ?? null,
           sourceAddress: target.address,
+          failureScope: source ? "resource" : "environment",
         },
       });
+      const providerFailureEnvironments = source
+        ? stringMetadata(afterAttempt.metadata, "providerFailureEnvironments")
+        : uniqueStrings([
+            ...stringMetadata(afterAttempt.metadata, "providerFailureEnvironments"),
+            environmentId,
+          ]);
+      const failedResources = source
+        ? uniqueStrings([
+            ...stringMetadata(afterAttempt.metadata, "failedResourceIds"),
+            source.id,
+          ])
+        : stringMetadata(afterAttempt.metadata, "failedResourceIds");
+
       this.store.transition(
-        migration.id,
+        afterAttempt.id,
         "target_failed",
         {
           sourceResourceId:
@@ -376,6 +425,10 @@ export class EnvironmentMobilityCoordinator {
           sourceProvider:
             migration.sourceProvider ?? environmentId,
           evidence: executionError.evidence,
+          metadata: {
+            providerFailureEnvironments,
+            failedResourceIds: failedResources,
+          },
         },
         "dispatch_failed",
       );
@@ -545,7 +598,10 @@ export class EnvironmentMobilityCoordinator {
   ): Promise<string[]> {
     const exclusions: string[] = [];
 
-    for (const environmentId of migration.attemptedEnvironments) {
+    for (const environmentId of stringMetadata(
+      migration.metadata,
+      "providerFailureEnvironments",
+    )) {
       const previous =
         migration.conditionFingerprints[environmentId];
       if (!previous) continue;
@@ -773,6 +829,24 @@ function stableStringify(value: unknown): string {
         `${JSON.stringify(key)}:${stableStringify(entry)}`,
     )
     .join(",")}}`;
+}
+
+function failedResourceIds(
+  migration: EnvironmentMigrationRecord,
+): string[] {
+  return stringMetadata(migration.metadata, "failedResourceIds");
+}
+
+function stringMetadata(
+  metadata: Record<string, unknown>,
+  key: string,
+): string[] {
+  const value = metadata[key];
+  return Array.isArray(value)
+    ? uniqueStrings(
+        value.filter((entry): entry is string => typeof entry === "string"),
+      )
+    : [];
 }
 
 function uniqueStrings(values: string[]): string[] {
