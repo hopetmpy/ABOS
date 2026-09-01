@@ -83,6 +83,7 @@ import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
 import { EnvironmentRetentionCoordinator } from "../environments/retention.js";
 import { EnvironmentMigrationStore } from "../environments/mobility-store.js";
 import { EnvironmentMobilityCoordinator } from "../environments/mobility.js";
+import { ContinuityAssembler } from "../environments/continuity-assembler.js";
 import { EnvironmentSelector } from "../environments/selector.js";
 import {
   EnvironmentExecutionBridge,
@@ -132,6 +133,10 @@ export async function runAgentLoop(
     environmentResources,
   );
   const environmentMigrations = new EnvironmentMigrationStore(db.raw);
+  const continuityAssembler = new ContinuityAssembler(db.raw, {
+    migrations: environmentMigrations,
+    resources: environmentResources,
+  });
   let environmentMobility: EnvironmentMobilityCoordinator | null = null;
   const environmentSelector = new EnvironmentSelector(
     environmentRegistry,
@@ -412,8 +417,10 @@ export async function runAgentLoop(
             "LocalWorkerPool is initialized in the current ABOS runtime.",
           ],
         }),
-        spawn: async (task) => {
-          const spawned = initializedWorkerPool.spawn(task);
+        spawn: async (task, options) => {
+          const spawned = initializedWorkerPool.spawn(task, {
+            executionContinuation: options?.continuationContext,
+          });
           return {
             ...spawned,
             resourceExternalId: spawned.sandboxId,
@@ -621,6 +628,7 @@ export async function runAgentLoop(
         environmentLifecycle,
         environmentMigrations,
         environmentExecution,
+        continuityAssembler,
       );
 
       // Restart recovery is observation-first and non-destructive. It does not
