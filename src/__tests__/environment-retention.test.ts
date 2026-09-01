@@ -145,6 +145,61 @@ describe("EnvironmentRetentionCoordinator", () => {
     }
   });
 
+  it("retires the legacy child row when a provider-neutral executor is released", async () => {
+    const db = createDb();
+    try {
+      insertGoal(db, "goal-legacy", "completed");
+      db.prepare(
+        `INSERT INTO children (
+          id, name, address, sandbox_id, genesis_prompt,
+          funded_amount_cents, status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        "child-aws",
+        "aws-worker",
+        "aws://ec2/i-legacy",
+        "i-legacy",
+        "Role: generalist",
+        0,
+        "healthy",
+        new Date().toISOString(),
+      );
+
+      const registry = new EnvironmentRegistry();
+      registry.register(provider());
+      const lifecycle = new EnvironmentLifecycleManager(
+        registry,
+        new EnvironmentResourceStore(db),
+      );
+      lifecycle.adopt({
+        provider: "cloud",
+        externalId: "i-legacy",
+        type: "compute",
+        goalId: "goal-legacy",
+        status: "running",
+        retentionPolicy: "until_goal_complete",
+        metadata: {
+          executorAddress: "aws://ec2/i-legacy",
+        },
+      });
+
+      const retention = new EnvironmentRetentionCoordinator(
+        db,
+        registry,
+        lifecycle,
+      );
+      const sweep = await retention.sweep();
+
+      expect(sweep.released).toBe(1);
+      const child = db.prepare(
+        "SELECT status FROM children WHERE id = ?",
+      ).get("child-aws") as { status: string };
+      expect(child.status).toBe("cleaned_up");
+    } finally {
+      db.close();
+    }
+  });
+
   it("releases ephemeral resources when their owning Task settles even if the Goal remains active", async () => {
     const db = createDb();
     try {
