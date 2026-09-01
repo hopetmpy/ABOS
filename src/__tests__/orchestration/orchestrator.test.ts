@@ -225,6 +225,13 @@ describe("orchestration/Orchestrator", () => {
           content: JSON.stringify({
             analysis: "Analysis text",
             strategy: "Strategy text",
+            path: {
+              hypothesis: "The local CLI route can complete the goal",
+              assumptions: ["The CLI is installed"],
+              requiredCapabilities: ["cli"],
+              preferredEnvironment: "local",
+              expectedOutcome: "Task completes successfully",
+            },
             customRoles: [],
             tasks: [
               {
@@ -235,6 +242,8 @@ describe("orchestration/Orchestrator", () => {
                 estimatedCostCents: 50,
                 priority: 50,
                 timeoutMs: 60000,
+                requiredCapabilities: ["cli"],
+                preferredEnvironment: "local",
               },
             ],
             risks: [],
@@ -248,6 +257,72 @@ describe("orchestration/Orchestrator", () => {
       const orc = makeOrchestrator(db, { inference: inference as any });
       const result = await orc.tick();
       expect(result.phase).toBe("plan_review");
+
+      const binding = db.prepare(
+        `SELECT required_capabilities, preferred_environment, path_id
+         FROM adaptive_task_bindings
+         WHERE goal_id = ?`,
+      ).get(goalId) as {
+        required_capabilities: string;
+        preferred_environment: string | null;
+        path_id: string | null;
+      };
+
+      expect(JSON.parse(binding.required_capabilities)).toEqual(["cli"]);
+      expect(binding.preferred_environment).toBe("local");
+      expect(binding.path_id).toBeTruthy();
+
+      const persistedTask = db.prepare(
+        `SELECT estimated_cost_cents, timeout_ms
+         FROM task_graph
+         WHERE goal_id = ?`,
+      ).get(goalId) as {
+        estimated_cost_cents: number;
+        timeout_ms: number;
+      };
+      expect(persistedTask.estimated_cost_cents).toBe(50);
+      expect(persistedTask.timeout_ms).toBe(60_000);
+    });
+
+    it("planner inference failure preserves the objective instead of inventing a single-task route", async () => {
+      const goalId = insertGoal(db, {
+        title: "Complex Goal",
+        description: "Needs a real plan",
+      });
+      setOrchestratorState(db, {
+        phase: "planning",
+        goalId,
+        replanCount: 0,
+        failedTaskId: null,
+        failedError: null,
+      });
+
+      const inference = {
+        chat: vi.fn().mockRejectedValue(new Error("planner provider unavailable")),
+      };
+
+      const orc = makeOrchestrator(db, { inference: inference as any });
+      const result = await orc.tick();
+
+      expect(result.phase).toBe("planning");
+      const persistedState = getOrchestratorState(db);
+      expect(persistedState?.failedError).toContain("planner provider unavailable");
+
+      const taskCount = db.prepare(
+        "SELECT COUNT(*) AS count FROM task_graph WHERE goal_id = ?",
+      ).get(goalId) as { count: number };
+      expect(taskCount.count).toBe(0);
+
+      const evidence = db.prepare(
+        "SELECT kind, source, content FROM adaptive_evidence WHERE goal_id = ?",
+      ).all(goalId) as Array<{ kind: string; source: string; content: string }>;
+      expect(evidence).toEqual([
+        expect.objectContaining({
+          kind: "error",
+          source: "planner-inference",
+          content: "planner provider unavailable",
+        }),
+      ]);
     });
 
     it("plan_review with plan in KV auto-approves (auto mode) and transitions to executing", async () => {
@@ -602,7 +677,7 @@ describe("orchestration/Orchestrator", () => {
       };
     }
 
-    it("transitions to replanning when task permanently fails and replanCount < maxReplans", async () => {
+    it("transitions to replanning when a strategic task path fails", async () => {
       const goalId = insertGoal(db, { status: "active" });
       // max_retries=0 so failTask marks it permanently failed (no retry budget)
       const taskId = insertTask(db, { goalId, status: "running" });
@@ -618,7 +693,7 @@ describe("orchestration/Orchestrator", () => {
       expect(state?.failedError).toBe("some error");
     });
 
-    it("transitions to failed when replanCount >= maxReplans", async () => {
+    it("does not treat replanCount as evidence that the objective failed", async () => {
       const goalId = insertGoal(db, { status: "active" });
       // max_retries=0 so failTask marks it permanently failed (no retry budget)
       const taskId = insertTask(db, { goalId, status: "running" });
@@ -629,10 +704,11 @@ describe("orchestration/Orchestrator", () => {
       await orc.handleFailure(makeTaskNode(goalId, taskId), "fatal");
 
       const state = getOrchestratorState(db);
-      expect(state?.phase).toBe("failed");
+      expect(state?.phase).toBe("replanning");
+      expect(state?.failedTaskId).toBe(taskId);
     });
 
-    it("retries task when retry budget allows (maxRetries > retryCount)", async () => {
+    it("uses a narrow technical retry for a transient failure", async () => {
       const goalId = insertGoal(db, { status: "active" });
       const taskId = insertTask(db, { goalId, status: "running" });
       // Insert with retries available
@@ -640,7 +716,7 @@ describe("orchestration/Orchestrator", () => {
       setOrchestratorState(db, { phase: "executing", goalId, replanCount: 0, failedTaskId: null, failedError: null });
 
       const orc = makeOrchestrator(db, { config: { maxReplans: 3 } });
-      await orc.handleFailure(makeTaskNode(goalId, taskId), "transient");
+      await orc.handleFailure(makeTaskNode(goalId, taskId), "ETIMEDOUT contacting provider");
 
       // Task should have been retried (status pending or blocked, not necessarily failed)
       const taskRow = db.prepare("SELECT status FROM task_graph WHERE id = ?").get(taskId) as

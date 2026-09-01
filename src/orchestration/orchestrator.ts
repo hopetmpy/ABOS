@@ -20,6 +20,7 @@ import {
   replanAfterFailure,
   type PlannerOutput,
   type PlannedTask,
+  type PlannerContext,
   taskToPlannerFailureInput,
 } from "./planner.js";
 import { ColonyMessaging, type AgentMessage } from "./messaging.js";
@@ -37,6 +38,11 @@ import {
   type GoalRow,
   type TaskGraphRow,
 } from "../state/database.js";
+import { AdaptivePathEngine } from "../intelligence/adaptive-engine.js";
+import { plannerOutputToPathCandidate, taskToPathCandidate } from "../intelligence/task-path.js";
+import type { EnvironmentRegistry } from "../environments/registry.js";
+import type { CapabilityRegistry } from "../capabilities/registry.js";
+import { CapabilityResolver } from "../capabilities/resolver.js";
 import type {
   AgentAssignment,
   AgentTracker,
@@ -49,7 +55,6 @@ const logger = createLogger("orchestration.orchestrator");
 const ORCHESTRATOR_STATE_KEY = "orchestrator.state";
 const ORCHESTRATOR_TODO_KEY = "orchestrator.todo_md";
 const DEFAULT_TASK_FUNDING_CENTS = 25;
-const DEFAULT_MAX_REPLANS = 3;
 
 type ExecutionPhase =
   | "idle"
@@ -92,6 +97,7 @@ const DEFAULT_STATE: OrchestratorState = {
 
 export class Orchestrator {
   private pendingTaskResults: TaskResultEnvelope[] = [];
+  private readonly adaptive: AdaptivePathEngine;
 
   constructor(private readonly params: {
     db: Database;
@@ -101,9 +107,13 @@ export class Orchestrator {
     inference: UnifiedInferenceClient;
     identity: AbosIdentity;
     config: any;
+    environmentRegistry?: EnvironmentRegistry;
+    capabilityRegistry?: CapabilityRegistry;
     /** Check if a worker agent is still alive. Used to recover stale tasks. */
     isWorkerAlive?: (address: string) => boolean;
-  }) {}
+  }) {
+    this.adaptive = new AdaptivePathEngine(params.db);
+  }
 
   async tick(): Promise<OrchestratorTickResult> {
     const counters: TickCounters = {
@@ -282,23 +292,93 @@ export class Orchestrator {
   }
 
   async handleFailure(task: TaskNode, error: string): Promise<void> {
-    failTask(this.params.db, task.id, error, true);
-
-    const latest = getTaskById(this.params.db, task.id);
-    if (!latest || latest.status !== "failed") {
+    const goalRow = getGoalById(this.params.db, task.goalId);
+    if (!goalRow) {
+      failTask(this.params.db, task.id, error, false);
       return;
     }
 
-    const state = this.loadState();
-    const maxReplans = this.getMaxReplans();
+    const binding = this.adaptive.store.getTaskBinding(task.id);
+    const decision = this.adaptive.recordFailure({
+      candidate: taskToPathCandidate(
+        task,
+        goalRowToGoal(goalRow),
+        binding,
+      ),
+      pathId: binding?.pathId ?? null,
+      error,
+      evidence: task.result?.output ? [task.result.output] : [],
+      conditions: await this.currentConditions(task),
+    });
 
-    if (state.replanCount < maxReplans) {
-      updateGoalStatus(this.params.db, task.goalId, "active");
+    logger.info("Adaptive failure decision", {
+      goalId: task.goalId,
+      taskId: task.id,
+      pathId: decision.path.id,
+      action: decision.action,
+      failureClass: decision.diagnosis.classification,
+      noveltyScore: decision.novelty.score,
+      conditionChanged: decision.novelty.conditionChanged,
+    });
+
+    if (
+      decision.action === "acquire_capability" &&
+      decision.diagnosis.subject &&
+      this.params.capabilityRegistry
+    ) {
+      const snapshots = this.params.environmentRegistry
+        ? await this.params.environmentRegistry.inspectAll()
+        : [];
+      const resolution = new CapabilityResolver(
+        this.params.capabilityRegistry,
+      ).resolve(
+        { requirement: decision.diagnosis.subject },
+        snapshots,
+      );
+
+      this.adaptive.store.addOpportunity({
+        goalId: task.goalId,
+        sourcePathId: decision.path.id,
+        description:
+          `Capability resolution for "${decision.diagnosis.subject}": ${resolution.kind}. ${resolution.rationale}`,
+        evidence: [
+          error,
+          ...resolution.nextActions,
+          ...resolution.candidates.map((candidate) => candidate.id),
+        ],
+      });
     }
 
+    // A technical retry is deliberately narrow: one transient retry is
+    // allowed while the path is new, or later when material conditions changed.
+    // Strategic failures never consume task retry counters.
+    const technicalRetry =
+      decision.action === "technical_retry" &&
+      (decision.novelty.novel || decision.novelty.conditionChanged);
+
+    failTask(this.params.db, task.id, error, technicalRetry);
+
+    const latest = getTaskById(this.params.db, task.id);
+    if (technicalRetry && latest && latest.status !== "failed") {
+      return;
+    }
+
+    if (decision.action === "technical_retry" && latest?.status === "failed") {
+      this.adaptive.store.setPathStatus(decision.path.id, "failed");
+      this.adaptive.store.addOpportunity({
+        goalId: task.goalId,
+        sourcePathId: decision.path.id,
+        description:
+          "Transient recovery could not continue under the task's current technical retry budget. Re-evaluate the path, executor, or environment instead of blindly repeating.",
+        evidence: [error],
+      });
+    }
+
+    updateGoalStatus(this.params.db, task.goalId, "active");
+    const state = this.loadState();
     this.saveState({
       ...state,
-      phase: state.replanCount < maxReplans ? "replanning" : "failed",
+      phase: "replanning",
       goalId: task.goalId,
       failedTaskId: task.id,
       failedError: error,
@@ -400,61 +480,70 @@ export class Orchestrator {
     try {
       output = await planGoal(
         goalToPlannerInput(goalRowToGoal(goal)),
-        await buildPlannerContext({
-          db: this.params.db,
-          workspace: new AgentWorkspace(goal.id),
-          funding: this.params.funding,
-          identityAddress: this.params.identity.address,
-          usdcBalance: Number(this.params.config?.usdcBalance ?? 0),
-          idleAgents: this.params.agentTracker.getIdle().length,
-          busyAgents: Math.max(0, this.getActiveAgentCount() - this.params.agentTracker.getIdle().length),
-          maxAgents: Number(this.params.config?.maxChildren ?? 3),
-        }),
+        await this.buildAdaptivePlannerContext(goal.id),
         this.params.inference,
       );
     } catch (error) {
       const err = normalizeError(error);
-      logger.warn("Planner inference failed, falling back to single-task plan", {
+      logger.warn("Planner inference unavailable; preserving objective without inventing a route", {
         goalId: goal.id,
         error: err.message,
       });
-      output = {
-        analysis: `Planner fallback: ${err.message}`,
-        strategy: "Execute goal as a single generalist task",
-        customRoles: [],
-        tasks: [{
-          title: goal.title,
-          description: goal.description,
-          agentRole: "generalist",
-          dependencies: [],
-          estimatedCostCents: 200,
-          priority: 50,
-          timeoutMs: 300_000,
-        }],
-        risks: ["Planner unavailable — executing without decomposition"],
-        estimatedTotalCostCents: 200,
-        estimatedTimeMinutes: 30,
+
+      this.adaptive.store.recordEvidence({
+        goalId: goal.id,
+        kind: "error",
+        content: err.message,
+        source: "planner-inference",
+        confidence: 1,
+      });
+      this.adaptive.store.addOpportunity({
+        goalId: goal.id,
+        description:
+          "Planner inference is currently unavailable. Preserve the objective and retry planning when inference conditions change or an alternate planner capability becomes available.",
+        evidence: [err.message],
+      });
+
+      return {
+        ...state,
+        phase: "planning",
+        failedError: err.message,
       };
     }
 
     if (output.tasks.length === 0) {
-      // Planner returned valid JSON but empty tasks — use fallback single task
-      logger.warn("Planner returned no tasks, falling back to single-task plan", { goalId: goal.id });
-      output = {
-        ...output,
-        tasks: [{
-          title: goal.title,
-          description: goal.description,
-          agentRole: "generalist",
-          dependencies: [],
-          estimatedCostCents: 200,
-          priority: 50,
-          timeoutMs: 300_000,
-        }],
-      };
+      logger.warn("Planner returned no executable tasks; preserving objective for further discovery", {
+        goalId: goal.id,
+      });
+      this.adaptive.store.addOpportunity({
+        goalId: goal.id,
+        description: "Expand the possibility space: the planner found no currently executable task graph.",
+        evidence: [output.analysis],
+      });
+      return { ...state, phase: "planning" };
     }
 
-    decomposeGoal(this.params.db, goal.id, plannerOutputToTasks(goal.id, output));
+    const plannedPath = plannerOutputToPathCandidate(goalRowToGoal(goal), output);
+    const conditions = await this.currentConditions();
+    const novelty = this.adaptive.isCandidateEligible(plannedPath, conditions);
+    if (!novelty.novel) {
+      this.adaptive.store.addOpportunity({
+        goalId: goal.id,
+        sourcePathId: novelty.equivalentPathId,
+        description: "Planner proposed a substantially equivalent path under unchanged conditions; discover a materially different route.",
+        evidence: [novelty.reason],
+      });
+      return { ...state, phase: "planning" };
+    }
+
+    const selectedPath = this.adaptive.selectCandidate(plannedPath, conditions);
+    this.params.db.prepare("UPDATE goals SET strategy = ? WHERE id = ?").run(output.strategy, goal.id);
+    const persistedTaskIds = decomposeGoal(
+      this.params.db,
+      goal.id,
+      plannerOutputToTasks(goal.id, output),
+    );
+    this.bindPlannedTasks(goal.id, selectedPath.path.id, persistedTaskIds, output.tasks);
     await this.persistPlannerOutput(goal.id, output, "plan");
 
     return {
@@ -552,8 +641,26 @@ export class Orchestrator {
 
     for (const task of ready) {
       try {
-        const assignment = await this.matchTaskToAgent(task);
-        assignTask(this.params.db, task.id, assignment.agentAddress);
+        const executionTask = this.withExecutionIntent(task);
+        const assignment = await this.matchTaskToAgent(executionTask);
+        assignTask(this.params.db, executionTask.id, assignment.agentAddress);
+
+        const assignedRow = getTaskById(this.params.db, executionTask.id);
+        if (assignedRow) {
+          const binding = this.adaptive.store.getTaskBinding(assignedRow.id);
+          if (binding?.pathId) {
+            this.adaptive.store.setPathStatus(binding.pathId, "executing");
+          } else {
+            this.adaptive.selectCandidate(
+              taskToPathCandidate(
+                taskRowToTaskNode(assignedRow),
+                goalRowToGoal(goal),
+                binding,
+              ),
+              await this.currentConditions(taskRowToTaskNode(assignedRow)),
+            );
+          }
+        }
 
         const isLocalWorker = assignment.agentAddress.startsWith("local://");
         const isSelfAssigned = assignment.agentAddress === this.params.identity?.address;
@@ -562,22 +669,25 @@ export class Orchestrator {
         // their own inference loop. Self-assigned tasks are handled by the
         // parent agent via its normal turn. Neither needs funding or messaging.
         if (!isLocalWorker && !isSelfAssigned) {
-          await this.fundAgentForTask(assignment.agentAddress, task);
+          await this.fundAgentForTask(assignment.agentAddress, executionTask);
 
           const message = this.params.messaging.createMessage({
             type: "task_assignment",
             to: assignment.agentAddress,
-            goalId: task.goalId,
-            taskId: task.id,
+            goalId: executionTask.goalId,
+            taskId: executionTask.id,
             priority: "high",
             requiresResponse: true,
             content: JSON.stringify({
-              taskId: task.id,
-              title: task.title,
-              description: task.description,
-              agentRole: task.agentRole,
-              dependencies: task.dependencies,
-              timeoutMs: task.metadata.timeoutMs,
+              taskId: executionTask.id,
+              title: executionTask.title,
+              description: executionTask.description,
+              agentRole: executionTask.agentRole,
+              dependencies: executionTask.dependencies,
+              timeoutMs: executionTask.metadata.timeoutMs,
+              requiredCapabilities: executionTask.requiredCapabilities ?? [],
+              preferredEnvironment: executionTask.preferredEnvironment ?? null,
+              strategicPathId: executionTask.strategicPathId ?? null,
             }),
           });
 
@@ -600,7 +710,10 @@ export class Orchestrator {
         }
 
         const previous = getTaskById(this.params.db, task.id);
-        await this.handleFailure(task, err.message);
+        const failureTask = previous
+          ? taskRowToTaskNode(previous)
+          : this.withExecutionIntent(task);
+        await this.handleFailure(failureTask, err.message);
         const latest = getTaskById(this.params.db, task.id);
         if (previous?.status !== "failed" && latest?.status === "failed") {
           counters.tasksFailed += 1;
@@ -612,12 +725,27 @@ export class Orchestrator {
 
     for (const event of this.pendingTaskResults) {
       const taskRow = getTaskById(this.params.db, event.taskId);
-      if (!taskRow) {
+      if (!taskRow || taskRow.status === "cancelled") {
+        // A late result from a superseded path is evidence from an obsolete
+        // execution branch. It must not resurrect or fail the current plan.
         continue;
       }
 
       if (event.result.success) {
         try {
+          const binding = this.adaptive.store.getTaskBinding(taskRow.id);
+          this.adaptive.recordSuccess({
+            candidate: taskToPathCandidate(
+              taskRowToTaskNode(taskRow),
+              goalRowToGoal(goal),
+              binding,
+            ),
+            pathId: binding?.pathId ?? null,
+            markPathSucceeded: !binding?.pathId,
+            observations: [event.result.output],
+            evidence: event.result.artifacts,
+            conditions: await this.currentConditions(taskRowToTaskNode(taskRow)),
+          });
           completeTask(this.params.db, taskRow.id, event.result);
           counters.tasksCompleted += 1;
 
@@ -648,6 +776,14 @@ export class Orchestrator {
     const progress = getGoalProgress(this.params.db, goal.id);
 
     if (progress.total > 0 && progress.completed === progress.total) {
+      const strategicPathId = this.adaptive.store.currentBoundPathId(goal.id);
+      if (strategicPathId) {
+        this.adaptive.completePath(
+          strategicPathId,
+          ["All non-superseded tasks for the strategic path completed successfully."],
+        );
+      }
+
       updateGoalStatus(this.params.db, goal.id, "completed");
       return {
         ...state,
@@ -656,10 +792,9 @@ export class Orchestrator {
     }
 
     if (progress.failed > 0) {
-      const maxReplans = this.getMaxReplans();
       return {
         ...state,
-        phase: state.replanCount < maxReplans ? "replanning" : "failed",
+        phase: "replanning",
         failedTaskId: state.failedTaskId ?? this.findFirstFailedTaskId(goal.id),
         failedError: state.failedError ?? "Task execution failed",
       };
@@ -701,73 +836,85 @@ export class Orchestrator {
       output = await replanAfterFailure(
         goalToPlannerInput(goalRowToGoal(goal)),
         taskToPlannerFailureInput(taskRowToTaskNode(failedTaskRow)),
-        await buildPlannerContext({
-          db: this.params.db,
-          workspace: new AgentWorkspace(goal.id),
-          funding: this.params.funding,
-          identityAddress: this.params.identity.address,
-          usdcBalance: Number(this.params.config?.usdcBalance ?? 0),
-          idleAgents: this.params.agentTracker.getIdle().length,
-          busyAgents: Math.max(0, this.getActiveAgentCount() - this.params.agentTracker.getIdle().length),
-          maxAgents: Number(this.params.config?.maxChildren ?? 3),
-        }),
+        await this.buildAdaptivePlannerContext(goal.id),
         this.params.inference,
       );
     } catch (error) {
       const err = normalizeError(error);
-      logger.warn("Replanner inference failed, falling back to single-task plan", {
+      logger.warn("Replanner inference failed; preserving objective and failed-path evidence", {
         goalId: goal.id,
         error: err.message,
       });
-      output = {
-        analysis: `Replanner fallback: ${err.message}`,
-        strategy: "Re-execute goal as a single generalist task",
-        customRoles: [],
-        tasks: [{
-          title: goal.title,
-          description: goal.description,
-          agentRole: "generalist",
-          dependencies: [],
-          estimatedCostCents: 200,
-          priority: 50,
-          timeoutMs: 300_000,
-        }],
-        risks: ["Replanner unavailable — re-executing without decomposition"],
-        estimatedTotalCostCents: 200,
-        estimatedTimeMinutes: 30,
+      this.adaptive.store.addOpportunity({
+        goalId: goal.id,
+        description: "Replanning inference is currently unavailable; retry planning when inference availability changes.",
+        evidence: [err.message],
+      });
+      return {
+        ...state,
+        phase: "replanning",
+        failedError: err.message,
       };
     }
 
     if (output.tasks.length === 0) {
-      logger.warn("Replanner returned no tasks, falling back to single-task plan", { goalId: goal.id });
-      output = {
-        ...output,
-        tasks: [{
-          title: goal.title,
-          description: goal.description,
-          agentRole: "generalist",
-          dependencies: [],
-          estimatedCostCents: 200,
-          priority: 50,
-          timeoutMs: 300_000,
-        }],
+      logger.warn("Replanner found no executable route; preserving objective for discovery", {
+        goalId: goal.id,
+      });
+      this.adaptive.store.addOpportunity({
+        goalId: goal.id,
+        description: "No executable route is currently known. Investigate unknown paths, missing capabilities, and alternate environments.",
+        evidence: [output.analysis],
+      });
+      return {
+        ...state,
+        phase: "replanning",
+        failedError: output.analysis,
       };
     }
 
+    const replannedPath = plannerOutputToPathCandidate(goalRowToGoal(goal), output);
+    const conditions = await this.currentConditions(taskRowToTaskNode(failedTaskRow));
+    const novelty = this.adaptive.isCandidateEligible(replannedPath, conditions);
+    if (!novelty.novel) {
+      logger.warn("Rejected equivalent replan under unchanged conditions", {
+        goalId: goal.id,
+        equivalentPathId: novelty.equivalentPathId,
+      });
+      this.adaptive.store.addOpportunity({
+        goalId: goal.id,
+        sourcePathId: novelty.equivalentPathId,
+        description: "Equivalent replan rejected. Challenge assumptions and search for a materially different capability, environment, sequence, or method.",
+        evidence: [novelty.reason],
+      });
+      return {
+        ...state,
+        phase: "replanning",
+        failedError: "Equivalent replan rejected under unchanged conditions.",
+      };
+    }
+
+    // Failed and blocked tasks belong to the superseded path. Keep them as
+    // evidence but do not execute them again merely because a replan occurred.
     this.params.db.prepare(
       `UPDATE task_graph
-       SET status = 'pending',
+       SET status = 'cancelled',
            assigned_to = NULL,
-           started_at = NULL,
-           completed_at = NULL,
-           result = NULL
+           completed_at = COALESCE(completed_at, ?)
        WHERE goal_id = ?
-         AND status IN ('failed', 'blocked')`,
-    ).run(goal.id);
+         AND status IN ('pending', 'assigned', 'running', 'failed', 'blocked')`,
+    ).run(new Date().toISOString(), goal.id);
 
     updateGoalStatus(this.params.db, goal.id, "active");
+    this.params.db.prepare("UPDATE goals SET strategy = ? WHERE id = ?").run(output.strategy, goal.id);
+    const selectedPath = this.adaptive.selectCandidate(replannedPath, conditions);
 
-    decomposeGoal(this.params.db, goal.id, plannerOutputToTasks(goal.id, output));
+    const persistedTaskIds = decomposeGoal(
+      this.params.db,
+      goal.id,
+      plannerOutputToTasks(goal.id, output),
+    );
+    this.bindPlannedTasks(goal.id, selectedPath.path.id, persistedTaskIds, output.tasks);
     await this.persistPlannerOutput(goal.id, output, "replan");
 
     return {
@@ -1003,17 +1150,95 @@ export class Orchestrator {
     return row?.count ?? 0;
   }
 
-  private getMaxReplans(): number {
-    const configured = Number(this.params.config?.maxReplans ?? DEFAULT_MAX_REPLANS);
-    if (!Number.isFinite(configured)) {
-      return DEFAULT_MAX_REPLANS;
+  private withExecutionIntent(task: TaskNode): TaskNode {
+    const binding = this.adaptive.store.getTaskBinding(task.id);
+    if (!binding) return task;
+
+    return {
+      ...task,
+      requiredCapabilities: binding.requiredCapabilities,
+      preferredEnvironment: binding.preferredEnvironment ?? null,
+      strategicPathId: binding.pathId ?? null,
+    };
+  }
+
+  private bindPlannedTasks(
+    goalId: string,
+    pathId: string,
+    taskIds: string[],
+    plannedTasks: PlannedTask[],
+  ): void {
+    for (let index = 0; index < taskIds.length; index += 1) {
+      const taskId = taskIds[index];
+      const planned = plannedTasks[index];
+      if (!taskId || !planned) continue;
+
+      this.adaptive.store.bindTask({
+        taskId,
+        goalId,
+        pathId,
+        requiredCapabilities: planned.requiredCapabilities ?? [],
+        preferredEnvironment: planned.preferredEnvironment ?? null,
+      });
+    }
+  }
+
+  private async buildAdaptivePlannerContext(goalId: string): Promise<PlannerContext> {
+    const environmentSnapshots = this.params.environmentRegistry
+      ? await this.params.environmentRegistry.inspectAll()
+      : [];
+
+    if (this.params.capabilityRegistry) {
+      for (const snapshot of environmentSnapshots) {
+        this.params.capabilityRegistry.registerMany(snapshot.capabilities);
+      }
     }
 
-    return Math.max(0, Math.floor(configured));
+    return buildPlannerContext({
+      db: this.params.db,
+      workspace: new AgentWorkspace(goalId),
+      funding: this.params.funding,
+      identityAddress: this.params.identity.address,
+      usdcBalance: Number(this.params.config?.usdcBalance ?? 0),
+      idleAgents: this.params.agentTracker.getIdle().length,
+      busyAgents: Math.max(
+        0,
+        this.getActiveAgentCount() - this.params.agentTracker.getIdle().length,
+      ),
+      maxAgents: Number(this.params.config?.maxChildren ?? 3),
+      adaptiveContext: this.adaptive.buildPlannerContext(goalId),
+      environmentSnapshots,
+      capabilities: this.params.capabilityRegistry?.list() ?? [],
+    });
+  }
+
+  private async currentConditions(task?: TaskNode): Promise<Record<string, unknown>> {
+    const environmentSnapshots = this.params.environmentRegistry
+      ? await this.params.environmentRegistry.inspectAll()
+      : [];
+
+    return {
+      assignedTo: task?.assignedTo ?? null,
+      agentRole: task?.agentRole ?? null,
+      environments: environmentSnapshots.map((snapshot) => ({
+        id: snapshot.id,
+        availability: snapshot.availability,
+        constraints: snapshot.constraints,
+      })),
+    };
   }
 }
 
-function plannerOutputToTasks(goalId: string, output: PlannerOutput): Omit<TaskNode, "id" | "metadata">[] {
+function plannerOutputToTasks(
+  goalId: string,
+  output: PlannerOutput,
+): Array<
+  Omit<TaskNode, "id" | "metadata"> & {
+    metadata?: Partial<
+      Pick<TaskNode["metadata"], "estimatedCostCents" | "maxRetries" | "timeoutMs">
+    >;
+  }
+> {
   return output.tasks.map((task, index) => ({
     parentId: null,
     goalId,
@@ -1025,6 +1250,13 @@ function plannerOutputToTasks(goalId: string, output: PlannerOutput): Omit<TaskN
     priority: clampPriority(task.priority, index),
     dependencies: task.dependencies.map((dep) => String(dep)),
     result: null,
+    requiredCapabilities: task.requiredCapabilities ?? [],
+    preferredEnvironment: task.preferredEnvironment ?? null,
+    strategicPathId: null,
+    metadata: {
+      estimatedCostCents: task.estimatedCostCents,
+      timeoutMs: task.timeoutMs,
+    },
   }));
 }
 

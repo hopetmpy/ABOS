@@ -161,7 +161,9 @@ export type ToolCategory =
   | "git"
   | "registry"
   | "replication"
-  | "memory";
+  | "memory"
+  | "environment"
+  | "capability";
 
 export interface ToolContext {
   identity: AbosIdentity;

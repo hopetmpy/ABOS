@@ -356,9 +356,21 @@ describe("integration/plan-execute-flow", () => {
       expect(result.phase).toBe("plan_review");
       const state = readState(db);
       expect(state?.replanCount).toBe(1);
+
+      const superseded = db.prepare(
+        "SELECT status FROM task_graph WHERE id = ?",
+      ).get(taskId) as { status: string };
+      expect(superseded.status).toBe("cancelled");
+
+      const activeNewTasks = db.prepare(
+        `SELECT COUNT(*) AS count
+         FROM task_graph
+         WHERE goal_id = ? AND status != 'cancelled'`,
+      ).get(goalId) as { count: number };
+      expect(activeNewTasks.count).toBeGreaterThan(0);
     });
 
-    it("max replans exceeded transitions to failed", async () => {
+    it("replan count does not terminate a still-valid objective", async () => {
       const goalId = insertGoal(db, { status: "active" });
       const taskId = ulid();
       db.prepare(
@@ -366,7 +378,8 @@ describe("integration/plan-execute-flow", () => {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(taskId, goalId, "Task 1", "Do the thing", "pending", "generalist", 1, "[]", 0, 0, new Date().toISOString());
 
-      // replanCount already at max
+      // Historical telemetry may already show multiple replans. This is not
+      // itself evidence that the objective is impossible.
       setState(db, { phase: "executing", goalId, replanCount: 3, failedTaskId: null, failedError: null });
 
       mocks.agentTracker.getIdle.mockReturnValue([
@@ -400,10 +413,12 @@ describe("integration/plan-execute-flow", () => {
       const orc = makeOrchestrator(db, mocks, { maxReplans: 3 });
       const result = await orc.tick();
 
-      expect(result.phase).toBe("failed");
+      expect(result.phase).toBe("replanning");
+      const goal = db.prepare("SELECT status FROM goals WHERE id = ?").get(goalId) as { status: string };
+      expect(goal.status).toBe("active");
     });
 
-    it("goal status is set to failed when max replans exceeded", async () => {
+    it("explicit failed phase still marks a goal failed for genuine terminal/runtime failure", async () => {
       const goalId = insertGoal(db, { status: "active" });
 
       setState(db, {

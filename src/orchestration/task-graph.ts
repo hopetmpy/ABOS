@@ -43,6 +43,10 @@ export interface TaskNode {
   priority: number;
   dependencies: string[];
   result: TaskResult | null;
+  /** Planner execution intent; persisted in adaptive_task_bindings. */
+  requiredCapabilities?: string[];
+  preferredEnvironment?: string | null;
+  strategicPathId?: string | null;
   metadata: {
     estimatedCostCents: number;
     actualCostCents: number;
@@ -68,7 +72,11 @@ export interface Goal {
   deadline: string | null;
 }
 
-type DecomposeTaskInput = Omit<TaskNode, "id" | "metadata">;
+type DecomposeTaskInput = Omit<TaskNode, "id" | "metadata"> & {
+  metadata?: Partial<
+    Pick<TaskNode["metadata"], "estimatedCostCents" | "maxRetries" | "timeoutMs">
+  >;
+};
 
 type CycleTask = {
   id?: string;
@@ -117,14 +125,14 @@ export function createGoal(
 export function decomposeGoal(
   db: Database,
   goalId: string,
-  tasks: Omit<TaskNode, "id" | "metadata">[],
-): void {
+  tasks: DecomposeTaskInput[],
+): string[] {
   if (!getGoalById(db, goalId)) {
     throw new Error(`Goal not found: ${goalId}`);
   }
 
   if (tasks.length === 0) {
-    return;
+    return [];
   }
 
   const titleCounts = new Map<string, number>();
@@ -166,6 +174,8 @@ export function decomposeGoal(
     throw new Error("Task graph contains a cycle; decomposition must be a DAG");
   }
 
+  const persistedIds: string[] = [];
+
   withTransaction(db, () => {
     const localToPersisted = new Map<string, string>();
     const deferredUpdates: {
@@ -192,9 +202,13 @@ export function decomposeGoal(
         priority: planned.task.priority,
         dependencies: dependencyRefs,
         result: planned.task.result,
+        estimatedCostCents: planned.task.metadata?.estimatedCostCents,
+        maxRetries: planned.task.metadata?.maxRetries,
+        timeoutMs: planned.task.metadata?.timeoutMs,
       });
 
       localToPersisted.set(planned.localId, taskId);
+      persistedIds.push(taskId);
       deferredUpdates.push({
         taskId,
         requestedStatus: planned.task.status,
@@ -230,6 +244,8 @@ export function decomposeGoal(
     unblockReadyBlockedTasks(db);
     refreshGoalStatus(db, goalId);
   });
+
+  return persistedIds;
 }
 
 export function getReadyTasks(db: Database): TaskNode[] {
@@ -335,7 +351,8 @@ export function getGoalProgress(
          SUM(CASE WHEN status = 'blocked' THEN 1 ELSE 0 END) AS blocked,
          SUM(CASE WHEN status IN ('assigned', 'running') THEN 1 ELSE 0 END) AS running
        FROM task_graph
-       WHERE goal_id = ?`,
+       WHERE goal_id = ?
+         AND status != 'cancelled'`,
     )
     .get(goalId) as
     | {

@@ -119,13 +119,13 @@ describe("orchestration/plan-mode", () => {
       expect(controller.getState().phase).toBe("planning");
     });
 
-    it("allows executing -> replanning and updates counters", () => {
+    it("allows executing -> replanning without consuming the legacy counter", () => {
       controller.setState({ phase: "executing", replansRemaining: 2, planVersion: 4 });
       controller.transition("executing", "replanning", "failure");
 
       const state = controller.getState();
       expect(state.phase).toBe("replanning");
-      expect(state.replansRemaining).toBe(1);
+      expect(state.replansRemaining).toBe(2);
       expect(state.planVersion).toBe(5);
     });
 
@@ -405,9 +405,11 @@ describe("orchestration/plan-mode", () => {
   });
 
   describe("shouldReplan", () => {
-    it("returns false when no replans remain", () => {
+    it("does not treat the legacy replan counter as evidence that replanning must stop", () => {
       const state = baseState({ replansRemaining: 0 });
-      expect(shouldReplan(state, { type: "task_failure", taskId: "t1", error: "boom" })).toBe(false);
+      expect(
+        shouldReplan(state, { type: "task_failure", taskId: "t1", error: "boom" }),
+      ).toBe(true);
     });
 
     it("task_failure requires taskId and error", () => {
@@ -442,16 +444,16 @@ describe("orchestration/plan-mode", () => {
       expect(shouldReplan(state, { type: "environment_change", resource: "db", error: " " })).toBe(false);
     });
 
-    it("opportunity requires enough replans and long suggestion", () => {
+    it("opportunity depends on substantive content, not the legacy replan counter", () => {
       expect(shouldReplan(
         baseState({ replansRemaining: 2 }),
         { type: "opportunity", suggestion: "This opportunity is long enough to justify a replan", agentAddress: "0x1" },
       )).toBe(true);
 
       expect(shouldReplan(
-        baseState({ replansRemaining: 1 }),
+        baseState({ replansRemaining: 0 }),
         { type: "opportunity", suggestion: "This opportunity is long enough to justify a replan", agentAddress: "0x1" },
-      )).toBe(false);
+      )).toBe(true);
 
       expect(shouldReplan(
         baseState({ replansRemaining: 3 }),
