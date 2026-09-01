@@ -114,6 +114,60 @@ describe("spawnChild", () => {
     vi.restoreAllMocks();
   });
 
+  it("enforces maxChildren from the runtime config instead of an implicit DB property", async () => {
+    db.insertChild({
+      id: "existing-child",
+      name: "existing",
+      address: validAddress,
+      sandboxId: "sandbox-existing",
+      genesisPrompt: "existing child",
+      fundedAmountCents: 0,
+      status: "running",
+      createdAt: new Date().toISOString(),
+    });
+    const createSandbox = vi.spyOn(conway, "createSandbox");
+
+    await expect(
+      spawnChild(
+        conway,
+        identity,
+        db,
+        genesis,
+        undefined,
+        { maxChildren: 1, childSandboxMemoryMb: 1024 },
+      ),
+    ).rejects.toThrow("already at max children (1)");
+
+    expect(createSandbox).not.toHaveBeenCalled();
+  });
+
+  it("uses childSandboxMemoryMb from the runtime config when selecting a sandbox tier", async () => {
+    vi.spyOn(conway, "exec").mockImplementation(async (command: string) => {
+      if (command.includes("--init")) {
+        return { stdout: `Wallet initialized: ${validAddress}`, stderr: "", exitCode: 0 };
+      }
+      return { stdout: "ok", stderr: "", exitCode: 0 };
+    });
+    const createSandbox = vi.spyOn(conway, "createSandbox");
+
+    await spawnChild(
+      conway,
+      identity,
+      db,
+      genesis,
+      undefined,
+      { maxChildren: 3, childSandboxMemoryMb: 2048 },
+    );
+
+    expect(createSandbox).toHaveBeenCalledWith(
+      expect.objectContaining({
+        memoryMb: 2048,
+        vcpu: 2,
+        diskGb: 20,
+      }),
+    );
+  });
+
   it("runs child initialization from the ABOS repository root", async () => {
     const commands: string[] = [];
     vi.spyOn(conway, "exec").mockImplementation(async (command: string) => {
