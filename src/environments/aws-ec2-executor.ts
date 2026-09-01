@@ -10,6 +10,7 @@ import type {
   EnvironmentTaskExecutionAssessment,
   EnvironmentTaskExecutor,
   EnvironmentTaskSpawnResult,
+  EnvironmentTaskSpawnOptions,
   EnvironmentTaskTarget,
 } from "./task-executor.js";
 import { AwsEnvironmentProvider } from "./aws.js";
@@ -41,7 +42,10 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
 
   constructor(private readonly options: AwsEc2TaskExecutorOptions) {}
 
-  async assess(task: TaskNode): Promise<EnvironmentTaskExecutionAssessment> {
+  async assess(
+    task: TaskNode,
+    spawnOptions: EnvironmentTaskSpawnOptions = {},
+  ): Promise<EnvironmentTaskExecutionAssessment> {
     const harnessId = new HarnessRegistry().getHarnessIdForRole(task.agentRole);
     if (harnessId === "orchestrator") {
       return {
@@ -67,7 +71,9 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
       };
     }
 
-    const reusable = this.findReusableResources();
+    const reusable = this.findReusableResources(
+      spawnOptions.excludedResourceIds ?? [],
+    );
     const instanceProfile =
       this.options.provider.getConfiguredIamInstanceProfile(
         this.options.resourceMetadata,
@@ -99,8 +105,13 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
     };
   }
 
-  async spawn(task: TaskNode): Promise<EnvironmentTaskSpawnResult> {
-    const reusable = await this.findHealthyReusableResource();
+  async spawn(
+    task: TaskNode,
+    spawnOptions: EnvironmentTaskSpawnOptions = {},
+  ): Promise<EnvironmentTaskSpawnResult> {
+    const reusable = await this.findHealthyReusableResource(
+      spawnOptions.excludedResourceIds ?? [],
+    );
     if (reusable?.externalId) {
       return {
         address: executorAddress(reusable.externalId),
@@ -445,7 +456,8 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
     };
   }
 
-  private findReusableResources() {
+  private findReusableResources(excludedResourceIds: string[] = []) {
+    const excluded = new Set(excludedResourceIds);
     const releaseStates = new Set([
       "artifact_hold",
       "destroy_requested",
@@ -458,6 +470,7 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
       .filter(
         (resource) =>
           resource.provider === "aws" &&
+          !excluded.has(resource.id) &&
           resource.type === "aws-ec2-instance" &&
           resource.metadata.executorKind === "aws-ec2-ssm" &&
           ["ready", "running", "suspended"].includes(resource.status) &&
@@ -470,8 +483,10 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
       );
   }
 
-  private async findHealthyReusableResource() {
-    for (const candidate of this.findReusableResources()) {
+  private async findHealthyReusableResource(
+    excludedResourceIds: string[] = [],
+  ) {
+    for (const candidate of this.findReusableResources(excludedResourceIds)) {
       let current = candidate;
       if (current.status === "suspended") {
         current = await this.options.lifecycle.resume(current.id);
