@@ -315,6 +315,55 @@ describe("AwsEc2TaskExecutor", () => {
     expect(healthCalls).toBe(1);
   });
 
+  it("skips an explicitly excluded AWS resource while allowing another healthy resource from the same provider", async () => {
+    const failed = resource({
+      id: "resource-failed",
+      externalId: "i-failed",
+      metadata: {
+        executorKind: "aws-ec2-ssm",
+        executorAddress: "aws://ec2/i-failed",
+        installRoot: "/opt/abos",
+      },
+    });
+    const healthy = resource({
+      id: "resource-healthy",
+      externalId: "i-healthy",
+      metadata: {
+        executorKind: "aws-ec2-ssm",
+        executorAddress: "aws://ec2/i-healthy",
+        installRoot: "/opt/abos",
+      },
+    });
+    const lifecycle = {
+      resources: {
+        list: () => [failed, healthy],
+      },
+      health: async (id: string) => {
+        const found = [failed, healthy].find((entry) => entry.id === id);
+        if (!found) throw new Error("resource not found");
+        return found;
+      },
+    } as unknown as EnvironmentLifecycleManager;
+    const provider = new AwsEnvironmentProvider({
+      runner: async () => {
+        throw new Error("AWS control plane should not be needed for healthy reuse");
+      },
+    });
+    const executor = new AwsEc2TaskExecutor({
+      provider,
+      lifecycle,
+      identity: {} as any,
+      config: {} as any,
+    });
+
+    const spawned = await executor.spawn(task(), {
+      excludedResourceIds: [failed.id],
+    });
+
+    expect(spawned.address).toBe("aws://ec2/i-healthy");
+    expect(spawned.metadata?.reusedResourceId).toBe(healthy.id);
+  });
+
   it("does not reuse a degraded AWS executor without fresh recovery evidence", async () => {
     const degraded = resource({
       status: "degraded",
