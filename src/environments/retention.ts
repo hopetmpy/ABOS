@@ -11,6 +11,7 @@ export interface EnvironmentRetentionSweepResult {
   released: number;
   pendingObservation: number;
   unavailable: number;
+  artifactHolds: number;
   evidence: string[];
 }
 
@@ -45,6 +46,7 @@ export class EnvironmentRetentionCoordinator {
       released: 0,
       pendingObservation: 0,
       unavailable: 0,
+      artifactHolds: 0,
       evidence: [],
     };
 
@@ -55,6 +57,15 @@ export class EnvironmentRetentionCoordinator {
       result.releaseEligible += 1;
 
       let resource = initial;
+      if (hasPendingLocalArtifacts(resource)) {
+        resource = await this.holdForArtifactCollection(
+          resource,
+          decision.reason,
+          result,
+        );
+        result.artifactHolds += 1;
+        continue;
+      }
       if (resource.metadata.retentionReleaseState === "pending_observation") {
         resource = await this.observeAfterUncertainDestroy(resource, result);
         if (resource.status === "terminated") {
@@ -165,6 +176,50 @@ export class EnvironmentRetentionCoordinator {
     }
 
     return result;
+  }
+
+  private async holdForArtifactCollection(
+    resource: EnvironmentResource,
+    releaseReason: string,
+    result: EnvironmentRetentionSweepResult,
+  ): Promise<EnvironmentResource> {
+    const alreadyHeld =
+      resource.metadata.retentionReleaseState === "artifact_hold";
+    let current = resource;
+
+    if (
+      !alreadyHeld &&
+      !["suspended", "terminated"].includes(current.status) &&
+      this.registry.supportsOperation(current.provider, "suspend")
+    ) {
+      current = await this.lifecycle.suspend(current.id);
+    }
+
+    if (!alreadyHeld) {
+      current = this.lifecycle.resources.applyMutation(
+        current.id,
+        {
+          evidence: [
+            `Retention boundary reached (${releaseReason}), but local executor artifacts remain uncollected. Resource destruction is held to preserve deliverables.`,
+            current.status === "suspended"
+              ? "Provider resource was suspended to reduce compute cost while preserving artifact state."
+              : "Provider does not currently provide a verified suspended state; resource is retained until artifact collection evidence exists.",
+          ],
+          metadata: {
+            retentionReleaseState: "artifact_hold",
+            retentionReleaseReason: releaseReason,
+            artifactHoldSince: new Date().toISOString(),
+          },
+        },
+        "retention",
+        "Automatic release deferred until remote artifact collection completes.",
+      );
+    }
+
+    result.evidence.push(
+      `Resource ${current.id} retained for ${pendingArtifactCount(current)} uncollected local artifact(s).`,
+    );
+    return current;
   }
 
   private retentionDecision(resource: EnvironmentResource): RetentionDecision {
@@ -306,6 +361,38 @@ export class EnvironmentRetentionCoordinator {
       update.run(resource.externalId, resource.externalId);
     }
   }
+}
+
+function hasPendingLocalArtifacts(
+  resource: EnvironmentResource,
+): boolean {
+  if (resource.metadata.artifactCollectionState !== "pending") {
+    return false;
+  }
+
+  const artifacts = Array.isArray(resource.metadata.remoteArtifacts)
+    ? resource.metadata.remoteArtifacts.filter(
+        (value): value is string =>
+          typeof value === "string" && value.trim().length > 0,
+      )
+    : [];
+
+  return artifacts.some((artifact) => !hasDurableExternalScheme(artifact));
+}
+
+function pendingArtifactCount(resource: EnvironmentResource): number {
+  return Array.isArray(resource.metadata.remoteArtifacts)
+    ? resource.metadata.remoteArtifacts.filter(
+        (value): value is string =>
+          typeof value === "string" &&
+          value.trim().length > 0 &&
+          !hasDurableExternalScheme(value),
+      ).length
+    : 0;
+}
+
+function hasDurableExternalScheme(value: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(value.trim());
 }
 
 function resourceFingerprint(resource: EnvironmentResource): string {
