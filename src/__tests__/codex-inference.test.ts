@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { CodexRpcTransport } from "../codex/app-server.js";
 import { CodexInferenceRuntime } from "../codex/inference.js";
 import type { InferenceToolDefinition } from "../types.js";
@@ -215,23 +215,28 @@ describe("CodexInferenceRuntime", () => {
       "codex:gpt-test",
     );
 
-    // Let thread/start and turn/start complete so an interruptable turn id exists.
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    // Abort as soon as turn/start has been issued. This intentionally allows
+    // the abort to race with turn-id assignment; production must still
+    // interrupt once the id becomes known.
+    await vi.waitFor(() => {
+      expect(
+        fake.requests.some((request) => request.method === "turn/start"),
+      ).toBe(true);
+    });
     controller.abort();
 
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
-    await Promise.resolve();
 
-    expect(
-      fake.requests.some(
-        (request) =>
-          request.method === "turn/interrupt" &&
-          request.params?.threadId === "thread-1" &&
-          request.params?.turnId === "turn-1",
-      ),
-    ).toBe(true);
+    await vi.waitFor(() => {
+      expect(
+        fake.requests.filter(
+          (request) =>
+            request.method === "turn/interrupt" &&
+            request.params?.threadId === "thread-1" &&
+            request.params?.turnId === "turn-1",
+        ),
+      ).toHaveLength(1);
+    });
   });
 
   it("rejects provider-native side effects instead of bypassing ABOS execution", async () => {
@@ -246,5 +251,14 @@ describe("CodexInferenceRuntime", () => {
         "codex:gpt-test",
       ),
     ).rejects.toThrow(/outside the ABOS capability broker/);
+
+    expect(
+      fake.requests.filter(
+        (request) =>
+          request.method === "turn/interrupt" &&
+          request.params?.threadId === "thread-1" &&
+          request.params?.turnId === "turn-1",
+      ),
+    ).toHaveLength(1);
   });
 });
