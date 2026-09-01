@@ -1,5 +1,9 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { gunzipSync } from "node:zlib";
+import { getHomeDir } from "../platform/home.js";
 import type {
   CommandResult,
   EnvironmentCollectionResult,
@@ -26,6 +30,9 @@ const DEFAULT_MANAGED_TAG_VALUE = "true";
 const DEFAULT_ABOS_REPOSITORY = "https://github.com/hopetmpy/ABOS.git";
 const DEFAULT_ABOS_REF = "main";
 const DEFAULT_ABOS_INSTALL_ROOT = "/opt/abos";
+const DEFAULT_ARTIFACT_MAX_COMPRESSED_BYTES = 512 * 1024;
+const DEFAULT_ARTIFACT_CHUNK_BYTES = 15_000;
+const MAX_SSM_ARTIFACT_CHUNK_BYTES = 16_000;
 
 const defaultRunner: EnvironmentCommandRunner = (
   command,
@@ -55,6 +62,8 @@ export interface AwsEnvironmentProviderOptions {
   commandTimeoutMs?: number;
   ssmReadyAttempts?: number;
   ssmReadyIntervalMs?: number;
+  artifactMaxCompressedBytes?: number;
+  artifactChunkBytes?: number;
 }
 
 interface AwsEc2Observation {
@@ -646,26 +655,306 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
 
   async collect(resource: EnvironmentResource): Promise<EnvironmentCollectionResult> {
     const instanceId = requireInstanceId(resource);
-    const observed = await this.describeInstance(
-      instanceId,
-      resource.region ?? await this.resolveRegion(),
+    const region = resource.region ?? await this.resolveRegion();
+    const observed = await this.describeInstance(instanceId, region);
+    const pending = remoteArtifactPaths(resource.metadata);
+
+    if (!observed.instance) {
+      return {
+        artifacts: [],
+        evidence: [
+          `AWS EC2 instance ${instanceId} is not currently observable; remote artifact collection remains pending and no artifact was fabricated.`,
+          ...observed.evidence,
+        ],
+        metadata: {
+          artifactCollectionState:
+            pending.length > 0 ? "pending" : resource.metadata.artifactCollectionState ?? "none",
+          remoteArtifacts: pending,
+        },
+      };
+    }
+
+    const evidence = [
+      `Collected AWS EC2 control-plane observation for ${instanceId}.`,
+      `state=${observed.instance.State?.Name ?? "unknown"} privateIp=${observed.instance.PrivateIpAddress ?? "unknown"} publicIp=${observed.instance.PublicIpAddress ?? "unknown"}.`,
+    ];
+
+    if (
+      resource.metadata.artifactCollectionState !== "pending" ||
+      pending.length === 0
+    ) {
+      return {
+        artifacts: [],
+        evidence,
+        metadata: {
+          ...observationMetadata(observed.instance),
+          artifactCollectionState:
+            resource.metadata.artifactCollectionState ?? "none",
+          remoteArtifacts: pending,
+        },
+      };
+    }
+
+    const originalState = observed.instance.State?.Name ?? "unknown";
+    let startedForCollection = false;
+    if (originalState === "stopped") {
+      await this.startInstance(instanceId, region);
+      startedForCollection = true;
+      evidence.push(
+        `Temporarily started suspended EC2 instance ${instanceId} to collect pending artifacts.`,
+      );
+    } else if (originalState !== "running") {
+      return {
+        artifacts: [],
+        evidence: [
+          ...evidence,
+          `Artifact collection is currently unavailable while EC2 state=${originalState}; pending artifacts are preserved.`,
+        ],
+        metadata: {
+          ...observationMetadata(observed.instance),
+          artifactCollectionState: "pending",
+          remoteArtifacts: pending,
+        },
+      };
+    }
+
+    const collectedArtifacts: Array<{
+      remotePath: string;
+      localPath: string;
+      bytes: number;
+      compressedBytes: number;
+    }> = [];
+    const uncollectedArtifacts: string[] = [];
+    const installRoot =
+      metadataString(resource.metadata, "installRoot") ??
+      DEFAULT_ABOS_INSTALL_ROOT;
+    const maxCompressedBytes = configuredPositiveInteger(
+      this.options.artifactMaxCompressedBytes ??
+        process.env.ABOS_AWS_ARTIFACT_MAX_COMPRESSED_BYTES,
+      DEFAULT_ARTIFACT_MAX_COMPRESSED_BYTES,
+    );
+    const chunkBytes = Math.min(
+      MAX_SSM_ARTIFACT_CHUNK_BYTES,
+      configuredPositiveInteger(
+        this.options.artifactChunkBytes ??
+          process.env.ABOS_AWS_ARTIFACT_CHUNK_BYTES,
+        DEFAULT_ARTIFACT_CHUNK_BYTES,
+      ),
     );
 
+    try {
+      await this.waitForSsmOnline(instanceId, region);
+
+      for (let index = 0; index < pending.length; index += 1) {
+        const original = pending[index]!;
+        const remotePath = resolveRemoteRuntimeArtifact(
+          original,
+          installRoot,
+        );
+        if (!remotePath) {
+          uncollectedArtifacts.push(original);
+          evidence.push(
+            `Remote artifact path "${original}" could not be verified inside runtime root=${installRoot}; collection remains pending.`,
+          );
+          continue;
+        }
+
+        try {
+          const collected = await this.collectArtifactFile({
+            instanceId,
+            region,
+            resource,
+            remotePath,
+            artifactIndex: index,
+            maxCompressedBytes,
+            chunkBytes,
+          });
+          collectedArtifacts.push({
+            remotePath: original,
+            ...collected,
+          });
+          evidence.push(
+            `Collected remote artifact "${original}" to "${collected.localPath}" (${collected.bytes} bytes).`,
+          );
+        } catch (error) {
+          uncollectedArtifacts.push(original);
+          evidence.push(
+            `Remote artifact "${original}" remains pending: ${errorMessage(error)}`,
+          );
+        }
+      }
+    } finally {
+      if (startedForCollection) {
+        try {
+          await this.stopInstance(instanceId, region);
+          evidence.push(
+            `Restored EC2 instance ${instanceId} to suspended state after artifact collection.`,
+          );
+        } catch (error) {
+          evidence.push(
+            `Failed to restore EC2 instance ${instanceId} to suspended state after collection: ${errorMessage(error)}`,
+          );
+        }
+      }
+    }
+
     return {
-      artifacts: [],
-      evidence: observed.instance
-        ? [
-            `Collected AWS EC2 control-plane observation for ${instanceId}.`,
-            `state=${observed.instance.State?.Name ?? "unknown"} privateIp=${observed.instance.PrivateIpAddress ?? "unknown"} publicIp=${observed.instance.PublicIpAddress ?? "unknown"}.`,
-          ]
-        : [
-            `AWS EC2 instance ${instanceId} is not currently observable; no artifact inventory was fabricated.`,
-            ...observed.evidence,
-          ],
-      metadata: observed.instance
-        ? observationMetadata(observed.instance)
-        : {},
+      artifacts: collectedArtifacts.map((entry) => entry.localPath),
+      evidence,
+      metadata: {
+        ...observationMetadata(observed.instance),
+        artifactCollectionState:
+          uncollectedArtifacts.length === 0 ? "collected" : "pending",
+        remoteArtifacts: uncollectedArtifacts,
+        collectedArtifacts,
+        artifactCollectionObservedAt: new Date().toISOString(),
+      },
     };
+  }
+
+  private async collectArtifactFile(input: {
+    instanceId: string;
+    region: string | null;
+    resource: EnvironmentResource;
+    remotePath: string;
+    artifactIndex: number;
+    maxCompressedBytes: number;
+    chunkBytes: number;
+  }): Promise<{
+    localPath: string;
+    bytes: number;
+    compressedBytes: number;
+  }> {
+    const digest = createHash("sha256")
+      .update(
+        `${input.resource.id}:${input.artifactIndex}:${input.remotePath}`,
+        "utf8",
+      )
+      .digest("hex");
+    const remoteArchive =
+      `/tmp/abos-artifact-${digest.slice(0, 24)}.gz`;
+
+    try {
+      const prepared = await this.runSsmCommands(
+        input.instanceId,
+        [[
+          "set -euo pipefail",
+          `test -f ${shellQuote(input.remotePath)}`,
+          `gzip -c -- ${shellQuote(input.remotePath)} > ${shellQuote(remoteArchive)}`,
+          `printf 'ABOS_ARTIFACT_SIZE=%s\\n' "$(stat -c %s ${shellQuote(remoteArchive)})"`,
+        ].join("\n")],
+        input.region,
+        this.commandTimeoutMs(),
+      );
+      if (prepared.Status !== "Success") {
+        throw new Error(
+          `artifact preparation failed with SSM status=${prepared.Status ?? "unknown"}: ${prepared.StandardErrorContent ?? ""}`,
+        );
+      }
+
+      const compressedBytes = parseArtifactSize(
+        prepared.StandardOutputContent ?? "",
+      );
+      if (compressedBytes == null) {
+        throw new Error(
+          "artifact preparation returned no valid compressed-size marker",
+        );
+      }
+      if (compressedBytes > input.maxCompressedBytes) {
+        throw new Error(
+          `compressed artifact size=${compressedBytes} exceeds current automatic collection budget=${input.maxCompressedBytes} bytes. Increase ABOS_AWS_ARTIFACT_MAX_COMPRESSED_BYTES or use another collection route; the artifact remains preserved, not impossible.`,
+        );
+      }
+
+      const chunks: Buffer[] = [];
+      for (
+        let offset = 0;
+        offset < compressedBytes;
+        offset += input.chunkBytes
+      ) {
+        const count = Math.min(
+          input.chunkBytes,
+          compressedBytes - offset,
+        );
+        const invocation = await this.runSsmCommands(
+          input.instanceId,
+          [
+            `set -euo pipefail\ndd if=${shellQuote(remoteArchive)} bs=1 skip=${offset} count=${count} status=none | base64 -w0`,
+          ],
+          input.region,
+          this.commandTimeoutMs(),
+        );
+        if (invocation.Status !== "Success") {
+          throw new Error(
+            `artifact chunk transfer failed at offset=${offset} status=${invocation.Status ?? "unknown"}: ${invocation.StandardErrorContent ?? ""}`,
+          );
+        }
+
+        const encoded = (invocation.StandardOutputContent ?? "")
+          .replace(/\s+/g, "");
+        if (
+          !encoded ||
+          !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)
+        ) {
+          throw new Error(
+            `artifact chunk at offset=${offset} returned invalid base64 payload`,
+          );
+        }
+        chunks.push(Buffer.from(encoded, "base64"));
+      }
+
+      const compressed = Buffer.concat(chunks);
+      if (compressed.length !== compressedBytes) {
+        throw new Error(
+          `artifact transfer length mismatch: expected=${compressedBytes} received=${compressed.length}`,
+        );
+      }
+
+      const body = gunzipSync(compressed);
+      const goalSegment = safeFilesystemSegment(
+        input.resource.goalId ?? "unbound-goal",
+      );
+      const resourceSegment = safeFilesystemSegment(
+        input.resource.id,
+      );
+      const artifactDir = path.join(
+        getHomeDir(),
+        ".abos",
+        "workspace",
+        goalSegment,
+        "remote-artifacts",
+        resourceSegment,
+      );
+      fs.mkdirSync(artifactDir, { recursive: true });
+
+      const basename = safeArtifactBasename(
+        path.posix.basename(input.remotePath),
+        input.artifactIndex,
+      );
+      const localPath = path.join(
+        artifactDir,
+        `${digest.slice(0, 12)}-${basename}`,
+      );
+      fs.writeFileSync(localPath, body);
+
+      return {
+        localPath,
+        bytes: body.length,
+        compressedBytes,
+      };
+    } finally {
+      try {
+        await this.runSsmCommands(
+          input.instanceId,
+          [`rm -f -- ${shellQuote(remoteArchive)}`],
+          input.region,
+          this.commandTimeoutMs(),
+        );
+      } catch {
+        // A failed temporary-file cleanup must not convert a successfully
+        // materialized artifact into a fabricated collection failure.
+      }
+    }
   }
 
   async resize(
@@ -1533,6 +1822,90 @@ function observeComputeEstimate(
     },
     evidence: `AWS EC2 compute-only accrued estimate=${total.toFixed(4)} cents at observed provider state=${providerState}; full billed cost remains UNKNOWN without billing evidence.`,
   };
+}
+
+function remoteArtifactPaths(
+  metadata: Record<string, unknown>,
+): string[] {
+  return Array.isArray(metadata.remoteArtifacts)
+    ? metadata.remoteArtifacts
+        .filter(
+          (value): value is string =>
+            typeof value === "string" && value.trim().length > 0,
+        )
+        .map((value) => value.trim())
+    : [];
+}
+
+function resolveRemoteRuntimeArtifact(
+  artifact: string,
+  installRoot: string,
+): string | null {
+  const root = path.posix.resolve(installRoot);
+  let candidate = artifact.trim();
+
+  if (/^(?:https?|s3|gs|ipfs|ar):\/\//i.test(candidate)) {
+    return null;
+  }
+
+  if (/^file:\/\//i.test(candidate)) {
+    try {
+      candidate = decodeURIComponent(new URL(candidate).pathname);
+    } catch {
+      return null;
+    }
+  } else if (candidate.startsWith("~")) {
+    candidate = candidate.slice(1).replace(/^\/+/, "");
+  }
+
+  const resolved = path.posix.isAbsolute(candidate)
+    ? path.posix.resolve(candidate)
+    : path.posix.resolve(root, candidate);
+  if (resolved !== root && !resolved.startsWith(`${root}/`)) {
+    return null;
+  }
+  return resolved;
+}
+
+function parseArtifactSize(output: string): number | null {
+  const match = /(?:^|\n)ABOS_ARTIFACT_SIZE=(\d+)(?:\n|$)/.exec(output);
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function configuredPositiveInteger(
+  value: number | string | undefined,
+  fallback: number,
+): number {
+  const parsed =
+    typeof value === "number" ? value :
+    typeof value === "string" && value.trim() ? Number(value) :
+    Number.NaN;
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.floor(parsed)
+    : fallback;
+}
+
+function safeFilesystemSegment(value: string): string {
+  const normalized = value
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 100);
+  return normalized || "unknown";
+}
+
+function safeArtifactBasename(
+  value: string,
+  index: number,
+): string {
+  const normalized = value
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120);
+  return normalized || `artifact-${index + 1}`;
 }
 
 function observationMetadata(
