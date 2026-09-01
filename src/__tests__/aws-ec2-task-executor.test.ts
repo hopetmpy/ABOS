@@ -391,6 +391,10 @@ describe("AwsEc2TaskExecutor", () => {
 
     expect(dispatched.result).toEqual(expected);
     expect(dispatched.metadata?.delivery).toBe("aws_ssm");
+    expect(dispatched.metadata?.artifactCollectionState).toBe("pending");
+    expect(dispatched.metadata?.remoteArtifacts).toEqual([
+      "/tmp/result.txt",
+    ]);
     const send = calls.find(
       (args) => args[0] === "ssm" && args[1] === "send-command",
     );
