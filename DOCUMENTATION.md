@@ -46,7 +46,7 @@ The ABOS has a genesis prompt (its purpose), a set of tools (shell access, file 
 
 ### One-line install (Conway sandbox)
 
-The canonical source is the private ABOS repository. Install from an authenticated checkout so code always comes from `hopetmpy/ABOS`.
+The canonical source is the public `hopetmpy/ABOS` repository. A normal clone or GitHub source download follows the default `main` branch.
 
 This clones the repo, builds, and launches the setup wizard inside a Conway sandbox.
 
