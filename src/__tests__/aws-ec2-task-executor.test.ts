@@ -273,6 +273,81 @@ describe("AwsEc2TaskExecutor", () => {
     ).toBe(true);
   });
 
+  it("resumes and health-checks a suspended owned executor before reuse", async () => {
+    const suspended = resource({
+      status: "suspended",
+      providerState: "stopped",
+    });
+    let resumeCalls = 0;
+    let healthCalls = 0;
+    const lifecycle = {
+      resources: {
+        list: () => [suspended],
+      },
+      resume: async () => {
+        resumeCalls += 1;
+        suspended.status = "running";
+        suspended.providerState = "running";
+        return suspended;
+      },
+      health: async () => {
+        healthCalls += 1;
+        return suspended;
+      },
+    } as unknown as EnvironmentLifecycleManager;
+    const provider = new AwsEnvironmentProvider({
+      runner: async () => {
+        throw new Error("AWS control plane should not be needed for known reusable executor");
+      },
+    });
+    const executor = new AwsEc2TaskExecutor({
+      provider,
+      lifecycle,
+      identity: {} as any,
+      config: {} as any,
+    });
+
+    const spawned = await executor.spawn(task());
+
+    expect(spawned.address).toBe("aws://ec2/i-new");
+    expect(spawned.metadata?.reusedResourceId).toBe(suspended.id);
+    expect(resumeCalls).toBe(1);
+    expect(healthCalls).toBe(1);
+  });
+
+  it("does not reuse a degraded AWS executor without fresh recovery evidence", async () => {
+    const degraded = resource({
+      status: "degraded",
+      providerState: "unhealthy",
+    });
+    let healthCalls = 0;
+    const lifecycle = {
+      resources: {
+        list: () => [degraded],
+      },
+      health: async () => {
+        healthCalls += 1;
+        return degraded;
+      },
+    } as unknown as EnvironmentLifecycleManager;
+    const provider = new AwsEnvironmentProvider({
+      runner: async () => {
+        throw new Error("AWS control plane should not be reached before authorization gate");
+      },
+    });
+    const executor = new AwsEc2TaskExecutor({
+      provider,
+      lifecycle,
+      identity: {} as any,
+      config: {} as any,
+    });
+
+    await expect(executor.spawn(task())).rejects.toThrow(
+      "requires an IAM instance profile",
+    );
+    expect(healthCalls).toBe(0);
+  });
+
   it("blocks before provisioning when a new SSM executor has no IAM instance profile", async () => {
     const runner: EnvironmentCommandRunner = async (_command, args) => {
       if (args[0] === "--version") {
