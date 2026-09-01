@@ -157,6 +157,43 @@ export async function runAgentLoop(
     });
   }
 
+  const trackSpawnedConwayWorker = (
+    child: { id: string; address: string; name: string; sandboxId: string },
+    task: {
+      id?: string;
+      goalId?: string;
+      strategicPathId?: string | null;
+      requiredCapabilities?: string[];
+    },
+  ): void => {
+    environmentLifecycle.adopt({
+      provider: "conway",
+      externalId: child.sandboxId,
+      type: "conway-sandbox",
+      goalId: task.goalId ?? null,
+      pathId: task.strategicPathId ?? null,
+      taskId: task.id ?? null,
+      status: "ready",
+      capabilities: [
+        ...new Set([
+          "remote compute",
+          "linux",
+          "sandbox",
+          ...(task.requiredCapabilities ?? []),
+        ]),
+      ],
+      retentionPolicy: "until_goal_complete",
+      evidence: [
+        `Conway worker sandbox adopted immediately after spawn for task ${task.id ?? "unknown"}.`,
+      ],
+      metadata: {
+        childId: child.id,
+        childAddress: child.address,
+        childName: child.name,
+      },
+    });
+  };
+
   // Reconcile resources once at runtime start. Providers without a reconcile
   // operation remain visible as-is rather than being guessed or discarded.
   for (const resource of environmentResources.list()) {
@@ -348,6 +385,7 @@ export async function runAgentLoop(
 
               const lifecycle = new ChildLifecycle(db.raw);
               const child = await spawnChild(conway, identity, db, genesis, lifecycle);
+              trackSpawnedConwayWorker(child, task);
 
               return {
                 address: child.address,
@@ -393,6 +431,7 @@ export async function runAgentLoop(
                         });
                         const retryLifecycle = new RetryLifecycle(db.raw);
                         const child = await retrySpawn(conway, identity, db, retryGenesis, retryLifecycle);
+                        trackSpawnedConwayWorker(child, task);
                         return {
                           address: child.address,
                           name: child.name,
