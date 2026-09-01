@@ -65,7 +65,11 @@ function migrateBrokenRootFallbackStateIfNeeded(): boolean {
 
   // This migration is only relevant when HOME was absent and Windows-style
   // USERPROFILE resolution is what corrected the state root.
-  if (process.env.HOME || !process.env.USERPROFILE) {
+  if (
+    process.platform !== "win32"
+    || process.env.HOME
+    || !process.env.USERPROFILE
+  ) {
     brokenRootFallbackMigrationChecked = true;
     return false;
   }
