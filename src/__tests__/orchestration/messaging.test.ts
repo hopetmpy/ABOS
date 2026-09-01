@@ -500,7 +500,7 @@ describe("orchestration/messaging", () => {
       expect(processed[0].error).toContain("expired");
     });
 
-    it("marks inbox rows processed even when malformed", async () => {
+    it("leaves malformed non-structured rows untouched for the conversational consumer", async () => {
       const ctx = createTestDb();
       raw = ctx.raw;
       const messaging = new ColonyMessaging({ deliver: vi.fn(), getRecipients: () => [] }, ctx.db);
@@ -508,14 +508,22 @@ describe("orchestration/messaging", () => {
       insertInbox(raw, { id: "m1", from: "0xfrom", content: "not-json" });
       await messaging.processInbox();
 
-      const row = raw.prepare("SELECT processed_at FROM inbox_messages WHERE id = 'm1'").get() as {
+      const row = raw.prepare(
+        "SELECT status, processed_at, retry_count FROM inbox_messages WHERE id = 'm1'",
+      ).get() as {
+        status: string;
         processed_at: string | null;
+        retry_count: number;
       };
 
-      expect(row.processed_at).not.toBeNull();
+      expect(row).toEqual({
+        status: "received",
+        processed_at: null,
+        retry_count: 0,
+      });
     });
 
-    it("records handler failure and continues", async () => {
+    it("records handler failure and leaves the structured row retryable", async () => {
       const ctx = createTestDb();
       raw = ctx.raw;
       const messaging = new ColonyMessaging({ deliver: vi.fn(), getRecipients: () => [] }, ctx.db);
@@ -532,10 +540,18 @@ describe("orchestration/messaging", () => {
       expect(processed[0].success).toBe(false);
       expect(processed[0].error).toContain("handler broke");
 
-      const row = raw.prepare("SELECT processed_at FROM inbox_messages WHERE id = 'm-alert'").get() as {
+      const row = raw.prepare(
+        "SELECT status, processed_at, retry_count FROM inbox_messages WHERE id = 'm-alert'",
+      ).get() as {
+        status: string;
         processed_at: string | null;
+        retry_count: number;
       };
-      expect(row.processed_at).not.toBeNull();
+      expect(row).toEqual({
+        status: "received",
+        processed_at: null,
+        retry_count: 1,
+      });
     });
   });
 
