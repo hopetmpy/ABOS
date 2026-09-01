@@ -305,7 +305,8 @@ describe("orchestration/Orchestrator", () => {
       const result = await orc.tick();
 
       expect(result.phase).toBe("planning");
-      expect(result.failedError).toContain("planner provider unavailable");
+      const persistedState = getOrchestratorState(db);
+      expect(persistedState?.failedError).toContain("planner provider unavailable");
 
       const taskCount = db.prepare(
         "SELECT COUNT(*) AS count FROM task_graph WHERE goal_id = ?",
