@@ -337,7 +337,18 @@ export class EnvironmentLifecycleManager {
   async collect(resourceId: string) {
     const resource = this.requireResource(resourceId);
     const provider = this.requireOperation(resource.provider, "collect");
-    return provider.collect!(resource);
+
+    const result = await provider.collect!(resource);
+    this.resources.applyMutation(
+      resourceId,
+      {
+        evidence: result.evidence,
+        metadata: result.metadata,
+      },
+      "collect",
+      "Environment artifact/control-plane collection completed.",
+    );
+    return result;
   }
 
   private async runMutation(
