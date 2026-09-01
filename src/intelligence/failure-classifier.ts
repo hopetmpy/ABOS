@@ -25,6 +25,28 @@ export function classifyFailure(error: string): FailureDiagnosis {
   }
 
   if (matches(text, [
+    /assumption.*false/,
+    /assumption.*invalid/,
+    /does not exist/,
+    /not supported/,
+    /invalid premise/,
+    /expected .* but/,
+  ])) {
+    return {
+      classification: "assumption_invalid",
+      reason: "Evidence contradicts an assumption underlying the path.",
+      technicalRetryEligible: false,
+      strategicReplanRequired: true,
+      waitForConditionChange: false,
+      terminalForPath: true,
+      suggestedActions: [
+        "Invalidate the contradicted assumption.",
+        "Rebuild the possibility space without that assumption.",
+      ],
+    };
+  }
+
+  if (matches(text, [
     /401\b/,
     /403\b/,
     /unauthori[sz]ed/,
@@ -145,28 +167,6 @@ export function classifyFailure(error: string): FailureDiagnosis {
       suggestedActions: [
         "Evaluate another registered environment.",
         "Reconsider environment requirements.",
-      ],
-    };
-  }
-
-  if (matches(text, [
-    /assumption.*false/,
-    /assumption.*invalid/,
-    /does not exist/,
-    /not supported/,
-    /invalid premise/,
-    /expected .* but/,
-  ])) {
-    return {
-      classification: "assumption_invalid",
-      reason: "Evidence contradicts an assumption underlying the path.",
-      technicalRetryEligible: false,
-      strategicReplanRequired: true,
-      waitForConditionChange: false,
-      terminalForPath: true,
-      suggestedActions: [
-        "Invalidate the contradicted assumption.",
-        "Rebuild the possibility space without that assumption.",
       ],
     };
   }
