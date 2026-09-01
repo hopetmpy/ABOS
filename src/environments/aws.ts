@@ -284,6 +284,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
 
     return {
       estimatedCostCents,
+      costCoverage: estimatedCostCents == null ? "unknown" : "partial",
       reusableResourceCount,
       evidence,
       metadata,
