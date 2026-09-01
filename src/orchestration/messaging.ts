@@ -6,8 +6,15 @@
  * Transport can be swapped to social relay when backend becomes available.
  */
 
-import type { AbosDatabase, InboxMessage } from "../types.js";
-import { insertEvent } from "../state/database.js";
+import type { AbosDatabase, InboxMessage, SocialClientInterface } from "../types.js";
+import {
+  claimInboxMessages,
+  insertEvent,
+  markInboxFailed,
+  markInboxProcessed,
+  resetInboxToReceived,
+  type InboxMessageRow,
+} from "../state/database.js";
 import { createLogger } from "../observability/logger.js";
 import { ulid } from "ulid";
 import type BetterSqlite3 from "better-sqlite3";
@@ -18,7 +25,7 @@ const MAX_INBOX_BATCH = 200;
 const SEND_RETRIES = 3;
 const RETRY_BACKOFF_MS = [1_000, 2_000, 4_000] as const;
 
-const MESSAGE_TYPES = [
+export const COLONY_MESSAGE_TYPES = [
   "task_assignment",
   "task_result",
   "status_report",
@@ -40,7 +47,7 @@ const PRIORITY_ORDER = {
 
 // ─── Types ──────────────────────────────────────────────────────
 
-export type MessageType = (typeof MESSAGE_TYPES)[number];
+export type MessageType = (typeof COLONY_MESSAGE_TYPES)[number];
 
 export interface AgentMessage {
   id: string;
@@ -115,13 +122,64 @@ export class LocalDBTransport implements MessageTransport {
   }
 }
 
+/**
+ * Remote transport adapter over the already-existing signed Social relay.
+ *
+ * This adds no new wire protocol: ColonyMessaging still owns colony_message_v1,
+ * while SocialClientInterface remains the authenticated network transport.
+ */
+export class SocialRelayTransport implements MessageTransport {
+  constructor(
+    private readonly social: SocialClientInterface,
+    private readonly db: AbosDatabase,
+  ) {}
+
+  async deliver(to: string, envelope: string): Promise<void> {
+    await this.social.send(to, envelope);
+  }
+
+  getRecipients(): string[] {
+    return this.db.getChildren().map((child) => child.address);
+  }
+}
+
 // ─── Colony Messaging ───────────────────────────────────────────
 
+export type ColonyMessageHandler = (
+  message: AgentMessage,
+) => void | Promise<void>;
+
+export interface ColonyMessagingOptions {
+  handlers?: Partial<Record<MessageType, ColonyMessageHandler>>;
+}
+
+export interface ProcessInboxOptions {
+  /** Only claim these structured Colony message types. */
+  types?: readonly MessageType[];
+}
+
 export class ColonyMessaging {
+  private readonly handlers = new Map<MessageType, ColonyMessageHandler>();
+
   constructor(
     private readonly transport: MessageTransport,
     private readonly db: AbosDatabase,
-  ) {}
+    options: ColonyMessagingOptions = {},
+  ) {
+    for (const [type, handler] of Object.entries(options.handlers ?? {})) {
+      if (handler && isMessageType(type)) {
+        this.handlers.set(type, handler);
+      }
+    }
+  }
+
+  setHandler(
+    type: MessageType,
+    handler: ColonyMessageHandler | null,
+  ): void {
+    if (handler) this.handlers.set(type, handler);
+    else this.handlers.delete(type);
+  }
 
   async send(message: AgentMessage): Promise<void> {
     validateMessage(message);
@@ -160,36 +218,53 @@ export class ColonyMessaging {
     );
   }
 
-  async processInbox(): Promise<ProcessedMessage[]> {
-    const inbox = this.db.getUnprocessedInboxMessages(MAX_INBOX_BATCH);
-    const pending: PendingInboxMessage[] = [];
+  async processInbox(
+    options: ProcessInboxOptions = {},
+  ): Promise<ProcessedMessage[]> {
+    const types = options.types?.length
+      ? [...new Set(options.types)]
+      : [...COLONY_MESSAGE_TYPES];
+    const rows = claimInboxMessages(this.db.raw, MAX_INBOX_BATCH, {
+      includeMessageTypes: types,
+    });
+    const pending: Array<PendingInboxMessage & {
+      retryCount: number;
+      maxRetries: number;
+    }> = [];
     const processed: ProcessedMessage[] = [];
 
-    for (const row of inbox) {
+    for (const row of rows) {
+      const inbox = toInboxMessage(row);
       try {
-        const message = parseInboundMessage(row);
-        pending.push({ inboxId: row.id, message });
+        const message = parseInboundMessage(inbox);
+        pending.push({
+          inboxId: row.id,
+          message,
+          retryCount: row.retryCount,
+          maxRetries: row.maxRetries,
+        });
       } catch (error) {
         const err = normalizeError(error);
-        const rejected = createRejectedMessage(row);
-        this.db.markInboxMessageProcessed(row.id);
+        const rejected = createRejectedMessage(inbox);
+        markInboxFailed(this.db.raw, [row.id]);
         processed.push({
           message: rejected,
           handledBy: "rejectMalformedMessage",
           success: false,
           error: err.message,
         });
-        logger.warn("Rejected malformed inbound message", {
+        logger.warn("Rejected malformed structured inbound message", {
           inboxId: row.id,
-          from: row.from,
+          from: inbox.from,
           error: err.message,
         });
       }
     }
 
-    // Process critical priority first
     pending.sort((a, b) => {
-      const priorityDelta = PRIORITY_ORDER[a.message.priority] - PRIORITY_ORDER[b.message.priority];
+      const priorityDelta =
+        PRIORITY_ORDER[a.message.priority] -
+        PRIORITY_ORDER[b.message.priority];
       if (priorityDelta !== 0) return priorityDelta;
       return a.message.createdAt.localeCompare(b.message.createdAt);
     });
@@ -198,6 +273,7 @@ export class ColonyMessaging {
       let handledBy = "unknown";
       try {
         handledBy = await this.routeMessage(item.message);
+        markInboxProcessed(this.db.raw, [item.inboxId]);
         processed.push({
           message: item.message,
           handledBy,
@@ -205,20 +281,25 @@ export class ColonyMessaging {
         });
       } catch (error) {
         const err = normalizeError(error);
+        if (item.retryCount >= item.maxRetries) {
+          markInboxFailed(this.db.raw, [item.inboxId]);
+        } else {
+          resetInboxToReceived(this.db.raw, [item.inboxId]);
+        }
         processed.push({
           message: item.message,
           handledBy,
           success: false,
           error: err.message,
         });
-        logger.error("Failed to handle inbox message", err, {
+        logger.error("Failed to handle structured inbox message", err, {
           messageId: item.message.id,
           type: item.message.type,
           from: item.message.from,
           to: item.message.to,
+          retryCount: item.retryCount,
+          maxRetries: item.maxRetries,
         });
-      } finally {
-        this.db.markInboxMessageProcessed(item.inboxId);
       }
     }
 
@@ -277,6 +358,11 @@ export class ColonyMessaging {
   }
 
   private async routeMessage(message: AgentMessage): Promise<string> {
+    const customHandler = this.handlers.get(message.type);
+    if (customHandler) {
+      await customHandler(message);
+    }
+
     switch (message.type) {
       case "task_assignment":
         await this.handleTaskAssignment(message);
@@ -404,6 +490,18 @@ function extractAgentMessage(parsed: unknown): unknown {
   return parsed;
 }
 
+function toInboxMessage(row: InboxMessageRow): InboxMessage {
+  return {
+    id: row.id,
+    from: row.fromAddress,
+    to: row.toAddress ?? "",
+    content: row.content,
+    signedAt: row.receivedAt,
+    createdAt: row.receivedAt,
+    replyTo: row.replyTo ?? undefined,
+  };
+}
+
 function parseInboundMessage(row: InboxMessage): AgentMessage {
   let parsed: unknown;
   try {
@@ -473,7 +571,8 @@ function createRejectedMessage(row: InboxMessage): AgentMessage {
 }
 
 function isMessageType(value: unknown): value is MessageType {
-  return typeof value === "string" && (MESSAGE_TYPES as readonly string[]).includes(value);
+  return typeof value === "string" &&
+    (COLONY_MESSAGE_TYPES as readonly string[]).includes(value);
 }
 
 function isPriority(value: unknown): value is "low" | "normal" | "high" | "critical" {
