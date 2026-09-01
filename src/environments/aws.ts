@@ -102,6 +102,15 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     }
   }
 
+  getConfiguredIamInstanceProfile(
+    metadata?: Record<string, unknown>,
+  ): string | null {
+    return metadataString(metadata, "iamInstanceProfile") ??
+      this.options.defaultIamInstanceProfile ??
+      process.env.ABOS_AWS_EC2_INSTANCE_PROFILE ??
+      null;
+  }
+
   async inspect(): Promise<EnvironmentSnapshot> {
     const version = await this.runner("aws", ["--version"], 10_000);
     if (version.exitCode !== 0) {
@@ -346,10 +355,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       process.env.ABOS_AWS_EC2_IMAGE_ID ??
       await this.resolveAmazonLinuxImage(region, architecture);
     const iamInstanceProfile =
-      metadataString(request.metadata, "iamInstanceProfile") ??
-      this.options.defaultIamInstanceProfile ??
-      process.env.ABOS_AWS_EC2_INSTANCE_PROFILE ??
-      null;
+      this.getConfiguredIamInstanceProfile(request.metadata);
 
     const args = [
       "ec2",
