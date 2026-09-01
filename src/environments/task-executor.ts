@@ -48,6 +48,12 @@ export interface EnvironmentTaskExecutor {
   ): Promise<EnvironmentTaskDispatchResult>;
 }
 
+export interface EnvironmentTaskSpawnOptions {
+  preferredEnvironment?: string | null;
+  excludedEnvironmentIds?: string[];
+  metadata?: Record<string, unknown>;
+}
+
 export interface EnvironmentTaskExecutionResult
   extends EnvironmentTaskSpawnResult {
   environmentId: string;
@@ -113,13 +119,20 @@ export class EnvironmentExecutionBridge {
     private readonly lifecycle?: EnvironmentLifecycleManager,
   ) {}
 
-  async spawn(task: TaskNode): Promise<EnvironmentTaskExecutionResult> {
+  async spawn(
+    task: TaskNode,
+    options: EnvironmentTaskSpawnOptions = {},
+  ): Promise<EnvironmentTaskExecutionResult> {
     const selection = await this.selector.select({
       // Task capabilities belong to the executor/tool plane, not necessarily to
       // the infrastructure provider itself. They remain available to adapters
       // through task + metadata instead of being falsely treated as provider SKUs.
       requiredCapabilities: [],
-      preferredEnvironment: task.preferredEnvironment ?? null,
+      preferredEnvironment:
+        options.preferredEnvironment !== undefined
+          ? options.preferredEnvironment
+          : task.preferredEnvironment ?? null,
+      excludedEnvironmentIds: options.excludedEnvironmentIds ?? [],
       expectedDurationMs: task.metadata.timeoutMs,
       goalId: task.goalId,
       pathId: task.strategicPathId ?? null,
@@ -127,6 +140,7 @@ export class EnvironmentExecutionBridge {
       metadata: {
         taskRequiredCapabilities: task.requiredCapabilities ?? [],
         agentRole: task.agentRole,
+        ...(options.metadata ?? {}),
       },
     });
 
