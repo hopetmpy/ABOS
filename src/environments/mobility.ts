@@ -13,6 +13,7 @@ import type {
   EnvironmentMigrationStore,
 } from "./mobility-store.js";
 import type { EnvironmentRegistry } from "./registry.js";
+import type { ContinuityAssembler } from "./continuity-assembler.js";
 import type {
   EnvironmentSelectionResult,
   EnvironmentSelector,
@@ -62,6 +63,7 @@ export class EnvironmentMobilityCoordinator {
     private readonly lifecycle: EnvironmentLifecycleManager,
     readonly store: EnvironmentMigrationStore,
     private readonly execution: EnvironmentExecutionBridge,
+    private readonly continuity?: ContinuityAssembler,
   ) {}
 
   /**
@@ -150,11 +152,20 @@ export class EnvironmentMobilityCoordinator {
     const resourceExclusions = active
       ? failedResourceIds(active)
       : [];
+    const continuationContext = this.continuity
+      ? this.continuity.assemble(
+          task.id,
+          task.strategicPathId !== undefined
+            ? { targetPathId: task.strategicPathId }
+            : {},
+        )
+      : undefined;
 
     try {
       const spawned = await this.execution.spawn(task, {
         excludedEnvironmentIds: exclusions,
         excludedResourceIds: resourceExclusions,
+        continuationContext,
         metadata: {
           mobilityMigrationId: active?.id ?? null,
           mobilityExcludedEnvironmentIds: exclusions,
