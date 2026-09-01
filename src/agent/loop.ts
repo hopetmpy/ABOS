@@ -26,7 +26,10 @@ import type {
   InputSource,
   ModelStrategyConfig,
 } from "../types.js";
-import { DEFAULT_MODEL_STRATEGY_CONFIG } from "../types.js";
+import {
+  DEFAULT_MODEL_STRATEGY_CONFIG,
+  DEFAULT_TREASURY_POLICY,
+} from "../types.js";
 import type { PolicyEngine } from "./policy-engine.js";
 import { buildSystemPrompt, buildWakeupPrompt } from "./system-prompt.js";
 import { buildContextMessages, trimContext } from "./context.js";
@@ -1381,6 +1384,10 @@ export async function runAgentLoop(
           sessionId: db.getKV("session_id") || "default",
           turnId: ulid(),
           tools: inferenceTools,
+          dailyBudgetCents:
+            liveConfig?.treasuryPolicy?.maxInferenceDailyCents ??
+            config.treasuryPolicy?.maxInferenceDailyCents ??
+            DEFAULT_TREASURY_POLICY.maxInferenceDailyCents,
         },
         (msgs, opts) => inference.chat(msgs, { ...opts, tools: inferenceTools }),
       );
