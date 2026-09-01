@@ -1,7 +1,9 @@
+import { execFileSync } from "node:child_process";
 import { HarnessRegistry } from "../agent/harness-registry.js";
 import type { AbosConfig, AbosIdentity } from "../types.js";
 import { generateGenesisConfig } from "../replication/genesis.js";
 import type { TaskNode, TaskResult } from "../orchestration/task-graph.js";
+import { RUNTIME_ROOT } from "../runtime-root.js";
 import type { EnvironmentLifecycleManager } from "./lifecycle.js";
 import type {
   EnvironmentTaskDispatchResult,
@@ -101,6 +103,7 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
     }
 
     const name = workerName(task);
+    const repositoryRef = this.options.repositoryRef ?? resolveRuntimeGitRef();
     const estimate = await this.options.provider.estimate({
       requiredCapabilities: ["remote compute", "linux", "ssm"],
       expectedDurationMs: task.metadata.timeoutMs,
@@ -184,8 +187,7 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
             this.options.repositoryUrl ??
             DEFAULT_REPOSITORY,
           repositoryRef:
-            this.options.repositoryRef ??
-            DEFAULT_REPOSITORY_REF,
+            repositoryRef,
           installRoot:
             this.options.installRoot ??
             DEFAULT_INSTALL_ROOT,
@@ -214,8 +216,7 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
             this.options.installRoot ??
             DEFAULT_INSTALL_ROOT,
           repositoryRef:
-            this.options.repositoryRef ??
-            DEFAULT_REPOSITORY_REF,
+            repositoryRef,
         },
       },
       "executor_ready",
@@ -335,6 +336,20 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
       }
     }
     return null;
+  }
+}
+
+function resolveRuntimeGitRef(): string {
+  try {
+    const value = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: RUNTIME_ROOT,
+      encoding: "utf8",
+      timeout: 5_000,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return /^[0-9a-f]{40}$/i.test(value) ? value : DEFAULT_REPOSITORY_REF;
+  } catch {
+    return DEFAULT_REPOSITORY_REF;
   }
 }
 
