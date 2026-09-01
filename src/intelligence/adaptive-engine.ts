@@ -31,6 +31,7 @@ export class AdaptivePathEngine {
       conditions,
     });
     const path = this.store.getOrCreatePath(candidate);
+    this.store.syncAssumptions(candidate.goalId, path.id, candidate.assumptions);
     return { path, novelty };
   }
 
@@ -68,6 +69,36 @@ export class AdaptivePathEngine {
         source: `path:${path.id}`,
         lastVerifiedAt: new Date().toISOString(),
       });
+    }
+
+    if (diagnosis.classification === "assumption_invalid") {
+      const assumptions = this.store.listAssumptions(input.candidate.goalId, path.id);
+      const errorText = input.error.toLowerCase();
+      let matched = false;
+      for (const assumption of assumptions) {
+        const significantTerms = assumption.normalizedStatement
+          .split(/[^a-z0-9]+/u)
+          .filter((term) => term.length >= 5);
+        if (significantTerms.some((term) => errorText.includes(term))) {
+          this.store.updateAssumptionStatus(
+            assumption.id,
+            "invalidated",
+            [input.error],
+            0.95,
+          );
+          matched = true;
+        }
+      }
+      if (!matched) {
+        for (const assumption of assumptions.filter((entry) => entry.status === "active")) {
+          this.store.updateAssumptionStatus(
+            assumption.id,
+            "unknown",
+            [`Failure indicates at least one path assumption may be invalid: ${input.error}`],
+            Math.min(assumption.confidence, 0.4),
+          );
+        }
+      }
     }
 
     const attempt = this.store.recordAttempt({
@@ -147,6 +178,16 @@ export class AdaptivePathEngine {
       retryEligible: false,
     });
     this.store.setPathStatus(path.id, "succeeded");
+    for (const assumption of this.store.listAssumptions(input.candidate.goalId, path.id)) {
+      if (assumption.status === "active" || assumption.status === "unknown") {
+        this.store.updateAssumptionStatus(
+          assumption.id,
+          "validated",
+          input.evidence ?? input.observations ?? ["Path succeeded."],
+          Math.max(assumption.confidence, 0.8),
+        );
+      }
+    }
   }
 
   /**
@@ -172,8 +213,9 @@ export class AdaptivePathEngine {
     const attempts = this.store.listAttempts(goalId, 30);
     const facts = this.store.listFacts(goalId);
     const opportunities = this.store.listOpenOpportunities(goalId);
+    const assumptions = this.store.listAssumptions(goalId);
 
-    if (paths.length === 0 && attempts.length === 0 && facts.length === 0) {
+    if (paths.length === 0 && attempts.length === 0 && facts.length === 0 && assumptions.length === 0) {
       return "No adaptive path history exists for this goal yet.";
     }
 
@@ -201,6 +243,10 @@ export class AdaptivePathEngine {
       `${fact.epistemicStatus.toUpperCase()} ${fact.key}=${fact.value} confidence=${fact.confidence}`,
     );
 
+    const assumptionLines = assumptions.slice(0, 30).map((assumption) =>
+      `${assumption.status.toUpperCase()} confidence=${assumption.confidence}: ${assumption.statement}`,
+    );
+
     const opportunityLines = opportunities.slice(0, 20).map((opportunity) =>
       `OPEN: ${opportunity.description}`,
     );
@@ -218,6 +264,9 @@ export class AdaptivePathEngine {
       "",
       "## World facts",
       ...(factLines.length ? factLines : ["none"]),
+      "",
+      "## Assumptions",
+      ...(assumptionLines.length ? assumptionLines : ["none"]),
       "",
       "## Open opportunities",
       ...(opportunityLines.length ? opportunityLines : ["none"]),
