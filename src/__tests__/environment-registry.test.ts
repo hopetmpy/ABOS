@@ -47,6 +47,19 @@ describe("AWS environment provider", () => {
   });
 });
 
+describe("Conway environment provider", () => {
+  it("reports degraded rather than fully available when no credits remain", async () => {
+    const { ConwayEnvironmentProvider } = await import("../environments/conway.js");
+    const snapshot = await new ConwayEnvironmentProvider({
+      getCreditsBalance: async () => 0,
+    }).inspect();
+
+    expect(snapshot.availability).toBe("degraded");
+    expect(snapshot.capabilities.every((capability) => !capability.available)).toBe(true);
+    expect(snapshot.constraints.join(" ")).toContain("No Conway credits");
+  });
+});
+
 describe("environment registry", () => {
   it("selects environments by capability instead of provider-specific branching", async () => {
     const registry = new EnvironmentRegistry();
