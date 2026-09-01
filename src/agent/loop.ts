@@ -220,7 +220,8 @@ export async function runAgentLoop(
       retention.destroyAttempts > 0 ||
       retention.released > 0 ||
       retention.pendingObservation > 0 ||
-      retention.unavailable > 0
+      retention.unavailable > 0 ||
+      retention.artifactHolds > 0
     ) {
       logger.info("Environment retention startup sweep", { retention });
     }
@@ -916,7 +917,8 @@ export async function runAgentLoop(
           retention.destroyAttempts > 0 ||
           retention.released > 0 ||
           retention.pendingObservation > 0 ||
-          retention.unavailable > 0
+          retention.unavailable > 0 ||
+          retention.artifactHolds > 0
         ) {
           logger.info("Environment retention sweep", { retention });
         }
