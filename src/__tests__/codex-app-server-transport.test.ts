@@ -4,7 +4,7 @@ import { CodexAppServerClient } from "../codex/app-server.js";
 const FAKE_APP_SERVER = String.raw`
 const readline = require("node:readline");
 const rl = readline.createInterface({ input: process.stdin });
-function send(value) { process.stdout.write(JSON.stringify(value) + "\\n"); }
+function send(value) { process.stdout.write(JSON.stringify(value) + "\n"); }
 
 rl.on("line", (line) => {
   let message;
