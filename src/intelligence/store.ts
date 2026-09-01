@@ -13,6 +13,7 @@ import type {
   WorldFact,
   TrackedAssumption,
   AssumptionStatus,
+  AdaptiveTaskBinding,
 } from "./types.js";
 
 const stringify = (value: unknown): string => JSON.stringify(value ?? []);
@@ -204,6 +205,52 @@ export class AdaptiveStore {
        ON latest.path_id = a.path_id AND latest.max_created = a.created_at`,
     ).all(goalId) as Array<{ path_id: string; condition_fingerprint: string }>;
     return new Map(rows.map((row) => [row.path_id, row.condition_fingerprint]));
+  }
+
+  bindTask(input: {
+    taskId: string;
+    goalId: string;
+    pathId?: string | null;
+    requiredCapabilities?: string[];
+    preferredEnvironment?: string | null;
+  }): AdaptiveTaskBinding {
+    const now = new Date().toISOString();
+    this.db.prepare(
+      `INSERT INTO adaptive_task_bindings
+       (task_id, goal_id, path_id, required_capabilities, preferred_environment, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(task_id) DO UPDATE SET
+         goal_id = excluded.goal_id,
+         path_id = excluded.path_id,
+         required_capabilities = excluded.required_capabilities,
+         preferred_environment = excluded.preferred_environment,
+         updated_at = excluded.updated_at`,
+    ).run(
+      input.taskId,
+      input.goalId,
+      input.pathId ?? null,
+      stringify(input.requiredCapabilities ?? []),
+      input.preferredEnvironment ?? null,
+      now,
+      now,
+    );
+    return this.getTaskBinding(input.taskId)!;
+  }
+
+  getTaskBinding(taskId: string): AdaptiveTaskBinding | undefined {
+    const row = this.db.prepare(
+      "SELECT * FROM adaptive_task_bindings WHERE task_id = ?",
+    ).get(taskId) as any | undefined;
+    if (!row) return undefined;
+    return {
+      taskId: row.task_id,
+      goalId: row.goal_id,
+      pathId: row.path_id ?? null,
+      requiredCapabilities: parseArray(row.required_capabilities),
+      preferredEnvironment: row.preferred_environment ?? null,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
   }
 
   syncAssumptions(
