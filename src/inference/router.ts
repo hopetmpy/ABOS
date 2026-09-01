@@ -184,10 +184,13 @@ export class InferenceRouter {
   /**
    * Select the best model for a given tier and task type.
    *
-   * Priority:
-   *   1. First routing-matrix candidate present in the registry
-   *   2. User-configured model(s) from ModelStrategyConfig
-   *      (free/Ollama models are allowed at any tier, including dead)
+   * Priority for agent_turn:
+   *   1. Explicit active model when compatible with the current survival tier
+   *      (externally-funded/free models stay eligible at every tier)
+   *   2. Tier-specific configured fallback
+   *   3. Static routing-matrix candidate
+   *
+   * Specialized/background task types continue to use the routing matrix first.
    */
   selectModel(tier: SurvivalTier, taskType: InferenceTaskType): ModelEntry | null {
     const TIER_ORDER: Record<string, number> = {
@@ -243,6 +246,19 @@ export class InferenceRouter {
     };
     const tierRank = TIER_ORDER[tier] ?? 0;
     const strategy = this.budget.config;
+
+    // The explicitly selected model remains authoritative at every survival
+    // tier when its cost is external to ABOS (Codex subscription, Ollama, etc.).
+    // A paid model still yields to the survival fallbacks when its tier minimum
+    // is above the current tier.
+    const active = this.registry.get(strategy.inferenceModel);
+    if (
+      active?.enabled &&
+      active.costPer1kInput === 0 &&
+      active.costPer1kOutput === 0
+    ) {
+      return active;
+    }
 
     const candidateIds =
       tier === "high" || tier === "normal"

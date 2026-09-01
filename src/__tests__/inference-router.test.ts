@@ -254,6 +254,35 @@ describe("InferenceRouter", () => {
       expect(router.selectModel("normal", "agent_turn")!.modelId).toBe("gpt-4.1");
     });
 
+    it("keeps an externally-funded active model authoritative across survival tiers", () => {
+      const now = new Date().toISOString();
+      registry.upsert({
+        modelId: "codex:gpt-test",
+        provider: "codex",
+        displayName: "Codex GPT Test",
+        tierMinimum: "dead",
+        costPer1kInput: 0,
+        costPer1kOutput: 0,
+        maxTokens: 4096,
+        contextWindow: 0,
+        supportsTools: true,
+        supportsVision: false,
+        parameterStyle: "max_completion_tokens",
+        enabled: true,
+        lastSeen: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+      budget.updateConfig({
+        ...DEFAULT_MODEL_STRATEGY_CONFIG,
+        inferenceModel: "codex:gpt-test",
+      });
+
+      expect(router.selectModel("low_compute", "agent_turn")!.modelId).toBe("codex:gpt-test");
+      expect(router.selectModel("critical", "agent_turn")!.modelId).toBe("codex:gpt-test");
+      expect(router.selectModel("dead", "agent_turn")!.modelId).toBe("codex:gpt-test");
+    });
+
     it("returns cheaper model for low_compute tier", () => {
       const model = router.selectModel("low_compute", "agent_turn");
       expect(model).not.toBeNull();
