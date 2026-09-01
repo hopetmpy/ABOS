@@ -131,7 +131,10 @@ describe("DurableScheduler", () => {
   describe("task timeout", () => {
     it("times out tasks that exceed their timeout", async () => {
       const neverFinish: HeartbeatTaskFn = async () => {
-        await new Promise((resolve) => setTimeout(resolve, 60_000));
+        // A pending promise has no active timer handle. The scheduler's own
+        // timeout is what this test validates, so the test must not leave a
+        // 60-second host timer alive after Promise.race resolves.
+        await new Promise<void>(() => {});
         return { shouldWake: false };
       };
 
