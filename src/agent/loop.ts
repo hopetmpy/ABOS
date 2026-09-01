@@ -81,6 +81,8 @@ import { createEnvironmentTools } from "../environments/tools.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
 import { EnvironmentRetentionCoordinator } from "../environments/retention.js";
+import { EnvironmentMigrationStore } from "../environments/mobility-store.js";
+import { EnvironmentMobilityCoordinator } from "../environments/mobility.js";
 import { EnvironmentSelector } from "../environments/selector.js";
 import {
   EnvironmentExecutionBridge,
@@ -129,7 +131,38 @@ export async function runAgentLoop(
     environmentRegistry,
     environmentResources,
   );
-  const environmentSelector = new EnvironmentSelector(environmentRegistry);
+  const environmentMigrations = new EnvironmentMigrationStore(db.raw);
+  let environmentMobility: EnvironmentMobilityCoordinator | null = null;
+  const environmentSelector = new EnvironmentSelector(
+    environmentRegistry,
+    {
+      reuseEvaluator: (environmentId, requirements) => {
+        const sourceResourceId =
+          typeof requirements.metadata?.mobilitySourceResourceId === "string"
+            ? requirements.metadata.mobilitySourceResourceId
+            : null;
+        const releaseStates = new Set([
+          "artifact_hold",
+          "destroy_requested",
+          "pending_observation",
+          "released",
+        ]);
+        return environmentResources
+          .list({ provider: environmentId })
+          .filter(
+            (resource) =>
+              resource.id !== sourceResourceId &&
+              ["ready", "running", "suspended"].includes(resource.status) &&
+              !releaseStates.has(
+                typeof resource.metadata.retentionReleaseState === "string"
+                  ? resource.metadata.retentionReleaseState
+                  : "",
+              ) &&
+              resource.metadata.artifactCollectionState !== "pending",
+          ).length;
+      },
+    },
+  );
   const environmentRetention = new EnvironmentRetentionCoordinator(
     db.raw,
     environmentRegistry,
@@ -236,6 +269,7 @@ export async function runAgentLoop(
   const environmentTools = createEnvironmentTools(environmentRegistry, {
     selector: environmentSelector,
     lifecycle: environmentLifecycle,
+    getMobility: () => environmentMobility,
   });
 
   // Unified capability/environment view. Existing tool and skill systems remain
@@ -581,7 +615,36 @@ export async function runAgentLoop(
         taskExecutors,
         environmentLifecycle,
       );
+      environmentMobility = new EnvironmentMobilityCoordinator(
+        environmentRegistry,
+        environmentSelector,
+        environmentLifecycle,
+        environmentMigrations,
+        environmentExecution,
+      );
 
+      // Restart recovery is observation-first and non-destructive. It does not
+      // provision replacement resources or silently switch providers.
+      try {
+        const recovery = await environmentMobility.sweepRecovery();
+        if (
+          recovery.reconciled > 0 ||
+          recovery.recoverAttempts > 0 ||
+          recovery.recovered > 0 ||
+          recovery.unchangedSkipped > 0 ||
+          recovery.unknown > 0 ||
+          recovery.migrationsReconciled > 0 ||
+          recovery.retentionOwnedSkipped > 0
+        ) {
+          logger.info("Environment mobility startup recovery sweep", {
+            recovery,
+          });
+        }
+      } catch (error) {
+        logger.warn("Environment mobility startup recovery sweep failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
 
       const resolveExecutionEnvironment = (address: string): string | null => {
         if (address === identity.address || address.startsWith("local://")) {
@@ -635,9 +698,10 @@ export async function runAgentLoop(
                 resource.metadata.childAddress === address,
             );
           if (owned) {
-            return ["ready", "running", "degraded", "recovering"].includes(
-              owned.status,
-            );
+            // "alive" for assignment means execution-ready, not merely known.
+            // Degraded/recovering resources must earn reuse through fresh
+            // health/recovery evidence before receiving another Task.
+            return ["ready", "running"].includes(owned.status);
           }
 
           // Legacy Conway child lifecycle remains authoritative only when no
@@ -664,7 +728,19 @@ export async function runAgentLoop(
             );
           }
 
-          const dispatched = await environmentExecution.dispatch(
+          const mobility = environmentMobility;
+          if (!mobility) {
+            throw new EnvironmentTaskExecutionError(
+              environmentId,
+              "Environment mobility coordinator is not initialized for dispatch.",
+              [
+                "Provider-neutral mobility authority is unavailable at runtime.",
+                "This is current runtime unavailability, not proof that the objective is impossible.",
+              ],
+              "dispatch",
+            );
+          }
+          const dispatched = await mobility.dispatch(
             environmentId,
             task,
             {
@@ -680,7 +756,19 @@ export async function runAgentLoop(
         config: {
           ...config,
           spawnAgent: async (task: any) => {
-            const spawned = await environmentExecution.spawn(task);
+            const mobility = environmentMobility;
+            if (!mobility) {
+              throw new EnvironmentTaskExecutionError(
+                null,
+                "Environment mobility coordinator is not initialized for spawn.",
+                [
+                  "Provider-neutral mobility authority is unavailable at runtime.",
+                  "This is current runtime unavailability, not proof that the objective is impossible.",
+                ],
+                "selection",
+              );
+            }
+            const spawned = await mobility.spawn(task);
             return {
               address: spawned.address,
               name: spawned.name,
@@ -906,6 +994,22 @@ export async function runAgentLoop(
       }
 
       if (orchestrator) {
+        if (environmentMobility) {
+          const recovery = await environmentMobility.sweepRecovery();
+          if (
+            recovery.reconciled > 0 ||
+            recovery.recoverAttempts > 0 ||
+            recovery.recovered > 0 ||
+            recovery.unchangedSkipped > 0 ||
+            recovery.unknown > 0 ||
+            recovery.migrationsReconciled > 0
+          ) {
+            logger.info("Environment mobility recovery sweep", {
+              recovery,
+            });
+          }
+        }
+
         const orchestratorTick = await orchestrator.tick();
         db.setKV("orchestrator.last_tick", JSON.stringify(orchestratorTick));
 

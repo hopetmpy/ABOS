@@ -38,14 +38,29 @@ export interface EnvironmentTaskExecutor {
   readonly environmentId: string;
   assess?(
     task: TaskNode,
+    options?: EnvironmentTaskSpawnOptions,
   ):
     | EnvironmentTaskExecutionAssessment
     | Promise<EnvironmentTaskExecutionAssessment>;
-  spawn(task: TaskNode): Promise<EnvironmentTaskSpawnResult>;
+  spawn(
+    task: TaskNode,
+    options?: EnvironmentTaskSpawnOptions,
+  ): Promise<EnvironmentTaskSpawnResult>;
   dispatch?(
     task: TaskNode,
     target: EnvironmentTaskTarget,
   ): Promise<EnvironmentTaskDispatchResult>;
+}
+
+export interface EnvironmentTaskSpawnOptions {
+  preferredEnvironment?: string | null;
+  excludedEnvironmentIds?: string[];
+  /**
+   * Resource-scoped exclusions preserve provider openness: a failed executor
+   * does not automatically make every resource from the same provider invalid.
+   */
+  excludedResourceIds?: string[];
+  metadata?: Record<string, unknown>;
 }
 
 export interface EnvironmentTaskExecutionResult
@@ -113,13 +128,20 @@ export class EnvironmentExecutionBridge {
     private readonly lifecycle?: EnvironmentLifecycleManager,
   ) {}
 
-  async spawn(task: TaskNode): Promise<EnvironmentTaskExecutionResult> {
+  async spawn(
+    task: TaskNode,
+    options: EnvironmentTaskSpawnOptions = {},
+  ): Promise<EnvironmentTaskExecutionResult> {
     const selection = await this.selector.select({
       // Task capabilities belong to the executor/tool plane, not necessarily to
       // the infrastructure provider itself. They remain available to adapters
       // through task + metadata instead of being falsely treated as provider SKUs.
       requiredCapabilities: [],
-      preferredEnvironment: task.preferredEnvironment ?? null,
+      preferredEnvironment:
+        options.preferredEnvironment !== undefined
+          ? options.preferredEnvironment
+          : task.preferredEnvironment ?? null,
+      excludedEnvironmentIds: options.excludedEnvironmentIds ?? [],
       expectedDurationMs: task.metadata.timeoutMs,
       goalId: task.goalId,
       pathId: task.strategicPathId ?? null,
@@ -127,6 +149,7 @@ export class EnvironmentExecutionBridge {
       metadata: {
         taskRequiredCapabilities: task.requiredCapabilities ?? [],
         agentRole: task.agentRole,
+        ...(options.metadata ?? {}),
       },
     });
 
@@ -156,7 +179,7 @@ export class EnvironmentExecutionBridge {
       }
 
       const assessment = executor.assess
-        ? await safeAssess(executor, task)
+        ? await safeAssess(executor, task, options)
         : {
             executable: null,
             evidence: [
@@ -204,7 +227,7 @@ export class EnvironmentExecutionBridge {
 
     let spawned: EnvironmentTaskSpawnResult;
     try {
-      spawned = await chosen.executor.spawn(task);
+      spawned = await chosen.executor.spawn(task, options);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new EnvironmentTaskExecutionError(
@@ -341,9 +364,10 @@ export class EnvironmentExecutionBridge {
 async function safeAssess(
   executor: EnvironmentTaskExecutor,
   task: TaskNode,
+  options: EnvironmentTaskSpawnOptions,
 ): Promise<EnvironmentTaskExecutionAssessment> {
   try {
-    return await executor.assess!(task);
+    return await executor.assess!(task, options);
   } catch (error) {
     return {
       executable: null,

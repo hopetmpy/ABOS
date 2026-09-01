@@ -2,6 +2,7 @@ import type { AbosTool } from "../types.js";
 import type { EnvironmentLifecycleManager } from "./lifecycle.js";
 import type { EnvironmentRegistry } from "./registry.js";
 import type { EnvironmentSelector } from "./selector.js";
+import type { EnvironmentMobilityCoordinator } from "./mobility.js";
 
 const MAX_PROVIDER_OUTPUT_CHARS = 64_000;
 
@@ -44,6 +45,11 @@ const SENSITIVE_AWS_PATTERNS: Array<(args: string[]) => boolean> = [
 export interface EnvironmentToolingOptions {
   selector?: EnvironmentSelector;
   lifecycle?: EnvironmentLifecycleManager;
+  /**
+   * Lazy because Task executors are registered after the general tool catalog
+   * is assembled. Returns the single runtime mobility authority when ready.
+   */
+  getMobility?: () => EnvironmentMobilityCoordinator | null;
 }
 
 export function createEnvironmentTools(
@@ -313,6 +319,157 @@ export function createEnvironmentTools(
           if (!resourceId) return "BLOCKED: resource_id is required.";
           const resource = await options.lifecycle!.reconcile(resourceId);
           return JSON.stringify(resource, null, 2);
+        },
+      },
+    );
+  }
+
+  if (options.getMobility) {
+    tools.push(
+      {
+        name: "environment_migrations",
+        description:
+          "List provider-neutral environment mobility transactions and their source/target, attempts, condition fingerprints, evidence, and restart-safe status.",
+        category: "environment",
+        riskLevel: "safe",
+        parameters: {
+          type: "object",
+          properties: {
+            goal_id: { type: "string" },
+            path_id: { type: "string" },
+            task_id: { type: "string" },
+            status: { type: "string" },
+            active_only: { type: "boolean" },
+          },
+        },
+        execute: async (args) => {
+          const mobility = options.getMobility!();
+          if (!mobility) {
+            return "UNAVAILABLE: environment mobility coordinator is not initialized yet.";
+          }
+          return JSON.stringify(
+            mobility.store.list({
+              goalId: optionalString(args.goal_id),
+              pathId: optionalString(args.path_id),
+              taskId: optionalString(args.task_id),
+              status: optionalString(args.status),
+              activeOnly: args.active_only === true,
+            }),
+            null,
+            2,
+          );
+        },
+      },
+      {
+        name: "environment_migration_plan",
+        description:
+          "Plan a non-destructive move away from a tracked source resource using the same open EnvironmentSelector. " +
+          "Planning records evidence and ranks alternatives but does not provision or destroy resources.",
+        category: "environment",
+        riskLevel: "safe",
+        parameters: {
+          type: "object",
+          properties: {
+            source_resource_id: { type: "string" },
+            reason: { type: "string" },
+            required_capabilities: {
+              type: "array",
+              items: { type: "string" },
+            },
+            required_operations: {
+              type: "array",
+              items: { type: "string" },
+            },
+            preferred_environment: {
+              type: ["string", "null"],
+            },
+            max_estimated_cost_cents: {
+              type: ["number", "null"],
+            },
+            expected_duration_ms: {
+              type: ["number", "null"],
+            },
+            region: {
+              type: ["string", "null"],
+            },
+            goal_id: {
+              type: ["string", "null"],
+            },
+            path_id: {
+              type: ["string", "null"],
+            },
+            task_id: {
+              type: ["string", "null"],
+            },
+            metadata: {
+              type: "object",
+            },
+          },
+          required: ["source_resource_id", "reason"],
+        },
+        execute: async (args) => {
+          const mobility = options.getMobility!();
+          if (!mobility) {
+            return "UNAVAILABLE: environment mobility coordinator is not initialized yet.";
+          }
+          const sourceResourceId = String(
+            args.source_resource_id ?? "",
+          ).trim();
+          const reason = String(args.reason ?? "").trim();
+          if (!sourceResourceId) {
+            return "BLOCKED: source_resource_id is required.";
+          }
+          if (!reason) {
+            return "BLOCKED: reason is required.";
+          }
+
+          const plan = await mobility.plan(
+            sourceResourceId,
+            {
+              requiredCapabilities: stringArray(
+                args.required_capabilities,
+              ),
+              requiredOperations: stringArray(
+                args.required_operations,
+              ),
+              preferredEnvironment:
+                nullableString(args.preferred_environment),
+              maxEstimatedCostCents:
+                nullableNumber(args.max_estimated_cost_cents),
+              expectedDurationMs:
+                nullableNumber(args.expected_duration_ms),
+              region: nullableString(args.region),
+              goalId: nullableString(args.goal_id),
+              pathId: nullableString(args.path_id),
+              taskId: nullableString(args.task_id),
+              metadata: objectValue(args.metadata),
+            },
+            reason,
+          );
+          return JSON.stringify(plan, null, 2);
+        },
+      },
+      {
+        name: "environment_recovery_sweep",
+        description:
+          "Reconcile degraded/unknown environment resources and attempt provider recovery only when fresh observed conditions justify a materially new recovery attempt. " +
+          "This does not provision a replacement or destroy resources.",
+        category: "environment",
+        riskLevel: "caution",
+        parameters: {
+          type: "object",
+          properties: {},
+        },
+        execute: async () => {
+          const mobility = options.getMobility!();
+          if (!mobility) {
+            return "UNAVAILABLE: environment mobility coordinator is not initialized yet.";
+          }
+          return JSON.stringify(
+            await mobility.sweepRecovery(),
+            null,
+            2,
+          );
         },
       },
     );

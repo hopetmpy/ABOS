@@ -4,6 +4,9 @@ import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
 import { EnvironmentRegistry } from "../environments/registry.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { EnvironmentSelector } from "../environments/selector.js";
+import { EnvironmentMigrationStore } from "../environments/mobility-store.js";
+import { EnvironmentMobilityCoordinator } from "../environments/mobility.js";
+import type { EnvironmentExecutionBridge } from "../environments/task-executor.js";
 import { createEnvironmentTools } from "../environments/tools.js";
 import {
   CREATE_TABLES,
@@ -11,6 +14,7 @@ import {
   MIGRATION_V10,
   MIGRATION_V12,
   MIGRATION_V13,
+  MIGRATION_V14,
 } from "../state/schema.js";
 
 function createDb() {
@@ -21,6 +25,7 @@ function createDb() {
   db.exec(MIGRATION_V10);
   db.exec(MIGRATION_V12);
   db.exec(MIGRATION_V13);
+  db.exec(MIGRATION_V14);
   return db;
 }
 
@@ -69,6 +74,110 @@ describe("environment lifecycle agent tools", () => {
     expect(parsed.selected.environment).toBe("zero-cost");
     expect(parsed.selected.executionEligible).toBe(true);
     expect(parsed.candidates).toHaveLength(1);
+  });
+
+  it("exposes non-destructive mobility planning and durable migration evidence", async () => {
+    const db = createDb();
+    try {
+      let mutations = 0;
+      const registry = new EnvironmentRegistry();
+      for (const id of ["source-provider", "target-provider"]) {
+        registry.register({
+          id,
+          inspect: async () => ({
+            id,
+            label: id,
+            availability: "available",
+            capabilities: [{
+              id: `${id}:compute`,
+              type: "executor",
+              provider: id,
+              description: "compute",
+              requirements: ["compute"],
+              permissions: [],
+              environment: id,
+              available: true,
+            }],
+            evidence: [],
+            constraints: [],
+            observedAt: new Date().toISOString(),
+          }),
+          estimate: async () => ({
+            estimatedCostCents: 0,
+            costCoverage: "complete",
+            reliability: 0.9,
+          }),
+          provision: async () => {
+            mutations += 1;
+            return { externalId: "unexpected" };
+          },
+          destroy: async () => {
+            mutations += 1;
+            return { status: "terminated" };
+          },
+        });
+      }
+
+      const resources = new EnvironmentResourceStore(db);
+      const lifecycle = new EnvironmentLifecycleManager(
+        registry,
+        resources,
+      );
+      const source = lifecycle.adopt({
+        provider: "source-provider",
+        externalId: "source-resource",
+        type: "executor",
+        status: "running",
+        capabilities: ["compute"],
+        retentionPolicy: "manual_retention",
+      });
+      const selector = new EnvironmentSelector(registry);
+      const mobility = new EnvironmentMobilityCoordinator(
+        registry,
+        selector,
+        lifecycle,
+        new EnvironmentMigrationStore(db),
+        {} as EnvironmentExecutionBridge,
+      );
+      const tools = createEnvironmentTools(registry, {
+        selector,
+        lifecycle,
+        getMobility: () => mobility,
+      });
+      const planTool = tools.find(
+        (tool) => tool.name === "environment_migration_plan",
+      )!;
+      const listTool = tools.find(
+        (tool) => tool.name === "environment_migrations",
+      )!;
+
+      const plan = JSON.parse(
+        await planTool.execute({
+          source_resource_id: source.id,
+          reason: "continue on a distinct resource route",
+          required_capabilities: ["compute"],
+          preferred_environment: "target-provider",
+          max_estimated_cost_cents: 10,
+        }, {} as any),
+      );
+
+      expect(plan.selection.selected.environmentId).toBe(
+        "target-provider",
+      );
+      expect(plan.excludedResourceIds).toEqual([source.id]);
+      expect(plan.excludedEnvironmentIds).toEqual([]);
+      expect(mutations).toBe(0);
+
+      const migrations = JSON.parse(
+        await listTool.execute({ active_only: true }, {} as any),
+      );
+      expect(migrations).toHaveLength(1);
+      expect(migrations[0].sourceResourceId).toBe(source.id);
+      expect(migrations[0].targetProvider).toBe("target-provider");
+      expect(mutations).toBe(0);
+    } finally {
+      db.close();
+    }
   });
 
   it("lists, health-checks and reconciles persisted resources", async () => {
