@@ -689,7 +689,7 @@ describe("orchestration/Orchestrator", () => {
         isWorkerAlive: (address) => address !== "local://dead",
       });
 
-      const result = await orc.matchTaskToAgent(makeTask(goalId));
+      const result = await orc.matchTaskToAgent(makeTaskWithCost(goalId, 10));
       expect(result.agentAddress).toBe("local://fresh");
       expect(result.spawned).toBe(true);
     });
