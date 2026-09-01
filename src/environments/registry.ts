@@ -15,6 +15,23 @@ export class EnvironmentRegistry {
     return [...this.providers.values()];
   }
 
+  async execute(
+    environmentId: string,
+    args: string[],
+    timeoutMs = 120_000,
+  ) {
+    const provider = this.providers.get(environmentId);
+    if (!provider) {
+      throw new Error(`Unknown environment: ${environmentId}`);
+    }
+    if (!provider.execute) {
+      throw new Error(
+        `Environment "${environmentId}" does not expose provider-native execution.`,
+      );
+    }
+    return provider.execute(args, timeoutMs);
+  }
+
   async inspectAll(): Promise<EnvironmentSnapshot[]> {
     const snapshots = await Promise.all(
       this.list().map(async (provider) => {
