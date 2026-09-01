@@ -22,6 +22,12 @@ export interface EnvironmentSnapshot {
 export interface EnvironmentProvider {
   readonly id: string;
   inspect(): Promise<EnvironmentSnapshot>;
+  /**
+   * Optional provider-native argv execution. Implementations MUST avoid shell
+   * interpolation. Providers without this surface can still participate in
+   * planning/capability discovery through inspect().
+   */
+  execute?(args: string[], timeoutMs?: number): Promise<CommandResult>;
 }
 
 export interface CommandResult {
