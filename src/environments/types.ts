@@ -123,6 +123,9 @@ export interface EnvironmentProvisionRequest extends EnvironmentRequirements {
   resourceId: string;
   resourceType: string;
   retentionPolicy: EnvironmentRetentionPolicy;
+  /** Selector estimate captured before provisioning; provider evidence may refine it. */
+  selectionEstimateCents?: number | null;
+  selectionEvidence?: string[];
 }
 
 export interface EnvironmentProvisionResult {
