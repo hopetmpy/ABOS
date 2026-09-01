@@ -94,6 +94,11 @@ import { EnvironmentRetentionCoordinator } from "../environments/retention.js";
 import { EnvironmentMigrationStore } from "../environments/mobility-store.js";
 import { EnvironmentMobilityCoordinator } from "../environments/mobility.js";
 import { ContinuityAssembler } from "../environments/continuity-assembler.js";
+import {
+  applyArtifactMaterializationResult,
+  materializeArtifactsToFilesystemRoot,
+  prepareArtifactMaterialization,
+} from "../environments/artifact-materialization.js";
 import { EnvironmentSelector } from "../environments/selector.js";
 import {
   EnvironmentExecutionBridge,
@@ -457,8 +462,47 @@ export async function runAgentLoop(
           ],
         }),
         spawn: async (task, options) => {
+          let executionContinuation =
+            options?.continuationContext;
+          let artifactMaterialization:
+            | Record<string, unknown>
+            | null = null;
+
+          if (executionContinuation) {
+            const prepared = prepareArtifactMaterialization(
+              task,
+              executionContinuation,
+            );
+            executionContinuation =
+              prepared.continuationContext;
+
+            if (prepared.request.sources.length > 0) {
+              const materialized =
+                materializeArtifactsToFilesystemRoot(
+                  prepared.request,
+                  RUNTIME_ROOT,
+                );
+              const applied =
+                applyArtifactMaterializationResult(
+                  prepared,
+                  materialized,
+                  {
+                    environmentId: "local",
+                    address: "local://host",
+                  },
+                );
+              executionContinuation =
+                applied.continuationContext;
+              artifactMaterialization =
+                applied.manifest as unknown as Record<
+                  string,
+                  unknown
+                >;
+            }
+          }
+
           const spawned = initializedWorkerPool.spawn(task, {
-            executionContinuation: options?.continuationContext,
+            executionContinuation,
           });
           return {
             ...spawned,
@@ -467,8 +511,35 @@ export async function runAgentLoop(
             evidence: [
               `Local worker ${spawned.sandboxId} started for task ${task.id}.`,
             ],
+            metadata: {
+              ...(artifactMaterialization
+                ? { artifactMaterialization }
+                : {}),
+            },
           };
         },
+        materializeArtifacts: async (
+          _task,
+          _target,
+          request,
+        ) => ({
+          protocolVersion: 1,
+          entries: request.sources.map((source) => ({
+            reference: source.reference,
+            state: "available",
+            targetPath: source.localPath,
+            integrity: source.integrity,
+            evidence: [
+              "Local target shares the current ABOS runtime filesystem; parent-observed staged artifact remains directly available.",
+            ],
+          })),
+          evidence: [
+            "Local artifact materialization reused the already-staged host file without a duplicate copy.",
+          ],
+          metadata: {
+            transport: "shared_local_filesystem",
+          },
+        }),
         dispatch: async (task, target) => {
           if (!target.spawned) {
             throw new Error(
