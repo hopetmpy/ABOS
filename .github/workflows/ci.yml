@@ -1,4 +1,6 @@
 name: CI
+permissions:
+  contents: write
 on: [push, pull_request]
 jobs:
   build-and-test:
@@ -206,6 +208,45 @@ jobs:
           src/__tests__/genesis-bootstrap.test.ts
           src/__tests__/heartbeat-scheduler.test.ts
           src/__tests__/orchestration/local-worker-harness.test.ts
+
+  dependency-remediation:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - name: Upgrade vulnerable dependencies
+        run: |
+          pnpm add simple-git@^3.36.0
+          pnpm add -D vitest@^3.2.6
+          pnpm audit --fix
+          pnpm install
+      - name: Verify no high or critical advisories remain
+        run: pnpm audit --audit-level=high
+      - run: pnpm run typecheck
+      - run: pnpm run build
+      - name: Run full suite after dependency remediation
+        run: pnpm run test:diagnose
+      - name: Commit verified dependency remediation
+        shell: bash
+        run: |
+          if git diff --quiet -- package.json pnpm-lock.yaml; then
+            echo "No dependency changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json pnpm-lock.yaml
+          git commit -m "chore: remediate high severity dependency advisories"
+          git push origin HEAD:abos/windows-runtime-hardening
+
 
   security-audit:
     runs-on: ubuntu-latest
