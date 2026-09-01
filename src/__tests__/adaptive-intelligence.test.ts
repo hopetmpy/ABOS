@@ -130,6 +130,43 @@ describe("adaptive path persistence", () => {
     }
   });
 
+  it("tracks assumptions and validates them when a path succeeds", () => {
+    const db = memoryDb();
+    try {
+      const engine = new AdaptivePathEngine(db);
+      engine.recordSuccess({
+        candidate: candidate({ assumptions: ["Credentials are valid", "Provider is reachable"] }),
+        evidence: ["validated response"],
+        conditions: { credentialVersion: 1 },
+      });
+
+      const assumptions = engine.store.listAssumptions("goal-1");
+      expect(assumptions).toHaveLength(2);
+      expect(assumptions.every((entry) => entry.status === "validated")).toBe(true);
+      expect(assumptions.every((entry) => entry.evidence.includes("validated response"))).toBe(true);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("invalidates a matched assumption when failure evidence contradicts it", () => {
+    const db = memoryDb();
+    try {
+      const engine = new AdaptivePathEngine(db);
+      engine.recordFailure({
+        candidate: candidate({ assumptions: ["Provider authentication is valid"] }),
+        error: "assumption invalid: authentication is not valid",
+        evidence: ["401 from provider"],
+      });
+
+      const assumptions = engine.store.listAssumptions("goal-1");
+      expect(assumptions[0]?.status).toBe("invalidated");
+      expect(assumptions[0]?.evidence.join(" ")).toContain("authentication");
+    } finally {
+      db.close();
+    }
+  });
+
   it("allows reconsidering the same path after a material condition change", () => {
     const db = memoryDb();
     try {
