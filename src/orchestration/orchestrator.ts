@@ -57,6 +57,17 @@ const ORCHESTRATOR_STATE_KEY = "orchestrator.state";
 const ORCHESTRATOR_TODO_KEY = "orchestrator.todo_md";
 const DEFAULT_TASK_FUNDING_CENTS = 25;
 
+export function calculateTaskFundingCents(task: TaskNode, config: any): number {
+  const estimated = Math.max(0, task.metadata.estimatedCostCents);
+  const configuredDefault = Number(
+    config?.defaultTaskFundingCents ?? DEFAULT_TASK_FUNDING_CENTS,
+  );
+  return Math.max(
+    estimated,
+    Number.isFinite(configuredDefault) ? configuredDefault : 0,
+  );
+}
+
 type ExecutionPhase =
   | "idle"
   | "classifying"
@@ -120,6 +131,11 @@ export class Orchestrator {
     isWorkerAlive?: (address: string) => boolean;
     /** Resolve an agent address to its execution environment when known. */
     resolveAgentEnvironment?: (address: string) => string | null;
+    /** Provider-neutral Task delivery hook. Runtime adapters own transport/funding semantics. */
+    dispatchAgentTask?: (
+      assignment: AgentAssignment,
+      task: TaskNode,
+    ) => Promise<void>;
   }) {
     this.adaptive = new AdaptivePathEngine(params.db);
   }
@@ -214,8 +230,10 @@ export class Orchestrator {
   async matchTaskToAgent(task: TaskNode): Promise<AgentAssignment> {
     const requestedRole = task.agentRole?.trim() || "generalist";
 
-    const idleAgents = this.params.agentTracker.getIdle().filter((agent) =>
-      this.matchesPreferredEnvironment(agent.address, task.preferredEnvironment),
+    const idleAgents = this.params.agentTracker.getIdle().filter(
+      (agent) =>
+        this.matchesPreferredEnvironment(agent.address, task.preferredEnvironment) &&
+        (!this.params.isWorkerAlive || this.params.isWorkerAlive(agent.address)),
     );
     const directRoleMatch = idleAgents.find((agent) => agent.role === requestedRole);
     if (directRoleMatch) {
@@ -229,7 +247,8 @@ export class Orchestrator {
     const bestIdle = this.params.agentTracker.getBestForTask(requestedRole);
     if (
       bestIdle &&
-      this.matchesPreferredEnvironment(bestIdle.address, task.preferredEnvironment)
+      this.matchesPreferredEnvironment(bestIdle.address, task.preferredEnvironment) &&
+      (!this.params.isWorkerAlive || this.params.isWorkerAlive(bestIdle.address))
     ) {
       return {
         agentAddress: bestIdle.address,
@@ -274,9 +293,7 @@ export class Orchestrator {
   }
 
   async fundAgentForTask(addr: string, task: TaskNode): Promise<void> {
-    const estimated = Math.max(0, task.metadata.estimatedCostCents);
-    const configuredDefault = Number(this.params.config?.defaultTaskFundingCents ?? DEFAULT_TASK_FUNDING_CENTS);
-    const amountCents = Math.max(estimated, Number.isFinite(configuredDefault) ? configuredDefault : 0);
+    const amountCents = calculateTaskFundingCents(task, this.params.config);
 
     if (amountCents <= 0) {
       return;
@@ -693,10 +710,11 @@ export class Orchestrator {
         const isLocalWorker = assignment.agentAddress.startsWith("local://");
         const isSelfAssigned = assignment.agentAddress === this.params.identity?.address;
 
-        // Local workers receive their task directly at spawn time and run
-        // their own inference loop. Self-assigned tasks are handled by the
-        // parent agent via its normal turn. Neither needs funding or messaging.
-        if (!isLocalWorker && !isSelfAssigned) {
+        if (!isSelfAssigned && this.params.dispatchAgentTask) {
+          await this.params.dispatchAgentTask(assignment, executionTask);
+        } else if (!isLocalWorker && !isSelfAssigned) {
+          // Compatibility path for runtimes that have not installed the
+          // provider-neutral dispatch hook yet.
           await this.fundAgentForTask(assignment.agentAddress, executionTask);
 
           const message = this.params.messaging.createMessage({
@@ -1049,7 +1067,8 @@ export class Orchestrator {
     const candidate = rows.find(
       (row) =>
         !idleAddresses.has(row.address) &&
-        this.matchesPreferredEnvironment(row.address, preferredEnvironment),
+        this.matchesPreferredEnvironment(row.address, preferredEnvironment) &&
+        (!this.params.isWorkerAlive || this.params.isWorkerAlive(row.address)),
     );
     if (!candidate) {
       return null;
