@@ -100,6 +100,21 @@ export interface ContinuationPendingItem {
   metadata?: Record<string, unknown>;
 }
 
+export interface ContinuationPathView {
+  id: string;
+  status: string;
+  hypothesis: string;
+  strategy: string;
+  assumptions: string[];
+  requiredCapabilities: string[];
+  environment?: string | null;
+  executor?: string | null;
+  sequence: string[];
+  expectedOutcome: string;
+  evidence: string[];
+  metadata?: Record<string, unknown>;
+}
+
 export interface ExecutionContinuationContext {
   protocolVersion: typeof EXECUTION_CONTINUATION_PROTOCOL_VERSION;
   assembledAt: string;
@@ -114,11 +129,24 @@ export interface ExecutionContinuationContext {
     pathId: string | null;
   };
 
+  goal: {
+    title: string;
+    description: string;
+    status: string;
+    strategy: string | null;
+    metadata?: Record<string, unknown>;
+  };
+
   task: {
+    title: string;
+    description: string;
     status: string;
     result: TaskResult | null;
     metadata?: Record<string, unknown>;
   };
+
+  /** Current target Path view, derived from Adaptive. */
+  path: ContinuationPathView | null;
 
   history: {
     failures: ContinuationFailure[];
@@ -169,6 +197,10 @@ export function scopeExecutionContinuationContext(
       ...context.identity,
       pathId: targetPathId,
     },
+    goal: {
+      ...context.goal,
+      metadata: cloneRecord(context.goal.metadata),
+    },
     task: {
       ...context.task,
       result: context.task.result
@@ -179,6 +211,16 @@ export function scopeExecutionContinuationContext(
         : null,
       metadata: cloneRecord(context.task.metadata),
     },
+    path: context.path
+      ? {
+          ...context.path,
+          assumptions: [...context.path.assumptions],
+          requiredCapabilities: [...context.path.requiredCapabilities],
+          sequence: [...context.path.sequence],
+          evidence: [...context.path.evidence],
+          metadata: cloneRecord(context.path.metadata),
+        }
+      : null,
     history: {
       failures: context.history.failures.map(cloneFailure),
       decisions: context.history.decisions.map(cloneDecision),
