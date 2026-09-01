@@ -200,6 +200,12 @@ export class DurableScheduler {
     // Acquire lease
     if (!this.acquireLease(taskName)) return;
 
+    // A persisted nextRunAt represents one pending retry slot. Consume it at
+    // attempt start; only a subsequent eligible failure may schedule another.
+    if (schedule?.nextRunAt) {
+      updateHeartbeatSchedule(this.db, taskName, { nextRunAt: null });
+    }
+
     const startedAt = new Date().toISOString();
     const startMs = Date.now();
     const abortController = new AbortController();
@@ -222,10 +228,10 @@ export class DurableScheduler {
       const durationMs = Date.now() - startMs;
       this.recordSuccess(taskName, durationMs, startedAt);
 
-      // If the task says we should wake, fire the callback
-      if (result.shouldWake && this.onWakeRequest) {
+      // Persist wake intent regardless of whether a host callback is attached.
+      if (result.shouldWake) {
         const reason = result.message || `Heartbeat task '${taskName}' requested wake`;
-        this.onWakeRequest(reason);
+        this.onWakeRequest?.(reason);
         insertWakeEvent(this.db, "heartbeat", reason, { taskName });
       }
     } catch (err: any) {
