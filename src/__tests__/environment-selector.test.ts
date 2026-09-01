@@ -22,7 +22,7 @@ function provider(input: {
       label: input.id,
       availability: input.availability ?? "available",
       capabilities: input.capabilities.map((capability) => ({
-        id: \`\${input.id}:\${capability}\`,
+        id: `${input.id}:${capability}`,
         type: "cloud_resource",
         provider: input.id,
         description: capability,
