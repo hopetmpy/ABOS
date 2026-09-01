@@ -710,7 +710,10 @@ export class Orchestrator {
         }
 
         const previous = getTaskById(this.params.db, task.id);
-        await this.handleFailure(task, err.message);
+        const failureTask = previous
+          ? taskRowToTaskNode(previous)
+          : this.withExecutionIntent(task);
+        await this.handleFailure(failureTask, err.message);
         const latest = getTaskById(this.params.db, task.id);
         if (previous?.status !== "failed" && latest?.status === "failed") {
           counters.tasksFailed += 1;
