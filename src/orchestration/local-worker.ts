@@ -29,6 +29,7 @@ import type {
 } from "../types.js";
 import type { Database } from "better-sqlite3";
 import type { PolicyEngine } from "../agent/policy-engine.js";
+import type { ExecutionContinuationContext } from "../environments/continuity.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
 
 const logger = createLogger("orchestration.local-worker");
@@ -53,6 +54,7 @@ export interface WorkerExecutionConfig {
 export interface WorkerExecutionOptions {
   workerId?: string;
   abortSignal?: AbortSignal;
+  executionContinuation?: ExecutionContinuationContext;
 }
 
 /**
@@ -106,6 +108,7 @@ export async function executeTaskWithHarness(
     policyEngine: config.policyEngine,
     spendTracker: config.spendTracker,
     inputSource: config.inputSource,
+    executionContinuation: options.executionContinuation,
   };
 
   if (config.maxTurns) {
@@ -131,7 +134,10 @@ export class LocalWorkerPool {
 
   constructor(private readonly config: WorkerExecutionConfig) {}
 
-  spawn(task: TaskNode): { address: string; name: string; sandboxId: string } {
+  spawn(
+    task: TaskNode,
+    options: Pick<WorkerExecutionOptions, "executionContinuation"> = {},
+  ): { address: string; name: string; sandboxId: string } {
     const workerId = `local-worker-${ulid()}`;
     const workerName = `worker-${task.agentRole ?? "generalist"}-${workerId.slice(-6)}`;
     const address = `local://${workerId}`;
@@ -141,6 +147,7 @@ export class LocalWorkerPool {
       workerId,
       task,
       abortController.signal,
+      options.executionContinuation,
     )
       .catch((error) => {
         logger.error(
@@ -196,11 +203,13 @@ export class LocalWorkerPool {
     workerId: string,
     task: TaskNode,
     signal: AbortSignal,
+    executionContinuation?: ExecutionContinuationContext,
   ): Promise<void> {
     try {
       const result = await executeTaskWithHarness(this.config, task, {
         workerId,
         abortSignal: signal,
+        executionContinuation,
       });
 
       if (result.success) {
