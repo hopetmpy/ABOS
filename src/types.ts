@@ -40,6 +40,52 @@ export interface ProvisionResult {
 
 // ─── Configuration ───────────────────────────────────────────────
 
+/**
+ * Connection method/provider identifiers are intentionally open strings.
+ * ABOS ships built-in adapters, but the core must not encode the universe of
+ * possible authentication methods or inference providers.
+ */
+export type AiConnectionMethod = string;
+export type AiRuntimeProvider = string;
+
+export interface AiConnectionProfile {
+  id: string;
+  method: AiConnectionMethod;
+  provider: AiRuntimeProvider;
+  configuredAt: string;
+  /** Non-secret adapter metadata only. Credentials remain with their authority. */
+  metadata?: Record<string, unknown>;
+}
+
+export interface AiConnectionConfig {
+  /** Named configured connections. Multiple connections may coexist. */
+  connections?: Record<string, AiConnectionProfile>;
+  /** Explicit runtime route. Model identity remains independent. */
+  active?: {
+    connectionId?: string;
+    method: AiConnectionMethod;
+    provider: AiRuntimeProvider;
+    updatedAt: string;
+  };
+}
+
+export const DEFAULT_AI_CONNECTION_CONFIG: AiConnectionConfig = {};
+
+export interface CodexProviderConfig {
+  /** Whether ABOS should treat an external Codex/ChatGPT session as available. */
+  enabled: boolean;
+  /** Last Codex model selected, stored without provider namespace. */
+  selectedModel?: string;
+  /** Provider-native option; deliberately open-ended. */
+  reasoningEffort?: string;
+  includeHiddenModels?: boolean;
+}
+
+export const DEFAULT_CODEX_PROVIDER_CONFIG: CodexProviderConfig = {
+  enabled: false,
+  includeHiddenModels: false,
+};
+
 export interface AbosConfig {
   name: string;
   genesisPrompt: string;
@@ -52,6 +98,10 @@ export interface AbosConfig {
   openaiApiKey?: string;
   anthropicApiKey?: string;
   ollamaBaseUrl?: string;
+  /** Codex OAuth metadata only. OAuth credentials remain owned by Codex. */
+  codex?: CodexProviderConfig;
+  /** Configured AI connections and the explicit active route. */
+  aiConnection?: AiConnectionConfig;
   inferenceModel: string;
   maxTokensPerTurn: number;
   heartbeatConfigPath: string;
@@ -90,6 +140,8 @@ export const DEFAULT_CONFIG: Partial<AbosConfig> = {
   maxTurnsPerCycle: 25,
   childSandboxMemoryMb: 1024,
   socialRelayUrl: "https://social.conway.tech",
+  codex: DEFAULT_CODEX_PROVIDER_CONFIG,
+  aiConnection: DEFAULT_AI_CONNECTION_CONFIG,
 };
 
 // ─── Agent State ─────────────────────────────────────────────────
@@ -337,6 +389,8 @@ export interface InferenceToolCall {
 export interface InferenceResponse {
   id: string;
   model: string;
+  /** Actual runtime provider used when known. */
+  provider?: ModelProvider;
   message: ChatMessage;
   toolCalls?: InferenceToolCall[];
   usage: TokenUsage;
@@ -345,6 +399,8 @@ export interface InferenceResponse {
 
 export interface InferenceOptions {
   model?: string;
+  /** Explicit provider route; avoids inferring credentials from model names. */
+  connectionProvider?: AiRuntimeProvider;
   maxTokens?: number;
   temperature?: number;
   tools?: InferenceToolDefinition[];
@@ -1150,7 +1206,8 @@ export const DEFAULT_MEMORY_BUDGET: MemoryBudget = {
 
 // === Phase 2.3: Inference & Model Strategy Types ===
 
-export type ModelProvider = "openai" | "anthropic" | "conway" | "ollama" | "other";
+/** Provider IDs are open data; registered adapters define what is executable. */
+export type ModelProvider = string;
 
 export type InferenceTaskType =
   | "agent_turn"
@@ -1188,6 +1245,8 @@ export type RoutingMatrix = Record<SurvivalTier, Record<InferenceTaskType, Model
 export interface InferenceRequest {
   messages: ChatMessage[];
   taskType: InferenceTaskType;
+  /** Explicit connection route, independent of model ownership. */
+  connectionProvider?: AiRuntimeProvider;
   tier: SurvivalTier;
   sessionId: string;
   turnId?: string;
