@@ -335,7 +335,8 @@ export function getGoalProgress(
          SUM(CASE WHEN status = 'blocked' THEN 1 ELSE 0 END) AS blocked,
          SUM(CASE WHEN status IN ('assigned', 'running') THEN 1 ELSE 0 END) AS running
        FROM task_graph
-       WHERE goal_id = ?`,
+       WHERE goal_id = ?
+         AND status != 'cancelled'`,
     )
     .get(goalId) as
     | {
