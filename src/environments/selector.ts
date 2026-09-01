@@ -59,12 +59,18 @@ export type EnvironmentSelectionPolicyEvaluator = (
   | EnvironmentSelectionPolicyDecision
   | Promise<EnvironmentSelectionPolicyDecision>;
 
+export type EnvironmentReuseEvaluator = (
+  environmentId: string,
+  requirements: EnvironmentRequirements,
+) => number | null | Promise<number | null>;
+
 export class EnvironmentSelector {
   constructor(
     private readonly registry: EnvironmentRegistry,
     private readonly options: {
       weights?: Partial<EnvironmentSelectionWeights>;
       policyEvaluator?: EnvironmentSelectionPolicyEvaluator;
+      reuseEvaluator?: EnvironmentReuseEvaluator;
     } = {},
   ) {}
 
@@ -140,6 +146,35 @@ export class EnvironmentSelector {
       ? await safeEstimate(provider, requirements, snapshot)
       : {};
 
+    if (this.options.reuseEvaluator) {
+      try {
+        const observedReuse = await this.options.reuseEvaluator(
+          snapshot.id,
+          requirements,
+        );
+        if (
+          typeof observedReuse === "number" &&
+          Number.isFinite(observedReuse) &&
+          observedReuse >= 0
+        ) {
+          const providerReuse = estimate.reusableResourceCount;
+          estimate.reusableResourceCount =
+            typeof providerReuse === "number" && Number.isFinite(providerReuse)
+              ? Math.max(providerReuse, observedReuse)
+              : observedReuse;
+          estimate.evidence = [
+            ...(estimate.evidence ?? []),
+            `Canonical ABOS resource inventory reusable candidates=${observedReuse}.`,
+          ];
+        }
+      } catch (error) {
+        estimate.evidence = [
+          ...(estimate.evidence ?? []),
+          `canonical reuse evaluation failed: ${error instanceof Error ? error.message : String(error)}`,
+        ];
+      }
+    }
+
     const missingCapabilities =
       satisfaction.missingCapabilities ?? fallbackSatisfaction.missingCapabilities ?? [];
     const missingOperations = (requirements.requiredOperations ?? []).filter(
@@ -147,6 +182,16 @@ export class EnvironmentSelector {
     );
 
     const blockers: string[] = [];
+    const excluded = new Set(
+      (requirements.excludedEnvironmentIds ?? [])
+        .map((entry) => entry.trim())
+        .filter(Boolean),
+    );
+    if (excluded.has(snapshot.id)) {
+      blockers.push(
+        "excluded by current path evidence; equivalent environment retry is deferred until conditions change",
+      );
+    }
     if (!["available", "degraded"].includes(snapshot.availability)) {
       blockers.push(`availability=${snapshot.availability}`);
     }
