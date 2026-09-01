@@ -162,7 +162,8 @@ export type ToolCategory =
   | "registry"
   | "replication"
   | "memory"
-  | "environment";
+  | "environment"
+  | "capability";
 
 export interface ToolContext {
   identity: AbosIdentity;
