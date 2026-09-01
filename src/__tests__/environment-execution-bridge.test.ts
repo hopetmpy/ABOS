@@ -6,7 +6,11 @@ import {
 } from "../environments/task-executor.js";
 import { EnvironmentRegistry } from "../environments/registry.js";
 import { EnvironmentSelector } from "../environments/selector.js";
-import type { EnvironmentProvider } from "../environments/types.js";
+import type {
+  EnvironmentProvider,
+  EnvironmentResource,
+} from "../environments/types.js";
+import type { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
 import type { TaskNode } from "../orchestration/task-graph.js";
 import {
   EXECUTION_CONTINUATION_PROTOCOL_VERSION,
@@ -314,6 +318,120 @@ describe("EnvironmentExecutionBridge", () => {
         targetAddress: "alpha://existing",
       }),
     );
+  });
+
+  it("collects executor-local async artifacts through lifecycle before returning parent-safe result references", async () => {
+    const environments = new EnvironmentRegistry();
+    environments.register(provider("alpha"));
+    const executors = new EnvironmentTaskExecutorRegistry();
+
+    const resource: EnvironmentResource = {
+      id: "resource-alpha-1",
+      provider: "alpha",
+      externalId: "sandbox-alpha-1",
+      type: "alpha-worker",
+      goalId: "goal-1",
+      pathId: "path-1",
+      taskId: "task-1",
+      status: "running",
+      region: null,
+      capabilities: [],
+      estimatedCostCents: 0,
+      actualCostCents: 0,
+      credentialsReference: null,
+      retentionPolicy: "until_goal_complete",
+      providerState: "running",
+      evidence: [],
+      metadata: {
+        executorAddress: "alpha://child",
+        lastDispatchedTaskId: "task-1",
+      },
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+      lastHealthCheck: null,
+    };
+
+    const collect = vi.fn(async () => {
+      expect(resource.metadata.remoteArtifacts).toEqual([
+        "outputs/remote.bin",
+      ]);
+      expect(resource.metadata.artifactCollectionState).toBe(
+        "pending",
+      );
+      resource.metadata = {
+        ...resource.metadata,
+        remoteArtifacts: [],
+        artifactCollectionState: "collected",
+        collectedArtifacts: [{
+          remotePath: "outputs/remote.bin",
+          localPath: "/parent/verified.bin",
+          bytes: 12,
+          sha256: "a".repeat(64),
+        }],
+      };
+      return {
+        artifacts: ["/parent/verified.bin"],
+        evidence: ["collected and verified"],
+        metadata: {
+          remoteArtifacts: [],
+          artifactCollectionState: "collected",
+          collectedArtifacts:
+            resource.metadata.collectedArtifacts,
+        },
+      };
+    });
+
+    const lifecycle = {
+      resources: {
+        list: () => [resource],
+        applyMutation: (
+          _id: string,
+          mutation: {
+            evidence?: string[];
+            metadata?: Record<string, unknown>;
+          },
+        ) => {
+          resource.evidence = [
+            ...resource.evidence,
+            ...(mutation.evidence ?? []),
+          ];
+          resource.metadata = {
+            ...resource.metadata,
+            ...(mutation.metadata ?? {}),
+          };
+          return resource;
+        },
+      },
+      collect,
+    } as unknown as EnvironmentLifecycleManager;
+
+    const bridge = new EnvironmentExecutionBridge(
+      new EnvironmentSelector(environments),
+      executors,
+      lifecycle,
+    );
+
+    const result = await bridge.collectRemoteResultArtifacts(
+      "alpha",
+      task(),
+      "alpha://child",
+      {
+        success: true,
+        output: "done",
+        artifacts: [
+          "outputs/remote.bin",
+          "https://example.test/durable.bin",
+        ],
+        costCents: 1,
+        duration: 10,
+      },
+    );
+
+    expect(collect).toHaveBeenCalledWith("resource-alpha-1");
+    expect(result.artifacts).toEqual([
+      "https://example.test/durable.bin",
+      "/parent/verified.bin",
+    ]);
   });
 
   it("reports a missing dispatch implementation as unavailable, not as impossible", async () => {
