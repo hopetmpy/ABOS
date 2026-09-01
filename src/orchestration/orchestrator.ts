@@ -722,6 +722,7 @@ export class Orchestrator {
           if (immediateResult) {
             this.directTaskResults.push({
               taskId: executionTask.id,
+              goalId: executionTask.goalId,
               result: immediateResult,
             });
           }
