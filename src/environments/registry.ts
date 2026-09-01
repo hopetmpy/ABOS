@@ -1,4 +1,4 @@
-import type { EnvironmentProvider, EnvironmentSnapshot } from "./types.js";
+import type { EnvironmentOperation, EnvironmentProvider, EnvironmentSnapshot } from "./types.js";
 
 export class EnvironmentRegistry {
   private readonly providers = new Map<string, EnvironmentProvider>();
@@ -13,6 +13,50 @@ export class EnvironmentRegistry {
 
   list(): EnvironmentProvider[] {
     return [...this.providers.values()];
+  }
+
+  /**
+   * Discover lifecycle operations from implemented methods plus provider-native
+   * declarations. This stays open-ended and never branches on provider IDs.
+   */
+  getSupportedOperations(environmentId: string): EnvironmentOperation[] {
+    const provider = this.providers.get(environmentId);
+    if (!provider) return [];
+
+    const operations = new Set<EnvironmentOperation>(provider.operations ?? []);
+    operations.add("inspect");
+
+    const methodOperations: Array<[EnvironmentOperation, keyof EnvironmentProvider]> = [
+      ["can_satisfy", "canSatisfy"],
+      ["estimate", "estimate"],
+      ["prepare", "prepare"],
+      ["provision", "provision"],
+      ["bootstrap", "bootstrap"],
+      ["execute", "execute"],
+      ["health", "health"],
+      ["collect", "collect"],
+      ["resize", "resize"],
+      ["suspend", "suspend"],
+      ["resume", "resume"],
+      ["destroy", "destroy"],
+      ["recover", "recover"],
+      ["reconcile", "reconcile"],
+    ];
+
+    for (const [operation, method] of methodOperations) {
+      if (typeof provider[method] === "function") {
+        operations.add(operation);
+      }
+    }
+
+    return [...operations].sort();
+  }
+
+  supportsOperation(
+    environmentId: string,
+    operation: EnvironmentOperation,
+  ): boolean {
+    return this.getSupportedOperations(environmentId).includes(operation);
   }
 
   async execute(
