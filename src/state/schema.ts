@@ -766,6 +766,24 @@ export const MIGRATION_V12 = `
   CREATE INDEX IF NOT EXISTS idx_adaptive_attempts_failure
     ON adaptive_attempts(goal_id, failure_class);
 
+  CREATE TABLE IF NOT EXISTS adaptive_evidence (
+    id TEXT PRIMARY KEY,
+    goal_id TEXT NOT NULL REFERENCES goals(id),
+    path_id TEXT REFERENCES adaptive_paths(id),
+    attempt_id TEXT REFERENCES adaptive_attempts(id),
+    kind TEXT NOT NULL
+      CHECK(kind IN ('observation','error','artifact','condition','fact','external')),
+    content TEXT NOT NULL,
+    source TEXT NOT NULL,
+    confidence REAL NOT NULL DEFAULT 1.0,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_adaptive_evidence_goal
+    ON adaptive_evidence(goal_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_adaptive_evidence_path
+    ON adaptive_evidence(path_id, created_at);
+
   CREATE TABLE IF NOT EXISTS adaptive_assumptions (
     id TEXT PRIMARY KEY,
     goal_id TEXT NOT NULL REFERENCES goals(id),
