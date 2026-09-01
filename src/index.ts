@@ -36,9 +36,10 @@ import { prettySink } from "./observability/pretty-sink.js";
 import { bootstrapTopup } from "./conway/topup.js";
 import { randomUUID } from "crypto";
 import { keccak256, toHex } from "viem";
+import { ABOS_VERSION } from "./version.js";
 
 const logger = createLogger("main");
-const VERSION = "0.3.0";
+const VERSION = ABOS_VERSION;
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -216,7 +217,9 @@ async function run(): Promise<void> {
   const resolvedChainType = config.chainType || walletChainType || "evm";
   const apiKey = config.conwayApiKey || loadApiKeyFromConfig();
   if (!apiKey) {
-    logger.error("No API key found. Run: abos --provision");
+    logger.error(
+      "No Conway API key found. Your ABOS wallet/config remain saved. Retry with: node dist/index.js --provision, or provide CONWAY_API_KEY / an existing key in setup.",
+    );
     process.exit(1);
   }
 

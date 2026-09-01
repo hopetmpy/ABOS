@@ -21,6 +21,7 @@ import type {
 } from "../types.js";
 import { logModification } from "./audit-log.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
+import { expandHomePath, toPosixShellPath } from "../platform/home.js";
 
 // ─── IMMUTABLE SAFETY INVARIANTS ─────────────────────────────
 // These are hard-coded and CANNOT be changed by the agent.
@@ -124,10 +125,7 @@ const MAX_DIFF_SIZE = 10_000;
 function resolveAndValidatePath(filePath: string): string | null {
   try {
     // Step 1: Resolve ~ to home
-    let resolved = filePath;
-    if (resolved.startsWith("~")) {
-      resolved = path.join(process.env.HOME || "/root", resolved.slice(1));
-    }
+    let resolved = expandHomePath(filePath);
 
     // Step 2: Resolve to absolute path (handles .. and relative paths)
     resolved = path.resolve(resolved);
@@ -157,29 +155,35 @@ function resolveAndValidatePath(filePath: string): string | null {
  * Check if a file path is protected from modification.
  */
 export function isProtectedFile(filePath: string): boolean {
-  const resolved = path.resolve(filePath);
+  // Security matching must understand both POSIX sandbox paths and native host
+  // paths. Normalize separators explicitly instead of depending on path.sep.
+  const normalized = path.posix.normalize(filePath.replace(/\\/g, "/"));
 
-  // Check against protected file patterns using path-segment matching
   for (const pattern of PROTECTED_FILES) {
-    const patternResolved = path.resolve(pattern);
-    // Exact match on resolved paths
-    if (resolved === patternResolved) return true;
-    // Match by path suffix: the resolved path ends with /pattern
-    if (resolved.endsWith(path.sep + pattern)) return true;
-    // Also check multi-segment patterns (e.g., "self-mod/code.ts")
-    if (pattern.includes("/") && resolved.endsWith(path.sep + pattern.replace(/\//g, path.sep))) return true;
-  }
-
-  // Check against blocked directory patterns using path-segment matching
-  for (const pattern of BLOCKED_DIRECTORY_PATTERNS) {
-    // Check if any path segment matches the blocked directory
-    if (resolved.includes(path.sep + pattern + path.sep) ||
-        resolved.endsWith(path.sep + pattern) ||
-        resolved === pattern) {
+    const normalizedPattern = path.posix.normalize(pattern.replace(/\\/g, "/"));
+    if (
+      normalized === normalizedPattern
+      || normalized.endsWith("/" + normalizedPattern)
+    ) {
       return true;
     }
-    // Handle absolute patterns like /etc/systemd
-    if (pattern.startsWith("/") && resolved.startsWith(pattern)) {
+  }
+
+  const segments = normalized.split("/").filter(Boolean);
+  for (const pattern of BLOCKED_DIRECTORY_PATTERNS) {
+    const normalizedPattern = path.posix.normalize(pattern.replace(/\\/g, "/"));
+
+    if (normalizedPattern.startsWith("/")) {
+      if (
+        normalized === normalizedPattern
+        || normalized.startsWith(normalizedPattern + "/")
+      ) {
+        return true;
+      }
+      continue;
+    }
+
+    if (segments.includes(normalizedPattern)) {
       return true;
     }
   }
@@ -304,7 +308,8 @@ export async function editFile(
   // 10. Rebuild if source file was edited
   if (/\.(ts|js|tsx|jsx)$/.test(filePath)) {
     try {
-      const build = await conway.exec("pnpm run build", 60_000);
+      const buildRoot = escapeShellArg(toPosixShellPath(RUNTIME_ROOT));
+      const build = await conway.exec(`cd ${buildRoot} && pnpm run build`, 60_000);
       if (build.exitCode !== 0) {
         const detail = build.stderr || build.stdout || `exit code ${build.exitCode}`;
         return {
@@ -422,4 +427,9 @@ function generateSimpleDiff(
   }
 
   return lines.join("\n");
+}
+
+/** Escape a path/value for the POSIX shell used by Conway exec. */
+function escapeShellArg(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }

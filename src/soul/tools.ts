@@ -16,6 +16,7 @@ import { validateSoul } from "./validator.js";
 import { insertSoulHistory, getCurrentSoulVersion, getLatestSoulHistory, getSoulHistory } from "../state/database.js";
 import { ulid } from "ulid";
 import { createLogger } from "../observability/logger.js";
+import { getHomeDir } from "../platform/home.js";
 const logger = createLogger("soul");
 
 // ─── Update Soul ────────────────────────────────────────────────
@@ -37,7 +38,7 @@ export async function updateSoul(
   soulPath?: string,
 ): Promise<UpdateSoulResult> {
   try {
-    const home = process.env.HOME || "/root";
+    const home = getHomeDir();
     const resolvedPath = soulPath || path.join(home, ".abos", "SOUL.md");
 
     // Load current soul or create default

@@ -12,6 +12,7 @@ import { getAbosDir } from "./identity/wallet.js";
 import { loadApiKeyFromConfig } from "./identity/provision.js";
 import { createLogger } from "./observability/logger.js";
 import type { ChainType } from "./identity/chain.js";
+import { expandHomePath } from "./platform/home.js";
 
 const logger = createLogger("config");
 const CONFIG_FILENAME = "abos.json";
@@ -105,10 +106,17 @@ export function saveConfig(config: AbosConfig): void {
  * Resolve ~ paths to absolute paths.
  */
 export function resolvePath(p: string): string {
-  if (p.startsWith("~")) {
-    return path.join(process.env.HOME || "/root", p.slice(1));
+  const portable = p.replace(/\\/g, "/");
+
+  if (portable === "~/.abos") {
+    return getAbosDir();
   }
-  return p;
+  if (portable.startsWith("~/.abos/")) {
+    const relative = portable.slice("~/.abos/".length);
+    return path.join(getAbosDir(), ...relative.split("/").filter(Boolean));
+  }
+
+  return expandHomePath(p);
 }
 
 /**

@@ -25,6 +25,8 @@ import { getActiveSkillInstructions } from "../skills/loader.js";
 import { getLineageSummary } from "../replication/lineage.js";
 import { sanitizeInput } from "./injection-defense.js";
 import { loadCurrentSoul } from "../soul/model.js";
+import { getHomeDir } from "../platform/home.js";
+import { RUNTIME_ROOT } from "../runtime-root.js";
 
 function getCoreRules(chainType?: string): string {
   const usdcNetwork = chainType === "solana" ? "USDC on Solana" : "USDC on Base";
@@ -91,8 +93,8 @@ If you fail to create value, you lose compute and die.`;
  */
 function loadConstitution(): string {
   const locations = [
-    path.join(process.env.HOME || "/root", ".abos", "constitution.md"),
-    path.join(process.cwd(), "constitution.md"),
+    path.join(getHomeDir(), ".abos", "constitution.md"),
+    path.join(RUNTIME_ROOT, "constitution.md"),
   ];
   for (const loc of locations) {
     try {
@@ -552,6 +554,24 @@ export function getOrchestratorStatus(db: Database.Database): string {
 /**
  * Build the complete system prompt for a turn.
  */
+function getOperationalContext(config: AbosConfig): string {
+  if (config.sandboxId) return OPERATIONAL_CONTEXT;
+
+  if (process.platform === "win32") {
+    return OPERATIONAL_CONTEXT.replace(
+      "You operate inside a Linux VM (Conway sandbox) with full root access. Your runtime\nenvironment includes:\n- Shell access (exec): full Linux commands, package installation, process management",
+      "You are running ABOS locally on Windows, not inside a Conway sandbox.\n" +
+        "Local shell commands execute through Git Bash for POSIX compatibility and file tools are confined to the Windows user home.\n" +
+        "Your runtime environment includes:\n- Shell access (exec): Git Bash/POSIX-compatible commands on the local Windows host",
+    );
+  }
+
+  return OPERATIONAL_CONTEXT.replace(
+    "You operate inside a Linux VM (Conway sandbox) with full root access. Your runtime\nenvironment includes:",
+    `You are running ABOS locally on ${process.platform}, not inside a Conway sandbox. Your runtime\nenvironment includes:`,
+  );
+}
+
 export function buildSystemPrompt(params: {
   identity: AbosIdentity;
   config: AbosConfig;
@@ -663,7 +683,7 @@ Your chain type is ${chainType}.`,
   }
 
   // Layer 6: Operational Context
-  sections.push(OPERATIONAL_CONTEXT);
+  sections.push(getOperationalContext(config));
 
   // Layer 7: Dynamic Context
   const turnCount = db.getTurnCount();
@@ -762,7 +782,7 @@ ${orchestratorStatus}
  */
 function loadSoulMd(): string | null {
   try {
-    const home = process.env.HOME || "/root";
+    const home = getHomeDir();
     const soulPath = path.join(home, ".abos", "SOUL.md");
     if (fs.existsSync(soulPath)) {
       return fs.readFileSync(soulPath, "utf-8");
@@ -778,7 +798,7 @@ function loadSoulMd(): string | null {
  */
 function loadWorklog(): string | null {
   try {
-    const home = process.env.HOME || "/root";
+    const home = getHomeDir();
     const worklogPath = path.join(home, ".abos", "WORKLOG.md");
     if (fs.existsSync(worklogPath)) {
       return fs.readFileSync(worklogPath, "utf-8");

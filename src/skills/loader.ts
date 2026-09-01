@@ -13,6 +13,7 @@ import type { Skill, AbosDatabase } from "../types.js";
 import { parseSkillMd } from "./format.js";
 import { sanitizeInput } from "../agent/injection-defense.js";
 import { createLogger } from "../observability/logger.js";
+import { expandHomePath } from "../platform/home.js";
 
 const logger = createLogger("skills.loader");
 
@@ -92,7 +93,7 @@ const BIN_NAME_RE = /^[a-zA-Z0-9._-]+$/;
 
 /**
  * Check if a skill's requirements are met.
- * Uses execFileSync with argument arrays to prevent shell injection.
+ * Uses a platform-native binary locator with argument arrays to prevent shell injection.
  */
 function checkRequirements(skill: Skill): boolean {
   if (!skill.requires) return true;
@@ -105,7 +106,8 @@ function checkRequirements(skill: Skill): boolean {
         return false;
       }
       try {
-        execFileSync("which", [bin], { stdio: "ignore" });
+        const locator = process.platform === "win32" ? "where.exe" : "which";
+        execFileSync(locator, [bin], { stdio: "ignore" });
       } catch {
         return false;
       }
@@ -185,8 +187,5 @@ export function getActiveSkillInstructions(skills: Skill[]): string {
 }
 
 function resolveHome(p: string): string {
-  if (p.startsWith("~")) {
-    return path.join(process.env.HOME || "/root", p.slice(1));
-  }
-  return p;
+  return expandHomePath(p);
 }

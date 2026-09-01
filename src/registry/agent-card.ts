@@ -18,6 +18,7 @@ import type {
   AbosDatabase,
   ConwayClient,
 } from "../types.js";
+import { getHomeDir } from "../platform/home.js";
 
 const AGENT_CARD_TYPE =
   "https://eips.ethereum.org/EIPS/eip-8004#registration-v1";
@@ -146,6 +147,6 @@ export async function saveAgentCard(
   conway: ConwayClient,
 ): Promise<void> {
   const cardJson = serializeAgentCard(card);
-  const home = process.env.HOME || "/root";
+  const home = getHomeDir();
   await conway.writeFile(`${home}/.abos/agent-card.json`, cardJson);
 }

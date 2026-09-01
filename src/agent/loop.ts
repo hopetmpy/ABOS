@@ -6,6 +6,8 @@
  */
 
 import path from "node:path";
+import { getHomeDir } from "../platform/home.js";
+import { RUNTIME_ROOT } from "../runtime-root.js";
 import type {
   AbosIdentity,
   AbosConfig,
@@ -157,7 +159,7 @@ export async function runAgentLoop(
       }
 
       const providersPath = path.join(
-        process.env.HOME || process.cwd(),
+        getHomeDir(),
         ".abos",
         "inference-providers.json",
       );
@@ -192,7 +194,7 @@ export async function runAgentLoop(
         harnessRegistry,
         identity,
         config,
-        allowedEditRoot: process.cwd(),
+        allowedEditRoot: RUNTIME_ROOT,
         tools,
         toolContext,
         policyEngine,

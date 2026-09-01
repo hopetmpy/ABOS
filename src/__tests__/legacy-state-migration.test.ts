@@ -121,7 +121,9 @@ describe("legacy Automaton state migration", () => {
       JSON.parse(fs.readFileSync(path.join(abosDir, "wallet.json"), "utf-8")),
     ).toEqual(wallet);
     expect(fs.readFileSync(path.join(abosDir, "state.db"), "utf-8")).toBe("legacy-db");
-    expect(fs.statSync(abosDir).mode & 0o777).toBe(0o700);
+    if (process.platform !== "win32") {
+      expect(fs.statSync(abosDir).mode & 0o777).toBe(0o700);
+    }
 
     // New ABOS executable source is never overwritten by legacy state migration.
     expect(fs.readFileSync(path.join(abosDir, "runtime", "new-runtime.txt"), "utf-8")).toBe("abos-code");

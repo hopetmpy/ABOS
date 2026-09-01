@@ -23,31 +23,72 @@ import type { PolicyEngine } from "./policy-engine.js";
 import { sanitizeToolResult, sanitizeInput } from "./injection-defense.js";
 import { createLogger } from "../observability/logger.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
+import { expandHomePath, getHomeDir, toPosixShellPath } from "../platform/home.js";
 
 const logger = createLogger("tools");
 
 // ─── Path Confinement ─────────────────────────────────────────
-// write_file is restricted to the sandbox home directory tree.
-// The sandbox home is /root for both local and remote execution.
-const SANDBOX_HOME = "/root";
+// Remote Conway sandboxes are Linux and use /root. Local execution must use
+// the actual host user's home directory and native path semantics.
+const REMOTE_SANDBOX_HOME = "/root";
 
 /**
- * Validate that a file path resolves to within the allowed root directory.
+ * Validate that a file path resolves to within the allowed home directory.
  * Returns the resolved absolute path, or an error string if out of bounds.
  */
-function confinePathToSandbox(filePath: string): string | { error: string } {
-  // Resolve ~ to SANDBOX_HOME
-  const expanded = filePath.startsWith("~")
-    ? nodePath.join(SANDBOX_HOME, filePath.slice(1))
-    : filePath;
-  // Resolve to absolute (relative paths resolve against SANDBOX_HOME)
-  const resolved = nodePath.resolve(SANDBOX_HOME, expanded);
-  // Ensure the resolved path is within the sandbox home
-  if (resolved !== SANDBOX_HOME && !resolved.startsWith(SANDBOX_HOME + "/")) {
+function confinePathToSandbox(
+  filePath: string,
+  sandboxId: string,
+): string | { error: string } {
+  if (sandboxId) {
+    const portableInput = filePath.replace(/\\/g, "/");
+    const expanded = portableInput.startsWith("~")
+      ? nodePath.posix.join(REMOTE_SANDBOX_HOME, portableInput.slice(1))
+      : portableInput;
+    const resolved = nodePath.posix.resolve(REMOTE_SANDBOX_HOME, expanded);
+
+    if (
+      resolved !== REMOTE_SANDBOX_HOME
+      && !resolved.startsWith(REMOTE_SANDBOX_HOME + "/")
+    ) {
+      return {
+        error: `Blocked: write_file path "${filePath}" resolves to "${resolved}" which is outside the allowed directory (${REMOTE_SANDBOX_HOME}). Writes are confined to the sandbox home.`,
+      };
+    }
+
+    return resolved;
+  }
+
+  const localHome = nodePath.resolve(getHomeDir());
+  const portableInput = filePath.replace(/\\/g, "/");
+  let expanded: string;
+
+  if (portableInput === "/root") {
+    expanded = localHome;
+  } else if (portableInput.startsWith("/root/")) {
+    expanded = nodePath.join(
+      localHome,
+      ...portableInput.slice("/root/".length).split("/").filter(Boolean),
+    );
+  } else if (portableInput.startsWith("~")) {
+    expanded = expandHomePath(filePath);
+  } else {
+    expanded = filePath;
+  }
+
+  const resolved = nodePath.isAbsolute(expanded)
+    ? nodePath.resolve(expanded)
+    : nodePath.resolve(localHome, expanded);
+
+  if (
+    resolved !== localHome
+    && !resolved.startsWith(localHome + nodePath.sep)
+  ) {
     return {
-      error: `Blocked: write_file path "${filePath}" resolves to "${resolved}" which is outside the allowed directory (${SANDBOX_HOME}). Writes are confined to the sandbox home.`,
+      error: `Blocked: write_file path "${filePath}" resolves to "${resolved}" which is outside the allowed directory (${localHome}). Writes are confined to the local ABOS home.`,
     };
   }
+
   return resolved;
 }
 
@@ -160,7 +201,7 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
       execute: async (args, ctx) => {
         const filePath = args.path as string;
         // Path confinement: restrict writes to sandbox home directory
-        const confined = confinePathToSandbox(filePath);
+        const confined = confinePathToSandbox(filePath, sandboxId);
         if (typeof confined === "object") return confined.error;
         // Guard against overwriting protected files (same check as edit_own_file)
         const { isProtectedFile } = await import("../self-mod/code.js");
@@ -185,8 +226,13 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
       },
       execute: async (args, ctx) => {
         const filePath = args.path as string;
+        const effectivePath = sandboxId
+          ? filePath
+          : confinePathToSandbox(filePath, sandboxId);
+        if (typeof effectivePath === "object") return effectivePath.error;
+
         // Block reads of sensitive files (wallet, env, config secrets)
-        const basename = filePath.split("/").pop() || "";
+        const basename = effectivePath.replace(/\\/g, "/").split("/").pop() || "";
         const sensitiveFiles = ["wallet.json", ".env", "abos.json"];
         const sensitiveExtensions = [".key", ".pem"];
         if (
@@ -197,15 +243,15 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
           return "Blocked: Cannot read sensitive file. This protects credentials and secrets.";
         }
         try {
-          return await ctx.conway.readFile(filePath);
+          return await ctx.conway.readFile(effectivePath);
         } catch {
           // Conway files/read API may be broken — fall back to exec(cat)
           const result = await ctx.conway.exec(
-            `cat ${escapeShellArg(filePath)}`,
+            `cat ${escapeShellArg(effectivePath)}`,
             30_000,
           );
           if (result.exitCode !== 0) {
-            return `ERROR: File not found or not readable: ${filePath}`;
+            return `ERROR: File not found or not readable: ${effectivePath}`;
           }
           return result.stdout;
         }
@@ -464,17 +510,17 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
       riskLevel: "caution",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
-        const repoRoot = RUNTIME_ROOT;
+        const repoRoot = escapeShellArg(toPosixShellPath(RUNTIME_ROOT));
 
         // Show what we're reverting
         const lastCommit = await ctx.conway.exec(
-          `cd '${repoRoot}' && git log -1 --oneline`,
+          `cd ${repoRoot} && git log -1 --oneline`,
           10_000,
         );
 
         // Revert
         const result = await ctx.conway.exec(
-          `cd '${repoRoot}' && git revert HEAD --no-edit`,
+          `cd ${repoRoot} && git revert HEAD --no-edit`,
           30_000,
         );
         if (result.exitCode !== 0) {
@@ -483,7 +529,7 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
 
         // Rebuild
         const build = await ctx.conway.exec(
-          `cd '${repoRoot}' && pnpm run build`,
+          `cd ${repoRoot} && pnpm run build`,
           60_000,
         );
 
@@ -504,7 +550,7 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
       riskLevel: "dangerous",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
-        const repoRoot = RUNTIME_ROOT;
+        const repoRoot = escapeShellArg(toPosixShellPath(RUNTIME_ROOT));
         try {
           const { ensureCanonicalOrigin } = await import("../self-mod/upstream.js");
           ensureCanonicalOrigin();
@@ -514,7 +560,7 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
 
         // Fetch latest canonical ABOS main
         const fetch = await ctx.conway.exec(
-          `cd '${repoRoot}' && git fetch origin main`,
+          `cd ${repoRoot} && git fetch origin main`,
           30_000,
         );
         if (fetch.exitCode !== 0) {
@@ -523,13 +569,13 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
 
         // Record what we're about to lose
         const localCommits = await ctx.conway.exec(
-          `cd '${repoRoot}' && git log origin/main..HEAD --oneline`,
+          `cd ${repoRoot} && git log origin/main..HEAD --oneline`,
           10_000,
         );
 
         // Hard reset
         const reset = await ctx.conway.exec(
-          `cd '${repoRoot}' && git reset --hard origin/main`,
+          `cd ${repoRoot} && git reset --hard origin/main`,
           30_000,
         );
         if (reset.exitCode !== 0) {
@@ -538,7 +584,7 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
 
         // Reinstall + rebuild
         const build = await ctx.conway.exec(
-          `cd '${repoRoot}' && pnpm install --frozen-lockfile && pnpm run build`,
+          `cd ${repoRoot} && pnpm install --frozen-lockfile && pnpm run build`,
           120_000,
         );
 
@@ -644,9 +690,12 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
           return `Refusing update: ${error?.message || String(error)}`;
         }
 
-        // Run git commands inside sandbox via conway.exec()
+        // Run repository commands from the actual runtime checkout. On
+        // Windows local mode the Conway client executes through Git Bash, so
+        // convert the native runtime path to its MSYS/POSIX form first.
+        const repoRoot = escapeShellArg(toPosixShellPath(RUNTIME_ROOT));
         const run = async (cmd: string) => {
-          const result = await ctx.conway.exec(cmd, 120_000);
+          const result = await ctx.conway.exec(`cd ${repoRoot} && ${cmd}`, 120_000);
           if (result.exitCode !== 0) {
             throw new Error(
               result.stderr ||

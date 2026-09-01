@@ -8,6 +8,8 @@ import { getEncoding, type Tiktoken } from "js-tiktoken";
 import type { ChatMessage } from "../types.js";
 
 const MAX_TOKEN_CACHE_SIZE = 10_000;
+const MAX_EXACT_TOKEN_INPUT_CHARS = 10_000;
+const LARGE_TEXT_CHARS_PER_TOKEN = 3.5;
 const DEFAULT_RESERVE_TOKENS = 4_096;
 const COMPRESSION_HEADROOM_RATIO = 0.1;
 const MAX_EVENT_CONTENT_CHARS = 220;
@@ -140,6 +142,16 @@ export function createTokenCounter(): TokenCounter {
 
   const countTokens = (text: string, model?: string): number => {
     const normalizedText = text ?? "";
+
+    // Exact BPE tokenization can become disproportionately expensive on very
+    // large or pathological strings. For oversized inputs, use the same
+    // conservative fallback already used when the encoder is unavailable.
+    // Do not cache those strings: using the full text as a cache key would
+    // duplicate large payloads in memory and can make context assembly worse.
+    if (normalizedText.length > MAX_EXACT_TOKEN_INPUT_CHARS) {
+      return Math.ceil(normalizedText.length / LARGE_TEXT_CHARS_PER_TOKEN);
+    }
+
     const key = formatCacheKey(normalizedText, model);
 
     const cached = cache.get(key);

@@ -4,6 +4,7 @@ import path from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
+  home: "",
   dir: "",
   provision: vi.fn(),
 }));
@@ -33,9 +34,14 @@ vi.mock("../setup/environment.js", () => ({
   }),
 }));
 
+const ORIGINAL_HOME = process.env.HOME;
+
 describe("replicated child genesis bootstrap", () => {
   beforeEach(() => {
-    state.dir = fs.mkdtempSync(path.join(os.tmpdir(), "abos-genesis-bootstrap-"));
+    state.home = fs.mkdtempSync(path.join(os.tmpdir(), "abos-genesis-bootstrap-"));
+    state.dir = path.join(state.home, ".abos");
+    fs.mkdirSync(state.dir, { recursive: true });
+    process.env.HOME = state.home;
     state.provision.mockReset();
     state.provision.mockResolvedValue({
       apiKey: "cnwy_k_test_child",
@@ -46,8 +52,13 @@ describe("replicated child genesis bootstrap", () => {
   });
 
   afterEach(() => {
-    if (state.dir) {
-      fs.rmSync(state.dir, { recursive: true, force: true });
+    if (ORIGINAL_HOME === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = ORIGINAL_HOME;
+    }
+    if (state.home) {
+      fs.rmSync(state.home, { recursive: true, force: true });
     }
   });
 

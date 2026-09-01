@@ -19,6 +19,21 @@ import {
 } from "./mocks.js";
 import type { AbosDatabase, AgentTurn, AgentState } from "../types.js";
 
+// Agent-loop tests must stay deterministic and offline. The discover_agents
+// behavior under test here is loop classification, not the live ERC-8004 RPC.
+vi.mock("../registry/discovery.js", () => ({
+  discoverAgents: vi.fn(async () => [
+    {
+      agentId: "1",
+      owner: "0x1111111111111111111111111111111111111111",
+      agentURI: "data:application/json,{}",
+      name: "mock-agent",
+      description: "Deterministic test agent",
+    },
+  ]),
+  searchAgents: vi.fn(async () => []),
+}));
+
 describe("Agent Loop", () => {
   let db: AbosDatabase;
   let conway: MockConwayClient;

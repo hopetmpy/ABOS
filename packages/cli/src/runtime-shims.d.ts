@@ -14,6 +14,7 @@ declare module "@abos/runtime/config.js" {
   }
 
   export function loadConfig(): AbosCliConfig | null;
+  export function getConfigPath(): string;
   export function resolvePath(p: string): string;
 }
 

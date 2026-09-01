@@ -6,7 +6,7 @@
  * Adapted from @aiws/sdk patterns.
  */
 
-import { execSync } from "child_process";
+import { execFileSync, execSync } from "child_process";
 import fs from "fs";
 import nodePath from "path";
 import type {
@@ -28,6 +28,7 @@ import { keccak256, toHex } from "viem";
 import type { Address, PrivateKeyAccount } from "viem";
 import { randomUUID } from "crypto";
 import type { ChainType, ChainIdentity } from "../identity/chain.js";
+import { expandHomePath, getHomeDir, toPosixShellPath } from "../platform/home.js";
 
 interface ConwayClientOptions {
   apiUrl: string;
@@ -108,14 +109,80 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
 
   const isLocal = !sandboxId;
 
+  let cachedGitBash: string | null | undefined;
+
+  const findGitBash = (): string | null => {
+    if (process.platform !== "win32") return null;
+    if (cachedGitBash !== undefined) return cachedGitBash;
+
+    const candidates = [
+      process.env.ABOS_BASH_PATH,
+      process.env.ProgramFiles
+        ? nodePath.join(process.env.ProgramFiles, "Git", "bin", "bash.exe")
+        : undefined,
+      process.env["ProgramFiles(x86)"]
+        ? nodePath.join(process.env["ProgramFiles(x86)"], "Git", "bin", "bash.exe")
+        : undefined,
+      process.env.LOCALAPPDATA
+        ? nodePath.join(process.env.LOCALAPPDATA, "Programs", "Git", "bin", "bash.exe")
+        : undefined,
+    ].filter((value): value is string => Boolean(value));
+
+    try {
+      const gitLocations = execFileSync("where.exe", ["git.exe"], {
+        encoding: "utf-8",
+        windowsHide: true,
+      })
+        .split(/\r?\n/)
+        .map((value) => value.trim())
+        .filter(Boolean);
+
+      for (const gitPath of gitLocations) {
+        const gitRoot = nodePath.dirname(nodePath.dirname(gitPath));
+        candidates.unshift(nodePath.join(gitRoot, "bin", "bash.exe"));
+      }
+    } catch {
+      // Git may be unavailable or not discoverable through PATH.
+    }
+
+    cachedGitBash =
+      candidates.find((candidate) => fs.existsSync(candidate)) ?? null;
+    return cachedGitBash;
+  };
+
   const execLocal = (command: string, timeout?: number): ExecResult => {
     try {
-      const stdout = execSync(command, {
+      const commonOptions = {
         timeout: timeout || 30_000,
-        encoding: "utf-8",
+        encoding: "utf-8" as const,
         maxBuffer: 10 * 1024 * 1024,
-        cwd: process.env.HOME || "/root",
-      });
+        cwd: getHomeDir(),
+      };
+
+      let stdout: string;
+      if (process.platform === "win32") {
+        const bash = findGitBash();
+        if (!bash) {
+          return {
+            stdout: "",
+            stderr:
+              "ABOS local execution on Windows requires Git Bash. Install Git for Windows or set ABOS_BASH_PATH to bash.exe.",
+            exitCode: 127,
+          };
+        }
+
+        stdout = execFileSync(bash, ["-lc", command], {
+          ...commonOptions,
+          windowsHide: true,
+          env: {
+            ...process.env,
+            HOME: toPosixShellPath(getHomeDir()),
+          },
+        });
+      } else {
+        stdout = execSync(command, commonOptions);
+      }
+
       return { stdout: stdout || "", stderr: "", exitCode: 0 };
     } catch (err: any) {
       return {
@@ -163,10 +230,17 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     }
   };
 
-  const resolveLocalPath = (filePath: string): string =>
-    filePath.startsWith("~")
-      ? nodePath.join(process.env.HOME || "/root", filePath.slice(1))
-      : filePath;
+  const resolveLocalPath = (filePath: string): string => {
+    const portable = filePath.replace(/\\/g, "/");
+    if (portable === "/root") return getHomeDir();
+    if (portable.startsWith("/root/")) {
+      return nodePath.join(
+        getHomeDir(),
+        ...portable.slice("/root/".length).split("/").filter(Boolean),
+      );
+    }
+    return expandHomePath(filePath);
+  };
 
   const writeFile = async (
     filePath: string,

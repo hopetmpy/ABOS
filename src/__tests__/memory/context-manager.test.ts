@@ -67,6 +67,14 @@ describe("createTokenCounter", () => {
     expect(counter.cache.size).toBe(sizeAfterFirst);
   });
 
+  it("uses bounded conservative counting for oversized inputs without caching them", () => {
+    const counter = createTokenCounter();
+    const oversized = "x".repeat(20_000);
+
+    expect(counter.countTokens(oversized)).toBe(Math.ceil(oversized.length / 3.5));
+    expect(counter.cache.size).toBe(0);
+  });
+
   it("LRU cache limits to 10000 entries", () => {
     const counter = createTokenCounter();
 

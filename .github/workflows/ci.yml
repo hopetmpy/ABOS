@@ -19,20 +19,21 @@ jobs:
         timeout-minutes: 10
         run: |
           set +e
-          timeout 300 pnpm test
+          timeout 300 pnpm run test:diagnose
           RC=$?
           set -e
-          # Exit code 124 means timeout killed the process (vitest hung after tests completed)
-          if [ $RC -eq 124 ]; then echo "::warning::vitest process hung after tests, killed by timeout"; exit 0; fi
+          # A timeout is a CI failure. Tests must terminate cleanly; otherwise
+          # we would be converting an unknown/hung suite into a false PASS.
+          if [ $RC -eq 124 ]; then echo "::error::vitest timed out or left active handles"; fi
           exit $RC
       - name: Run security tests
         timeout-minutes: 10
         run: |
           set +e
-          timeout 180 pnpm test -- --grep "security|injection|policy|financial"
+          timeout 180 pnpm exec vitest run -t "security|injection|policy|financial"
           RC=$?
           set -e
-          if [ $RC -eq 124 ]; then echo "::warning::vitest process hung after tests, killed by timeout"; exit 0; fi
+          if [ $RC -eq 124 ]; then echo "::error::security test run timed out or left active handles"; fi
           exit $RC
 
   rebrand-integrity:
@@ -61,7 +62,7 @@ jobs:
             exit 1
           fi
 
-          if git grep -n -E 'Conway-Research/automaton|/root/automaton|/opt/automaton|scripts/automaton\.sh' -- package.json packages scripts src; then
+          if git grep -n -E 'Conway-Research/automaton|/root/automaton|/opt/automaton|scripts/automaton\.sh' -- package.json packages scripts src ':!src/__tests__/**'; then
             echo "Legacy operational Automaton identity found."
             exit 1
           fi
@@ -90,6 +91,9 @@ jobs:
 
           if git grep -n -F 'process.cwd()' -- \
             src/agent/tools.ts \
+            src/agent/loop.ts \
+            src/agent/system-prompt.ts \
+            src/agent/policy-rules/path-protection.ts \
             src/self-mod/code.ts \
             src/self-mod/upstream.ts \
             src/replication/source.ts \
@@ -98,6 +102,110 @@ jobs:
             echo "Critical runtime paths must not depend on caller cwd."
             exit 1
           fi
+
+          if git grep -n -F 'process.env.HOME || "/root"' -- packages src ':!src/__tests__/**'; then
+            echo "Host state path still falls back to /root instead of the platform home resolver."
+            exit 1
+          fi
+
+          if git grep -n -F 'execFileSync("which"' -- src/skills/loader.ts; then
+            echo "Skill requirement lookup is still POSIX-only."
+            exit 1
+          fi
+
+
+  windows-regression:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm run build
+      - name: Smoke test built CLI and Windows state persistence
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $smokeHome = Join-Path $env:RUNNER_TEMP "abos-smoke-home"
+          Remove-Item $smokeHome -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $smokeHome | Out-Null
+          $env:HOME = $smokeHome
+          $env:USERPROFILE = $smokeHome
+
+          node dist/index.js --version
+          node dist/index.js --help
+          node dist/index.js --init
+
+          $walletPath = Join-Path $smokeHome ".abos\wallet.json"
+          if (-not (Test-Path $walletPath)) {
+            throw "ABOS --init did not create wallet.json under the Windows user home"
+          }
+
+          $wallet1 = Get-Content $walletPath -Raw | ConvertFrom-Json
+          $identity1 = if ($wallet1.privateKey) { $wallet1.privateKey } else { $wallet1.secretKey }
+          if (-not $identity1) {
+            throw "ABOS wallet.json contains no persisted identity material"
+          }
+
+          node dist/index.js --init
+
+          $wallet2 = Get-Content $walletPath -Raw | ConvertFrom-Json
+          $identity2 = if ($wallet2.privateKey) { $wallet2.privateKey } else { $wallet2.secretKey }
+          if ($identity1 -ne $identity2) {
+            throw "ABOS --init replaced the existing wallet identity on restart"
+          }
+
+          $configScript = @'
+          import { createConfig, saveConfig } from "./dist/config.js";
+          import { getWalletAddress } from "./dist/identity/wallet.js";
+          const address = getWalletAddress();
+          if (!address) throw new Error("wallet address unavailable after --init");
+          saveConfig(createConfig({
+            name: "ABOS Windows Smoke",
+            genesisPrompt: "Validate deterministic Windows bootstrap.",
+            creatorAddress: address,
+            registeredWithConway: false,
+            sandboxId: "windows-ci-smoke",
+            walletAddress: address,
+            apiKey: "ci-smoke-key",
+            chainType: "evm"
+          }));
+          '@
+          $configScript | node --input-type=module
+
+          node dist/index.js --status
+          node dist/index.js --status
+
+          $statePath = Join-Path $smokeHome ".abos\state.db"
+          $configPath = Join-Path $smokeHome ".abos\abos.json"
+          if (-not (Test-Path $configPath)) {
+            throw "ABOS config was not persisted under the Windows user home"
+          }
+          if (-not (Test-Path $statePath)) {
+            throw "ABOS --status did not initialize persistent state.db"
+          }
+
+          if (Test-Path "C:\root\.abos") {
+            throw "ABOS created state under the historical C:\root\.abos fallback"
+          }
+      - name: Run Windows portability regressions
+        shell: pwsh
+        run: >
+          pnpm exec vitest run
+          src/__tests__/platform-home.test.ts
+          src/__tests__/rebrand-installation.test.ts
+          src/__tests__/path-protection.test.ts
+          src/__tests__/tools-security.test.ts
+          src/__tests__/skills-hardening.test.ts
+          src/__tests__/command-injection.test.ts
+          src/__tests__/legacy-state-migration.test.ts
+          src/__tests__/genesis-bootstrap.test.ts
+          src/__tests__/heartbeat-scheduler.test.ts
+          src/__tests__/orchestration/local-worker-harness.test.ts
 
   security-audit:
     runs-on: ubuntu-latest
@@ -108,4 +216,5 @@ jobs:
           node-version: 22
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
-      - run: pnpm audit --audit-level=high || true
+      - name: Verify dependency audit is clean
+        run: pnpm audit

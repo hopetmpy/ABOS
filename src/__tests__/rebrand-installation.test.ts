@@ -22,7 +22,9 @@ describe("ABOS installation and state separation", () => {
     expect(script).toContain('git@github.com:*) REPO="$SOURCE_ORIGIN"');
   });
 
-  it("has valid POSIX shell syntax", () => {
+  it("has valid POSIX shell syntax when a POSIX shell is available", () => {
+    if (process.platform === "win32") return;
+
     const scriptPath = path.join(process.cwd(), "scripts", "abos.sh");
     const result = spawnSync("sh", ["-n", scriptPath], { encoding: "utf-8" });
 
@@ -52,6 +54,29 @@ describe("ABOS installation and state separation", () => {
       '[ "$NODE_MAJOR" -ne 20 ] && [ "$NODE_MAJOR" -ne 22 ]',
     );
     expect(installer).toContain("Node 22 LTS is recommended");
+  });
+
+  it("keeps banner and runtime version aligned with package metadata", () => {
+    const root = process.cwd();
+    const packageJson = JSON.parse(
+      fs.readFileSync(path.join(root, "package.json"), "utf-8"),
+    );
+    const versionSource = fs.readFileSync(
+      path.join(root, "src", "version.ts"),
+      "utf-8",
+    );
+    const bannerSource = fs.readFileSync(
+      path.join(root, "src", "setup", "banner.ts"),
+      "utf-8",
+    );
+
+    expect(versionSource).toContain(
+      `ABOS_VERSION = "${packageJson.version}"`,
+    );
+    expect(bannerSource).toContain("ABOS");
+    expect(bannerSource).toContain("Conway-connected autonomous runtime");
+    expect(bannerSource).not.toContain("AUTOMATON");
+    expect(bannerSource).not.toContain("v0.2.0");
   });
 
   it("prevents legacy runtime checkout from entering the state Git repository", async () => {

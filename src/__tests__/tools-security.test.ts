@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import path from "node:path";
 import { createBuiltinTools, loadInstalledTools, executeTool } from "../agent/tools.js";
 import {
   MockInferenceClient,
@@ -200,6 +201,43 @@ describe("write_file / edit_own_file protection parity", () => {
       ctx,
     );
     expect(result).toContain("File written");
+  });
+
+  it("write_file uses the actual host home in local execution mode", async () => {
+    const previousHome = process.env.HOME;
+    const localHome = path.join(process.cwd(), ".tmp-abos-local-home");
+    process.env.HOME = localHome;
+
+    try {
+      const localTools = createBuiltinTools("");
+      const localConway = new MockConwayClient();
+      const localCtx: ToolContext = {
+        identity: { ...createTestIdentity(), sandboxId: "" },
+        config: createTestConfig({ sandboxId: "" }),
+        db,
+        conway: localConway,
+        inference: new MockInferenceClient(),
+      };
+      const writeTool = localTools.find((t) => t.name === "write_file")!;
+
+      const result = await writeTool.execute(
+        { path: "project/file.txt", content: "safe local content" },
+        localCtx,
+      );
+      const expectedPath = path.resolve(localHome, "project", "file.txt");
+
+      expect(result).toContain(expectedPath);
+      expect(localConway.files[expectedPath]).toBe("safe local content");
+
+      const blocked = await writeTool.execute(
+        { path: path.resolve(localHome, "..", "escape.txt"), content: "no" },
+        localCtx,
+      );
+      expect(blocked).toContain("Blocked");
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+    }
   });
 
   it("write_file blocks paths outside sandbox home", async () => {
