@@ -49,13 +49,18 @@ export class AdaptivePathEngine {
 
   recordFailure(input: {
     candidate: PathCandidate;
+    pathId?: string | null;
     error: string;
     observations?: string[];
     evidence?: string[];
     learnedFacts?: Array<{ key: string; value: string; confidence?: number }>;
     conditions?: Record<string, unknown>;
   }): AdaptiveDecision {
-    const { path, novelty } = this.assessCandidate(input.candidate, input.conditions);
+    const { path, novelty } = this.assessAttemptTarget(
+      input.candidate,
+      input.pathId,
+      input.conditions,
+    );
     const diagnosis = classifyFailure(input.error);
     const fingerprint = conditionFingerprint(input.conditions);
 
@@ -220,11 +225,17 @@ export class AdaptivePathEngine {
 
   recordSuccess(input: {
     candidate: PathCandidate;
+    pathId?: string | null;
+    markPathSucceeded?: boolean;
     observations?: string[];
     evidence?: string[];
     conditions?: Record<string, unknown>;
   }): void {
-    const { path, novelty } = this.assessCandidate(input.candidate, input.conditions);
+    const { path, novelty } = this.assessAttemptTarget(
+      input.candidate,
+      input.pathId,
+      input.conditions,
+    );
     const attempt = this.store.recordAttempt({
       pathId: path.id,
       goalId: input.candidate.goalId,
@@ -273,17 +284,88 @@ export class AdaptivePathEngine {
       });
     }
 
+    if (input.markPathSucceeded !== false) {
+      this.completePath(
+        path.id,
+        input.evidence ?? input.observations ?? ["Path succeeded."],
+      );
+    }
+  }
+
+  completePath(pathId: string, evidence: string[] = ["Path completed."]): void {
+    const path = this.store.getPath(pathId);
+    if (!path) return;
+
     this.store.setPathStatus(path.id, "succeeded");
-    for (const assumption of this.store.listAssumptions(input.candidate.goalId, path.id)) {
+    for (const assumption of this.store.listAssumptions(path.goalId, path.id)) {
       if (assumption.status === "active" || assumption.status === "unknown") {
         this.store.updateAssumptionStatus(
           assumption.id,
           "validated",
-          input.evidence ?? input.observations ?? ["Path succeeded."],
+          evidence,
           Math.max(assumption.confidence, 0.8),
         );
       }
     }
+
+    for (const item of evidence) {
+      if (!item.trim()) continue;
+      this.store.recordEvidence({
+        goalId: path.goalId,
+        pathId: path.id,
+        kind: "observation",
+        content: item,
+        source: "path-completion",
+      });
+    }
+  }
+
+  private assessAttemptTarget(
+    candidate: PathCandidate,
+    pathId: string | null | undefined,
+    conditions?: Record<string, unknown>,
+  ): { path: PersistedPath; novelty: NoveltyAssessment } {
+    if (pathId) {
+      const boundPath = this.store.getPath(pathId);
+      if (boundPath) {
+        const currentFingerprint = conditionFingerprint(conditions);
+        const previousAttempt = this.store.latestAttempt(
+          boundPath.id,
+          candidate.taskId,
+        );
+
+        if (!previousAttempt) {
+          return {
+            path: boundPath,
+            novelty: {
+              novel: true,
+              score: 1,
+              equivalentPathId: boundPath.id,
+              conditionChanged: false,
+              reason: "This is the first recorded attempt for the task on its bound strategic path.",
+            },
+          };
+        }
+
+        const conditionChanged =
+          previousAttempt.conditionFingerprint !== currentFingerprint;
+
+        return {
+          path: boundPath,
+          novelty: {
+            novel: conditionChanged,
+            score: conditionChanged ? 0.45 : 0,
+            equivalentPathId: boundPath.id,
+            conditionChanged,
+            reason: conditionChanged
+              ? "The strategic path is unchanged, but material runtime conditions changed for this task."
+              : "The same task is being attempted on the same strategic path under unchanged conditions.",
+          },
+        };
+      }
+    }
+
+    return this.assessCandidate(candidate, conditions);
   }
 
   /**
