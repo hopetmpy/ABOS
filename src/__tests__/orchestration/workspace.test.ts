@@ -170,14 +170,22 @@ describe("orchestration/workspace", () => {
     expect(file?.summary).toBe("x".repeat(100));
   });
 
-  it("createWorkspace uses homedir-based default path", () => {
+  it("createWorkspace uses the platform HOME override for its default path", () => {
     const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), "workspace-home-"));
     tmpRoots.push(fakeHome);
+    const originalHome = process.env.HOME;
+    process.env.HOME = fakeHome;
 
-    vi.spyOn(os, "homedir").mockReturnValue(fakeHome);
-
-    const ws = createWorkspace("goal-create");
-    expect(ws.basePath).toBe(path.join(fakeHome, ".abos", "workspace", "goal-create"));
-    expect(fs.existsSync(path.join(fakeHome, ".abos", "workspace", "goal-create", "outputs"))).toBe(true);
+    try {
+      const ws = createWorkspace("goal-create");
+      expect(ws.basePath).toBe(path.join(fakeHome, ".abos", "workspace", "goal-create"));
+      expect(fs.existsSync(path.join(fakeHome, ".abos", "workspace", "goal-create", "outputs"))).toBe(true);
+    } finally {
+      if (originalHome === undefined) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = originalHome;
+      }
+    }
   });
 });

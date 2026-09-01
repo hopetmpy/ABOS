@@ -36,13 +36,34 @@ jobs:
           if [ $RC -eq 124 ]; then echo "::error::security test run timed out or left active handles"; fi
           exit $RC
 
-  isolate-test-hang:
+  isolate-shard4:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 5
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        include:
+          - group: a
+            files: >-
+              src/__tests__/agent/general-harness.test.ts
+              src/__tests__/context-hardening.test.ts
+              src/__tests__/genesis-bootstrap.test.ts
+              src/__tests__/inbox-processing.test.ts
+              src/__tests__/inference/provider-registry.test.ts
+          - group: b
+            files: >-
+              src/__tests__/integration/inference-failover.test.ts
+              src/__tests__/memory.test.ts
+              src/__tests__/memory/event-stream.test.ts
+              src/__tests__/orchestration/health-monitor.test.ts
+              src/__tests__/orchestration/plan-mode.test.ts
+          - group: c
+            files: >-
+              src/__tests__/policy-engine.test.ts
+              src/__tests__/siws.test.ts
+              src/__tests__/social.test.ts
+              src/__tests__/upstream-rebrand.test.ts
+              src/__tests__/wallet-solana.test.ts
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -51,14 +72,14 @@ jobs:
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
-      - name: Run Vitest shard ${{ matrix.shard }}/4
+      - name: Run shard-4 isolation group ${{ matrix.group }}
         shell: bash
         run: |
           set +e
-          timeout 180 pnpm exec vitest run --shard=${{ matrix.shard }}/4 --reporter=verbose
+          timeout 120 pnpm exec vitest run ${{ matrix.files }} --reporter=verbose
           RC=$?
           set -e
-          if [ $RC -eq 124 ]; then echo "::error::Vitest shard ${{ matrix.shard }}/4 timed out"; fi
+          if [ $RC -eq 124 ]; then echo "::error::Shard-4 isolation group ${{ matrix.group }} timed out"; fi
           exit $RC
 
 
