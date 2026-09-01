@@ -4,6 +4,7 @@ import type { AbosConfig, AbosIdentity } from "../types.js";
 import { generateGenesisConfig } from "../replication/genesis.js";
 import type { TaskNode, TaskResult } from "../orchestration/task-graph.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
+import { createTaskExecutionEnvelope } from "../orchestration/task-execution-envelope.js";
 import type { EnvironmentLifecycleManager } from "./lifecycle.js";
 import type {
   EnvironmentTaskDispatchOptions,
@@ -330,11 +331,12 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
     const remoteTaskPath =
       `$HOME/.abos/tasks/${safeTaskFileName(task.id)}.json`;
     const taskBase64 = Buffer.from(
-      JSON.stringify({
-        protocol: "abos_task_execution_v1",
-        task,
-        continuationContext: options.continuationContext ?? null,
-      }),
+      JSON.stringify(
+        createTaskExecutionEnvelope(
+          task,
+          options.continuationContext,
+        ),
+      ),
       "utf8",
     ).toString("base64");
 
