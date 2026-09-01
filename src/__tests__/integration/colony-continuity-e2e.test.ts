@@ -37,6 +37,7 @@ import {
 import { EnvironmentResourceStore } from "../../environments/resource-store.js";
 import { EnvironmentLifecycleManager } from "../../environments/lifecycle.js";
 import { ConwayEnvironmentProvider } from "../../environments/conway.js";
+import { ContinuityAssembler } from "../../environments/continuity-assembler.js";
 
 class InMemoryColonyRelay implements MessageTransport {
   constructor(
@@ -546,6 +547,126 @@ describe("cross-environment logical continuity E2E", () => {
           resource?.metadata.collectedArtifacts,
         ),
       ).toContain(artifactDigest);
+
+      const assembled = new ContinuityAssembler(
+        parentDb.raw,
+        { resources },
+      ).assemble("task-e2e-1", {
+        targetPathId: null,
+      });
+      const reusable = assembled.artifacts.find(
+        (artifact) =>
+          artifact.materializedPath === parentArtifact,
+      );
+      expect(reusable).toMatchObject({
+        state: "available",
+        materializedPath: parentArtifact,
+      });
+
+      environmentRegistry.register({
+        id: "future-target",
+        inspect: async () => ({
+          id: "future-target",
+          label: "Future target",
+          availability: "available",
+          capabilities: [],
+          evidence: ["future target observed"],
+          constraints: [],
+          observedAt: new Date().toISOString(),
+        }),
+      });
+      const futureExecutors =
+        new EnvironmentTaskExecutorRegistry();
+      let futureContinuation:
+        | ExecutionContinuationContext
+        | undefined;
+      futureExecutors.register({
+        environmentId: "future-target",
+        spawn: async () => ({
+          address: "future://worker",
+          name: "future-worker",
+          sandboxId: "future-sandbox",
+        }),
+        materializeArtifacts: async (
+          _incomingTask,
+          _target,
+          request,
+        ) => {
+          const source = request.sources.find(
+            (entry) =>
+              entry.localPath === parentArtifact,
+          );
+          expect(source).toBeTruthy();
+          expect(source?.integrity.digest).toBe(
+            artifactDigest,
+          );
+          return {
+            protocolVersion: 1,
+            entries: request.sources.map((entry) => ({
+              reference: entry.reference,
+              state: "available",
+              targetPath:
+                `/future/runtime/${entry.targetName}`,
+              integrity: entry.integrity,
+              evidence: [
+                "future target verified the same bytes",
+              ],
+            })),
+          };
+        },
+        dispatch: async (
+          _incomingTask,
+          _target,
+          options,
+        ) => {
+          futureContinuation =
+            options?.continuationContext;
+          return {
+            evidence: [
+              "future target received continuation",
+            ],
+          };
+        },
+      });
+      const futureBridge =
+        new EnvironmentExecutionBridge(
+          new EnvironmentSelector(
+            environmentRegistry,
+          ),
+          futureExecutors,
+        );
+
+      await futureBridge.dispatch(
+        "future-target",
+        {
+          ...task(),
+          preferredEnvironment: "future-target",
+        },
+        {
+          address: "future://worker",
+          name: "future-worker",
+          spawned: false,
+        },
+        {
+          continuationContext: assembled,
+        },
+      );
+
+      const rematerialized =
+        futureContinuation?.artifacts.find(
+          (artifact) =>
+            artifact.reference === parentArtifact,
+        );
+      expect(rematerialized).toMatchObject({
+        state: "available",
+        integrity: {
+          algorithm: "sha256",
+          digest: artifactDigest,
+        },
+      });
+      expect(
+        rematerialized?.materializedPath,
+      ).toMatch(/^\/future\/runtime\//);
     } finally {
       if (previousHome === undefined) {
         delete process.env.HOME;
