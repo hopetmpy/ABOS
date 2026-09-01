@@ -3,6 +3,7 @@ import { classifyFailure } from "./failure-classifier.js";
 import { assessPathNovelty } from "./novelty.js";
 import { conditionFingerprint } from "./path-signature.js";
 import { AdaptiveStore } from "./store.js";
+import { PossibilitySpace } from "./possibility-space.js";
 import type {
   AdaptiveAction,
   AdaptiveDecision,
@@ -13,9 +14,11 @@ import type {
 
 export class AdaptivePathEngine {
   readonly store: AdaptiveStore;
+  readonly possibilities: PossibilitySpace;
 
   constructor(private readonly db: Database) {
     this.store = new AdaptiveStore(db);
+    this.possibilities = new PossibilitySpace(this.store);
   }
 
   assessCandidate(
@@ -253,6 +256,7 @@ export class AdaptivePathEngine {
 
     return [
       "# Adaptive path history",
+      this.possibilities.describe(goalId),
       "Do not repeat a substantially equivalent failed path unless the supplied conditions have materially changed.",
       "A failed method is not the goal. Preserve the goal and search for a different route.",
       "",
