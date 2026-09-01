@@ -75,6 +75,7 @@ export interface PathAttempt {
 export interface FailureDiagnosis {
   classification: FailureClass;
   reason: string;
+  subject?: string;
   technicalRetryEligible: boolean;
   strategicReplanRequired: boolean;
   waitForConditionChange: boolean;
