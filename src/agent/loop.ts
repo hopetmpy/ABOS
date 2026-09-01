@@ -76,6 +76,7 @@ import { EnvironmentRegistry } from "../environments/registry.js";
 import { LocalEnvironmentProvider } from "../environments/local.js";
 import { ConwayEnvironmentProvider } from "../environments/conway.js";
 import { AwsEnvironmentProvider } from "../environments/aws.js";
+import { AwsEc2TaskExecutor } from "../environments/aws-ec2-executor.js";
 import { createEnvironmentTools } from "../environments/tools.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
@@ -117,9 +118,10 @@ export async function runAgentLoop(
     options;
 
   const environmentRegistry = new EnvironmentRegistry();
+  const awsEnvironment = new AwsEnvironmentProvider();
   environmentRegistry.register(new LocalEnvironmentProvider());
   environmentRegistry.register(new ConwayEnvironmentProvider(conway));
-  environmentRegistry.register(new AwsEnvironmentProvider());
+  environmentRegistry.register(awsEnvironment);
 
   const environmentResources = new EnvironmentResourceStore(db.raw);
   const environmentLifecycle = new EnvironmentLifecycleManager(
@@ -146,6 +148,27 @@ export async function runAgentLoop(
   // inventory. This is adoption, not creation: no remote side effect occurs.
   for (const child of db.getChildren()) {
     if (!child.sandboxId) continue;
+
+    // The children table predates provider-neutral environments. Do not
+    // reinterpret a modern aws://, local://, or other provider address as a
+    // Conway sandbox during restart migration.
+    const existingOwned = environmentResources
+      .list({ includeTerminated: true })
+      .find(
+        (resource) =>
+          resource.externalId === child.sandboxId ||
+          resource.metadata.executorAddress === child.address ||
+          resource.metadata.childAddress === child.address,
+      );
+    if (existingOwned && existingOwned.provider !== "conway") {
+      continue;
+    }
+
+    const childScheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(child.address)?.[1]?.toLowerCase();
+    if (childScheme && childScheme !== "conway") {
+      continue;
+    }
+
     environmentLifecycle.adopt({
       provider: "conway",
       externalId: child.sandboxId,
@@ -154,7 +177,7 @@ export async function runAgentLoop(
       capabilities: ["remote compute", "linux", "sandbox"],
       retentionPolicy: "manual_retention",
       evidence: [
-        `Adopted legacy child resource ${child.id} with recorded status=${child.status}.`,
+        `Adopted legacy Conway child resource ${child.id} with recorded status=${child.status}.`,
       ],
       metadata: {
         childId: child.id,
@@ -512,6 +535,21 @@ export async function runAgentLoop(
         },
       });
 
+      taskExecutors.register(
+        new AwsEc2TaskExecutor({
+          provider: awsEnvironment,
+          lifecycle: environmentLifecycle,
+          identity,
+          config,
+          repositoryUrl:
+            process.env.ABOS_AWS_EXECUTOR_REPOSITORY || undefined,
+          repositoryRef:
+            process.env.ABOS_AWS_EXECUTOR_REF || "main",
+          installRoot:
+            process.env.ABOS_AWS_EXECUTOR_INSTALL_ROOT || undefined,
+        }),
+      );
+
       const environmentExecution = new EnvironmentExecutionBridge(
         environmentSelector,
         taskExecutors,
@@ -559,14 +597,10 @@ export async function runAgentLoop(
             return initializedWorkerPool.hasWorker(address);
           }
 
-          // Legacy Conway child lifecycle remains authoritative when present.
-          const child = db.raw.prepare(
-            "SELECT status FROM children WHERE sandbox_id = ? OR address = ?",
-          ).get(address, address) as { status: string } | undefined;
-          if (child) {
-            return !["failed", "dead", "cleaned_up"].includes(child.status);
-          }
-
+          // Provider-neutral ownership wins over the legacy children table.
+          // Startup reconciliation has already refreshed providers that expose
+          // reconcile(), so an externally terminated EC2 is not kept alive just
+          // because a historical child row still says "healthy".
           const owned = environmentResources
             .list({ includeTerminated: true })
             .find(
@@ -574,8 +608,19 @@ export async function runAgentLoop(
                 resource.metadata.executorAddress === address ||
                 resource.metadata.childAddress === address,
             );
-          return !!owned &&
-            ["ready", "running", "degraded", "recovering"].includes(owned.status);
+          if (owned) {
+            return ["ready", "running", "degraded", "recovering"].includes(
+              owned.status,
+            );
+          }
+
+          // Legacy Conway child lifecycle remains authoritative only when no
+          // provider-neutral resource ownership exists.
+          const child = db.raw.prepare(
+            "SELECT status FROM children WHERE sandbox_id = ? OR address = ?",
+          ).get(address, address) as { status: string } | undefined;
+          return !!child &&
+            !["failed", "dead", "cleaned_up"].includes(child.status);
         },
         dispatchAgentTask: async (assignment, task) => {
           const environmentId = resolveExecutionEnvironment(
@@ -593,11 +638,16 @@ export async function runAgentLoop(
             );
           }
 
-          await environmentExecution.dispatch(environmentId, task, {
-            address: assignment.agentAddress,
-            name: assignment.agentName,
-            spawned: assignment.spawned,
-          });
+          const dispatched = await environmentExecution.dispatch(
+            environmentId,
+            task,
+            {
+              address: assignment.agentAddress,
+              name: assignment.agentName,
+              spawned: assignment.spawned,
+            },
+          );
+          return dispatched.result;
         },
         environmentRegistry,
         capabilityRegistry,
