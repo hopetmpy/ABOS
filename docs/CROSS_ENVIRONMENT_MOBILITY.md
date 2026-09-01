@@ -30,23 +30,26 @@ durable evidence.
 1. Objective != method.
 2. Environment != objective.
 3. Provider IDs are runtime data, not a central allowlist.
-4. A failed environment attempt is contextual evidence, not a permanent ban.
-5. Same failed environment + same Task/Path intent + same observed condition
+4. Failure scope matters: a failed resource is not automatically a failed provider.
+5. A provider-scoped failure is contextual evidence, not a permanent ban.
+6. Same provider-scoped failure + same Task/Path intent + same observed condition
    is an equivalent retry and is deferred.
-6. A materially changed observed condition can make the same environment
+7. A materially changed observed condition can make the same environment
    eligible again.
-7. A materially different strategic Path can use the same provider when the
+8. A materially different strategic Path can use the same provider when the
    method/conditions are no longer equivalent.
-8. Recovery is observation-first.
-9. Recovery never provisions a replacement.
-10. Migration planning never provisions or destroys.
-11. Actual provider execution failure is surfaced to Adaptive Path Intelligence;
+9. Resource-scoped failures exclude the failed resource from reuse while
+   preserving other healthy/provisionable resources from the same provider.
+10. Recovery is observation-first.
+11. Recovery never provisions a replacement.
+12. Migration planning never provisions or destroys.
+13. Actual provider execution failure is surfaced to Adaptive Path Intelligence;
     mobility does not hide it with a same-turn silent fallback.
-12. Unknown/unavailable/unauthorized/not-yet-discovered remain distinct from
+14. Unknown/unavailable/unauthorized/not-yet-discovered remain distinct from
     impossible.
-13. Resource ownership and lifecycle remain authoritative in
+15. Resource ownership and lifecycle remain authoritative in
     `environment_resources`; mobility does not create a second resource ledger.
-14. Migration transactions persist across restart.
+16. Migration transactions persist across restart.
 
 ## Persistent mobility authority
 
@@ -111,10 +114,16 @@ same task/path
 = equivalent failed environment route
 ```
 
-That route is contextually excluded from the next environment selection.
+For provider-scoped failures, that provider route is contextually excluded from
+the next equivalent selection.
 
-If the provider state changes materially, the fingerprint changes and that
-provider may be reconsidered.
+For resource-scoped failures, the provider remains eligible while the failed
+resource ID is excluded from executor reuse. This allows ABOS to use another
+healthy resource or provision a fresh resource from the same provider when the
+provider itself remains viable.
+
+If provider state changes materially, the fingerprint changes and a previously
+provider-scoped exclusion can be reconsidered.
 
 ## Selection and reuse
 
@@ -198,10 +207,11 @@ resources.
 Given a source resource and requirements it:
 
 1. persists a mobility transaction;
-2. contextually excludes the current source environment;
-3. evaluates all registered providers through the normal selector;
-4. preserves blockers and evidence for every candidate;
-5. records the selected target provider when one is currently executable.
+2. excludes the specific source resource from reuse evidence;
+3. keeps the source provider eligible unless provider-scoped evidence says otherwise;
+4. evaluates all registered providers through the normal selector;
+5. preserves blockers and evidence for every candidate;
+6. records the selected target provider when one is currently executable.
 
 No provider-pair route such as AWS→Conway is encoded.
 
@@ -239,13 +249,14 @@ Before freeze this phase must prove:
 
 1. migration state survives SQLite restart;
 2. contextual exclusions remain visible, not globally erased;
-3. unchanged failed environment conditions produce a different next route;
-4. changed material conditions reopen the provider;
-5. planning causes no provision/destroy side effect;
-6. degraded recovery is observation-first;
-7. unchanged recovery conditions do not repeat provider mutation;
-8. canonical resource reuse influences selection;
-9. degraded resources are not assigned as live workers;
-10. Local / Conway / AWS remain provider-neutral;
-11. no provider-pair branches appear in Orchestrator;
-12. Node 20/22, Windows, security, rebrand, and public distribution remain green.
+3. unchanged provider-scoped failure conditions produce a different next route;
+4. resource-scoped failure excludes only the failed resource, not the provider;
+5. changed material conditions reopen a provider-scoped route;
+6. planning causes no provision/destroy side effect;
+7. degraded recovery is observation-first;
+8. unchanged recovery conditions do not repeat provider mutation;
+9. canonical resource reuse influences selection;
+10. degraded resources are not assigned as live workers;
+11. Local / Conway / AWS remain provider-neutral;
+12. no provider-pair branches appear in Orchestrator;
+13. Node 20/22, Windows, security, rebrand, and public distribution remain green.
