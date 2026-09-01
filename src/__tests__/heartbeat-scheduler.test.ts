@@ -230,6 +230,37 @@ describe("DurableScheduler", () => {
     });
   });
 
+  describe("wake requests", () => {
+    it("persists exactly one wake event and notifies the host callback once", async () => {
+      const wakeTask: HeartbeatTaskFn = async () => ({
+        shouldWake: true,
+        message: "wake once",
+      });
+      const onWakeRequest = vi.fn();
+
+      seedScheduleRow(rawDb, "wake_task");
+      const tasks = new Map<string, HeartbeatTaskFn>([["wake_task", wakeTask]]);
+      const scheduler = new DurableScheduler(
+        rawDb,
+        DEFAULT_HB_CONFIG,
+        tasks,
+        createLegacyContext(db, conway),
+        onWakeRequest,
+      );
+
+      await scheduler.tick();
+
+      expect(onWakeRequest).toHaveBeenCalledTimes(1);
+      expect(onWakeRequest).toHaveBeenCalledWith("wake once");
+
+      const events = getUnconsumedWakeEvents(rawDb);
+      expect(events).toHaveLength(1);
+      expect(events[0].source).toBe("heartbeat");
+      expect(events[0].reason).toBe("wake once");
+      expect(JSON.parse(events[0].payload)).toEqual({ taskName: "wake_task" });
+    });
+  });
+
   describe("wake event ordering and consumption", () => {
     it("inserts and consumes wake events in order", () => {
       insertWakeEvent(rawDb, "heartbeat", "reason-1");
