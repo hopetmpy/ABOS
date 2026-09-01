@@ -472,12 +472,16 @@ export function createDatabase(dbPath: string): AbosDatabase {
 
   const insertInboxMessage = (msg: InboxMessage): void => {
     db.prepare(
-      `INSERT OR IGNORE INTO inbox_messages (id, from_address, content, received_at, reply_to)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT OR IGNORE INTO inbox_messages (
+        id, from_address, to_address, content, raw_content,
+        received_at, reply_to, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'received')`,
     ).run(
       msg.id,
       msg.from,
+      msg.to,
       msg.content,
+      msg.rawContent ?? null,
       msg.createdAt || new Date().toISOString(),
       msg.replyTo ?? null,
     );
@@ -1446,29 +1450,29 @@ export function claimInboxMessages(
       const placeholders = normalized.map(() => "?").join(",");
       if (mode === "include") {
         clauses.push(
-          `json_valid(content) = 1 AND ${expression} IN (${placeholders})`,
+          `json_valid(COALESCE(NULLIF(raw_content, ''), content)) = 1 AND ${expression} IN (${placeholders})`,
         );
       } else {
         clauses.push(
-          `(json_valid(content) = 0 OR COALESCE(${expression}, '') NOT IN (${placeholders}))`,
+          `(json_valid(COALESCE(NULLIF(raw_content, ''), content)) = 0 OR COALESCE(${expression}, '') NOT IN (${placeholders}))`,
         );
       }
       params.push(...normalized);
     };
 
     addListPredicate(
-      "json_extract(content, '$.protocol')",
+      "json_extract(COALESCE(NULLIF(raw_content, ''), content), '$.protocol')",
       options.includeProtocols,
       "include",
     );
     addListPredicate(
-      "json_extract(content, '$.protocol')",
+      "json_extract(COALESCE(NULLIF(raw_content, ''), content), '$.protocol')",
       options.excludeProtocols,
       "exclude",
     );
 
     const messageTypeExpression =
-      "COALESCE(json_extract(content, '$.message.type'), json_extract(content, '$.type'))";
+      "COALESCE(json_extract(COALESCE(NULLIF(raw_content, ''), content), '$.message.type'), json_extract(COALESCE(NULLIF(raw_content, ''), content), '$.type'))";
     addListPredicate(
       messageTypeExpression,
       options.includeMessageTypes,
@@ -1708,6 +1712,7 @@ function deserializeInboxMessage(row: any): InboxMessage {
     from: row.from_address,
     to: row.to_address ?? "",
     content: row.content,
+    rawContent: row.raw_content ?? undefined,
     signedAt: row.received_at,
     createdAt: row.received_at,
     replyTo: row.reply_to ?? undefined,
