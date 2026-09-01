@@ -128,7 +128,7 @@ export class EnvironmentRetentionCoordinator {
       const after = await this.lifecycle.destroy(resource.id);
 
       if (after.status === "terminated") {
-        this.lifecycle.resources.applyMutation(
+        const released = this.lifecycle.resources.applyMutation(
           after.id,
           {
             metadata: {
@@ -142,6 +142,7 @@ export class EnvironmentRetentionCoordinator {
           "retention",
           "Automatic retention release completed.",
         );
+        this.markLegacyExecutorReleased(released);
         result.released += 1;
         continue;
       }
@@ -236,7 +237,7 @@ export class EnvironmentRetentionCoordinator {
 
     const reconciled = await this.lifecycle.reconcile(resource.id);
     if (reconciled.status === "terminated") {
-      this.lifecycle.resources.applyMutation(
+      const released = this.lifecycle.resources.applyMutation(
         reconciled.id,
         {
           metadata: {
@@ -250,7 +251,8 @@ export class EnvironmentRetentionCoordinator {
         "retention",
         "Retention release verified by reconciliation.",
       );
-      return this.lifecycle.resources.get(reconciled.id) ?? reconciled;
+      this.markLegacyExecutorReleased(released);
+      return released;
     }
 
     if (reconciled.metadata.actualExists === false) {
@@ -269,10 +271,33 @@ export class EnvironmentRetentionCoordinator {
         "retention",
         "Retention boundary satisfied by provider-verified resource absence.",
       );
+      this.markLegacyExecutorReleased(absent);
       return absent;
     }
 
     return reconciled;
+  }
+
+  private markLegacyExecutorReleased(resource: EnvironmentResource): void {
+    const addresses = [
+      resource.metadata.executorAddress,
+      resource.metadata.childAddress,
+    ].filter(
+      (value): value is string =>
+        typeof value === "string" && value.trim().length > 0,
+    );
+
+    const update = this.db.prepare(
+      "UPDATE children SET status = 'cleaned_up' WHERE address = ? OR sandbox_id = ?",
+    );
+
+    for (const address of addresses) {
+      update.run(address, resource.externalId ?? address);
+    }
+
+    if (addresses.length === 0 && resource.externalId) {
+      update.run(resource.externalId, resource.externalId);
+    }
   }
 }
 
