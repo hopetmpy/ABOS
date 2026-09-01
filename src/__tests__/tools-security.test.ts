@@ -212,7 +212,7 @@ describe("write_file / edit_own_file protection parity", () => {
       const localTools = createBuiltinTools("");
       const localConway = new MockConwayClient();
       const localCtx: ToolContext = {
-        identity: createTestIdentity({ sandboxId: "" }),
+        identity: { ...createTestIdentity(), sandboxId: "" },
         config: createTestConfig({ sandboxId: "" }),
         db,
         conway: localConway,
