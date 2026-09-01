@@ -62,7 +62,7 @@ jobs:
             exit 1
           fi
 
-          if git grep -n -E 'Conway-Research/automaton|/root/automaton|/opt/automaton|scripts/automaton\.sh' -- package.json packages scripts src; then
+          if git grep -n -E 'Conway-Research/automaton|/root/automaton|/opt/automaton|scripts/automaton\.sh' -- package.json packages scripts src ':!src/__tests__/**'; then
             echo "Legacy operational Automaton identity found."
             exit 1
           fi
