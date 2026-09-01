@@ -392,7 +392,7 @@ function pendingArtifactCount(resource: EnvironmentResource): number {
 }
 
 function hasDurableExternalScheme(value: string): boolean {
-  return /^[a-z][a-z0-9+.-]*:\/\//i.test(value.trim());
+  return /^(?:https?|s3|gs|ipfs|ar):\/\//i.test(value.trim());
 }
 
 function resourceFingerprint(resource: EnvironmentResource): string {
