@@ -274,7 +274,10 @@ function parseReceipt(
   if (
     candidate.state === "result" &&
     typeof candidate.finishedAt === "string" &&
-    isResultMessage(candidate.resultMessage)
+    isResultMessage(candidate.resultMessage) &&
+    sameAgentAddress(candidate.resultMessage.to, message.from) &&
+    candidate.resultMessage.goalId === task.goalId &&
+    candidate.resultMessage.taskId === task.id
   ) {
     return candidate as ResultReceipt;
   }
