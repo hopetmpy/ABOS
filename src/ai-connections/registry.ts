@@ -2,9 +2,6 @@ import type {
   AbosConfig,
   AiConnectionMethod,
   AiRuntimeProvider,
-  ChatMessage,
-  InferenceOptions,
-  InferenceResponse,
   ModelEntry,
 } from "../types.js";
 import type { ModelRegistry } from "../inference/registry.js";
@@ -49,15 +46,6 @@ export interface AiConnectionAdapter {
     options?: Record<string, string | undefined>,
   ) => Promise<void>;
 
-  /**
-   * Optional runtime inference hook. Providers that do not implement this are
-   * known/configurable but not executable through this process yet.
-   */
-  chat?: (
-    messages: ChatMessage[],
-    options: InferenceOptions,
-    modelId: string,
-  ) => Promise<InferenceResponse>;
 }
 
 export class AiConnectionAdapterRegistry {
