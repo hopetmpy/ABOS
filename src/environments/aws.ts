@@ -52,6 +52,8 @@ export interface AwsEnvironmentProviderOptions {
   managedTagKey?: string;
   managedTagValue?: string;
   commandTimeoutMs?: number;
+  ssmReadyAttempts?: number;
+  ssmReadyIntervalMs?: number;
 }
 
 interface AwsEc2Observation {
@@ -509,6 +511,8 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         "AWS EC2 bootstrap has no commands or ABOS genesis payload. Bootstrap capability is available, but no authorized bootstrap plan was supplied.",
       );
     }
+
+    await this.waitForSsmOnline(instanceId, region);
 
     const invocation = await this.runSsmCommands(
       instanceId,
@@ -1084,6 +1088,43 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     };
   }
 
+  private async waitForSsmOnline(
+    instanceId: string,
+    region: string | null,
+  ): Promise<AwsSsmInstanceInfo> {
+    const attempts = Math.max(
+      1,
+      Math.floor(this.options.ssmReadyAttempts ?? 20),
+    );
+    const intervalMs = Math.max(
+      0,
+      Math.floor(this.options.ssmReadyIntervalMs ?? 5_000),
+    );
+    let lastObservation = "not observed";
+
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        const info = await this.describeSsmInstance(instanceId, region);
+        if (info?.PingStatus === "Online") {
+          return info;
+        }
+        lastObservation = info
+          ? `PingStatus=${info.PingStatus ?? "unknown"}`
+          : "instance absent from SSM inventory";
+      } catch (error) {
+        lastObservation = errorMessage(error);
+      }
+
+      if (attempt < attempts && intervalMs > 0) {
+        await sleep(intervalMs);
+      }
+    }
+
+    throw new Error(
+      `AWS EC2 instance ${instanceId} did not become SSM Online after ${attempts} observation(s): ${lastObservation}`,
+    );
+  }
+
   private async describeSsmInstance(
     instanceId: string,
     region: string | null,
@@ -1287,11 +1328,15 @@ function buildDefaultAbosBootstrapCommands(
   const script = [
     "set -euo pipefail",
     "if ! command -v git >/dev/null 2>&1; then sudo dnf install -y git || sudo yum install -y git; fi",
-    "if ! command -v node >/dev/null 2>&1; then sudo dnf install -y nodejs npm || sudo yum install -y nodejs npm; fi",
+    "if ! command -v curl >/dev/null 2>&1; then sudo dnf install -y curl || sudo yum install -y curl; fi",
+    "NODE_MAJOR=\"$(node -p 'process.versions.node.split(\\\".\\\")[0]' 2>/dev/null || true)\"",
+    "if [ \"$NODE_MAJOR\" != \"22\" ]; then curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -; sudo dnf install -y nodejs || sudo yum install -y nodejs; fi",
+    "node -e 'if (Number(process.versions.node.split(\".\")[0]) !== 22) { process.exit(22) }'",
     `if [ ! -d ${shellQuote(installRoot)}/.git ]; then sudo mkdir -p ${shellQuote(installRoot)}; sudo chown -R "$(id -u):$(id -g)" ${shellQuote(installRoot)}; git clone ${shellQuote(repository)} ${shellQuote(installRoot)}; fi`,
     `cd ${shellQuote(installRoot)}`,
     "git fetch --all --tags --prune",
     `git checkout --detach ${shellQuote(ref)}`,
+    `test "$(git rev-parse HEAD)" = "$(git rev-parse ${shellQuote(ref)})"`,
     "if command -v corepack >/dev/null 2>&1; then corepack enable; corepack prepare pnpm@10.28.1 --activate; elif ! command -v pnpm >/dev/null 2>&1; then npm install -g pnpm@10.28.1; fi",
     "pnpm install --frozen-lockfile",
     "pnpm run build",
@@ -1484,6 +1529,10 @@ function extractLowestOnDemandUsd(priceList: unknown[]): number | null {
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function errorMessage(error: unknown): string {
