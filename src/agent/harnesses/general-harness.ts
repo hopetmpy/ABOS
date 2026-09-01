@@ -1,5 +1,3 @@
-import { exec as execCb } from "node:child_process";
-import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { AbosTool, SpendTrackerInterface } from "../../types.js";
 import { isProtectedFile } from "../../self-mod/code.js";
@@ -131,8 +129,8 @@ When calling task_done, provide:
           try {
             const result = await this.context.conway.exec(command, timeoutMs);
             return formatExecResult(result.stdout ?? "", result.stderr ?? "");
-          } catch {
-            return localExec(command, timeoutMs);
+          } catch (error) {
+            return `exec error: ${error instanceof Error ? error.message : String(error)}`;
           }
         },
       },
@@ -160,14 +158,8 @@ When calling task_done, provide:
           try {
             await this.context.conway.writeFile(confined, content);
             return `Wrote ${content.length} bytes to ${confined}`;
-          } catch {
-            try {
-              await fs.mkdir(path.dirname(confined), { recursive: true });
-              await fs.writeFile(confined, content, "utf8");
-              return `Wrote ${content.length} bytes to ${confined} (local)`;
-            } catch (error) {
-              return `write error: ${error instanceof Error ? error.message : String(error)}`;
-            }
+          } catch (error) {
+            return `write error: ${error instanceof Error ? error.message : String(error)}`;
           }
         },
       },
@@ -193,13 +185,8 @@ When calling task_done, provide:
           try {
             const content = await this.context.conway.readFile(confined);
             return content.slice(0, MAX_READ_SIZE) || "(empty file)";
-          } catch {
-            try {
-              const content = await fs.readFile(confined, "utf8");
-              return content.slice(0, MAX_READ_SIZE) || "(empty file)";
-            } catch (error) {
-              return `read error: ${error instanceof Error ? error.message : String(error)}`;
-            }
+          } catch (error) {
+            return `read error: ${error instanceof Error ? error.message : String(error)}`;
           }
         },
       },
@@ -397,14 +384,3 @@ function formatExecResult(stdout: string, stderr: string): string {
   return err ? `stdout:\n${out}\nstderr:\n${err}` : out || "(no output)";
 }
 
-function localExec(command: string, timeoutMs: number): Promise<string> {
-  return new Promise((resolve) => {
-    execCb(command, { timeout: timeoutMs, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
-      if (error && !stdout && !stderr) {
-        resolve(`exec error: ${error.message}`);
-        return;
-      }
-      resolve(formatExecResult(stdout ?? "", stderr ?? ""));
-    });
-  });
-}
