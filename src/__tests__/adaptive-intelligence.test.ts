@@ -94,6 +94,9 @@ describe("failure intelligence", () => {
   it("separates transient failures from strategic failures", () => {
     expect(classifyFailure("ETIMEDOUT contacting provider").classification).toBe("transient");
     expect(classifyFailure("401 Unauthorized: token expired").classification).toBe("authorization");
+    expect(
+      classifyFailure("assumption invalid: authentication is not valid").classification,
+    ).toBe("assumption_invalid");
     expect(classifyFailure("command not found: terraform").classification).toBe("capability_missing");
     expect(classifyFailure("policy denied: forbidden operation").classification).toBe("prohibited");
     expect(classifyFailure("The proposed approach produced an invalid result").classification)
@@ -162,6 +165,62 @@ describe("adaptive path persistence", () => {
       const assumptions = engine.store.listAssumptions("goal-1");
       expect(assumptions[0]?.status).toBe("invalidated");
       expect(assumptions[0]?.evidence.join(" ")).toContain("authentication");
+    } finally {
+      db.close();
+    }
+  });
+
+  it("persists typed evidence linked to the exact failed attempt", () => {
+    const db = memoryDb();
+    try {
+      const engine = new AdaptivePathEngine(db);
+      const decision = engine.recordFailure({
+        candidate: candidate(),
+        error: "ETIMEDOUT contacting provider",
+        observations: ["request started"],
+        evidence: ["artifact://trace/123"],
+        learnedFacts: [{ key: "provider.reachable", value: "unknown", confidence: 0.6 }],
+        conditions: { network: "degraded" },
+      });
+
+      const evidence = engine.store.listEvidence("goal-1", {
+        attemptId: decision.attempt.id,
+      });
+
+      expect(evidence.every((entry) => entry.pathId === decision.path.id)).toBe(true);
+      expect(evidence.map((entry) => entry.kind).sort()).toEqual([
+        "artifact",
+        "condition",
+        "error",
+        "fact",
+        "observation",
+      ]);
+      expect(evidence.find((entry) => entry.kind === "error")?.content)
+        .toContain("ETIMEDOUT");
+      expect(evidence.find((entry) => entry.kind === "fact")?.confidence).toBe(0.6);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("persists success observations, artifacts, and runtime conditions as evidence", () => {
+    const db = memoryDb();
+    try {
+      const engine = new AdaptivePathEngine(db);
+      engine.recordSuccess({
+        candidate: candidate(),
+        observations: ["provider returned 200"],
+        evidence: ["artifact://response/200"],
+        conditions: { credentialVersion: 2 },
+      });
+
+      const evidence = engine.store.listEvidence("goal-1");
+      expect(evidence.map((entry) => entry.kind).sort()).toEqual([
+        "artifact",
+        "condition",
+        "observation",
+      ]);
+      expect(evidence.every((entry) => !!entry.attemptId)).toBe(true);
     } finally {
       db.close();
     }
