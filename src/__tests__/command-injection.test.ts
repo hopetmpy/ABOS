@@ -582,16 +582,15 @@ describe("Source code injection safety", () => {
     expect(source).toMatch(/fs\.rmSync\(/);
   });
 
-  it("loader.ts uses execFileSync('which', [bin]) not execSync('which ${bin}')", async () => {
+  it("loader.ts uses a platform-native binary locator without shell interpolation", async () => {
     const fs = await import("fs");
     const source = fs.readFileSync(
       fileURLToPath(new URL("../skills/loader.ts", import.meta.url)),
       "utf-8",
     );
-    // Should NOT have: execSync(`which ${bin}`)
     expect(source).not.toMatch(/execSync\s*\(\s*`which/);
-    // Should have: execFileSync("which", [bin])
-    expect(source).toMatch(/execFileSync\s*\(\s*"which"/);
+    expect(source).toMatch(/process\.platform\s*===\s*"win32"\s*\?\s*"where\.exe"\s*:\s*"which"/);
+    expect(source).toMatch(/execFileSync\s*\(\s*locator\s*,\s*\[bin\]/);
   });
 
   it("tools.ts pull_upstream uses conway.exec not host execSync", async () => {
