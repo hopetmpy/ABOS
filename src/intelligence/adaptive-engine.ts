@@ -34,6 +34,15 @@ export class AdaptivePathEngine {
     return { path, novelty };
   }
 
+  selectCandidate(
+    candidate: PathCandidate,
+    conditions?: Record<string, unknown>,
+  ): { path: PersistedPath; novelty: NoveltyAssessment } {
+    const assessed = this.assessCandidate(candidate, conditions);
+    this.store.setPathStatus(assessed.path.id, "selected");
+    return assessed;
+  }
+
   recordFailure(input: {
     candidate: PathCandidate;
     error: string;
