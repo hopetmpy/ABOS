@@ -79,6 +79,11 @@ function makeOrchestrator(
     config?: any;
     messaging?: ColonyMessaging;
     resolveAgentEnvironment?: (address: string) => string | null;
+    isWorkerAlive?: (address: string) => boolean;
+    dispatchAgentTask?: (
+      assignment: { agentAddress: string; agentName: string; spawned: boolean },
+      task: any,
+    ) => Promise<void>;
   } = {},
 ): Orchestrator {
   const { messaging } = makeMessaging(db);
@@ -91,6 +96,8 @@ function makeOrchestrator(
     identity: IDENTITY,
     config: overrides.config ?? {},
     resolveAgentEnvironment: overrides.resolveAgentEnvironment,
+    isWorkerAlive: overrides.isWorkerAlive,
+    dispatchAgentTask: overrides.dispatchAgentTask,
   });
 }
 
@@ -560,6 +567,50 @@ describe("orchestration/Orchestrator", () => {
 
   });
 
+
+  describe("provider-neutral dispatch", () => {
+    it("uses runtime dispatch hook instead of universal remote Conway funding/messaging", async () => {
+      const goalId = insertGoal(db);
+      insertTask(db, { goalId, title: "Dispatch Task" });
+      setOrchestratorState(db, {
+        phase: "executing",
+        goalId,
+        replanCount: 0,
+        failedTaskId: null,
+        failedError: null,
+      });
+
+      const agentTracker = makeAgentTracker({
+        getIdle: vi.fn().mockReturnValue([
+          { address: "future://worker-1", name: "Future", role: "generalist", status: "healthy" },
+        ]),
+      });
+      const funding = makeFunding();
+      const dispatchAgentTask = vi.fn().mockResolvedValue(undefined);
+      const messaging = {
+        processInbox: vi.fn().mockResolvedValue([]),
+        createMessage: vi.fn(),
+        send: vi.fn(),
+      } as unknown as ColonyMessaging;
+
+      const orc = makeOrchestrator(db, {
+        agentTracker,
+        funding,
+        messaging,
+        isWorkerAlive: () => true,
+        resolveAgentEnvironment: () => "future",
+        dispatchAgentTask,
+      });
+
+      await orc.tick();
+
+      expect(dispatchAgentTask).toHaveBeenCalledTimes(1);
+      expect(funding.fundChild).not.toHaveBeenCalled();
+      expect((messaging.createMessage as any)).not.toHaveBeenCalled();
+      expect((messaging.send as any)).not.toHaveBeenCalled();
+    });
+  });
+
   // ─── fundAgentForTask ────────────────────────────────────────
 
   describe("fundAgentForTask", () => {
@@ -615,6 +666,34 @@ describe("orchestration/Orchestrator", () => {
         "Funding transfer failed for 0xagent",
       );
     });
+
+    it("does not reuse an idle worker that runtime evidence says is dead", async () => {
+      const goalId = insertGoal(db);
+      const agentTracker = makeAgentTracker({
+        getIdle: vi.fn().mockReturnValue([
+          { address: "local://dead", name: "Dead", role: "generalist", status: "healthy" },
+        ]),
+        getBestForTask: vi.fn().mockReturnValue({
+          address: "local://dead",
+          name: "Dead",
+        }),
+      });
+      const spawnAgent = vi.fn().mockResolvedValue({
+        address: "local://fresh",
+        name: "Fresh",
+        sandboxId: "fresh",
+      });
+      const orc = makeOrchestrator(db, {
+        agentTracker,
+        config: { spawnAgent },
+        isWorkerAlive: (address) => address !== "local://dead",
+      });
+
+      const result = await orc.matchTaskToAgent(makeTask(goalId));
+      expect(result.agentAddress).toBe("local://fresh");
+      expect(result.spawned).toBe(true);
+    });
+
   });
 
   // ─── collectResults ──────────────────────────────────────────
