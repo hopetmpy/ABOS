@@ -17,12 +17,18 @@ export const ARTIFACT_MATERIALIZATION_PROTOCOL_VERSION = 1 as const;
 export const DEFAULT_CONTINUATION_ARTIFACT_DIR =
   ".abos-continuation-artifacts";
 
-export function isDurableExternalArtifactReference(
+export function isOpaqueExternalArtifactReference(
   value: string,
 ): boolean {
-  return /^(?:https?|s3|gs|ipfs|ar):\/\//i.test(
-    value.trim(),
-  );
+  const trimmed = value.trim();
+  const match =
+    /^([a-z][a-z0-9+.-]*):\/\//i.exec(trimmed);
+  if (!match) return false;
+
+  // file:// is executor-local filesystem state and must not be promoted into
+  // a parent-durable reference merely because it is URI-shaped. All other
+  // schemes remain open/opaque so future providers need no central allowlist.
+  return match[1].toLowerCase() !== "file";
 }
 
 /**
