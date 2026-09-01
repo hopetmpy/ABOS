@@ -434,6 +434,98 @@ describe("EnvironmentExecutionBridge", () => {
     ]);
   });
 
+  it("keeps uncollected remote artifacts opaque and pending when provider collection is unavailable", async () => {
+    const environments = new EnvironmentRegistry();
+    environments.register(provider("future-provider"));
+    const executors = new EnvironmentTaskExecutorRegistry();
+
+    const resource: EnvironmentResource = {
+      id: "resource-future-1",
+      provider: "future-provider",
+      externalId: "future-resource-1",
+      type: "future-worker",
+      goalId: "goal-1",
+      pathId: "path-1",
+      taskId: "task-1",
+      status: "running",
+      region: null,
+      capabilities: [],
+      estimatedCostCents: null,
+      actualCostCents: 0,
+      credentialsReference: null,
+      retentionPolicy: "until_goal_complete",
+      providerState: "running",
+      evidence: [],
+      metadata: {
+        executorAddress: "future://child",
+        lastDispatchedTaskId: "task-1",
+      },
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+      lastHealthCheck: null,
+    };
+
+    const lifecycle = {
+      resources: {
+        list: () => [resource],
+        applyMutation: (
+          _id: string,
+          mutation: {
+            evidence?: string[];
+            metadata?: Record<string, unknown>;
+          },
+        ) => {
+          resource.evidence = [
+            ...resource.evidence,
+            ...(mutation.evidence ?? []),
+          ];
+          resource.metadata = {
+            ...resource.metadata,
+            ...(mutation.metadata ?? {}),
+          };
+          return resource;
+        },
+      },
+      collect: vi.fn().mockRejectedValue(
+        new Error("collect capability not currently available"),
+      ),
+    } as unknown as EnvironmentLifecycleManager;
+
+    const bridge = new EnvironmentExecutionBridge(
+      new EnvironmentSelector(environments),
+      executors,
+      lifecycle,
+    );
+
+    const result = await bridge.collectRemoteResultArtifacts(
+      "future-provider",
+      task(),
+      "future://child",
+      {
+        success: true,
+        output: "semantic work succeeded",
+        artifacts: ["outputs/not-yet-collected.bin"],
+        costCents: 0,
+        duration: 5,
+      },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.artifacts).toHaveLength(1);
+    expect(result.artifacts[0]).toMatch(
+      /^abos-remote-artifact:\/\/\//,
+    );
+    expect(result.artifacts[0]).not.toContain(
+      "/parent/",
+    );
+    expect(resource.metadata.artifactCollectionState).toBe(
+      "pending",
+    );
+    expect(resource.metadata.remoteArtifacts).toEqual([
+      "outputs/not-yet-collected.bin",
+    ]);
+  });
+
   it("reports a missing dispatch implementation as unavailable, not as impossible", async () => {
     const environments = new EnvironmentRegistry();
     environments.register(provider("alpha"));
