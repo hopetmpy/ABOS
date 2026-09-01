@@ -1197,7 +1197,16 @@ export class Orchestrator {
   }
 }
 
-function plannerOutputToTasks(goalId: string, output: PlannerOutput): Omit<TaskNode, "id" | "metadata">[] {
+function plannerOutputToTasks(
+  goalId: string,
+  output: PlannerOutput,
+): Array<
+  Omit<TaskNode, "id" | "metadata"> & {
+    metadata?: Partial<
+      Pick<TaskNode["metadata"], "estimatedCostCents" | "maxRetries" | "timeoutMs">
+    >;
+  }
+> {
   return output.tasks.map((task, index) => ({
     parentId: null,
     goalId,
@@ -1212,6 +1221,10 @@ function plannerOutputToTasks(goalId: string, output: PlannerOutput): Omit<TaskN
     requiredCapabilities: task.requiredCapabilities ?? [],
     preferredEnvironment: task.preferredEnvironment ?? null,
     strategicPathId: null,
+    metadata: {
+      estimatedCostCents: task.estimatedCostCents,
+      timeoutMs: task.timeoutMs,
+    },
   }));
 }
 
