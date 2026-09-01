@@ -96,8 +96,12 @@ export function loadConfig(): AbosConfig | null {
       aiConnection,
       chainType: raw.chainType || "evm",
     } as AbosConfig;
-  } catch {
-    return null;
+  } catch (error) {
+    const detail =
+      error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Failed to load existing ABOS config at ${configPath}: ${detail}`,
+    );
   }
 }
 
