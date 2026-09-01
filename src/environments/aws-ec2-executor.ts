@@ -6,6 +6,7 @@ import type { TaskNode, TaskResult } from "../orchestration/task-graph.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
 import type { EnvironmentLifecycleManager } from "./lifecycle.js";
 import type {
+  EnvironmentTaskDispatchOptions,
   EnvironmentTaskDispatchResult,
   EnvironmentTaskExecutionAssessment,
   EnvironmentTaskExecutor,
@@ -303,6 +304,7 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
   async dispatch(
     task: TaskNode,
     target: EnvironmentTaskTarget,
+    options: EnvironmentTaskDispatchOptions = {},
   ): Promise<EnvironmentTaskDispatchResult> {
     const instanceId = resolveInstanceId(target.address);
     if (!instanceId) {
@@ -328,7 +330,11 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
     const remoteTaskPath =
       `$HOME/.abos/tasks/${safeTaskFileName(task.id)}.json`;
     const taskBase64 = Buffer.from(
-      JSON.stringify(task),
+      JSON.stringify({
+        protocol: "abos_task_execution_v1",
+        task,
+        continuationContext: options.continuationContext ?? null,
+      }),
       "utf8",
     ).toString("base64");
 
@@ -445,6 +451,9 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
       ],
       metadata: {
         delivery: "aws_ssm",
+        continuationDelivered: options.continuationContext != null,
+        continuationProtocolVersion:
+          options.continuationContext?.protocolVersion ?? null,
         commandId: invocation.CommandId ?? null,
         instanceId,
         responseCode: invocation.ResponseCode ?? null,
