@@ -213,8 +213,13 @@ export async function runSetupWizard(): Promise<AbosConfig> {
   const constitutionDst = path.join(abosDir, "constitution.md");
   if (fs.existsSync(constitutionSrc)) {
     fs.copyFileSync(constitutionSrc, constitutionDst);
-    fs.chmodSync(constitutionDst, 0o444); // read-only
-    console.log(chalk.green("  constitution.md installed (read-only)"));
+    try {
+      fs.chmodSync(constitutionDst, 0o444); // POSIX defense-in-depth
+    } catch {
+      // Windows filesystems may not expose POSIX mode bits. Runtime policy
+      // still treats constitution.md as immutable.
+    }
+    console.log(chalk.green("  constitution.md installed (protected)"));
   }
 
   // SOUL.md
