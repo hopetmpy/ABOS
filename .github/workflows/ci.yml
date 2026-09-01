@@ -227,7 +227,7 @@ jobs:
           pnpm add simple-git@^3.36.0
           pnpm add -D vitest@^3.2.6
           pnpm audit --fix
-          pnpm install
+          pnpm install --no-frozen-lockfile
       - name: Verify no high or critical advisories remain
         run: pnpm audit --audit-level=high
       - run: pnpm run typecheck
