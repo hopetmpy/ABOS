@@ -69,3 +69,55 @@ describe("environment registry", () => {
     expect(matches.map((entry) => entry.id)).toContain("local");
   });
 });
+
+
+describe("lifecycle operation discovery", () => {
+  it("exposes only Conway lifecycle operations backed by the current client", () => {
+    const registry = new EnvironmentRegistry();
+    registry.register(new (requireConwayProvider())({
+      getCreditsBalance: async () => 1000,
+      createSandbox: async () => ({
+        id: "sandbox-1",
+        status: "running",
+        region: "test",
+        vcpu: 1,
+        memoryMb: 1024,
+        diskGb: 10,
+      }),
+      listSandboxes: async () => [],
+    }));
+
+    const operations = registry.getSupportedOperations("conway");
+    expect(operations).toContain("provision");
+    expect(operations).toContain("health");
+    expect(operations).toContain("reconcile");
+    expect(operations).not.toContain("destroy");
+  });
+
+  it("keeps future provider-native operations discoverable", () => {
+    const registry = new EnvironmentRegistry();
+    registry.register({
+      id: "future",
+      operations: ["provider_native_snapshot", "quantum_prepare"],
+      inspect: async () => ({
+        id: "future",
+        label: "Future provider",
+        availability: "unknown",
+        capabilities: [],
+        evidence: [],
+        constraints: [],
+        observedAt: new Date().toISOString(),
+      }),
+    });
+
+    expect(registry.getSupportedOperations("future")).toEqual(
+      expect.arrayContaining(["inspect", "provider_native_snapshot", "quantum_prepare"]),
+    );
+  });
+});
+
+function requireConwayProvider() {
+  // Kept as a helper so this test validates the same exported class while
+  // avoiding a second top-level import solely for lifecycle-specific cases.
+  return class extends (ConwayEnvironmentProvider as typeof ConwayEnvironmentProvider) {};
+}
