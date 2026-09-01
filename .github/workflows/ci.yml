@@ -1,4 +1,6 @@
 name: CI
+permissions:
+  contents: write
 on: [push, pull_request]
 jobs:
   build-and-test:
@@ -206,6 +208,51 @@ jobs:
           src/__tests__/genesis-bootstrap.test.ts
           src/__tests__/heartbeat-scheduler.test.ts
           src/__tests__/orchestration/local-worker-harness.test.ts
+
+  node20-lock-remediation:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: pnpm/action-setup@v4
+      - name: Pin Node 20-compatible nanoid remediation
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          p.pnpm ??= {};
+          p.pnpm.overrides ??= {};
+          p.pnpm.overrides['nanoid@<3.3.16'] = '3.3.18';
+          p.pnpm.overrides['nanoid@<3.3.18'] = '3.3.18';
+          fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+          NODE
+          pnpm install --no-frozen-lockfile
+      - name: Verify clean audit
+        run: pnpm audit
+      - run: pnpm run typecheck
+      - run: pnpm run build
+      - name: Run full suite on Node 20
+        run: pnpm run test:diagnose
+      - name: Persist verified lockfile repair
+        shell: bash
+        run: |
+          if git diff --quiet -- package.json pnpm-lock.yaml; then
+            echo "Node 20 lockfile is already compatible."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json pnpm-lock.yaml
+          git commit -m "fix: keep security remediation compatible with Node 20"
+          git push origin HEAD:abos/windows-runtime-hardening
+
 
   security-audit:
     runs-on: ubuntu-latest
