@@ -42,6 +42,7 @@ import { AdaptivePathEngine } from "../intelligence/adaptive-engine.js";
 import { plannerOutputToPathCandidate, taskToPathCandidate } from "../intelligence/task-path.js";
 import type { EnvironmentRegistry } from "../environments/registry.js";
 import type { CapabilityRegistry } from "../capabilities/registry.js";
+import { CapabilityResolver } from "../capabilities/resolver.js";
 import type {
   AgentAssignment,
   AgentTracker,
@@ -313,6 +314,34 @@ export class Orchestrator {
       noveltyScore: decision.novelty.score,
       conditionChanged: decision.novelty.conditionChanged,
     });
+
+    if (
+      decision.action === "acquire_capability" &&
+      decision.diagnosis.subject &&
+      this.params.capabilityRegistry
+    ) {
+      const snapshots = this.params.environmentRegistry
+        ? await this.params.environmentRegistry.inspectAll()
+        : [];
+      const resolution = new CapabilityResolver(
+        this.params.capabilityRegistry,
+      ).resolve(
+        { requirement: decision.diagnosis.subject },
+        snapshots,
+      );
+
+      this.adaptive.store.addOpportunity({
+        goalId: task.goalId,
+        sourcePathId: decision.path.id,
+        description:
+          `Capability resolution for "${decision.diagnosis.subject}": ${resolution.kind}. ${resolution.rationale}`,
+        evidence: [
+          error,
+          ...resolution.nextActions,
+          ...resolution.candidates.map((candidate) => candidate.id),
+        ],
+      });
+    }
 
     // A technical retry is deliberately narrow: one transient retry is
     // allowed while the path is new, or later when material conditions changed.
