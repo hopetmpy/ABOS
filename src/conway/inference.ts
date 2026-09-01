@@ -15,6 +15,8 @@ import type {
   InferenceToolDefinition,
 } from "../types.js";
 import { ResilientHttpClient } from "./http-client.js";
+import { CodexInferenceRuntime } from "../codex/inference.js";
+import type { CodexProviderConfig } from "../types.js";
 
 const INFERENCE_TIMEOUT_MS = 60_000;
 
@@ -27,11 +29,13 @@ interface InferenceClientOptions {
   openaiApiKey?: string;
   anthropicApiKey?: string;
   ollamaBaseUrl?: string;
+  codex?: CodexProviderConfig;
+  getCodexConfig?: () => CodexProviderConfig | undefined;
   /** Optional registry lookup — if provided, used before name heuristics */
   getModelProvider?: (modelId: string) => string | undefined;
 }
 
-type InferenceBackend = "conway" | "openai" | "anthropic" | "ollama";
+type InferenceBackend = "conway" | "openai" | "anthropic" | "codex" | "ollama";
 
 function isLoopbackHttpUrl(url: string | undefined): boolean {
   if (!url) return false;
@@ -48,7 +52,16 @@ function isLoopbackHttpUrl(url: string | undefined): boolean {
 export function createInferenceClient(
   options: InferenceClientOptions,
 ): InferenceClient {
-  const { apiUrl, apiKey, openaiApiKey, anthropicApiKey, ollamaBaseUrl, getModelProvider } = options;
+  const {
+    apiUrl,
+    apiKey,
+    openaiApiKey,
+    anthropicApiKey,
+    ollamaBaseUrl,
+    codex,
+    getCodexConfig,
+    getModelProvider,
+  } = options;
   const httpClient = new ResilientHttpClient({
     baseTimeout: INFERENCE_TIMEOUT_MS,
     retryableStatuses: [429, 500, 502, 503, 504],
@@ -56,6 +69,12 @@ export function createInferenceClient(
   });
   let currentModel = options.defaultModel;
   let maxTokens = options.maxTokens;
+  // Construct lazily without spawning a process. This lets a running ABOS
+  // activate Codex OAuth/model selection from another CLI process and use it
+  // on the next turn without a runtime restart.
+  const codexRuntime = new CodexInferenceRuntime({
+    getReasoningEffort: () => getCodexConfig?.()?.reasoningEffort ?? codex?.reasoningEffort,
+  });
 
   const chat = async (
     messages: ChatMessage[],
@@ -68,6 +87,7 @@ export function createInferenceClient(
       openaiApiKey,
       anthropicApiKey,
       ollamaBaseUrl,
+      codexEnabled: getCodexConfig?.()?.enabled ?? codex?.enabled ?? false,
       getModelProvider,
     });
 
@@ -96,6 +116,10 @@ export function createInferenceClient(
     if (tools && tools.length > 0) {
       body.tools = tools;
       body.tool_choice = "auto";
+    }
+
+    if (backend === "codex") {
+      return codexRuntime.chat(messages, { ...(opts || {}), model }, model);
     }
 
     if (backend === "anthropic") {
@@ -180,6 +204,7 @@ function resolveInferenceBackend(
     openaiApiKey?: string;
     anthropicApiKey?: string;
     ollamaBaseUrl?: string;
+    codexEnabled?: boolean;
     getModelProvider?: (modelId: string) => string | undefined;
   },
 ): InferenceBackend {
@@ -189,6 +214,7 @@ function resolveInferenceBackend(
     if (provider === "ollama" && keys.ollamaBaseUrl) return "ollama";
     if (provider === "anthropic" && keys.anthropicApiKey) return "anthropic";
     if (provider === "openai" && keys.openaiApiKey) return "openai";
+    if (provider === "codex" && keys.codexEnabled) return "codex";
     if (provider === "conway") return "conway";
     // provider unknown or key not configured — fall through to heuristics
   }

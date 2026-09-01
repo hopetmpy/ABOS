@@ -20,6 +20,10 @@ class FakeTransport implements CodexRpcTransport {
     return queue.shift() as T;
   }
 
+  onNotification(_method: string, _handler: (params: unknown) => void): () => void {
+    return () => undefined;
+  }
+
   async waitForNotification<T>(
     method: string,
     predicate: (params: T) => boolean,

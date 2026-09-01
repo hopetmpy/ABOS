@@ -26,6 +26,16 @@ interface RecentNotification {
 export interface CodexRpcTransport {
   start(): Promise<void>;
   request<T>(method: string, params?: Record<string, unknown>): Promise<T>;
+  onNotification(method: string, handler: NotificationHandler): () => void;
+  onNotification(method: string, handler: NotificationHandler): () => void {
+    const set = this.handlers.get(method) || new Set<NotificationHandler>();
+    set.add(handler);
+    this.handlers.set(method, set);
+    return () => {
+      this.handlers.get(method)?.delete(handler);
+    };
+  }
+
   waitForNotification<T>(
     method: string,
     predicate: (params: T) => boolean,

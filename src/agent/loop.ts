@@ -52,6 +52,7 @@ import { ModelRegistry } from "../inference/registry.js";
 import { InferenceBudgetTracker } from "../inference/budget.js";
 import { InferenceRouter } from "../inference/router.js";
 import { RuntimeModelBinding } from "../inference/runtime-binding.js";
+import { loadCodexCatalog, syncCodexCatalogToRegistry } from "../codex/catalog.js";
 import { MemoryRetriever } from "../memory/retrieval.js";
 import { MemoryIngestionPipeline } from "../memory/ingestion.js";
 import { DEFAULT_MEMORY_BUDGET } from "../types.js";
@@ -602,7 +603,21 @@ export async function runAgentLoop(
       // ── Inference Call (via router when available) ──
       // Refresh only when abos.json changed. A model selection made from
       // another CLI process becomes authoritative on the next turn.
-      budgetTracker.updateConfig(runtimeModelBinding.refresh());
+      const liveModelStrategy = runtimeModelBinding.refresh();
+      budgetTracker.updateConfig(liveModelStrategy);
+
+      // Codex login/catalog/model selection may have been changed by another
+      // CLI process while this agent loop stayed alive. Rehydrate the registry
+      // on demand so provider activation is hot, not restart-bound.
+      if (liveModelStrategy.inferenceModel.startsWith("codex:")) {
+        const current = modelRegistry.get(liveModelStrategy.inferenceModel);
+        if (!current?.enabled) {
+          const cachedCodexCatalog = loadCodexCatalog();
+          if (cachedCodexCatalog) {
+            syncCodexCatalogToRegistry(modelRegistry, cachedCodexCatalog);
+          }
+        }
+      }
 
       const survivalTier = getSurvivalTier(financial.creditsCents);
       const selectedModel = inferenceRouter.selectModel(survivalTier, "agent_turn")?.modelId || "none";

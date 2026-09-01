@@ -23,6 +23,7 @@ import {
 import { consumeNextWakeEvent, insertWakeEvent } from "./state/database.js";
 import { runAgentLoop } from "./agent/loop.js";
 import { ModelRegistry } from "./inference/registry.js";
+import { loadCodexCatalog, syncCodexCatalogToRegistry } from "./codex/catalog.js";
 import { loadSkills } from "./skills/loader.js";
 import { initStateRepo } from "./git/state-versioning.js";
 import { createSocialClient } from "./social/client.js";
@@ -333,6 +334,12 @@ async function run(): Promise<void> {
   // "gpt-oss:120b" route to Ollama based on their registered provider, not heuristics.
   const modelRegistry = new ModelRegistry(db.raw);
   modelRegistry.initialize();
+  if (config.codex?.enabled) {
+    const cachedCodexCatalog = loadCodexCatalog();
+    if (cachedCodexCatalog) {
+      syncCodexCatalogToRegistry(modelRegistry, cachedCodexCatalog);
+    }
+  }
   const inference = createInferenceClient({
     apiUrl: config.conwayApiUrl,
     apiKey,
@@ -342,6 +349,8 @@ async function run(): Promise<void> {
     openaiApiKey: config.openaiApiKey,
     anthropicApiKey: config.anthropicApiKey,
     ollamaBaseUrl,
+    codex: config.codex,
+    getCodexConfig: () => loadConfig()?.codex,
     getModelProvider: (modelId) => modelRegistry.get(modelId)?.provider,
   });
 

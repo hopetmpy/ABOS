@@ -12,6 +12,13 @@ import { loadConfig, saveConfig, resolvePath } from "../config.js";
 import { createDatabase } from "../state/database.js";
 import { ModelRegistry } from "../inference/registry.js";
 import { discoverOllamaModels } from "../ollama/discover.js";
+import {
+  loadCodexCatalog,
+  refreshCodexCatalog,
+  syncCodexCatalogToRegistry,
+} from "../codex/catalog.js";
+import { CodexSessionManager } from "../codex/session-manager.js";
+import { stripCodexRegistryPrefix } from "../codex/inference.js";
 import type { ModelEntry } from "../types.js";
 import { promptOptional, closePrompts } from "./prompts.js";
 
@@ -20,6 +27,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   anthropic: "Anthropic",
   conway: "Conway",
   ollama: "Ollama",
+  codex: "Codex",
   other: "Other",
 };
 
@@ -43,6 +51,24 @@ export async function runModelPicker(): Promise<void> {
     await discoverOllamaModels(ollamaBaseUrl, db.raw);
   }
 
+  let codexCatalog = loadCodexCatalog();
+  if (config.codex?.enabled) {
+    try {
+      console.log(chalk.dim("  Refreshing Codex model catalog..."));
+      codexCatalog = await refreshCodexCatalog(
+        new CodexSessionManager(),
+        config.codex.includeHiddenModels ?? false,
+      );
+    } catch (error) {
+      console.log(
+        chalk.yellow(
+          `  Codex catalog refresh unavailable; using cache if present: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+      );
+    }
+    if (codexCatalog) syncCodexCatalogToRegistry(registry, codexCatalog);
+  }
+
   const models = registry.getAll().filter((m) => m.enabled);
 
   if (models.length === 0) {
@@ -57,11 +83,11 @@ export async function runModelPicker(): Promise<void> {
 
   console.log("");
   const input = await promptOptional("Enter model number (or press Enter to cancel)");
-  closePrompts();
 
   if (!input) {
     console.log(chalk.dim("  Cancelled."));
     db.close();
+    closePrompts();
     return;
   }
 
@@ -69,6 +95,7 @@ export async function runModelPicker(): Promise<void> {
   if (isNaN(idx) || idx < 0 || idx >= models.length) {
     console.log(chalk.red(`  Invalid selection: "${input}"`));
     db.close();
+    closePrompts();
     return;
   }
 
@@ -77,7 +104,40 @@ export async function runModelPicker(): Promise<void> {
   if (config.modelStrategy) {
     config.modelStrategy.inferenceModel = selected.modelId;
   }
+
+  if (selected.provider === "codex") {
+    const actualModel = stripCodexRegistryPrefix(selected.modelId);
+    const descriptor = codexCatalog?.models.find((model) => model.model === actualModel);
+    config.codex = {
+      enabled: true,
+      includeHiddenModels: config.codex?.includeHiddenModels ?? false,
+      ...config.codex,
+      selectedModel: actualModel,
+    };
+
+    const efforts = descriptor?.supportedReasoningEfforts || [];
+    if (efforts.length > 0) {
+      console.log(chalk.cyan("\n  Reasoning Effort\n"));
+      efforts.forEach((effort, i) => {
+        const active = effort.reasoningEffort === config.codex?.reasoningEffort
+          ? chalk.green(" ◀ active")
+          : "";
+        console.log(`  ${i + 1}. ${effort.reasoningEffort} - ${effort.description}${active}`);
+      });
+      const effortInput = await promptOptional(
+        `Enter reasoning number [default: ${descriptor?.defaultReasoningEffort || efforts[0].reasoningEffort}]`,
+      );
+      const effortIndex = effortInput ? parseInt(effortInput, 10) - 1 : -1;
+      const chosenEffort =
+        effortIndex >= 0 && effortIndex < efforts.length
+          ? efforts[effortIndex].reasoningEffort
+          : descriptor?.defaultReasoningEffort || config.codex.reasoningEffort || efforts[0].reasoningEffort;
+      config.codex.reasoningEffort = chosenEffort;
+    }
+  }
+
   saveConfig(config);
+  closePrompts();
 
   console.log(chalk.green(`\n  Active model set to: ${selected.modelId} (${selected.displayName})`));
   console.log(chalk.dim("  The running ABOS process will use this selection on its next inference turn.\n"));
@@ -92,6 +152,9 @@ function printModelTable(models: ModelEntry[], currentModelId: string): void {
     const m = models[i];
     const num = String(i + 1).padStart(numWidth);
     const provider = (PROVIDER_LABEL[m.provider] || m.provider).padEnd(9);
+    const displayModelId = m.provider === "codex"
+      ? stripCodexRegistryPrefix(m.modelId)
+      : m.modelId;
     const cost = m.costPer1kInput === 0
       ? chalk.green("free     ")
       : chalk.dim(`$${(m.costPer1kInput / 100 / 1000 * 1_000_000).toFixed(2)}/M in`);
@@ -99,7 +162,7 @@ function printModelTable(models: ModelEntry[], currentModelId: string): void {
     const tools = m.supportsTools ? "" : chalk.dim(" (no tools)");
 
     console.log(
-      `  ${chalk.white(num + ".")} ${chalk.cyan(m.modelId.padEnd(32))} ${chalk.dim(provider)} ${cost}${tools}${active}`,
+      `  ${chalk.white(num + ".")} ${chalk.cyan(displayModelId.padEnd(32))} ${chalk.dim(provider)} ${cost}${tools}${active}`,
     );
   }
 }

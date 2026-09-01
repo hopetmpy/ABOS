@@ -10,6 +10,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { getAbosDir } from "../identity/wallet.js";
 import { CodexSessionManager } from "./session-manager.js";
+import { codexRegistryModelId } from "./inference.js";
+import { ModelRegistry } from "../inference/registry.js";
 import type { CodexCatalogSnapshot, CodexModelDescriptor } from "./types.js";
 
 const CATALOG_FILENAME = "codex-model-catalog.json";
@@ -67,4 +69,55 @@ function saveCodexCatalog(snapshot: CodexCatalogSnapshot): void {
   const temp = `${file}.tmp-${process.pid}`;
   fs.writeFileSync(temp, JSON.stringify(snapshot, null, 2), { mode: 0o600 });
   fs.renameSync(temp, file);
+}
+
+
+/**
+ * Project the provider-rich Codex catalog into ABOS's routing registry.
+ * Registry IDs are provider-namespaced because the same upstream model name
+ * may also exist through OpenAI API or Conway.
+ */
+export function syncCodexCatalogToRegistry(
+  registry: ModelRegistry,
+  snapshot: CodexCatalogSnapshot,
+): void {
+  const now = snapshot.refreshedAt || new Date().toISOString();
+  const seen = new Set<string>();
+
+  for (const model of snapshot.models) {
+    if (!model?.model) continue;
+    const modelId = codexRegistryModelId(model.model);
+    seen.add(modelId);
+    const existing = registry.get(modelId);
+
+    registry.upsert({
+      modelId,
+      provider: "codex",
+      displayName: model.displayName || model.model,
+      tierMinimum: "dead",
+      // ChatGPT/Codex subscription usage is external to ABOS's treasury ledger.
+      costPer1kInput: 0,
+      costPer1kOutput: 0,
+      maxTokens: existing?.maxTokens || 4096,
+      // Codex model/list does not currently publish a context-window number.
+      // Zero means unknown here; the full provider metadata remains in the cache.
+      contextWindow: existing?.contextWindow || 0,
+      supportsTools: true,
+      // The current ABOS ChatMessage contract is text/tool oriented. Preserve
+      // richer input modalities in the Codex catalog without falsely claiming
+      // the adapter can already pass them through.
+      supportsVision: false,
+      parameterStyle: "max_completion_tokens",
+      enabled: true,
+      lastSeen: now,
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+    });
+  }
+
+  for (const existing of registry.getAll()) {
+    if (existing.provider === "codex" && !seen.has(existing.modelId) && existing.enabled) {
+      registry.setEnabled(existing.modelId, false);
+    }
+  }
 }
