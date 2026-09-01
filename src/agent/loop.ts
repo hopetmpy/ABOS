@@ -51,6 +51,9 @@ import { ulid } from "ulid";
 import { ModelRegistry } from "../inference/registry.js";
 import { InferenceBudgetTracker } from "../inference/budget.js";
 import { InferenceRouter } from "../inference/router.js";
+import { RuntimeModelBinding } from "../inference/runtime-binding.js";
+import { loadCodexCatalog, syncCodexCatalogToRegistry } from "../codex/catalog.js";
+import { loadConfig } from "../config.js";
 import { MemoryRetriever } from "../memory/retrieval.js";
 import { MemoryIngestionPipeline } from "../memory/ingestion.js";
 import { DEFAULT_MEMORY_BUDGET } from "../types.js";
@@ -348,6 +351,7 @@ export async function runAgentLoop(
   }
   const budgetTracker = new InferenceBudgetTracker(db.raw, modelStrategyConfig);
   const inferenceRouter = new InferenceRouter(db.raw, modelRegistry, budgetTracker);
+  const runtimeModelBinding = new RuntimeModelBinding(modelStrategyConfig);
 
   // Optional orchestration bootstrap (requires V9 goals/task tables)
   let planModeController: PlanModeController | undefined;
@@ -1321,14 +1325,44 @@ export async function runAgentLoop(
       pendingInput = undefined;
 
       // ── Inference Call (via router when available) ──
+      // A model/route changed by another CLI process becomes authoritative on
+      // the next turn without restarting the ABOS process.
+      const liveModelStrategy = runtimeModelBinding.refresh();
+      budgetTracker.updateConfig(liveModelStrategy);
+
+      const liveConfig = loadConfig();
+      const activeConnectionProvider =
+        liveConfig?.aiConnection?.active?.provider ??
+        config.aiConnection?.active?.provider;
+
+      // Codex model metadata is derived/cacheable. Re-project the cache into
+      // the canonical ModelRegistry only when a newly selected Codex model is
+      // not yet visible to this long-running process.
+      if (
+        activeConnectionProvider === "codex" &&
+        !modelRegistry.get(liveModelStrategy.inferenceModel)?.enabled
+      ) {
+        const cachedCodexCatalog = loadCodexCatalog();
+        if (cachedCodexCatalog) {
+          syncCodexCatalogToRegistry(modelRegistry, cachedCodexCatalog);
+        }
+      }
+
       const survivalTier = getSurvivalTier(financial.creditsCents);
-      log(config, `[THINK] Routing inference (tier: ${survivalTier}, model: ${inference.getDefaultModel()})...`);
+      const selectedModel =
+        inferenceRouter.selectModel(survivalTier, "agent_turn")?.modelId || "none";
+      const providerLabel = activeConnectionProvider || "legacy/auto";
+      log(
+        config,
+        `[THINK] Routing inference (tier: ${survivalTier}, connection: ${providerLabel}, model: ${selectedModel})...`,
+      );
 
       const inferenceTools = toolsToInferenceFormat(tools);
       const routerResult = await inferenceRouter.route(
         {
           messages: messages,
           taskType: "agent_turn",
+          connectionProvider: activeConnectionProvider,
           tier: survivalTier,
           sessionId: db.getKV("session_id") || "default",
           turnId: ulid(),
