@@ -1,6 +1,33 @@
 import type { AbosTool } from "../types.js";
 import type { EnvironmentRegistry } from "./registry.js";
 
+const MAX_PROVIDER_OUTPUT_CHARS = 64_000;
+
+function sanitizeProviderOutput(value: string): string {
+  if (!value) return "";
+
+  let sanitized = value
+    // AWS access-key IDs.
+    .replace(/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g, "[REDACTED_AWS_ACCESS_KEY_ID]")
+    // Common JSON / CLI credential fields. Keep field names for diagnostics.
+    .replace(
+      /("(?:SecretAccessKey|SessionToken|SecretString|Password|password|apiKey|api_key|token)"\s*:\s*")[^"]*(")/gi,
+      "$1[REDACTED]$2",
+    )
+    .replace(
+      /((?:SecretAccessKey|SessionToken|SecretString|Password|api[_-]?key|token)\s*[=:]\s*)[^\s]+/gi,
+      "$1[REDACTED]",
+    );
+
+  if (sanitized.length > MAX_PROVIDER_OUTPUT_CHARS) {
+    sanitized =
+      sanitized.slice(0, MAX_PROVIDER_OUTPUT_CHARS) +
+      `\n[TRUNCATED: provider output exceeded ${MAX_PROVIDER_OUTPUT_CHARS} characters]`;
+  }
+
+  return sanitized;
+}
+
 const SENSITIVE_AWS_PATTERNS: Array<(args: string[]) => boolean> = [
   (args) => args[0] === "configure" && args.includes("get"),
   (args) => args[0] === "configure" && args.includes("export-credentials"),
@@ -79,8 +106,8 @@ export function createEnvironmentTools(
       return [
         `environment: ${environment}`,
         `exit_code: ${result.exitCode}`,
-        `stdout: ${result.stdout}`,
-        `stderr: ${result.stderr}`,
+        `stdout: ${sanitizeProviderOutput(result.stdout)}`,
+        `stderr: ${sanitizeProviderOutput(result.stderr)}`,
       ].join("\n");
     },
   }];
