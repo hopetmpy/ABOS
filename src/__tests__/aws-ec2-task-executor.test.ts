@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { AwsEnvironmentProvider } from "../environments/aws.js";
 import { AwsEc2TaskExecutor } from "../environments/aws-ec2-executor.js";
@@ -520,6 +524,138 @@ describe("AwsEc2TaskExecutor", () => {
       "requires an IAM instance profile",
     );
     expect(stub.provisionCalls).toBe(0);
+  });
+
+  it("materializes a parent artifact to the EC2 runtime and verifies target bytes plus SHA-256", async () => {
+    const dir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "abos-aws-materialize-"),
+    );
+    try {
+      const localPath = path.join(dir, "input.bin");
+      const body = Buffer.from("aws materialization payload");
+      fs.writeFileSync(localPath, body);
+      const sha256 = createHash("sha256")
+        .update(body)
+        .digest("hex");
+
+      const sentScripts: string[] = [];
+      let nextCommandId = 0;
+      const commandOutputs = new Map<string, string>();
+      const runner: EnvironmentCommandRunner = async (_command, args) => {
+        if (args[0] === "ssm" && args[1] === "send-command") {
+          const paramsIndex = args.indexOf("--parameters");
+          const params = JSON.parse(
+            args[paramsIndex + 1] ?? "{}",
+          ) as { commands?: string[] };
+          const script = params.commands?.[0] ?? "";
+          sentScripts.push(script);
+          const id = `cmd-materialize-${++nextCommandId}`;
+          if (script.includes("ABOS_MATERIALIZED_BYTES")) {
+            commandOutputs.set(
+              id,
+              `ABOS_MATERIALIZED_BYTES=${body.length}\nABOS_MATERIALIZED_SHA256=${sha256}\n`,
+            );
+          } else {
+            commandOutputs.set(id, "");
+          }
+          return {
+            stdout: JSON.stringify({
+              Command: { CommandId: id },
+            }),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        if (
+          args[0] === "ssm" &&
+          args[1] === "wait" &&
+          args[2] === "command-executed"
+        ) {
+          return { stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (
+          args[0] === "ssm" &&
+          args[1] === "get-command-invocation"
+        ) {
+          const id = args[args.indexOf("--command-id") + 1]!;
+          return {
+            stdout: JSON.stringify({
+              CommandId: id,
+              Status: "Success",
+              ResponseCode: 0,
+              StandardOutputContent:
+                commandOutputs.get(id) ?? "",
+              StandardErrorContent: "",
+            }),
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        throw new Error(`unexpected AWS call: ${args.join(" ")}`);
+      };
+
+      const provider = new AwsEnvironmentProvider({
+        runner,
+        defaultRegion: "us-east-1",
+      });
+      const { lifecycle } = lifecycleStub([resource()]);
+      const executor = new AwsEc2TaskExecutor({
+        provider,
+        lifecycle,
+        identity: {} as any,
+        config: {} as any,
+      });
+
+      const result = await executor.materializeArtifacts(
+        task(),
+        {
+          address: "aws://ec2/i-new",
+          name: "aws-worker",
+          spawned: false,
+        },
+        {
+          protocolVersion: 1,
+          goalId: "goal-1",
+          taskId: "task-aws-1",
+          pathId: "path-1",
+          sources: [{
+            reference: "verified-input",
+            localPath,
+            targetName: `${sha256.slice(0, 16)}-input.bin`,
+            bytes: body.length,
+            integrity: {
+              algorithm: "sha256",
+              digest: sha256,
+            },
+          }],
+        },
+      );
+
+      expect(result.entries).toEqual([
+        expect.objectContaining({
+          reference: "verified-input",
+          state: "available",
+          targetPath: expect.stringMatching(
+            /^\/opt\/abos\/\.abos-continuation-artifacts\/goal-1\/task-aws-1\//,
+          ),
+          integrity: {
+            algorithm: "sha256",
+            digest: sha256,
+          },
+        }),
+      ]);
+      expect(result.metadata?.transport).toBe(
+        "aws_ssm_chunked_base64",
+      );
+      expect(sentScripts.some((script) =>
+        script.includes(".abos-continuation-artifacts")
+      )).toBe(true);
+      expect(sentScripts.some((script) =>
+        script.includes("sha256sum")
+      )).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("returns an immediate semantic TaskResult from SSM transport", async () => {
