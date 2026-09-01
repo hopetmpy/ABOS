@@ -369,7 +369,27 @@ export class AdaptivePathEngine {
       }
     }
 
-    return this.assessCandidate(candidate, conditions);
+    const assessed = this.assessCandidate(candidate, conditions);
+    const previousAttempt = this.store.latestAttempt(
+      assessed.path.id,
+      candidate.taskId,
+    );
+
+    if (!previousAttempt) {
+      return {
+        path: assessed.path,
+        novelty: {
+          novel: true,
+          score: 1,
+          equivalentPathId: assessed.path.id,
+          conditionChanged: false,
+          reason:
+            "The path may already be selected, but this is the first recorded execution attempt for this task.",
+        },
+      };
+    }
+
+    return assessed;
   }
 
   /**
