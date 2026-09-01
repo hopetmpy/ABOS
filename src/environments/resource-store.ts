@@ -344,7 +344,7 @@ export class EnvironmentResourceStore {
     const rows = this.db.prepare(
       `SELECT * FROM environment_resource_events
        WHERE resource_id = ?
-       ORDER BY created_at ASC, id ASC`,
+       ORDER BY created_at ASC, rowid ASC`,
     ).all(resourceId) as EventRow[];
 
     return rows.map((row) => ({
