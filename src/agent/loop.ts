@@ -80,6 +80,7 @@ import { AwsEc2TaskExecutor } from "../environments/aws-ec2-executor.js";
 import { createEnvironmentTools } from "../environments/tools.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
+import { EnvironmentRetentionCoordinator } from "../environments/retention.js";
 import { EnvironmentSelector } from "../environments/selector.js";
 import {
   EnvironmentExecutionBridge,
@@ -129,6 +130,11 @@ export async function runAgentLoop(
     environmentResources,
   );
   const environmentSelector = new EnvironmentSelector(environmentRegistry);
+  const environmentRetention = new EnvironmentRetentionCoordinator(
+    db.raw,
+    environmentRegistry,
+    environmentLifecycle,
+  );
 
   // Establish canonical ownership for the already-present host.
   environmentLifecycle.adopt({
@@ -203,6 +209,25 @@ export async function runAgentLoop(
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  // Terminal Tasks/Goals may have left provider resources behind if the prior
+  // process died between result persistence and cleanup. Sweep retention only
+  // after reconciliation so destructive action is based on current evidence.
+  try {
+    const retention = await environmentRetention.sweep();
+    if (
+      retention.destroyAttempts > 0 ||
+      retention.released > 0 ||
+      retention.pendingObservation > 0 ||
+      retention.unavailable > 0
+    ) {
+      logger.info("Environment retention startup sweep", retention);
+    }
+  } catch (error) {
+    logger.warn("Environment retention startup sweep failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   const builtinTools = createBuiltinTools(identity.sandboxId);
@@ -882,6 +907,19 @@ export async function runAgentLoop(
       if (orchestrator) {
         const orchestratorTick = await orchestrator.tick();
         db.setKV("orchestrator.last_tick", JSON.stringify(orchestratorTick));
+
+        // Resource retention is intentionally outside the Orchestrator. Goal
+        // execution produces persisted terminal state; this provider-neutral
+        // coordinator then applies each resource's declared retention policy.
+        const retention = await environmentRetention.sweep();
+        if (
+          retention.destroyAttempts > 0 ||
+          retention.released > 0 ||
+          retention.pendingObservation > 0 ||
+          retention.unavailable > 0
+        ) {
+          logger.info("Environment retention sweep", retention);
+        }
         const localWorkersActive = workerPool?.getActiveCount() ?? 0;
         const hasSelfAssignedParentTask = !!db.raw.prepare(
           `SELECT 1 FROM task_graph WHERE assigned_to = ? AND status IN ('assigned', 'running') LIMIT 1`,
