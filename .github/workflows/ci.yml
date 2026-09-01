@@ -126,6 +126,72 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run typecheck
       - run: pnpm run build
+      - name: Smoke test built CLI and Windows state persistence
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $smokeHome = Join-Path $env:RUNNER_TEMP "abos-smoke-home"
+          Remove-Item $smokeHome -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $smokeHome | Out-Null
+          $env:HOME = $smokeHome
+          $env:USERPROFILE = $smokeHome
+
+          node dist/index.js --version
+          node dist/index.js --help
+          node dist/index.js --init
+
+          $walletPath = Join-Path $smokeHome ".abos\wallet.json"
+          if (-not (Test-Path $walletPath)) {
+            throw "ABOS --init did not create wallet.json under the Windows user home"
+          }
+
+          $wallet1 = Get-Content $walletPath -Raw | ConvertFrom-Json
+          $identity1 = if ($wallet1.privateKey) { $wallet1.privateKey } else { $wallet1.secretKey }
+          if (-not $identity1) {
+            throw "ABOS wallet.json contains no persisted identity material"
+          }
+
+          node dist/index.js --init
+
+          $wallet2 = Get-Content $walletPath -Raw | ConvertFrom-Json
+          $identity2 = if ($wallet2.privateKey) { $wallet2.privateKey } else { $wallet2.secretKey }
+          if ($identity1 -ne $identity2) {
+            throw "ABOS --init replaced the existing wallet identity on restart"
+          }
+
+          $configScript = @'
+          import { createConfig, saveConfig } from "./dist/config.js";
+          import { getWalletAddress } from "./dist/identity/wallet.js";
+          const address = getWalletAddress();
+          if (!address) throw new Error("wallet address unavailable after --init");
+          saveConfig(createConfig({
+            name: "ABOS Windows Smoke",
+            genesisPrompt: "Validate deterministic Windows bootstrap.",
+            creatorAddress: address,
+            registeredWithConway: false,
+            sandboxId: "windows-ci-smoke",
+            walletAddress: address,
+            apiKey: "ci-smoke-key",
+            chainType: "evm"
+          }));
+          '@
+          $configScript | node --input-type=module
+
+          node dist/index.js --status
+          node dist/index.js --status
+
+          $statePath = Join-Path $smokeHome ".abos\state.db"
+          $configPath = Join-Path $smokeHome ".abos\abos.json"
+          if (-not (Test-Path $configPath)) {
+            throw "ABOS config was not persisted under the Windows user home"
+          }
+          if (-not (Test-Path $statePath)) {
+            throw "ABOS --status did not initialize persistent state.db"
+          }
+
+          if (Test-Path "C:\root\.abos") {
+            throw "ABOS created state under the historical C:\root\.abos fallback"
+          }
       - name: Run Windows portability regressions
         shell: pwsh
         run: >
