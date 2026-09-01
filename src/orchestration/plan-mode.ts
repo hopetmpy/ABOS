@@ -6,7 +6,9 @@ import type { PlannerOutput } from "./planner.js";
 import { validatePlannerOutput } from "./planner.js";
 
 const PLAN_MODE_STATE_KEY = "plan_mode.state";
-const DEFAULT_REPLANS_REMAINING = 3;
+// Compatibility seed for persisted pre-adaptive state. This field is telemetry only;
+ // it MUST NOT govern whether an objective may be replanned.
+const LEGACY_REPLAN_TELEMETRY_SEED = 3;
 const DEFAULT_AUTO_BUDGET_THRESHOLD = 5_000;
 const DEFAULT_CONSENSUS_CRITIC_ROLE = "reviewer";
 const DEFAULT_REVIEW_TIMEOUT_MS = 30 * 60_000;
@@ -28,6 +30,7 @@ export interface ExecutionState {
   planVersion: number;
   planFilePath: string | null;
   spawnedAgentIds: string[];
+  /** @deprecated Compatibility telemetry. Adaptive replanning is evidence-driven. */
   replansRemaining: number;
   phaseEnteredAt: string;
 }
@@ -81,7 +84,9 @@ export class PlanModeController {
     };
 
     if (from === "executing" && to === "replanning") {
-      next.replansRemaining = Math.max(0, state.replansRemaining - 1);
+      // Preserve legacy telemetry for state compatibility, but do not decrement
+      // it as a circuit breaker. Replan eligibility is evidence-driven.
+      next.replansRemaining = state.replansRemaining;
       next.planVersion = Math.max(0, state.planVersion + 1);
     }
 
@@ -272,11 +277,7 @@ export async function reviewPlan(
   }
 }
 
-export function shouldReplan(state: ExecutionState, trigger: ReplanTrigger): boolean {
-  if (state.replansRemaining <= 0) {
-    return false;
-  }
-
+export function shouldReplan(_state: ExecutionState, trigger: ReplanTrigger): boolean {
   switch (trigger.type) {
     case "task_failure":
       return trigger.taskId.trim().length > 0 && trigger.error.trim().length > 0;
@@ -294,7 +295,7 @@ export function shouldReplan(state: ExecutionState, trigger: ReplanTrigger): boo
       return trigger.resource.trim().length > 0 && trigger.error.trim().length > 0;
 
     case "opportunity":
-      return state.replansRemaining > 1 && trigger.suggestion.trim().length >= 24;
+      return trigger.suggestion.trim().length >= 24;
 
     default:
       return false;
@@ -309,7 +310,7 @@ function defaultExecutionState(): ExecutionState {
     planVersion: 0,
     planFilePath: null,
     spawnedAgentIds: [],
-    replansRemaining: DEFAULT_REPLANS_REMAINING,
+    replansRemaining: LEGACY_REPLAN_TELEMETRY_SEED,
     phaseEnteredAt: nowIso(),
   };
 }
