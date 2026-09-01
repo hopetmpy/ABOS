@@ -555,7 +555,7 @@ export async function runAgentLoop(
             }
           }
         },
-        dispatch: async (task, target) => {
+        dispatch: async (task, target, options) => {
           const amountCents = calculateTaskFundingCents(task, config);
           if (amountCents > 0) {
             const funded = await funding.fundChild(target.address, amountCents);
@@ -583,6 +583,7 @@ export async function runAgentLoop(
               requiredCapabilities: task.requiredCapabilities ?? [],
               preferredEnvironment: task.preferredEnvironment ?? null,
               strategicPathId: task.strategicPathId ?? null,
+              continuationContext: options?.continuationContext ?? null,
             }),
           });
           await messaging.send(message);
@@ -597,6 +598,10 @@ export async function runAgentLoop(
             metadata: {
               delivery: "colony_message",
               fundedAmountCents: amountCents,
+              continuationDelivered:
+                options?.continuationContext != null,
+              continuationProtocolVersion:
+                options?.continuationContext?.protocolVersion ?? null,
             },
           };
         },
