@@ -1,6 +1,14 @@
 import type { TaskNode, TaskResult } from "../orchestration/task-graph.js";
 import type { EnvironmentLifecycleManager } from "./lifecycle.js";
 import type { ExecutionContinuationContext } from "./continuity.js";
+import {
+  ARTIFACT_MATERIALIZATION_PROTOCOL_VERSION,
+  applyArtifactMaterializationResult,
+  prepareArtifactMaterialization,
+  type ArtifactMaterializationRequest,
+  type ArtifactMaterializationResult,
+  type ArtifactTransferManifest,
+} from "./artifact-materialization.js";
 import type {
   EnvironmentSelectionCandidate,
   EnvironmentSelectionResult,
@@ -56,6 +64,15 @@ export interface EnvironmentTaskExecutor {
     task: TaskNode,
     options?: EnvironmentTaskSpawnOptions,
   ): Promise<EnvironmentTaskSpawnResult>;
+  /**
+   * Optional target-specific artifact transfer. This belongs to the Task
+   * executor plane because the executor owns the concrete target transport.
+   */
+  materializeArtifacts?(
+    task: TaskNode,
+    target: EnvironmentTaskTarget,
+    request: ArtifactMaterializationRequest,
+  ): Promise<ArtifactMaterializationResult>;
   dispatch?(
     task: TaskNode,
     target: EnvironmentTaskTarget,
@@ -328,9 +345,103 @@ export class EnvironmentExecutionBridge {
       );
     }
 
+    let effectiveOptions = options;
+    let materializationManifest: ArtifactTransferManifest | null = null;
+
+    if (options.continuationContext) {
+      let prepared;
+      try {
+        prepared = prepareArtifactMaterialization(
+          task,
+          options.continuationContext,
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : String(error);
+        throw new EnvironmentTaskExecutionError(
+          environmentId,
+          `Artifact materialization preparation failed for "${environmentId}": ${message}`,
+          [`artifact materialization preparation failure: ${message}`],
+          "materialize",
+        );
+      }
+
+      if (prepared.request.sources.length > 0) {
+        let materialized: ArtifactMaterializationResult;
+        if (executor.materializeArtifacts) {
+          try {
+            materialized = await executor.materializeArtifacts(
+              task,
+              target,
+              prepared.request,
+            );
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            materialized = {
+              protocolVersion:
+                ARTIFACT_MATERIALIZATION_PROTOCOL_VERSION,
+              entries: prepared.request.sources.map((source) => ({
+                reference: source.reference,
+                state: "unavailable",
+                evidence: [
+                  `Target artifact materialization failed: ${message}`,
+                ],
+              })),
+              evidence: [
+                `Target artifact materializer for environment=${environmentId} failed without proving artifacts available: ${message}`,
+              ],
+            };
+          }
+        } else {
+          materialized = {
+            protocolVersion:
+              ARTIFACT_MATERIALIZATION_PROTOCOL_VERSION,
+            entries: prepared.request.sources.map((source) => ({
+              reference: source.reference,
+              state: "unavailable",
+              evidence: [
+                `Environment ${environmentId} has no target artifact materializer registered for this executor.`,
+              ],
+            })),
+            evidence: [
+              `Target artifact materialization is currently unavailable for environment=${environmentId}; this does not classify the artifact or objective as impossible.`,
+            ],
+          };
+        }
+
+        const applied = applyArtifactMaterializationResult(
+          prepared,
+          materialized,
+          {
+            environmentId,
+            address: target.address,
+          },
+        );
+        materializationManifest = applied.manifest;
+        effectiveOptions = {
+          ...options,
+          continuationContext: applied.continuationContext,
+          metadata: {
+            ...(options.metadata ?? {}),
+            artifactMaterialization: applied.manifest,
+          },
+        };
+      } else {
+        effectiveOptions = {
+          ...options,
+          continuationContext: prepared.continuationContext,
+        };
+      }
+    }
+
     let result: EnvironmentTaskDispatchResult;
     try {
-      result = await executor.dispatch(task, target, options);
+      result = await executor.dispatch(
+        task,
+        target,
+        effectiveOptions,
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new EnvironmentTaskExecutionError(
@@ -339,6 +450,16 @@ export class EnvironmentExecutionBridge {
         [`dispatch failure: ${message}`],
         "dispatch",
       );
+    }
+
+    if (materializationManifest) {
+      result = {
+        ...result,
+        metadata: {
+          ...(result.metadata ?? {}),
+          artifactMaterialization: materializationManifest,
+        },
+      };
     }
 
     if (this.lifecycle) {
