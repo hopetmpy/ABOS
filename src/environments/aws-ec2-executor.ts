@@ -1,4 +1,7 @@
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { createHash } from "node:crypto";
 import { HarnessRegistry } from "../agent/harness-registry.js";
 import type { AbosConfig, AbosIdentity } from "../types.js";
 import { generateGenesisConfig } from "../replication/genesis.js";
@@ -16,6 +19,12 @@ import type {
   EnvironmentTaskTarget,
 } from "./task-executor.js";
 import { AwsEnvironmentProvider } from "./aws.js";
+import {
+  ARTIFACT_MATERIALIZATION_PROTOCOL_VERSION,
+  artifactTargetRelativePath,
+  type ArtifactMaterializationRequest,
+  type ArtifactMaterializationResult,
+} from "./artifact-materialization.js";
 
 const DEFAULT_INSTALL_ROOT = "/opt/abos";
 const DEFAULT_REPOSITORY = "https://github.com/hopetmpy/ABOS.git";
@@ -298,6 +307,219 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
         executorKind: "aws-ec2-ssm",
         resourceId: bootstrapped.id,
         region: bootstrapped.region,
+      },
+    };
+  }
+
+  async materializeArtifacts(
+    task: TaskNode,
+    target: EnvironmentTaskTarget,
+    request: ArtifactMaterializationRequest,
+  ): Promise<ArtifactMaterializationResult> {
+    const instanceId = resolveInstanceId(target.address);
+    if (!instanceId) {
+      throw new Error(
+        `AWS EC2 artifact target address is invalid: ${target.address}`,
+      );
+    }
+
+    const resource = this.options.lifecycle.resources
+      .list({ includeTerminated: true })
+      .find(
+        (entry) =>
+          entry.provider === "aws" &&
+          entry.externalId === instanceId,
+      );
+    const installRoot =
+      (resource && typeof resource.metadata.installRoot === "string"
+        ? resource.metadata.installRoot
+        : null) ??
+      this.options.installRoot ??
+      DEFAULT_INSTALL_ROOT;
+    const timeoutMs = Math.max(
+      task.metadata.timeoutMs,
+      120_000,
+    );
+    const entries: ArtifactMaterializationResult["entries"] = [];
+    const evidence: string[] = [];
+
+    for (const source of request.sources) {
+      const relative = artifactTargetRelativePath(
+        request,
+        source,
+      );
+      const targetPath = path.posix.join(
+        installRoot,
+        relative,
+      );
+      const encodedPath = `${targetPath}.b64`;
+
+      try {
+        const body = fs.readFileSync(source.localPath);
+        const observedSourceDigest = createHash("sha256")
+          .update(body)
+          .digest("hex");
+        if (
+          source.integrity.algorithm.toLowerCase() !== "sha256" ||
+          source.integrity.digest.toLowerCase() !==
+            observedSourceDigest.toLowerCase()
+        ) {
+          entries.push({
+            reference: source.reference,
+            state: "unknown",
+            evidence: [
+              "Parent artifact changed after the materialization plan was prepared; AWS upload was not attempted.",
+            ],
+          });
+          continue;
+        }
+
+        const initialized =
+          await this.options.provider.runSsmCommands(
+            instanceId,
+            [[
+              "set -euo pipefail",
+              `mkdir -p -- ${shellQuote(path.posix.dirname(targetPath))}`,
+              `: > ${shellQuote(encodedPath)}`,
+            ].join("\n")],
+            resource?.region ?? null,
+            timeoutMs,
+          );
+        if (initialized.Status !== "Success") {
+          throw new Error(
+            `remote artifact staging initialization failed with SSM status=${initialized.Status ?? "unknown"}: ${initialized.StandardErrorContent ?? ""}`,
+          );
+        }
+
+        const encoded = body.toString("base64");
+        const chunkChars = 12_000;
+        for (
+          let offset = 0;
+          offset < encoded.length;
+          offset += chunkChars
+        ) {
+          const chunk = encoded.slice(
+            offset,
+            offset + chunkChars,
+          );
+          const uploaded =
+            await this.options.provider.runSsmCommands(
+              instanceId,
+              [
+                `set -euo pipefail\nprintf %s ${shellQuote(chunk)} >> ${shellQuote(encodedPath)}`,
+              ],
+              resource?.region ?? null,
+              timeoutMs,
+            );
+          if (uploaded.Status !== "Success") {
+            throw new Error(
+              `remote artifact chunk upload failed at base64 offset=${offset} status=${uploaded.Status ?? "unknown"}: ${uploaded.StandardErrorContent ?? ""}`,
+            );
+          }
+        }
+
+        const finalized =
+          await this.options.provider.runSsmCommands(
+            instanceId,
+            [[
+              "set -euo pipefail",
+              `base64 -d -- ${shellQuote(encodedPath)} > ${shellQuote(targetPath)}`,
+              `chmod 600 -- ${shellQuote(targetPath)}`,
+              `rm -f -- ${shellQuote(encodedPath)}`,
+              `printf 'ABOS_MATERIALIZED_BYTES=%s\\nABOS_MATERIALIZED_SHA256=%s\\n' "$(stat -c %s ${shellQuote(targetPath)})" "$(sha256sum ${shellQuote(targetPath)} | awk '{print $1}')"`,
+            ].join("\n")],
+            resource?.region ?? null,
+            timeoutMs,
+          );
+        if (finalized.Status !== "Success") {
+          throw new Error(
+            `remote artifact finalization failed with SSM status=${finalized.Status ?? "unknown"}: ${finalized.StandardErrorContent ?? ""}`,
+          );
+        }
+
+        const observation =
+          parseAwsMaterializationObservation(
+            finalized.StandardOutputContent ?? "",
+          );
+        if (!observation) {
+          entries.push({
+            reference: source.reference,
+            state: "unknown",
+            evidence: [
+              "AWS target did not return valid size/hash materialization markers.",
+            ],
+          });
+          continue;
+        }
+
+        const verified =
+          observation.bytes === source.bytes &&
+          observation.sha256.toLowerCase() ===
+            source.integrity.digest.toLowerCase();
+
+        entries.push({
+          reference: source.reference,
+          state: verified ? "available" : "unknown",
+          targetPath: verified ? targetPath : null,
+          integrity: {
+            algorithm: "sha256",
+            digest: observation.sha256,
+          },
+          evidence: [
+            `AWS target observed bytes=${observation.bytes} sha256=${observation.sha256}.`,
+            ...(verified
+              ? ["AWS target artifact matches parent manifest."]
+              : [
+                  `AWS target verification mismatch: expected bytes=${source.bytes} sha256=${source.integrity.digest}.`,
+                ]),
+          ],
+          metadata: {
+            instanceId,
+            installRoot,
+          },
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : String(error);
+        entries.push({
+          reference: source.reference,
+          state: "unavailable",
+          evidence: [
+            `AWS target artifact materialization failed: ${message}`,
+          ],
+          metadata: {
+            instanceId,
+            installRoot,
+          },
+        });
+        evidence.push(
+          `AWS artifact "${source.reference}" could not be materialized: ${message}`,
+        );
+        try {
+          await this.options.provider.runSsmCommands(
+            instanceId,
+            [
+              `rm -f -- ${shellQuote(encodedPath)}`,
+            ],
+            resource?.region ?? null,
+            timeoutMs,
+          );
+        } catch {
+          // Cleanup failure does not change the already-unavailable transfer
+          // observation and must not be represented as successful delivery.
+        }
+      }
+    }
+
+    return {
+      protocolVersion:
+        ARTIFACT_MATERIALIZATION_PROTOCOL_VERSION,
+      entries,
+      evidence,
+      metadata: {
+        transport: "aws_ssm_chunked_base64",
+        instanceId,
+        installRoot,
       },
     };
   }
@@ -625,6 +847,30 @@ function parseTaskResult(stdout: string): TaskResult | null {
   } catch {
     return null;
   }
+}
+
+function parseAwsMaterializationObservation(
+  output: string,
+): { bytes: number; sha256: string } | null {
+  const bytesMatch =
+    /(?:^|\n)ABOS_MATERIALIZED_BYTES=(\d+)(?:\n|$)/.exec(
+      output,
+    );
+  const hashMatch =
+    /(?:^|\n)ABOS_MATERIALIZED_SHA256=([0-9a-fA-F]{64})(?:\n|$)/.exec(
+      output,
+    );
+  if (!bytesMatch || !hashMatch) return null;
+
+  const bytes = Number(bytesMatch[1]);
+  if (!Number.isSafeInteger(bytes) || bytes < 0) {
+    return null;
+  }
+
+  return {
+    bytes,
+    sha256: hashMatch[1].toLowerCase(),
+  };
 }
 
 function shellQuote(value: string): string {
