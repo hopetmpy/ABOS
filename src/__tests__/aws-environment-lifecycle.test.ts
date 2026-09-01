@@ -114,6 +114,7 @@ describe("AwsEnvironmentProvider lifecycle", () => {
       (args) => args[0] === "ec2" && args[1] === "run-instances",
     );
     expect(run).toBeTruthy();
+    expect(run).toContain("--client-token");
     expect(run).toContain("--iam-instance-profile");
     expect(run).toContain("Name=ABOS-SSM");
     expect(run).toContain("--security-group-ids");
@@ -130,6 +131,43 @@ describe("AwsEnvironmentProvider lifecycle", () => {
         { Key: "Name", Value: "abos-worker" },
       ]),
     );
+  });
+
+  it("recovers a provisioned EC2 after restart when InstanceId was not persisted", async () => {
+    const runner: EnvironmentCommandRunner = async (_command, args) => {
+      if (
+        args[0] === "ec2" &&
+        args[1] === "describe-instances" &&
+        args.includes("Name=tag:abos:resource-id,Values=resource-1")
+      ) {
+        return ok(JSON.stringify([
+          {
+            InstanceId: "i-recovered",
+            State: { Name: "running" },
+            InstanceType: "t3.micro",
+            PrivateIpAddress: "10.0.0.8",
+          },
+        ]));
+      }
+      throw new Error(`unexpected aws call: ${args.join(" ")}`);
+    };
+
+    const provider = new AwsEnvironmentProvider({
+      runner,
+      defaultRegion: "us-east-1",
+    });
+    const missingExternal = resource({
+      externalId: null,
+      status: "provisioning",
+      metadata: {},
+    });
+
+    const reconciled = await provider.reconcile(missingExternal);
+
+    expect(reconciled.actualExists).toBe(true);
+    expect(reconciled.action).toBe("adopt_by_resource_tag");
+    expect(reconciled.resource.externalId).toBe("i-recovered");
+    expect(reconciled.resource.status).toBe("running");
   });
 
   it("bootstraps through SSM argv without requiring SSH or persisted raw credentials", async () => {
