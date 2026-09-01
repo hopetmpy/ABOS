@@ -402,8 +402,15 @@ describe("UnifiedInferenceClient", () => {
 
     const result = await client.chat({ tier: "reasoning", messages: BASE_MESSAGES });
     expect(result.usage).toEqual({ inputTokens: 2000, outputTokens: 500, totalTokens: 2500 });
-    expect(result.cost.inputCostCredits).toBeCloseTo(4); // 2k * 2.0 / 1k
-    expect(result.cost.outputCostCredits).toBeCloseTo(4); // 0.5k * 8.0 / 1k
+    // Canonical: gpt-4.1 pricing is $2/M input and $8/M output.
+    // 2k input = $0.004 = 0.4c; 0.5k output = $0.004 = 0.4c.
+    expect(result.cost.inputCostCents).toBeCloseTo(0.4);
+    expect(result.cost.outputCostCents).toBeCloseTo(0.4);
+    expect(result.cost.totalCostCents).toBeCloseTo(0.8);
+
+    // Legacy aliases stay numerically compatible (milli-dollars).
+    expect(result.cost.inputCostCredits).toBeCloseTo(4);
+    expect(result.cost.outputCostCredits).toBeCloseTo(4);
     expect(result.cost.totalCostCredits).toBeCloseTo(8);
   });
 

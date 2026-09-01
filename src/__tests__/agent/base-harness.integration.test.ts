@@ -136,6 +136,39 @@ describe("agent/BaseHarness integration", () => {
     (context.db as any).close?.();
   });
 
+  it("accounts successful inference cost against the worker iteration budget", async () => {
+    const harness = new TestHarness();
+    const task = createTask();
+    const context = createContext();
+    context.inference = {
+      chat: async () => ({
+        content: "",
+        costCents: 12.5,
+        toolCalls: [
+          {
+            id: "call-1",
+            type: "function",
+            function: {
+              name: "task_done",
+              arguments: JSON.stringify({
+                summary: "costed completion",
+                success: true,
+              }),
+            },
+          },
+        ],
+      }),
+    };
+
+    await harness.initialize(task, context);
+    const result = await harness.execute();
+
+    expect(result.success).toBe(true);
+    expect(context.budget.costUsedCents).toBeCloseTo(12.5);
+    expect(result.costCents).toBeCloseTo(12.5);
+    (context.db as any).close?.();
+  });
+
   it("injects continuation as derived evidence for the same Task", async () => {
     const harness = new TestHarness();
     const task = createTask();
@@ -243,6 +276,7 @@ describe("agent/BaseHarness integration", () => {
         }
         return {
           content: "",
+          costCents: 7.25,
           toolCalls: [
             {
               id: "call-1",
@@ -260,6 +294,7 @@ describe("agent/BaseHarness integration", () => {
     expect(result.output).toBe("finished after retry");
     expect(callCount).toBe(2);
     expect(context.budget.turnsUsed).toBe(1);
+    expect(context.budget.costUsedCents).toBeCloseTo(7.25);
     expect(harness.beforeTurnCalls).toBe(1);
     (context.db as any).close?.();
   });
