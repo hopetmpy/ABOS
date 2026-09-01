@@ -1324,6 +1324,21 @@ export function acquireTaskLease(db: DatabaseType, taskName: string, owner: stri
   return result.changes > 0;
 }
 
+export function renewTaskLease(
+  db: DatabaseType,
+  taskName: string,
+  owner: string,
+  ttlMs: number,
+): boolean {
+  const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+  const result = db.prepare(
+    `UPDATE heartbeat_schedule
+     SET lease_expires_at = ?, updated_at = datetime('now')
+     WHERE task_name = ? AND lease_owner = ?`,
+  ).run(expiresAt, taskName, owner);
+  return result.changes > 0;
+}
+
 export function releaseTaskLease(db: DatabaseType, taskName: string, owner: string): void {
   db.prepare(
     `UPDATE heartbeat_schedule
