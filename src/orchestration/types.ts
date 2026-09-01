@@ -7,7 +7,12 @@ export interface AgentTracker {
 
 export interface FundingProtocol {
   fundChild(childAddress: string, amountCents: number): Promise<{ success: boolean }>;
-  recallCredits(childAddress: string): Promise<{ success: boolean; amountCents: number }>;
+  recallCredits(childAddress: string): Promise<{
+    success: boolean;
+    amountCents: number;
+    /** Present when the recall could not be executed by an authorized child route. */
+    reason?: string;
+  }>;
   getBalance(childAddress: string): Promise<number>;
 }
 
