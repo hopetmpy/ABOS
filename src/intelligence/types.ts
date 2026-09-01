@@ -131,3 +131,29 @@ export interface Opportunity {
   createdAt: string;
   updatedAt: string;
 }
+
+
+export type AssumptionStatus = "active" | "validated" | "invalidated" | "unknown";
+
+export interface TrackedAssumption {
+  id: string;
+  goalId: string;
+  pathId: string;
+  statement: string;
+  normalizedStatement: string;
+  status: AssumptionStatus;
+  confidence: number;
+  evidence: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PossibilitySpaceSnapshot {
+  goalId: string;
+  paths: PersistedPath[];
+  openOpportunities: Opportunity[];
+  facts: WorldFact[];
+  assumptions: TrackedAssumption[];
+  exhaustedSignatures: string[];
+  unknownCount: number;
+}
