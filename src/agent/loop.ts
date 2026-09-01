@@ -973,6 +973,21 @@ export async function runAgentLoop(
           );
           return dispatched.result;
         },
+        prepareTaskResultForPersistence: async (
+          sourceAddress,
+          task,
+          result,
+        ) => {
+          const environmentId =
+            resolveExecutionEnvironment(sourceAddress) ??
+            "unknown";
+          return environmentExecution.collectRemoteResultArtifacts(
+            environmentId,
+            task,
+            sourceAddress,
+            result,
+          );
+        },
         environmentRegistry,
         capabilityRegistry,
         config: {
