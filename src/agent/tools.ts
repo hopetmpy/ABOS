@@ -1720,6 +1720,7 @@ Model: ${ctx.inference.getDefaultModel()}
             ctx.db,
             genesis,
             lifecycle,
+            ctx.config,
           );
         } catch (err: any) {
           // Auto-topup on 402 insufficient credits and retry once
@@ -1753,6 +1754,7 @@ Model: ${ctx.inference.getDefaultModel()}
                   ctx.db,
                   retryGenesis,
                   retryLifecycle,
+                  ctx.config,
                 );
               }
             }
