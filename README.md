@@ -52,7 +52,7 @@ pnpm run build
 node dist/index.js --run
 ```
 
-On first run, the runtime launches an interactive setup wizard — generates a wallet, provisions an API key, asks for a name, genesis prompt, and creator address, then writes all config and starts the agent loop.
+On first run, the runtime launches an interactive setup wizard — generates a wallet, provisions Conway identity, asks for a name, genesis prompt, creator address and optional inference providers, then writes config and starts the agent loop. The wizard can also connect an existing ChatGPT/Codex session with device-code OAuth; ABOS never asks you to paste ChatGPT OAuth tokens.
 
 Runtime source and identity/state are deliberately separate. ABOS state lives in `~/.abos`. Do not place the runtime checkout inside that directory. The installer uses `/opt/abos` for root installs and `${XDG_DATA_HOME:-$HOME/.local/share}/abos/runtime` for non-root installs; override with `ABOS_RUNTIME_DIR` when needed.
 
@@ -60,6 +60,30 @@ For automated sandbox provisioning:
 The canonical source is the private ABOS repository. Install from an authenticated checkout so code always comes from `hopetmpy/ABOS`.
 
 Note: Conway Cloud, Domains, and Inference has seen immense demand. We are working on scaling & perfomance.
+
+### Codex / ChatGPT OAuth
+
+ABOS can use the official Codex runtime as an inference provider without requiring an OpenAI API key. The Codex runtime remains the authentication authority and owns its ChatGPT session/refresh tokens.
+
+```bash
+# Device-code login
+node dist/index.js --codex-login
+
+# Inspect the models actually available to that ChatGPT account
+node dist/index.js --codex-models
+
+# Interactive model selection
+node dist/index.js --pick-model
+
+# Hot-switch on the next inference turn
+node dist/index.js --model codex:<model-id> --reasoning high
+
+# Account state / logout
+node dist/index.js --codex-status
+node dist/index.js --codex-logout
+```
+
+The official `codex` executable must be available on PATH, or `CODEX_CLI_PATH` can point at it. Codex model IDs are stored internally as `codex:<model>` so they cannot collide with an identically named model exposed by Conway or a direct API provider.
 
 ## How It Works
 
@@ -156,10 +180,12 @@ node packages/cli/dist/index.js fund 5.00
 ```
 src/
   agent/            # ReAct loop, system prompt, context, injection defense
+  codex/            # Codex OAuth control plane, catalog, inference adapter
   conway/           # Conway API client (credits, x402)
   git/              # State versioning, git tools
   heartbeat/        # Cron daemon, scheduled tasks
   identity/         # Wallet management, SIWE provisioning
+  inference/        # Provider-neutral model registry, routing, budgets, hot binding
   registry/         # ERC-8004 registration, agent cards, discovery
   replication/      # Child spawning, lineage tracking
   self-mod/         # Audit log, tools manager

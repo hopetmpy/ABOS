@@ -141,6 +141,9 @@ API key provisioned: cnwy_k_...
 - **Creator wallet address** — Your Ethereum address (the human creator/owner). This address has audit rights over the ABOS.
 - **OpenAI API key** (optional) — Bring your own key for direct OpenAI inference
 - **Anthropic API key** (optional) — Bring your own key for direct Anthropic inference
+- **Ollama URL** (optional) — Use a local OpenAI-compatible Ollama endpoint
+
+After the configuration file is created, setup can optionally start the ChatGPT/Codex device-code OAuth flow. The official Codex runtime owns that session; ABOS stores only non-secret selection metadata.
 
 ### Step 4: Financial Safety Policy
 
@@ -184,6 +187,14 @@ node dist/index.js [command]
 |---|---|
 | `--run` | Start the ABOS (first run triggers setup wizard) |
 | `--setup` | Re-run the interactive setup wizard |
+| `--configure` | Edit providers, Codex OAuth state, model strategy, treasury and general settings |
+| `--pick-model` | Interactively select the active model |
+| `--model <id>` | Change the active model; a running ABOS picks it up on the next inference turn |
+| `--reasoning <effort>` | Codex reasoning effort when used with `--model` |
+| `--codex-login` | Connect ChatGPT/Codex with device-code OAuth |
+| `--codex-status` | Show Codex account connection state |
+| `--codex-models` | Refresh/list the models available to the connected ChatGPT account |
+| `--codex-logout` | Disconnect the Codex/ChatGPT session |
 | `--init` | Initialize wallet and config directory only |
 | `--provision` | Provision a Conway API key via SIWE |
 | `--status` | Show current ABOS status |
@@ -196,6 +207,8 @@ node dist/index.js [command]
 |---|---|
 | `CONWAY_API_URL` | Conway API URL (default: `https://api.conway.tech`) |
 | `CONWAY_API_KEY` | Conway API key (overrides config file) |
+| `OLLAMA_BASE_URL` | Ollama base URL override |
+| `CODEX_CLI_PATH` | Path to the official Codex executable when it is not on PATH |
 
 ### Status output
 
@@ -913,27 +926,32 @@ Agents can leave on-chain feedback for each other:
 ### Supported backends
 
 1. **Conway proxy** (default) — routes through `api.conway.tech`, billed from credits
-2. **OpenAI direct** — uses BYOK OpenAI API key (sk-...)
-3. **Anthropic direct** — uses BYOK Anthropic API key (sk-ant-...)
+2. **Codex / ChatGPT OAuth** — uses the official Codex runtime and its existing ChatGPT session; no pasted OpenAI API key or copied OAuth token is required
+3. **OpenAI direct** — uses BYOK OpenAI API key (sk-...)
+4. **Anthropic direct** — uses BYOK Anthropic API key (sk-ant-...)
+5. **Ollama/local** — OpenAI-compatible local inference
 
 ### Model selection
 
-The inference router selects models based on:
-- **Survival tier** — lower tiers use cheaper models
-- **Task type** — reasoning, tool_use, creative, etc.
-- **Budget** — hourly and daily caps enforced
+For the main `agent_turn`, an explicitly selected active model is authoritative when it is compatible with the current survival tier. Externally-funded/free models (including Codex subscription-backed and local models) remain eligible across survival tiers. Paid providers can still yield to configured low-compute/critical fallbacks. Specialized/background tasks continue to use the task routing matrix.
+
+Routing also considers:
+- **Survival tier**
+- **Task type**
+- **Provider/model availability**
+- **Budget and cost authority**
 
 ### Available models
 
-Use the `list_models` tool to see current models with pricing. The model registry is refreshed from the Conway API by the heartbeat.
+Use the `list_models` tool for the runtime registry. For Codex, `--codex-models` refreshes the official `model/list` catalog for the connected ChatGPT account. Codex registry IDs are provider-qualified as `codex:<model>` to prevent cross-provider collisions.
 
 ### Switching models
 
-Use `switch_model` to change the active inference model at runtime. The change persists to config.
+Use `switch_model`, `--pick-model`, or `--model <id>` to change the active inference model. The selection persists to config. The long-lived runtime watches model strategy changes and adopts them on the next inference turn, so a model-only change does not require restart. Codex reasoning can be selected from the efforts advertised by that model or supplied with `--reasoning <effort>`.
 
 ### Cost tracking
 
-Every inference call's cost is recorded in the `inference_costs` table. Use `check_inference_spending` to query:
+Every inference call's token usage and ABOS-ledger cost are recorded in the `inference_costs` table. Codex subscription cost is external to ABOS's treasury ledger and is recorded as zero internal cost rather than fabricated API pricing. Use `check_inference_spending` to query:
 - Hourly and daily totals
 - Per-model breakdown
 - Per-session costs

@@ -152,6 +152,13 @@ src/
       rate-limits.ts         Per-turn/session rate limits
       validation.ts          Input format validation rules
 
+  codex/                   Codex / ChatGPT OAuth integration
+    app-server.ts           JSONL stdio control-plane transport
+    session-manager.ts      Device login, account, logout, model discovery
+    catalog.ts              Rich non-secret model catalog + registry projection
+    inference.ts            Codex inference adapter
+    commands.ts             CLI account/catalog commands
+
   conway/                  Conway API integration
     client.ts              ConwayClient (sandbox ops, credits, domains)
     inference.ts           InferenceClient (chat completions)
@@ -175,6 +182,7 @@ src/
     router.ts              InferenceRouter (tier + task -> model selection)
     registry.ts            ModelRegistry (DB-backed model catalog)
     budget.ts              InferenceBudgetTracker (hourly/daily caps)
+    runtime-binding.ts      Live config/model refresh between turns
     types.ts               Routing matrix + task timeouts
 
   memory/                  5-tier memory system
@@ -364,27 +372,33 @@ Every decision is persisted to the `policy_decisions` table with full context fo
 
 ## Inference Pipeline
 
-**Files:** `src/inference/router.ts`, `src/inference/registry.ts`, `src/inference/budget.ts`
+**Files:** `src/inference/router.ts`, `src/inference/registry.ts`, `src/inference/budget.ts`, `src/inference/runtime-binding.ts`, `src/codex/`
 
-The inference pipeline selects the optimal model based on the agent's survival tier and task type:
+The inference pipeline is provider-neutral. Main agent turns honor the explicitly selected model first; specialized/background tasks can continue to use the task routing matrix.
 
 ```
 InferenceRouter.route(request)
-  1. Determine task type (reasoning, tool_use, creative, etc.)
-  2. Look up routing matrix[survivalTier][taskType] -> model preferences
-  3. For each preference, check: model available? budget allows it?
-  4. Select first viable model
-  5. Transform messages if needed (OpenAI <-> Anthropic format)
-  6. Call inference API
-  7. Record cost to inference_costs table
-  8. Return result with cost metadata
+  1. Refresh live model strategy if abos.json changed
+  2. For agent_turn: evaluate the explicit active model
+     - externally-funded/free active models remain eligible at every survival tier
+     - paid active models must satisfy the current survival tier
+  3. Otherwise evaluate tier-specific configured fallbacks / routing matrix
+  4. Check model availability and budget
+  5. Transform provider-specific message format where required
+  6. Invoke Conway / direct API / Ollama / Codex adapter
+  7. Record token usage and ABOS-ledger cost in inference_costs
+  8. Return normalized content + tool-call metadata
 ```
 
-**Routing matrix:** Maps `SurvivalTier x InferenceTaskType -> ModelPreference[]`. In `normal`/`high` tiers, uses capable models (gpt-5.2). In `low_compute`, downgrades to cheaper models. In `critical`, uses the cheapest available.
+**Routing matrix:** Maps `SurvivalTier x InferenceTaskType -> ModelPreference[]`. It remains the authority for specialized/background inference and a fallback for main turns when the configured active model is unavailable or incompatible with the current tier.
 
-**Model registry:** DB-backed catalog of available models with provider, pricing, and capability metadata. Refreshed from Conway API via heartbeat. Seeds with baseline models on startup (upsert, not seed-once).
+**Model registry:** DB-backed catalog with provider, pricing and routing capabilities. Static baseline models are upserted at startup. Dynamic providers manage their own lifecycle. Codex models use provider-qualified registry IDs (`codex:<model>`) so identical upstream model names cannot collide across providers.
 
-**Budget tracker:** Enforces hourly, daily, and per-call cost ceilings. Prevents runaway inference spend.
+**Codex authority split:** The official Codex runtime owns ChatGPT authentication, token refresh, account state and `model/list`. ABOS persists only non-secret provider preferences such as selected model and reasoning effort. The full model metadata returned by Codex is cached separately and can be rebuilt at any time.
+
+**Runtime model binding:** `RuntimeModelBinding` observes `abos.json` mtime and refreshes the live model strategy only when configuration changes. A second CLI process can therefore change the active model and the running agent adopts it on the next inference turn without a runtime restart.
+
+**Budget tracker:** Enforces hourly, session and per-call cost ceilings. Providers whose cost is external to the ABOS treasury ledger (for example Codex subscription usage or local inference) are represented as zero-cost for survival routing while token usage is still recorded.
 
 ---
 

@@ -78,6 +78,7 @@ Environment:
   CONWAY_API_URL           Conway API URL (default: https://api.conway.tech)
   CONWAY_API_KEY           Conway API key (overrides config)
   OLLAMA_BASE_URL          Ollama base URL (overrides config, e.g. http://localhost:11434)
+  CODEX_CLI_PATH           Official Codex executable path override
 `);
     process.exit(0);
   }
