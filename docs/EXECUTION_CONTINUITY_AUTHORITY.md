@@ -29,8 +29,9 @@ Provider and capability identifiers are open runtime data. Nothing in this docum
 | General event history | EventStream | `src/memory/event-stream.ts` | Read relevant events; do not duplicate the stream. |
 | Long/working/episodic/etc. memory | Memory subsystem | `src/memory/*` | Select relevant memory without creating another memory database. |
 | Goal-local files and decisions | AgentWorkspace | `src/orchestration/workspace.ts` | Workspace remains the parent-host file/decision surface. |
-| AWS remote artifact extraction | AWS provider | `AwsEnvironmentProvider.collect()` | Reuse remote -> parent collection. Missing artifacts remain pending/unknown. |
-| Conway task transport | Colony Messaging | `src/orchestration/messaging.ts` | Reuse the existing transport; add continuity payload only through existing dispatch contracts. |
+| Remote -> parent artifact extraction | Environment lifecycle + provider `collect()` | `EnvironmentLifecycleManager.collect()`, AWS/Conway provider collectors | Reuse the canonical provider lifecycle operation. Missing artifacts remain pending/unknown; remote executor paths never masquerade as parent-local files. |
+| Parent -> target artifact materialization | EnvironmentTaskExecutor + derived artifact contract | `src/environments/artifact-materialization.ts`, Local/Conway/AWS executor adapters | Materialize only parent-observed files, verify target integrity, and keep provider/scheme identifiers open. |
+| Conway task transport | Colony Messaging | `src/orchestration/messaging.ts`, `colony-task-assignment.ts` | Reuse the existing transport and canonical harness execution; structured assignment/result identity is authenticated before persistence. |
 | AWS task transport | AwsEc2TaskExecutor | SSM dispatch | Reuse the existing transport; do not create an AWS-specific continuity orchestrator. |
 | Local task execution | LocalWorkerPool adapter | runtime registration in `src/agent/loop.ts` | Reuse the existing executor registration. |
 
@@ -96,24 +97,53 @@ Core contracts may define stable semantic fields, but must preserve open extensi
 
 Unknown does not mean impossible. Missing current support does not create a global prohibition.
 
-## Current verified gaps
+## Current implementation state
 
-At this freeze, the following are not yet implemented as a provider-neutral continuity capability:
+Implemented on the execution-continuity branch:
 
-- an `ExecutionContinuationContext` contract
-- a `ContinuityAssembler`
-- explicit continuation injection into Local/Conway/AWS execution
-- generic parent -> target artifact materialization
-- a provider-neutral artifact integrity manifest
+- `ExecutionContinuationContext` with Path-scoped executable state and durable cross-Path knowledge.
+- `ContinuityAssembler` as a read-only composer over TaskGraph, Adaptive, mobility, resource, event, and optional contributor authorities.
+- explicit continuation delivery through Local, Conway, and AWS without a second provider selector or orchestration authority.
+- structured Conway parent -> child Task consumption through Colony Messaging and the canonical harness path.
+- canonical parent -> target artifact materialization with target size/hash verification.
+- Local filesystem staging, Conway sandbox staging, and AWS SSM staging through their existing executor transports.
+- AWS and Conway remote -> parent artifact collection through the canonical lifecycle `collect()` operation.
+- authenticated asynchronous `task_result` normalization before TaskGraph persistence, so executor-local paths are collected or remain explicit opaque remote references.
+- an integrity manifest attached only as derived delivery evidence; it is not a new artifact ledger.
+- open URI/scheme handling: URI-shaped artifact references remain opaque by default, so future schemes do not require a central allowlist.
+- end-to-end tests covering logical parent/child continuation, physical Conway artifact return, canonical parent persistence, ContinuityAssembler reconstruction, and rematerialization into a newly registered future target without provider-pair routing.
 
-AWS already implements substantial remote -> parent artifact collection. That work must be reused rather than recreated.
+Still outside the claim of this phase:
+
+- transparent migration of arbitrary live process memory/state.
+- guaranteed materialization for a provider that exposes neither a compatible executor materializer nor a provider collection capability; such state remains unavailable/unknown/pending rather than impossible.
+- final phase freeze/merge until the exact branch HEAD completes the full CI matrix successfully.
+
+## Result finalization invariant
+
+For asynchronous remote workers the canonical result path is:
+
+```
+authenticated task_result
+  -> resolve canonical Task + assigned source
+  -> EnvironmentExecutionBridge result preparation
+  -> EnvironmentResource marks executor-local artifacts pending
+  -> EnvironmentLifecycleManager.collect()
+  -> provider verifies/collects what it can
+  -> parent-safe TaskResult
+  -> TaskGraph completion/failure
+```
+
+A semantic Task success does not fabricate artifact success. If collection is unavailable or incomplete, the TaskResult preserves an opaque remote reference and the EnvironmentResource remains pending with evidence.
 
 ## Phase order
 
-1. Contract + invariants.
-2. Tests for contract scoping and open-world behavior.
-3. ContinuityAssembler as a read-only composer.
-4. Local continuation integration.
-5. Conway/AWS delivery integration through existing dispatch paths.
-6. Parent -> target artifact materialization + integrity verification.
-7. Cross-environment end-to-end continuation tests.
+1. Contract + invariants. **Implemented**
+2. Tests for contract scoping and open-world behavior. **Implemented**
+3. ContinuityAssembler as a read-only composer. **Implemented**
+4. Local continuation integration. **Implemented**
+5. Conway/AWS delivery integration through existing dispatch paths. **Implemented**
+6. Parent -> target artifact materialization + integrity verification. **Implemented**
+7. Remote -> parent collection symmetry for AWS/Conway. **Implemented**
+8. Cross-environment logical + physical end-to-end continuation tests. **Implemented; final CI validation pending**
+9. Architecture audit + phase freeze/merge. **Pending**
