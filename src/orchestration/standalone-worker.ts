@@ -48,6 +48,19 @@ import {
   type TaskResult,
 } from "./task-graph.js";
 import { executeTaskWithHarness } from "./local-worker.js";
+import {
+  EXECUTION_CONTINUATION_PROTOCOL_VERSION,
+  type ExecutionContinuationContext,
+} from "../environments/continuity.js";
+
+export interface StandaloneTaskExecutionOptions {
+  executionContinuation?: ExecutionContinuationContext;
+}
+
+export interface ParsedStandaloneTaskExecutionPayload {
+  task: TaskNode;
+  executionContinuation?: ExecutionContinuationContext;
+}
 
 export async function executeStandaloneTaskFile(
   filePath: string,
@@ -55,11 +68,15 @@ export async function executeStandaloneTaskFile(
   const payload = JSON.parse(
     await fs.readFile(filePath, "utf8"),
   ) as unknown;
-  return executeStandaloneTask(parseTask(payload));
+  const parsed = parseStandaloneTaskExecutionPayload(payload);
+  return executeStandaloneTask(parsed.task, {
+    executionContinuation: parsed.executionContinuation,
+  });
 }
 
 export async function executeStandaloneTask(
   incomingTask: TaskNode,
+  options: StandaloneTaskExecutionOptions = {},
 ): Promise<TaskResult> {
   const bootstrapped = await bootstrapFromGenesisIfPresent();
   const config = loadConfig() ?? bootstrapped;
@@ -249,6 +266,8 @@ export async function executeStandaloneTask(
       {
         workerId:
           `remote-${incomingTask.id}`,
+        executionContinuation:
+          options.executionContinuation,
       },
     );
 
@@ -358,6 +377,80 @@ function createLocalMirrorTask(
       completedAt: row.completedAt,
     },
   };
+}
+
+export function parseStandaloneTaskExecutionPayload(
+  value: unknown,
+): ParsedStandaloneTaskExecutionPayload {
+  if (
+    value &&
+    typeof value === "object" &&
+    (value as Record<string, unknown>).protocol ===
+      "abos_task_execution_v1" &&
+    "task" in (value as Record<string, unknown>)
+  ) {
+    const envelope = value as Record<string, unknown>;
+    const task = parseTask(envelope.task);
+    const executionContinuation = parseContinuationContext(
+      envelope.continuationContext,
+      task,
+    );
+    return {
+      task,
+      ...(executionContinuation
+        ? { executionContinuation }
+        : {}),
+    };
+  }
+
+  // Backward compatibility: old callers may still send a bare TaskNode.
+  return { task: parseTask(value) };
+}
+
+function parseContinuationContext(
+  value: unknown,
+  task: TaskNode,
+): ExecutionContinuationContext | undefined {
+  if (value == null) return undefined;
+  if (!value || typeof value !== "object") {
+    throw new Error(
+      "Standalone continuationContext must be an object when provided.",
+    );
+  }
+
+  const context = value as Partial<ExecutionContinuationContext>;
+  if (
+    context.protocolVersion !== EXECUTION_CONTINUATION_PROTOCOL_VERSION ||
+    !context.identity ||
+    typeof context.identity.goalId !== "string" ||
+    typeof context.identity.taskId !== "string" ||
+    !(
+      typeof context.identity.pathId === "string" ||
+      context.identity.pathId === null
+    )
+  ) {
+    throw new Error(
+      "Standalone continuationContext has an unsupported protocol or invalid canonical identity.",
+    );
+  }
+
+  if (
+    context.identity.goalId !== task.goalId ||
+    context.identity.taskId !== task.id
+  ) {
+    throw new Error(
+      `Standalone continuation identity mismatch: expected goal=${task.goalId} task=${task.id}, received goal=${context.identity.goalId} task=${context.identity.taskId}.`,
+    );
+  }
+
+  const taskPathId = task.strategicPathId ?? null;
+  if (context.identity.pathId !== taskPathId) {
+    throw new Error(
+      `Standalone continuation Path mismatch: expected ${taskPathId ?? "unbound"}, received ${context.identity.pathId ?? "unbound"}.`,
+    );
+  }
+
+  return context as ExecutionContinuationContext;
 }
 
 function parseTask(value: unknown): TaskNode {
