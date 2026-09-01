@@ -16,6 +16,7 @@ import type { AbosConfig, ModelStrategyConfig, TreasuryPolicy, ModelEntry } from
 import { closePrompts } from "./prompts.js";
 import { createDatabase } from "../state/database.js";
 import { ModelRegistry } from "../inference/registry.js";
+import { runAiConnectionFlow } from "./ai-connection.js";
 
 // ─── Readline helpers ─────────────────────────────────────────────
 
@@ -170,12 +171,19 @@ function val(v: string | number | boolean | undefined): string {
 // ─── Main menu ────────────────────────────────────────────────────
 
 function printMainMenu(config: AbosConfig): void {
-  const providers = [
-    config.openaiApiKey ? "OpenAI" : null,
-    config.anthropicApiKey ? "Anthropic" : null,
-    config.ollamaBaseUrl ? "Ollama" : null,
-    "Conway",
-  ].filter(Boolean).join(", ");
+  const configuredConnections = Object.values(
+    config.aiConnection?.connections || {},
+  ).map((connection) => connection.provider);
+  const legacyConnections = [
+    config.openaiApiKey ? "openai" : null,
+    config.anthropicApiKey ? "anthropic" : null,
+    config.ollamaBaseUrl ? "ollama" : null,
+    config.conwayApiKey ? "conway" : null,
+  ].filter((value): value is string => !!value);
+  const providers = [...new Set([
+    ...configuredConnections,
+    ...legacyConnections,
+  ])].join(", ");
 
   const strategy = config.modelStrategy ?? DEFAULT_MODEL_STRATEGY_CONFIG;
 
@@ -183,7 +191,7 @@ function printMainMenu(config: AbosConfig): void {
   console.log(chalk.cyan("  │  Configure ABOS                        │"));
   console.log(chalk.cyan("  └────────────────────────────────────────────┘"));
   console.log("");
-  console.log(`  ${chalk.white("1.")} Inference Providers   ${dim(providers)}`);
+  console.log(`  ${chalk.white("1.")} AI Connections        ${dim(providers)}`);
   console.log(`  ${chalk.white("2.")} Model Strategy        ${dim(config.inferenceModel)} / ${dim(strategy.maxTokensPerTurn + " tokens")}`);
   console.log(`  ${chalk.white("3.")} Treasury Policy       ${dim("max transfer: " + (config.treasuryPolicy?.maxSingleTransferCents ?? DEFAULT_TREASURY_POLICY.maxSingleTransferCents) + "¢")}`);
   console.log(`  ${chalk.white("4.")} General               ${dim(config.name)} / ${dim(config.logLevel)}`);
@@ -192,22 +200,14 @@ function printMainMenu(config: AbosConfig): void {
   console.log("");
 }
 
-// ─── Section: Inference Providers ────────────────────────────────
+// ─── Section: AI Connections ────────────────────────────────────
 
-async function configureProviders(config: AbosConfig): Promise<void> {
-  console.log(chalk.cyan("\n  ── Inference Providers ─────────────────────────\n"));
-  console.log(chalk.dim("  Press Enter to keep the current value. Type - to clear an optional field.\n"));
-
-  config.conwayApiKey = await askRequiredString(
-    "Conway API key",
-    config.conwayApiKey,
-  );
-
-  config.openaiApiKey = await askString("OpenAI API key  (sk-...)", config.openaiApiKey) || undefined;
-  config.anthropicApiKey = await askString("Anthropic API key  (sk-ant-...)", config.anthropicApiKey) || undefined;
-  config.ollamaBaseUrl = await askString("Ollama base URL  (http://localhost:11434)", config.ollamaBaseUrl) || undefined;
-
-  console.log("");
+async function configureAiConnections(config: AbosConfig): Promise<void> {
+  if (rl) {
+    rl.close();
+    rl = null;
+  }
+  await runAiConnectionFlow(config, { manage: true, allowSkip: true });
 }
 
 // ─── Section: Model Strategy ──────────────────────────────────────
@@ -311,7 +311,7 @@ async function configureGeneral(config: AbosConfig): Promise<void> {
 // ─── Entry point ──────────────────────────────────────────────────
 
 export async function runConfigure(): Promise<void> {
-  const config = loadConfig();
+  let config = loadConfig();
   if (!config) {
     console.log(chalk.red("  ABOS is not configured. Run: abos --setup\n"));
     return;
@@ -325,9 +325,9 @@ export async function runConfigure(): Promise<void> {
 
     switch (choice) {
       case "1":
-        await configureProviders(config);
-        saveConfig(config);
-        console.log(chalk.green("  ✓ Providers saved.\n"));
+        await configureAiConnections(config);
+        config = loadConfig() ?? config;
+        console.log(chalk.green("  ✓ AI connections updated.\n"));
         break;
       case "2":
         await configureModelStrategy(config);
@@ -355,5 +355,5 @@ export async function runConfigure(): Promise<void> {
 
   if (rl) { rl.close(); rl = null; }
   closePrompts();
-  console.log(chalk.dim("  Done. Restart the abos to apply changes.\n"));
+  console.log(chalk.dim("  Done. AI route/model changes are picked up by running ABOS main-agent turns on their next inference call.\n"));
 }

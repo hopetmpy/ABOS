@@ -14,9 +14,21 @@ import type {
   TokenUsage,
   InferenceToolDefinition,
 } from "../types.js";
+import type { CodexProviderConfig } from "../types.js";
+import { CodexInferenceRuntime } from "../codex/inference.js";
 import { ResilientHttpClient } from "./http-client.js";
 
 const INFERENCE_TIMEOUT_MS = 60_000;
+
+export interface RuntimeInferenceProviderAdapter {
+  id: string;
+  isAvailable?: () => boolean;
+  chat: (
+    messages: ChatMessage[],
+    options: InferenceOptions,
+    modelId: string,
+  ) => Promise<InferenceResponse>;
+}
 
 interface InferenceClientOptions {
   apiUrl: string;
@@ -27,11 +39,17 @@ interface InferenceClientOptions {
   openaiApiKey?: string;
   anthropicApiKey?: string;
   ollamaBaseUrl?: string;
+  codex?: CodexProviderConfig;
+  getCodexConfig?: () => CodexProviderConfig | undefined;
+  /** Live explicit route. When set, no model-name heuristic may override it. */
+  getConnectionProvider?: () => string | undefined;
+  /** Open extension point for providers not built into this module. */
+  runtimeAdapters?: Iterable<RuntimeInferenceProviderAdapter>;
   /** Optional registry lookup — if provided, used before name heuristics */
   getModelProvider?: (modelId: string) => string | undefined;
 }
 
-type InferenceBackend = "conway" | "openai" | "anthropic" | "ollama";
+type InferenceBackend = string;
 
 function isLoopbackHttpUrl(url: string | undefined): boolean {
   if (!url) return false;
@@ -48,7 +66,17 @@ function isLoopbackHttpUrl(url: string | undefined): boolean {
 export function createInferenceClient(
   options: InferenceClientOptions,
 ): InferenceClient {
-  const { apiUrl, apiKey, openaiApiKey, anthropicApiKey, ollamaBaseUrl, getModelProvider } = options;
+  const {
+    apiUrl,
+    apiKey,
+    openaiApiKey,
+    anthropicApiKey,
+    ollamaBaseUrl,
+    codex,
+    getCodexConfig,
+    getConnectionProvider,
+    getModelProvider,
+  } = options;
   const httpClient = new ResilientHttpClient({
     baseTimeout: INFERENCE_TIMEOUT_MS,
     retryableStatuses: [429, 500, 502, 503, 504],
@@ -57,6 +85,22 @@ export function createInferenceClient(
   let currentModel = options.defaultModel;
   let maxTokens = options.maxTokens;
 
+  const runtimeAdapters = new Map<string, RuntimeInferenceProviderAdapter>();
+  const codexRuntime = new CodexInferenceRuntime({
+    getReasoningEffort: () =>
+      getCodexConfig?.()?.reasoningEffort ?? codex?.reasoningEffort,
+  });
+  runtimeAdapters.set("codex", {
+    id: "codex",
+    isAvailable: () =>
+      getCodexConfig?.()?.enabled ?? codex?.enabled ?? false,
+    chat: (messages, inferenceOptions, modelId) =>
+      codexRuntime.chat(messages, inferenceOptions, modelId),
+  });
+  for (const adapter of options.runtimeAdapters || []) {
+    runtimeAdapters.set(adapter.id, adapter);
+  }
+
   const chat = async (
     messages: ChatMessage[],
     opts?: InferenceOptions,
@@ -64,12 +108,33 @@ export function createInferenceClient(
     const model = opts?.model || currentModel;
     const tools = opts?.tools;
 
-    const backend = resolveInferenceBackend(model, {
-      openaiApiKey,
-      anthropicApiKey,
-      ollamaBaseUrl,
-      getModelProvider,
-    });
+    const explicitProvider = opts?.connectionProvider || getConnectionProvider?.();
+    const backend = resolveInferenceBackend(
+      model,
+      {
+        openaiApiKey,
+        anthropicApiKey,
+        ollamaBaseUrl,
+        getModelProvider,
+      },
+      explicitProvider,
+      runtimeAdapters,
+    );
+
+    const runtimeAdapter = runtimeAdapters.get(backend);
+    if (runtimeAdapter) {
+      if (runtimeAdapter.isAvailable && !runtimeAdapter.isAvailable()) {
+        throw new Error(
+          `AI provider '${backend}' is selected but is not currently available in this runtime`,
+        );
+      }
+      const response = await runtimeAdapter.chat(
+        messages,
+        { ...(opts || {}), model, connectionProvider: backend },
+        model,
+      );
+      return { ...response, provider: response.provider || backend };
+    }
 
     // Newer models (o-series, gpt-5.x, gpt-4.1) require max_completion_tokens.
     // Ollama always uses max_tokens.
@@ -124,7 +189,7 @@ export function createInferenceClient(
       body,
       apiUrl: openAiLikeApiUrl,
       apiKey: openAiLikeApiKey,
-      backend,
+      backend: backend as "conway" | "openai" | "ollama",
       httpClient,
     });
   };
@@ -182,22 +247,69 @@ function resolveInferenceBackend(
     ollamaBaseUrl?: string;
     getModelProvider?: (modelId: string) => string | undefined;
   },
+  explicitProvider: string | undefined,
+  runtimeAdapters: Map<string, RuntimeInferenceProviderAdapter>,
 ): InferenceBackend {
-  // Registry-based routing: most accurate, no name guessing
-  if (keys.getModelProvider) {
-    const provider = keys.getModelProvider(model);
-    if (provider === "ollama" && keys.ollamaBaseUrl) return "ollama";
-    if (provider === "anthropic" && keys.anthropicApiKey) return "anthropic";
-    if (provider === "openai" && keys.openaiApiKey) return "openai";
-    if (provider === "conway") return "conway";
-    // provider unknown or key not configured — fall through to heuristics
+  if (explicitProvider) {
+    if (runtimeAdapters.has(explicitProvider)) return explicitProvider;
+    if (explicitProvider === "ollama") {
+      if (!keys.ollamaBaseUrl) throw new Error("Ollama is selected but no local endpoint is configured");
+      return "ollama";
+    }
+    if (explicitProvider === "anthropic") {
+      if (!keys.anthropicApiKey) throw new Error("Anthropic is selected but no API key is configured");
+      return "anthropic";
+    }
+    if (explicitProvider === "openai") {
+      if (!keys.openaiApiKey) throw new Error("OpenAI is selected but no API key is configured");
+      return "openai";
+    }
+    if (explicitProvider === "conway") return "conway";
+
+    throw new Error(
+      `AI provider '${explicitProvider}' is selected but no runtime adapter is loaded. This is currently unavailable, not proof of impossibility.`,
+    );
   }
 
-  // Heuristic fallback (model not in registry yet)
-  if (keys.anthropicApiKey && /^claude/i.test(model)) return "anthropic";
-  if (keys.openaiApiKey && /^(gpt-[3-9]|gpt-4|gpt-5|o[1-9][-\s.]|o[1-9]$|chatgpt)/i.test(model)) return "openai";
-  return "conway";
+  // Registry-based routing is authoritative when it knows the model owner.
+  if (keys.getModelProvider) {
+    const provider = keys.getModelProvider(model);
+    if (provider) {
+      if (runtimeAdapters.has(provider)) return provider;
+      if (provider === "ollama") {
+        if (!keys.ollamaBaseUrl) throw new Error("Registered Ollama model has no configured local endpoint");
+        return "ollama";
+      }
+      if (provider === "anthropic") {
+        if (!keys.anthropicApiKey) throw new Error("Registered Anthropic model has no configured API key");
+        return "anthropic";
+      }
+      if (provider === "openai") {
+        if (!keys.openaiApiKey) {
+          // A Conway route may legitimately proxy an OpenAI-owned model only
+          // when no explicit connection route exists.
+          return "conway";
+        }
+        return "openai";
+      }
+      if (provider === "conway") return "conway";
 
+      throw new Error(
+        `Model '${model}' belongs to registered provider '${provider}', but no runtime adapter is loaded`,
+      );
+    }
+  }
+
+  // Legacy compatibility only when neither an explicit route nor a registered
+  // provider is available. These heuristics are not allowed to override either.
+  if (keys.anthropicApiKey && /^claude/i.test(model)) return "anthropic";
+  if (
+    keys.openaiApiKey &&
+    /^(gpt-[3-9]|gpt-4|gpt-5|o[1-9][-\s.]|o[1-9]$|chatgpt)/i.test(model)
+  ) {
+    return "openai";
+  }
+  return "conway";
 }
 
 async function chatViaOpenAiCompatible(params: {

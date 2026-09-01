@@ -171,10 +171,23 @@ src/
     wallet.ts              Ethereum wallet generation/loading
     provision.ts           SIWE API key provisioning
 
+  ai-connections/          User-facing AI connection composition
+    registry.ts            Open method/provider adapter registry (setup/auth only)
+
+  codex/                   ChatGPT/Codex provider adapter
+    app-server.ts          Official Codex app-server JSONL/stdio transport
+    session-manager.ts     Device-code/account/model-list control plane
+    catalog.ts             Non-secret provider metadata -> canonical ModelRegistry
+    inference.ts           Codex inference adapter with ABOS tool-boundary enforcement
+    commands.ts            Login/status/models/logout CLI operations
+
   inference/               Model strategy
     router.ts              InferenceRouter (tier + task -> model selection)
     registry.ts            ModelRegistry (DB-backed model catalog)
     budget.ts              InferenceBudgetTracker (hourly/daily caps)
+    runtime-binding.ts     Live main-agent model strategy reload
+    provider-registry.ts   Pre-existing worker/harness provider routing
+    inference-client.ts    Pre-existing worker/harness unified inference client
     types.ts               Routing matrix + task timeouts
 
   memory/                  5-tier memory system
@@ -695,10 +708,13 @@ AbosConfig
   creatorAddress          Creator's Ethereum address
   sandboxId               Conway sandbox ID (empty = local mode)
   conwayApiUrl            Conway API URL (default: https://api.conway.tech)
-  conwayApiKey            SIWE-provisioned API key
+  conwayApiKey            SIWE-provisioned Conway credential
   openaiApiKey            Optional BYOK OpenAI key
   anthropicApiKey         Optional BYOK Anthropic key
-  inferenceModel          Default model (default: gpt-5.2)
+  ollamaBaseUrl           Optional local/self-hosted Ollama endpoint
+  codex                   Non-secret Codex connection/model metadata
+  aiConnection            Configured profiles + explicit active method/provider route
+  inferenceModel          Active model (default: gpt-5.2)
   maxTokensPerTurn        Max tokens per inference call (default: 4096)
   heartbeatConfigPath     Path to heartbeat.yml
   dbPath                  Path to SQLite database
@@ -714,7 +730,21 @@ AbosConfig
   modelStrategy           Model routing config
 ```
 
-**Deep-merged fields:** `treasuryPolicy`, `modelStrategy`, and `soulConfig` are merged with defaults so partial overrides work correctly.
+**Deep-merged fields:** `treasuryPolicy`, `modelStrategy`, `soulConfig`, `codex`, and `aiConnection` are merged with defaults so partial overrides work correctly.
+
+### AI connection authority boundaries
+
+The three built-in connection methods — `oauth`, `api_key`, and `local` — are UX conventions, not a closed type. Method IDs and provider IDs are open strings. A newly installed/constructed adapter can register a provider or a new method without editing a core provider enum.
+
+Authority remains separated:
+
+- **AiConnectionAdapterRegistry**: setup/authentication/discovery coordination only.
+- **Provider credential/session authority**: API-key configuration or provider-owned session (Codex owns ChatGPT OAuth tokens).
+- **ModelRegistry**: canonical DB-backed catalog for main-agent model identity/capabilities.
+- **InferenceRouter + existing InferenceClient**: main-agent model/route execution.
+- **ProviderRegistry + UnifiedInferenceClient**: pre-existing worker/harness tiered inference path; not replaced by AI Connections.
+
+An explicit active provider fails closed if its required credential/runtime adapter is unavailable. Unknown or unloaded providers remain unavailable/unknown rather than being silently reinterpreted as Conway or declared impossible.
 
 ---
 

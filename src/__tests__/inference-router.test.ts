@@ -230,6 +230,59 @@ describe("InferenceRouter", () => {
       expect(model!.modelId).toBe("gpt-5.2");
     });
 
+    it("honors an explicit active model for the next agent turn", () => {
+      budget.updateConfig({
+        ...DEFAULT_MODEL_STRATEGY_CONFIG,
+        inferenceModel: "gpt-5.3",
+      });
+      const model = router.selectModel("normal", "agent_turn");
+      expect(model).not.toBeNull();
+      expect(model!.modelId).toBe("gpt-5.3");
+    });
+
+    it("hot-switches after the live strategy changes", () => {
+      budget.updateConfig({
+        ...DEFAULT_MODEL_STRATEGY_CONFIG,
+        inferenceModel: "gpt-5.3",
+      });
+      expect(router.selectModel("normal", "agent_turn")!.modelId).toBe("gpt-5.3");
+
+      budget.updateConfig({
+        ...DEFAULT_MODEL_STRATEGY_CONFIG,
+        inferenceModel: "gpt-4.1",
+      });
+      expect(router.selectModel("normal", "agent_turn")!.modelId).toBe("gpt-4.1");
+    });
+
+    it("keeps an externally-funded active model authoritative across survival tiers", () => {
+      const now = new Date().toISOString();
+      registry.upsert({
+        modelId: "codex:gpt-test",
+        provider: "codex",
+        displayName: "Codex GPT Test",
+        tierMinimum: "dead",
+        costPer1kInput: 0,
+        costPer1kOutput: 0,
+        maxTokens: 4096,
+        contextWindow: 0,
+        supportsTools: true,
+        supportsVision: false,
+        parameterStyle: "max_completion_tokens",
+        enabled: true,
+        lastSeen: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+      budget.updateConfig({
+        ...DEFAULT_MODEL_STRATEGY_CONFIG,
+        inferenceModel: "codex:gpt-test",
+      });
+
+      expect(router.selectModel("low_compute", "agent_turn")!.modelId).toBe("codex:gpt-test");
+      expect(router.selectModel("critical", "agent_turn")!.modelId).toBe("codex:gpt-test");
+      expect(router.selectModel("dead", "agent_turn")!.modelId).toBe("codex:gpt-test");
+    });
+
     it("returns cheaper model for low_compute tier", () => {
       const model = router.selectModel("low_compute", "agent_turn");
       expect(model).not.toBeNull();
@@ -286,6 +339,37 @@ describe("InferenceRouter", () => {
       const costs = inferenceGetSessionCosts(db, "test-session");
       expect(costs.length).toBe(1);
       expect(costs[0].model).toBe("gpt-5.2");
+    });
+
+    it("records the actual connection provider independently from model ownership", async () => {
+      const seenOptions: any[] = [];
+      const mockChat = async (_msgs: any[], opts: any) => {
+        seenOptions.push(opts);
+        return {
+          provider: "conway",
+          message: { content: "proxied", role: "assistant" },
+          usage: { promptTokens: 10, completionTokens: 5 },
+          finishReason: "stop",
+        };
+      };
+
+      const result = await router.route(
+        {
+          messages: [{ role: "user", content: "Use Conway" }],
+          taskType: "agent_turn",
+          connectionProvider: "conway",
+          tier: "normal",
+          sessionId: "connection-provider-session",
+        },
+        mockChat,
+      );
+
+      expect(seenOptions[0].connectionProvider).toBe("conway");
+      expect(result.model).toBe("gpt-5.2");
+      expect(result.provider).toBe("conway");
+
+      const costs = inferenceGetSessionCosts(db, "connection-provider-session");
+      expect(costs[0].provider).toBe("conway");
     });
 
     it("computes actualCostCents accurately from token usage", async () => {

@@ -46,7 +46,7 @@ The ABOS has a genesis prompt (its purpose), a set of tools (shell access, file 
 
 ### One-line install (Conway sandbox)
 
-The canonical source is the private ABOS repository. Install from an authenticated checkout so code always comes from `hopetmpy/ABOS`.
+The canonical source is the public `hopetmpy/ABOS` repository. A normal clone or GitHub source download follows the default `main` branch.
 
 This clones the repo, builds, and launches the setup wizard inside a Conway sandbox.
 
@@ -134,13 +134,21 @@ The runtime signs a SIWE (Sign-In With Ethereum) message to authenticate with Co
 API key provisioned: cnwy_k_...
 ```
 
-### Step 3: Interactive Questions
+### Step 3: Interactive Questions and AI Connection
 
-- **Name** — Give your ABOS a name (e.g., "Atlas", "Minerva")
-- **Genesis prompt** — The seed instruction that defines the ABOS's purpose. This is the most important input. Be specific about what you want it to do.
-- **Creator wallet address** — Your Ethereum address (the human creator/owner). This address has audit rights over the ABOS.
-- **OpenAI API key** (optional) — Bring your own key for direct OpenAI inference
-- **Anthropic API key** (optional) — Bring your own key for direct Anthropic inference
+The wizard collects the ABOS name, genesis prompt, and creator wallet address, writes the base configuration, and then opens **Connect AI**.
+
+Connect AI keeps three concepts separate: **connection method**, **provider adapter**, and **model**. ABOS ships three built-in connection-method conventions:
+
+- **OAuth** — currently includes the ChatGPT / Codex adapter using provider-managed device-code login.
+- **API Key** — currently includes OpenAI, Anthropic, and Conway adapters.
+- **Local / Self-hosted** — currently includes Ollama.
+
+These are built-in methods, not a closed universe. Provider and method identifiers are open strings, so an additional adapter can register another provider or another connection method without changing a core enum or central provider allowlist.
+
+A connection can be configured without becoming active. The active route changes only after a compatible model is explicitly selected. Multiple configured connection profiles can coexist.
+
+For Codex OAuth, ABOS talks to the official Codex app-server control plane. Codex remains the authority for the ChatGPT session, token refresh, account state, and logout; ABOS does not copy ChatGPT access or refresh tokens into `abos.json`.
 
 ### Step 4: Financial Safety Policy
 
@@ -281,11 +289,20 @@ Configuration is stored at `~/.abos/abos.json`.
   "conwayApiUrl": "https://api.conway.tech",    // Conway API endpoint
   "conwayApiKey": "cnwy_k_...",                 // API key
 
-  // Inference
-  "inferenceModel": "gpt-5.2",                  // Default model
+  // Inference / AI connections
+  "inferenceModel": "gpt-5.2",                  // Active model
   "maxTokensPerTurn": 4096,                     // Max tokens per inference call
-  "openaiApiKey": "sk-...",                      // Optional BYOK OpenAI
-  "anthropicApiKey": "sk-ant-...",               // Optional BYOK Anthropic
+  "openaiApiKey": "sk-...",                     // Optional BYOK OpenAI
+  "anthropicApiKey": "sk-ant-...",              // Optional BYOK Anthropic
+  "ollamaBaseUrl": "http://localhost:11434",     // Optional local runtime
+  "codex": {                                    // Non-secret Codex metadata only
+    "enabled": false,
+    "includeHiddenModels": false
+  },
+  "aiConnection": {
+    "connections": {},                          // Configured connection profiles
+    "active": null                              // Explicit method/provider route when selected
+  },
 
   // Paths
   "heartbeatConfigPath": "~/.abos/heartbeat.yml",
@@ -910,26 +927,57 @@ Agents can leave on-chain feedback for each other:
 
 ## Inference and Models
 
-### Supported backends
+### AI connection model
 
-1. **Conway proxy** (default) — routes through `api.conway.tech`, billed from credits
-2. **OpenAI direct** — uses BYOK OpenAI API key (sk-...)
-3. **Anthropic direct** — uses BYOK Anthropic API key (sk-ant-...)
+ABOS separates **method**, **provider**, and **model**:
 
-### Model selection
+```
+connection method -> provider adapter -> discovered/registered model -> active runtime route
+```
 
-The inference router selects models based on:
-- **Survival tier** — lower tiers use cheaper models
-- **Task type** — reasoning, tool_use, creative, etc.
-- **Budget** — hourly and daily caps enforced
+The built-in method conventions are OAuth, API Key, and Local / Self-hosted. The namespaces are deliberately open: a provider not known today is not classified as impossible and does not require expanding a closed `ModelProvider` or `AiRuntimeProvider` union.
 
-### Available models
+Currently shipped adapters include:
 
-Use the `list_models` tool to see current models with pricing. The model registry is refreshed from the Conway API by the heartbeat.
+- **Codex / ChatGPT OAuth** — device-code login through the official Codex app-server. Codex owns the OAuth session and tokens.
+- **OpenAI API Key**
+- **Anthropic API Key**
+- **Conway API Key / proxy**
+- **Ollama Local / Self-hosted**
 
-### Switching models
+The connection adapter registry owns connection/setup behavior only. It is not a second model authority. Discovered models are projected into the existing DB-backed `ModelRegistry`.
 
-Use `switch_model` to change the active inference model at runtime. The change persists to config.
+### Explicit route semantics
+
+When an active connection exists, its provider is authoritative for main-agent inference. ABOS does not silently switch providers because a model name looks compatible. If the selected provider is currently unavailable or its runtime adapter is not loaded, the call fails closed with an availability error.
+
+Legacy model-name/registry fallback remains only for configurations that do not yet have an explicit active connection.
+
+### Model selection and hot switching
+
+The main-agent inference router selects models using the configured model strategy, survival tier, task type, and budget. For the main agent turn, an explicitly selected compatible active model is authoritative; externally funded/local models can remain eligible across survival tiers.
+
+Use:
+
+- `abos --connect-ai` to configure or activate a connection.
+- `abos --pick-model` to select a model for the active connection.
+- `abos --model <id>` to hot-switch the active model.
+- `abos --model <id> --reasoning <value>` for a provider-native option such as Codex reasoning effort.
+- `abos --codex-login`, `--codex-status`, `--codex-models`, and `--codex-logout` for direct Codex account operations.
+
+Running main-agent processes reload the model strategy and active route from `abos.json` on subsequent inference turns; a restart is not required for that path.
+
+### Codex model discovery
+
+Codex `model/list` is paginated and its richer non-secret metadata is cached in `~/.abos/codex-model-catalog.json`. The cache can be rebuilt from the provider and is projected into `ModelRegistry` under provider-qualified IDs such as `codex:<model>`. Dynamically discovered providers are not disabled merely because they are absent from the static model baseline.
+
+### Existing worker/harness inference path
+
+Worker/harness execution already has a separate `ProviderRegistry` / `UnifiedInferenceClient` for tiered worker inference. This predates AI Connections. The new connection registry does not replace or duplicate that runtime authority; this integration applies the explicit user connection route to the main-agent inference path and keeps worker routing as its existing subsystem.
+
+### Acceptance boundary
+
+CI covers the Codex JSONL transport, device-code protocol contract, session state, paginated model discovery, inference adapter behavior, provider-boundary enforcement, open provider registration, fail-closed explicit routing, and dynamic model preservation. CI does **not** contain a human ChatGPT account, so a real browser/device-code authorization against a human account is still a separate acceptance test and is not claimed as executed.
 
 ### Cost tracking
 

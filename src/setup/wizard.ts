@@ -18,6 +18,7 @@ import {
 } from "./prompts.js";
 import { detectEnvironment } from "./environment.js";
 import { generateSoulMd, installDefaultSkills } from "./defaults.js";
+import { runAiConnectionFlow } from "./ai-connection.js";
 import type { ChainType } from "../identity/chain.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
 
@@ -120,34 +121,6 @@ export async function runSetupWizard(): Promise<AbosConfig> {
   const creatorAddress = await promptAddress(creatorAddressLabel, walletChainType);
   console.log(chalk.green(`  Creator: ${creatorAddress}\n`));
 
-  console.log(chalk.white("  Optional: bring your own inference provider keys (press Enter to skip)."));
-  const openaiApiKey = await promptOptional("OpenAI API key (sk-..., optional)");
-  if (openaiApiKey && !openaiApiKey.startsWith("sk-")) {
-    console.log(chalk.yellow("  Warning: OpenAI keys usually start with sk-. Saving anyway."));
-  }
-
-  const anthropicApiKey = await promptOptional("Anthropic API key (sk-ant-..., optional)");
-  if (anthropicApiKey && !anthropicApiKey.startsWith("sk-ant-")) {
-    console.log(chalk.yellow("  Warning: Anthropic keys usually start with sk-ant-. Saving anyway."));
-  }
-
-  const ollamaInput = await promptOptional("Ollama base URL (http://localhost:11434, optional)");
-  const ollamaBaseUrl = ollamaInput || undefined;
-  if (ollamaBaseUrl) {
-    console.log(chalk.green(`  Ollama URL saved: ${ollamaBaseUrl}`));
-  }
-
-  if (openaiApiKey || anthropicApiKey || ollamaBaseUrl) {
-    const providers = [
-      openaiApiKey ? "OpenAI" : null,
-      anthropicApiKey ? "Anthropic" : null,
-      ollamaBaseUrl ? "Ollama" : null,
-    ].filter(Boolean).join(", ");
-    console.log(chalk.green(`  Provider keys/URLs saved: ${providers}\n`));
-  } else {
-    console.log(chalk.dim("  No provider keys set. Inference will default to Conway.\n"));
-  }
-
   // ─── Financial Safety Policy ─────────────────────────────────
   console.log(chalk.cyan("  Financial Safety Policy"));
   console.log(chalk.dim("  These limits protect against unauthorized spending. Press Enter for defaults.\n"));
@@ -186,7 +159,7 @@ export async function runSetupWizard(): Promise<AbosConfig> {
   // ─── 5. Write config + heartbeat + SOUL.md + skills ───────────
   console.log(chalk.cyan("  [5/6] Writing configuration..."));
 
-  const config = createConfig({
+  let config = createConfig({
     name,
     genesisPrompt,
     creatorAddress,
@@ -194,15 +167,22 @@ export async function runSetupWizard(): Promise<AbosConfig> {
     sandboxId: env.sandboxId,
     walletAddress,
     apiKey,
-    openaiApiKey: openaiApiKey || undefined,
-    anthropicApiKey: anthropicApiKey || undefined,
-    ollamaBaseUrl,
     treasuryPolicy,
     chainType: walletChainType,
   });
 
   saveConfig(config);
   console.log(chalk.green("  abos.json written"));
+
+  try {
+    config = await runAiConnectionFlow(config, { allowSkip: true });
+  } catch (error) {
+    console.log(
+      chalk.yellow(
+        `  AI connection setup skipped: ${error instanceof Error ? error.message : String(error)}\n`,
+      ),
+    );
+  }
 
   writeDefaultHeartbeatConfig();
   console.log(chalk.green("  heartbeat.yml written"));

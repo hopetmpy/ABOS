@@ -6,8 +6,8 @@
 
 import fs from "fs";
 import path from "path";
-import type { AbosConfig, TreasuryPolicy, ModelStrategyConfig, SoulConfig } from "./types.js";
-import { DEFAULT_CONFIG, DEFAULT_TREASURY_POLICY, DEFAULT_MODEL_STRATEGY_CONFIG, DEFAULT_SOUL_CONFIG } from "./types.js";
+import type { AbosConfig, TreasuryPolicy, ModelStrategyConfig, SoulConfig, AiConnectionConfig, CodexProviderConfig } from "./types.js";
+import { DEFAULT_CONFIG, DEFAULT_TREASURY_POLICY, DEFAULT_MODEL_STRATEGY_CONFIG, DEFAULT_SOUL_CONFIG, DEFAULT_AI_CONNECTION_CONFIG, DEFAULT_CODEX_PROVIDER_CONFIG } from "./types.js";
 import { getAbosDir } from "./identity/wallet.js";
 import { loadApiKeyFromConfig } from "./identity/provision.js";
 import { createLogger } from "./observability/logger.js";
@@ -62,6 +62,25 @@ export function loadConfig(): AbosConfig | null {
       ...(raw.soulConfig ?? {}),
     };
 
+    // AI connection metadata is config state only; credentials remain with their
+    // provider authority (for example Codex owns ChatGPT OAuth tokens).
+    const codex: CodexProviderConfig = {
+      ...DEFAULT_CODEX_PROVIDER_CONFIG,
+      ...(raw.codex ?? {}),
+    };
+    const aiConnection: AiConnectionConfig = {
+      ...DEFAULT_AI_CONNECTION_CONFIG,
+      ...(raw.aiConnection ?? {}),
+      connections:
+        raw.aiConnection?.connections && typeof raw.aiConnection.connections === "object"
+          ? { ...raw.aiConnection.connections }
+          : undefined,
+      active:
+        raw.aiConnection?.active && typeof raw.aiConnection.active === "object"
+          ? { ...raw.aiConnection.active }
+          : undefined,
+    };
+
     return {
       ...DEFAULT_CONFIG,
       ...raw,
@@ -73,6 +92,8 @@ export function loadConfig(): AbosConfig | null {
       treasuryPolicy,
       modelStrategy,
       soulConfig,
+      codex,
+      aiConnection,
       chainType: raw.chainType || "evm",
     } as AbosConfig;
   } catch {
@@ -96,6 +117,8 @@ export function saveConfig(config: AbosConfig): void {
     treasuryPolicy: config.treasuryPolicy ?? DEFAULT_TREASURY_POLICY,
     modelStrategy: config.modelStrategy ?? DEFAULT_MODEL_STRATEGY_CONFIG,
     soulConfig: config.soulConfig ?? DEFAULT_SOUL_CONFIG,
+    codex: config.codex ?? DEFAULT_CODEX_PROVIDER_CONFIG,
+    aiConnection: config.aiConnection ?? DEFAULT_AI_CONNECTION_CONFIG,
   };
   fs.writeFileSync(configPath, JSON.stringify(toSave, null, 2), {
     mode: 0o600,
@@ -152,6 +175,8 @@ export function createConfig(params: {
     openaiApiKey: params.openaiApiKey,
     anthropicApiKey: params.anthropicApiKey,
     ollamaBaseUrl: params.ollamaBaseUrl,
+    codex: DEFAULT_CODEX_PROVIDER_CONFIG,
+    aiConnection: DEFAULT_AI_CONNECTION_CONFIG,
     inferenceModel: DEFAULT_CONFIG.inferenceModel || "gpt-5.2",
     maxTokensPerTurn: DEFAULT_CONFIG.maxTokensPerTurn || 4096,
     heartbeatConfigPath:

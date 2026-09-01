@@ -20,11 +20,19 @@ type Database = BetterSqlite3.Database;
 
 export class InferenceBudgetTracker {
   private db: Database;
-  readonly config: ModelStrategyConfig;
+  config: ModelStrategyConfig;
 
   constructor(db: Database, config: ModelStrategyConfig) {
     this.db = db;
-    this.config = config;
+    this.config = { ...config };
+  }
+
+  /**
+   * Replace the live routing/budget strategy without recreating the agent loop.
+   * Used by RuntimeModelBinding for hot model switching.
+   */
+  updateConfig(config: ModelStrategyConfig): void {
+    this.config = { ...config };
   }
 
   /**

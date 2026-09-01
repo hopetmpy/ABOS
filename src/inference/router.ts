@@ -43,7 +43,15 @@ export class InferenceRouter {
     request: InferenceRequest,
     inferenceChat: (messages: any[], options: any) => Promise<any>,
   ): Promise<InferenceResult> {
-    const { messages, taskType, tier, sessionId, turnId, tools } = request;
+    const {
+      messages,
+      taskType,
+      tier,
+      sessionId,
+      turnId,
+      tools,
+      connectionProvider,
+    } = request;
 
     // 1. Select model from routing matrix
     const model = this.selectModel(tier, taskType);
@@ -73,7 +81,7 @@ export class InferenceRouter {
       return {
         content: `Budget exceeded: ${budgetCheck.reason}`,
         model: model.modelId,
-        provider: model.provider,
+        provider: connectionProvider || model.provider,
         inputTokens: 0,
         outputTokens: 0,
         costCents: 0,
@@ -89,7 +97,7 @@ export class InferenceRouter {
         return {
           content: `Session budget exceeded: ${sessionCost}c spent + ${estimatedCostCents}c estimated > ${this.budget.config.sessionBudgetCents}c limit`,
           model: model.modelId,
-          provider: model.provider,
+          provider: connectionProvider || model.provider,
           inputTokens: 0,
           outputTokens: 0,
           costCents: 0,
@@ -100,7 +108,8 @@ export class InferenceRouter {
     }
 
     // 4. Transform messages for provider
-    const transformedMessages = this.transformMessagesForProvider(messages, model.provider);
+    const expectedProvider = connectionProvider || model.provider;
+    const transformedMessages = this.transformMessagesForProvider(messages, expectedProvider);
 
     // 5. Build inference options
     const preference = this.getPreference(tier, taskType);
@@ -111,6 +120,7 @@ export class InferenceRouter {
       model: model.modelId,
       maxTokens,
       tools: tools,
+      connectionProvider,
     };
 
     // 6. Call inference with timeout
@@ -132,7 +142,7 @@ export class InferenceRouter {
         return {
           content: `Inference timeout after ${timeout}ms`,
           model: model.modelId,
-          provider: model.provider,
+          provider: connectionProvider || model.provider,
           inputTokens: 0,
           outputTokens: 0,
           costCents: 0,
@@ -143,6 +153,8 @@ export class InferenceRouter {
       throw error;
     }
     const latencyMs = Date.now() - startTime;
+
+    const actualProvider = response.provider || expectedProvider;
 
     // 7. Calculate actual cost
     const inputTokens = response.usage?.promptTokens || 0;
@@ -157,7 +169,7 @@ export class InferenceRouter {
       sessionId,
       turnId: turnId || null,
       model: model.modelId,
-      provider: model.provider,
+      provider: actualProvider,
       inputTokens,
       outputTokens,
       costCents: actualCostCents,
@@ -171,7 +183,7 @@ export class InferenceRouter {
     return {
       content: response.message?.content || "",
       model: model.modelId,
-      provider: model.provider,
+      provider: actualProvider,
       inputTokens,
       outputTokens,
       costCents: actualCostCents,
@@ -184,10 +196,13 @@ export class InferenceRouter {
   /**
    * Select the best model for a given tier and task type.
    *
-   * Priority:
-   *   1. First routing-matrix candidate present in the registry
-   *   2. User-configured model(s) from ModelStrategyConfig
-   *      (free/Ollama models are allowed at any tier, including dead)
+   * Priority for agent_turn:
+   *   1. Explicit active model when compatible with the current survival tier
+   *      (externally-funded/free models stay eligible at every tier)
+   *   2. Tier-specific configured fallback
+   *   3. Static routing-matrix candidate
+   *
+   * Specialized/background task types continue to use the routing matrix first.
    */
   selectModel(tier: SurvivalTier, taskType: InferenceTaskType): ModelEntry | null {
     const TIER_ORDER: Record<string, number> = {
@@ -197,6 +212,14 @@ export class InferenceRouter {
     const tierRank = TIER_ORDER[tier] ?? 0;
 
     // 1. Try routing-matrix candidates
+    // An explicitly selected active model is authoritative for the main agent
+    // turn. Static routing remains the fallback and continues to govern
+    // background/specialized task types.
+    if (taskType === "agent_turn") {
+      const configured = this.selectConfiguredAgentModel(tier);
+      if (configured) return configured;
+    }
+
     const preference = this.getPreference(tier, taskType);
     if (preference && preference.candidates.length > 0) {
       for (const candidateId of preference.candidates) {
@@ -224,6 +247,49 @@ export class InferenceRouter {
       if (isFree || tierOk) {
         return entry;
       }
+    }
+
+    return null;
+  }
+
+  private selectConfiguredAgentModel(tier: SurvivalTier): ModelEntry | null {
+    const TIER_ORDER: Record<string, number> = {
+      dead: 0, critical: 1, low_compute: 2, normal: 3, high: 4,
+    };
+    const tierRank = TIER_ORDER[tier] ?? 0;
+    const strategy = this.budget.config;
+
+    // The explicitly selected model remains authoritative at every survival
+    // tier when its cost is external to ABOS (Codex subscription, Ollama, etc.).
+    // A paid model still yields to the survival fallbacks when its tier minimum
+    // is above the current tier.
+    const active = this.registry.get(strategy.inferenceModel);
+    if (
+      active?.enabled &&
+      active.costPer1kInput === 0 &&
+      active.costPer1kOutput === 0
+    ) {
+      return active;
+    }
+
+    const candidateIds =
+      tier === "high" || tier === "normal"
+        ? [strategy.inferenceModel]
+        : tier === "low_compute"
+          ? [strategy.lowComputeModel, strategy.inferenceModel]
+          : [strategy.criticalModel, strategy.lowComputeModel, strategy.inferenceModel];
+
+    const seen = new Set<string>();
+    for (const modelId of candidateIds) {
+      if (!modelId || seen.has(modelId)) continue;
+      seen.add(modelId);
+
+      const entry = this.registry.get(modelId);
+      if (!entry || !entry.enabled) continue;
+
+      const isExternallyFunded = entry.costPer1kInput === 0 && entry.costPer1kOutput === 0;
+      const tierOk = tierRank >= (TIER_ORDER[entry.tierMinimum] ?? 0);
+      if (isExternallyFunded || tierOk) return entry;
     }
 
     return null;

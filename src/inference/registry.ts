@@ -41,6 +41,7 @@ export class ModelRegistry {
   initialize(): void {
     const now = new Date().toISOString();
     const baselineIds = new Set(STATIC_MODEL_BASELINE.map((m) => m.modelId));
+    const baselineProviders = new Set(STATIC_MODEL_BASELINE.map((m) => m.provider));
 
     // Upsert all baseline models
     for (const model of STATIC_MODEL_BASELINE) {
@@ -71,8 +72,7 @@ export class ModelRegistry {
       if (
         !baselineIds.has(existing.modelId) &&
         existing.enabled &&
-        existing.provider !== "ollama" &&
-        existing.provider !== "other"
+        baselineProviders.has(existing.provider)
       ) {
         modelRegistrySetEnabled(this.db, existing.modelId, false);
       }
