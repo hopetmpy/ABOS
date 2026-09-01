@@ -952,6 +952,8 @@ export interface TickContext {
   lowComputeMultiplier: number;      // from config
   config: HeartbeatConfig;
   db: import("better-sqlite3").Database;
+  /** Per-task cooperative cancellation signal supplied by DurableScheduler. */
+  abortSignal?: AbortSignal;
 }
 
 export type HeartbeatTaskFn = (
