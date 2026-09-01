@@ -36,6 +36,32 @@ jobs:
           if [ $RC -eq 124 ]; then echo "::error::security test run timed out or left active handles"; fi
           exit $RC
 
+  isolate-test-hang:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - name: Run Vitest shard ${{ matrix.shard }}/4
+        shell: bash
+        run: |
+          set +e
+          timeout 180 pnpm exec vitest run --shard=${{ matrix.shard }}/4 --reporter=verbose
+          RC=$?
+          set -e
+          if [ $RC -eq 124 ]; then echo "::error::Vitest shard ${{ matrix.shard }}/4 timed out"; fi
+          exit $RC
+
+
   rebrand-integrity:
     runs-on: ubuntu-latest
     steps:
