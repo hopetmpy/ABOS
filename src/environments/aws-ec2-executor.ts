@@ -446,6 +446,13 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
   }
 
   private findReusableResources() {
+    const releaseStates = new Set([
+      "artifact_hold",
+      "destroy_requested",
+      "pending_observation",
+      "released",
+    ]);
+
     return this.options.lifecycle.resources
       .list()
       .filter(
@@ -453,13 +460,27 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
           resource.provider === "aws" &&
           resource.type === "aws-ec2-instance" &&
           resource.metadata.executorKind === "aws-ec2-ssm" &&
-          ["ready", "running", "degraded"].includes(resource.status),
+          ["ready", "running", "suspended"].includes(resource.status) &&
+          resource.metadata.artifactCollectionState !== "pending" &&
+          !releaseStates.has(
+            typeof resource.metadata.retentionReleaseState === "string"
+              ? resource.metadata.retentionReleaseState
+              : "",
+          ),
       );
   }
 
   private async findHealthyReusableResource() {
     for (const candidate of this.findReusableResources()) {
-      const observed = await this.options.lifecycle.health(candidate.id);
+      let current = candidate;
+      if (current.status === "suspended") {
+        current = await this.options.lifecycle.resume(current.id);
+        if (!["ready", "running"].includes(current.status)) {
+          continue;
+        }
+      }
+
+      const observed = await this.options.lifecycle.health(current.id);
       if (["ready", "running"].includes(observed.status)) {
         return observed;
       }
