@@ -1195,7 +1195,15 @@ export class Orchestrator {
 
     for (const child of children) {
       try {
-        await this.params.funding.recallCredits(child.address);
+        const result = await this.params.funding.recallCredits(child.address);
+        if (!result.success) {
+          logger.warn("Credit recall unavailable", {
+            address: child.address,
+            reason:
+              result.reason ||
+              "Funding provider did not expose an authorized child debit route",
+          });
+        }
       } catch (error) {
         const err = normalizeError(error);
         logger.warn("Failed to recall credits", {
