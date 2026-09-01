@@ -111,7 +111,8 @@ export async function runAiConnectionFlow(
 function collectMethods(
   adapterMethods: string[],
 ): Array<{ id: string; label: string; description: string }> {
-  const builtins = BUILTIN_AI_CONNECTION_METHODS.map((method) => ({ ...method }));
+  const builtins: Array<{ id: string; label: string; description: string }> =
+    BUILTIN_AI_CONNECTION_METHODS.map((method) => ({ ...method }));
   const seen = new Set(builtins.map((method) => method.id));
 
   for (const id of adapterMethods) {
