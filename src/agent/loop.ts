@@ -589,6 +589,7 @@ export async function runAgentLoop(
                 "Agent environment could not be resolved for Task dispatch.",
                 "Unknown execution environment is not proof that the objective is impossible.",
               ],
+              "dispatch",
             );
           }
 
