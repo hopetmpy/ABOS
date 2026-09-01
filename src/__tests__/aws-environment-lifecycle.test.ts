@@ -315,7 +315,7 @@ describe("AwsEnvironmentProvider lifecycle", () => {
 
     expect(estimate.reusableResourceCount).toBe(1);
     expect(estimate.estimatedCostCents).toBe(2);
-    expect(estimate.metadata?.hourlyCostCents).toBe(2);
+    expect(estimate.metadata?.hourlyCostCents).toBeCloseTo(1.04, 6);
   });
 
   it("reports SSM-aware health for executor resources", async () => {
