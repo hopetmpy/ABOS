@@ -66,6 +66,7 @@ import {
   COLONY_MESSAGE_TYPES,
   ColonyMessaging,
   LocalDBTransport,
+  SocialRelayTransport,
 } from "../orchestration/messaging.js";
 import { LocalWorkerPool } from "../orchestration/local-worker.js";
 import { createTaskExecutionEnvelope } from "../orchestration/task-execution-envelope.js";
@@ -385,7 +386,9 @@ export async function runAgentLoop(
       const agentTracker = new SimpleAgentTracker(db);
       const funding = new SimpleFundingProtocol(conway, identity, db);
       const messaging = new ColonyMessaging(
-        new LocalDBTransport(db),
+        social
+          ? new SocialRelayTransport(social, db)
+          : new LocalDBTransport(db),
         db,
       );
 
@@ -453,12 +456,21 @@ export async function runAgentLoop(
 
       taskExecutors.register({
         environmentId: "conway",
-        assess: async () => ({
-          executable: null,
-          evidence: [
-            "Conway Task execution is verified at spawn time through the existing child lifecycle; unknown preflight state remains eligible for evidence-gathering.",
-          ],
-        }),
+        assess: async () =>
+          social
+            ? {
+                executable: null,
+                evidence: [
+                  "Conway child provisioning is verified at spawn time and Task delivery uses the configured signed Social relay.",
+                ],
+              }
+            : {
+                executable: false,
+                evidence: [
+                  "Conway remote Task delivery is currently unavailable because no Social relay client is configured.",
+                  "Missing relay configuration is current unavailability, not proof that the objective is impossible.",
+                ],
+              },
         spawn: async (task) => {
           const spawnOnce = async () => {
             const { generateGenesisConfig } = await import("../replication/genesis.js");
@@ -561,6 +573,40 @@ export async function runAgentLoop(
           }
         },
         dispatch: async (task, target, options) => {
+          if (!social) {
+            throw new Error(
+              "Conway Task delivery is currently unavailable because the Social relay is not configured.",
+            );
+          }
+
+          const resource = environmentResources
+            .list({ provider: "conway", includeTerminated: true })
+            .find(
+              (entry) =>
+                entry.metadata.childAddress === target.address ||
+                entry.metadata.executorAddress === target.address,
+            );
+          const childId =
+            typeof resource?.metadata.childId === "string"
+              ? resource.metadata.childId
+              : null;
+          const child = childId
+            ? db.getChildById(childId)
+            : db.getChildren().find(
+                (entry) => entry.address === target.address,
+              );
+          if (!child) {
+            throw new Error(
+              `Conway executor child identity not found for ${target.address}.`,
+            );
+          }
+
+          const { ChildLifecycle } =
+            await import("../replication/lifecycle.js");
+          const { ensureChildRuntimeRunning } =
+            await import("../replication/spawn.js");
+          const lifecycle = new ChildLifecycle(db.raw);
+
           const amountCents = calculateTaskFundingCents(task, config);
           if (amountCents > 0) {
             const funded = await funding.fundChild(target.address, amountCents);
@@ -569,6 +615,33 @@ export async function runAgentLoop(
                 `Conway task funding failed for ${target.address}.`,
               );
             }
+          }
+
+          const lifecycleState = lifecycle.getCurrentState(child.id);
+          if (lifecycleState === "wallet_verified") {
+            lifecycle.transition(
+              child.id,
+              "funded",
+              amountCents > 0
+                ? `funded for Task ${task.id} with ${amountCents} cents`
+                : `Task ${task.id} requires no additional credit transfer`,
+              {
+                taskId: task.id,
+                amountCents,
+              },
+            );
+          }
+
+          const runtime = await ensureChildRuntimeRunning(
+            conway,
+            db,
+            child.id,
+            lifecycle,
+          );
+          if (!runtime.healthy) {
+            throw new Error(
+              `Conway child ${child.id} runtime was not observed healthy before Task delivery.`,
+            );
           }
 
           const message = messaging.createMessage({
@@ -589,13 +662,17 @@ export async function runAgentLoop(
 
           return {
             evidence: [
-              `Task ${task.id} delivered to Conway executor ${target.address}.`,
+              ...runtime.evidence,
+              `Task ${task.id} delivered through the Social relay to Conway executor ${target.address}.`,
               ...(amountCents > 0
                 ? [`Conway task funding amount=${amountCents} cents.`]
                 : []),
             ],
             metadata: {
-              delivery: "colony_message",
+              delivery: "colony_social_relay",
+              childId: child.id,
+              sandboxId: child.sandboxId,
+              runtimeAlreadyRunning: runtime.alreadyRunning,
               fundedAmountCents: amountCents,
               continuationDelivered:
                 options?.continuationContext != null,
