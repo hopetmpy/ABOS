@@ -258,6 +258,7 @@ jobs:
       - name: Validate pinned tree on Node 20
         run: |
           pnpm install --frozen-lockfile
+          pnpm rebuild better-sqlite3
           pnpm run typecheck
           pnpm run build
           pnpm run test:diagnose
