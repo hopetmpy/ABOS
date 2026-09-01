@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   ARTIFACT_MATERIALIZATION_PROTOCOL_VERSION,
   applyArtifactMaterializationResult,
+  materializeArtifactsToFilesystemRoot,
   prepareArtifactMaterialization,
 } from "../environments/artifact-materialization.js";
 import {
@@ -137,6 +138,40 @@ describe("parent -> target artifact materialization contract", () => {
     expect(
       prepared.continuationContext.artifacts[0]?.integrity?.digest,
     ).toBe(digest("verified payload"));
+  });
+
+  it("copies verified bytes into a target filesystem root and re-hashes the target", () => {
+    const sourceRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "abos-artifact-source-"),
+    );
+    const targetRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "abos-artifact-target-"),
+    );
+    dirs.push(sourceRoot, targetRoot);
+    const file = path.join(sourceRoot, "binary.dat");
+    fs.writeFileSync(file, Buffer.from([0, 1, 2, 3, 255]));
+
+    const prepared = prepareArtifactMaterialization(
+      task(),
+      context(file),
+      { allowedRoots: [sourceRoot] },
+    );
+    const materialized = materializeArtifactsToFilesystemRoot(
+      prepared.request,
+      targetRoot,
+    );
+
+    expect(materialized.entries).toHaveLength(1);
+    expect(materialized.entries[0]?.state).toBe("available");
+    expect(materialized.entries[0]?.targetPath).toContain(
+      ".abos-continuation-artifacts",
+    );
+    expect(
+      fs.readFileSync(materialized.entries[0]!.targetPath!),
+    ).toEqual(Buffer.from([0, 1, 2, 3, 255]));
+    expect(materialized.entries[0]?.integrity).toEqual(
+      prepared.request.sources[0]?.integrity,
+    );
   });
 
   it("does not expose a parent file outside the authorized transfer roots", () => {
