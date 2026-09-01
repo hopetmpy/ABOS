@@ -8,7 +8,12 @@ import { EnvironmentRegistry } from "../environments/registry.js";
 import { EnvironmentSelector } from "../environments/selector.js";
 import type { EnvironmentProvider } from "../environments/types.js";
 import type { TaskNode } from "../orchestration/task-graph.js";
-import type { ExecutionContinuationContext } from "../environments/continuity.js";
+import {
+  EXECUTION_CONTINUATION_PROTOCOL_VERSION,
+  type ExecutionContinuationContext,
+} from "../environments/continuity.js";
+import { RUNTIME_ROOT } from "../runtime-root.js";
+import path from "node:path";
 
 function provider(id: string, cost = 0): EnvironmentProvider {
   return {
@@ -26,6 +31,61 @@ function provider(id: string, cost = 0): EnvironmentProvider {
       estimatedCostCents: cost,
       reliability: 0.9,
     }),
+  };
+}
+
+function continuationWithRuntimeArtifact(): ExecutionContinuationContext {
+  return {
+    protocolVersion: EXECUTION_CONTINUATION_PROTOCOL_VERSION,
+    assembledAt: new Date(0).toISOString(),
+    identity: {
+      goalId: "goal-1",
+      taskId: "task-1",
+      pathId: "path-1",
+    },
+    goal: {
+      title: "Goal",
+      description: "Continue work.",
+      status: "active",
+      strategy: "Reuse verified work.",
+    },
+    task: {
+      title: "Execute",
+      description: "Execute a provider-neutral task.",
+      status: "pending",
+      result: null,
+    },
+    path: {
+      id: "path-1",
+      status: "executing",
+      hypothesis: "The task can continue.",
+      strategy: "Use verified state.",
+      assumptions: [],
+      requiredCapabilities: [],
+      environment: "alpha",
+      executor: null,
+      sequence: ["continue"],
+      expectedOutcome: "Task completes.",
+      evidence: [],
+    },
+    history: {
+      failures: [],
+      decisions: [],
+      evidence: [],
+    },
+    memory: [],
+    artifacts: [{
+      reference: "package.json",
+      state: "available",
+      materializedPath: path.join(RUNTIME_ROOT, "package.json"),
+    }],
+    pending: [],
+    checkpoint: null,
+    sources: [{
+      authority: "task_graph",
+      recordId: "task-1",
+    }],
+    extensions: {},
   };
 }
 
@@ -177,6 +237,81 @@ describe("EnvironmentExecutionBridge", () => {
     expect(result.evidence).toContain("alpha delivery");
     expect(deliveredContinuation).toBe(continuationContext);
     expect(deliveries).toEqual(["alpha:task-1:alpha://existing"]);
+  });
+
+  it("materializes parent artifacts before dispatch and passes only the verified target path onward", async () => {
+    const environments = new EnvironmentRegistry();
+    environments.register(provider("alpha"));
+
+    const executors = new EnvironmentTaskExecutorRegistry();
+    let dispatchContinuation: ExecutionContinuationContext | undefined;
+    let sourceDigest = "";
+    executors.register({
+      environmentId: "alpha",
+      spawn: async () => ({
+        address: "alpha://1",
+        name: "alpha",
+        sandboxId: "a-1",
+      }),
+      materializeArtifacts: async (_task, _target, request) => {
+        expect(request.sources).toHaveLength(1);
+        expect(request.sources[0]?.localPath).toBe(
+          path.join(RUNTIME_ROOT, "package.json"),
+        );
+        sourceDigest = request.sources[0]!.integrity.digest;
+        return {
+          protocolVersion: 1,
+          entries: request.sources.map((source) => ({
+            reference: source.reference,
+            state: "available",
+            targetPath: `/remote/${source.targetName}`,
+            integrity: source.integrity,
+            evidence: ["target hash verified"],
+          })),
+        };
+      },
+      dispatch: async (_task, _target, options) => {
+        dispatchContinuation = options?.continuationContext;
+        return { evidence: ["dispatched after materialization"] };
+      },
+    });
+
+    const bridge = new EnvironmentExecutionBridge(
+      new EnvironmentSelector(environments),
+      executors,
+    );
+
+    const result = await bridge.dispatch(
+      "alpha",
+      task(),
+      {
+        address: "alpha://existing",
+        name: "alpha-existing",
+        spawned: false,
+      },
+      {
+        continuationContext: continuationWithRuntimeArtifact(),
+      },
+    );
+
+    expect(sourceDigest).toMatch(/^[0-9a-f]{64}$/);
+    expect(dispatchContinuation?.artifacts[0]).toMatchObject({
+      reference: "package.json",
+      state: "available",
+      integrity: {
+        algorithm: "sha256",
+        digest: sourceDigest,
+      },
+    });
+    expect(
+      dispatchContinuation?.artifacts[0]?.materializedPath,
+    ).toMatch(/^\/remote\//);
+    expect(result.metadata?.artifactMaterialization).toEqual(
+      expect.objectContaining({
+        environmentId: "alpha",
+        targetAddress: "alpha://existing",
+      }),
+    );
   });
 
   it("reports a missing dispatch implementation as unavailable, not as impossible", async () => {
