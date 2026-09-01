@@ -625,10 +625,11 @@ export class Orchestrator {
 
     for (const task of ready) {
       try {
-        const assignment = await this.matchTaskToAgent(task);
-        assignTask(this.params.db, task.id, assignment.agentAddress);
+        const executionTask = this.withExecutionIntent(task);
+        const assignment = await this.matchTaskToAgent(executionTask);
+        assignTask(this.params.db, executionTask.id, assignment.agentAddress);
 
-        const assignedRow = getTaskById(this.params.db, task.id);
+        const assignedRow = getTaskById(this.params.db, executionTask.id);
         if (assignedRow) {
           this.adaptive.selectCandidate(
             taskToPathCandidate(
@@ -647,22 +648,25 @@ export class Orchestrator {
         // their own inference loop. Self-assigned tasks are handled by the
         // parent agent via its normal turn. Neither needs funding or messaging.
         if (!isLocalWorker && !isSelfAssigned) {
-          await this.fundAgentForTask(assignment.agentAddress, task);
+          await this.fundAgentForTask(assignment.agentAddress, executionTask);
 
           const message = this.params.messaging.createMessage({
             type: "task_assignment",
             to: assignment.agentAddress,
-            goalId: task.goalId,
-            taskId: task.id,
+            goalId: executionTask.goalId,
+            taskId: executionTask.id,
             priority: "high",
             requiresResponse: true,
             content: JSON.stringify({
-              taskId: task.id,
-              title: task.title,
-              description: task.description,
-              agentRole: task.agentRole,
-              dependencies: task.dependencies,
-              timeoutMs: task.metadata.timeoutMs,
+              taskId: executionTask.id,
+              title: executionTask.title,
+              description: executionTask.description,
+              agentRole: executionTask.agentRole,
+              dependencies: executionTask.dependencies,
+              timeoutMs: executionTask.metadata.timeoutMs,
+              requiredCapabilities: executionTask.requiredCapabilities ?? [],
+              preferredEnvironment: executionTask.preferredEnvironment ?? null,
+              strategicPathId: executionTask.strategicPathId ?? null,
             }),
           });
 
@@ -1111,6 +1115,18 @@ export class Orchestrator {
     return row?.count ?? 0;
   }
 
+  private withExecutionIntent(task: TaskNode): TaskNode {
+    const binding = this.adaptive.store.getTaskBinding(task.id);
+    if (!binding) return task;
+
+    return {
+      ...task,
+      requiredCapabilities: binding.requiredCapabilities,
+      preferredEnvironment: binding.preferredEnvironment ?? null,
+      strategicPathId: binding.pathId ?? null,
+    };
+  }
+
   private bindPlannedTasks(
     goalId: string,
     pathId: string,
@@ -1190,6 +1206,9 @@ function plannerOutputToTasks(goalId: string, output: PlannerOutput): Omit<TaskN
     priority: clampPriority(task.priority, index),
     dependencies: task.dependencies.map((dep) => String(dep)),
     result: null,
+    requiredCapabilities: task.requiredCapabilities ?? [],
+    preferredEnvironment: task.preferredEnvironment ?? null,
+    strategicPathId: null,
   }));
 }
 
