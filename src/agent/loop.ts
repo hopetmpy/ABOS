@@ -72,6 +72,7 @@ import { EnvironmentRegistry } from "../environments/registry.js";
 import { LocalEnvironmentProvider } from "../environments/local.js";
 import { ConwayEnvironmentProvider } from "../environments/conway.js";
 import { AwsEnvironmentProvider } from "../environments/aws.js";
+import { createEnvironmentTools } from "../environments/tools.js";
 
 const logger = createLogger("loop");
 const MAX_TOOL_CALLS_PER_TURN = 10;
@@ -103,9 +104,15 @@ export async function runAgentLoop(
   const { identity, config, db, conway, inference, social, skills, policyEngine, spendTracker, onStateChange, onTurnComplete, ollamaBaseUrl } =
     options;
 
+  const environmentRegistry = new EnvironmentRegistry();
+  environmentRegistry.register(new LocalEnvironmentProvider());
+  environmentRegistry.register(new ConwayEnvironmentProvider(conway));
+  environmentRegistry.register(new AwsEnvironmentProvider());
+
   const builtinTools = createBuiltinTools(identity.sandboxId);
   const installedTools = loadInstalledTools(db);
-  const tools = [...builtinTools, ...installedTools];
+  const environmentTools = createEnvironmentTools(environmentRegistry);
+  const tools = [...builtinTools, ...installedTools, ...environmentTools];
 
   // Unified capability/environment view. Existing tool and skill systems remain
   // authoritative implementations; this registry lets planning reason across
@@ -113,11 +120,6 @@ export async function runAgentLoop(
   const capabilityRegistry = new CapabilityRegistry();
   capabilityRegistry.ingestTools(tools);
   capabilityRegistry.ingestSkills(skills ?? []);
-
-  const environmentRegistry = new EnvironmentRegistry();
-  environmentRegistry.register(new LocalEnvironmentProvider());
-  environmentRegistry.register(new ConwayEnvironmentProvider(conway));
-  environmentRegistry.register(new AwsEnvironmentProvider());
 
   // Prime capability discovery once. Inspection failures are represented as
   // environment state (unavailable/unknown), never as a fatal agent-loop error.
