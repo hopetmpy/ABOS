@@ -38,7 +38,6 @@ export class CapabilityResolver {
       capability.available &&
       supports(capability, request.requirement) &&
       requiredPermissions.every((permission) =>
-        capability.permissions.length === 0 ||
         capability.permissions.includes(permission)
       ) &&
       (request.maxCostCents == null ||
