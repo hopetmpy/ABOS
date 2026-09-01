@@ -126,6 +126,63 @@ export class AdaptivePathEngine {
       retryEligible: diagnosis.technicalRetryEligible || novelty.conditionChanged,
     });
 
+    this.store.recordEvidence({
+      goalId: input.candidate.goalId,
+      pathId: path.id,
+      attemptId: attempt.id,
+      kind: "error",
+      content: input.error,
+      source: "path-execution",
+      confidence: 1,
+    });
+
+    for (const observation of input.observations ?? []) {
+      if (!observation.trim()) continue;
+      this.store.recordEvidence({
+        goalId: input.candidate.goalId,
+        pathId: path.id,
+        attemptId: attempt.id,
+        kind: "observation",
+        content: observation,
+        source: "path-execution",
+      });
+    }
+
+    for (const artifact of input.evidence ?? []) {
+      if (!artifact.trim()) continue;
+      this.store.recordEvidence({
+        goalId: input.candidate.goalId,
+        pathId: path.id,
+        attemptId: attempt.id,
+        kind: "artifact",
+        content: artifact,
+        source: "path-execution",
+      });
+    }
+
+    if (input.conditions && Object.keys(input.conditions).length > 0) {
+      this.store.recordEvidence({
+        goalId: input.candidate.goalId,
+        pathId: path.id,
+        attemptId: attempt.id,
+        kind: "condition",
+        content: JSON.stringify(input.conditions),
+        source: "runtime-state",
+      });
+    }
+
+    for (const fact of input.learnedFacts ?? []) {
+      this.store.recordEvidence({
+        goalId: input.candidate.goalId,
+        pathId: path.id,
+        attemptId: attempt.id,
+        kind: "fact",
+        content: `${fact.key}=${fact.value}`,
+        source: "path-learning",
+        confidence: fact.confidence ?? 0.85,
+      });
+    }
+
     this.store.setPathStatus(
       path.id,
       diagnosis.classification === "prohibited"
@@ -168,7 +225,7 @@ export class AdaptivePathEngine {
     conditions?: Record<string, unknown>;
   }): void {
     const { path, novelty } = this.assessCandidate(input.candidate, input.conditions);
-    this.store.recordAttempt({
+    const attempt = this.store.recordAttempt({
       pathId: path.id,
       goalId: input.candidate.goalId,
       taskId: input.candidate.taskId,
@@ -180,6 +237,42 @@ export class AdaptivePathEngine {
       learnedFacts: [],
       retryEligible: false,
     });
+
+    for (const observation of input.observations ?? []) {
+      if (!observation.trim()) continue;
+      this.store.recordEvidence({
+        goalId: input.candidate.goalId,
+        pathId: path.id,
+        attemptId: attempt.id,
+        kind: "observation",
+        content: observation,
+        source: "path-success",
+      });
+    }
+
+    for (const artifact of input.evidence ?? []) {
+      if (!artifact.trim()) continue;
+      this.store.recordEvidence({
+        goalId: input.candidate.goalId,
+        pathId: path.id,
+        attemptId: attempt.id,
+        kind: "artifact",
+        content: artifact,
+        source: "path-success",
+      });
+    }
+
+    if (input.conditions && Object.keys(input.conditions).length > 0) {
+      this.store.recordEvidence({
+        goalId: input.candidate.goalId,
+        pathId: path.id,
+        attemptId: attempt.id,
+        kind: "condition",
+        content: JSON.stringify(input.conditions),
+        source: "runtime-state",
+      });
+    }
+
     this.store.setPathStatus(path.id, "succeeded");
     for (const assumption of this.store.listAssumptions(input.candidate.goalId, path.id)) {
       if (assumption.status === "active" || assumption.status === "unknown") {
@@ -217,8 +310,15 @@ export class AdaptivePathEngine {
     const facts = this.store.listFacts(goalId);
     const opportunities = this.store.listOpenOpportunities(goalId);
     const assumptions = this.store.listAssumptions(goalId);
+    const evidence = this.store.listEvidence(goalId, { limit: 30 });
 
-    if (paths.length === 0 && attempts.length === 0 && facts.length === 0 && assumptions.length === 0) {
+    if (
+      paths.length === 0 &&
+      attempts.length === 0 &&
+      facts.length === 0 &&
+      assumptions.length === 0 &&
+      evidence.length === 0
+    ) {
       return "No adaptive path history exists for this goal yet.";
     }
 
@@ -250,6 +350,10 @@ export class AdaptivePathEngine {
       `${assumption.status.toUpperCase()} confidence=${assumption.confidence}: ${assumption.statement}`,
     );
 
+    const evidenceLines = evidence.slice(0, 20).map((entry) =>
+      `${entry.kind.toUpperCase()} source=${entry.source} confidence=${entry.confidence}: ${entry.content.slice(0, 300)}`,
+    );
+
     const opportunityLines = opportunities.slice(0, 20).map((opportunity) =>
       `OPEN: ${opportunity.description}`,
     );
@@ -271,6 +375,9 @@ export class AdaptivePathEngine {
       "",
       "## Assumptions",
       ...(assumptionLines.length ? assumptionLines : ["none"]),
+      "",
+      "## Structured evidence",
+      ...(evidenceLines.length ? evidenceLines : ["none"]),
       "",
       "## Open opportunities",
       ...(opportunityLines.length ? opportunityLines : ["none"]),
