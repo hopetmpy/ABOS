@@ -52,6 +52,9 @@ import {
   EXECUTION_CONTINUATION_PROTOCOL_VERSION,
   type ExecutionContinuationContext,
 } from "../environments/continuity.js";
+import {
+  isTaskExecutionEnvelope,
+} from "./task-execution-envelope.js";
 
 export interface StandaloneTaskExecutionOptions {
   executionContinuation?: ExecutionContinuationContext;
@@ -382,14 +385,8 @@ function createLocalMirrorTask(
 export function parseStandaloneTaskExecutionPayload(
   value: unknown,
 ): ParsedStandaloneTaskExecutionPayload {
-  if (
-    value &&
-    typeof value === "object" &&
-    (value as Record<string, unknown>).protocol ===
-      "abos_task_execution_v1" &&
-    "task" in (value as Record<string, unknown>)
-  ) {
-    const envelope = value as Record<string, unknown>;
+  if (isTaskExecutionEnvelope(value)) {
+    const envelope = value;
     const task = parseTask(envelope.task);
     const executionContinuation = parseContinuationContext(
       envelope.continuationContext,
