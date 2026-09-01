@@ -372,6 +372,248 @@ describe("InferenceRouter", () => {
       expect(costs[0].provider).toBe("conway");
     });
 
+    it("tries a different registered model when the primary inference path fails", async () => {
+      const attempted: string[] = [];
+      const result = await router.route(
+        {
+          messages: [{ role: "user", content: "find another path" }],
+          taskType: "agent_turn",
+          tier: "normal",
+          sessionId: "fallback-session",
+        },
+        async (_messages, options) => {
+          attempted.push(options.model);
+          if (options.model === "gpt-5.2") {
+            throw new Error("primary unavailable");
+          }
+          return {
+            message: { content: "fallback worked", role: "assistant" },
+            usage: { promptTokens: 10, completionTokens: 5 },
+            finishReason: "stop",
+          };
+        },
+      );
+
+      expect(attempted.slice(0, 2)).toEqual(["gpt-5.2", "gpt-5-mini"]);
+      expect(result.model).toBe("gpt-5-mini");
+      expect(result.content).toBe("fallback worked");
+    });
+
+    it("does not try a second model when model fallback is disabled", async () => {
+      const noFallbackBudget = new InferenceBudgetTracker(db, {
+        ...DEFAULT_MODEL_STRATEGY_CONFIG,
+        enableModelFallback: false,
+      });
+      const noFallbackRouter = new InferenceRouter(
+        db,
+        registry,
+        noFallbackBudget,
+      );
+      const attempted: string[] = [];
+
+      await expect(
+        noFallbackRouter.route(
+          {
+            messages: [{ role: "user", content: "single path" }],
+            taskType: "agent_turn",
+            tier: "normal",
+            sessionId: "no-fallback-session",
+          },
+          async (_messages, options) => {
+            attempted.push(options.model);
+            throw new Error("selected route failed");
+          },
+        ),
+      ).rejects.toThrow("selected route failed");
+
+      expect(attempted).toEqual(["gpt-5.2"]);
+    });
+
+    it("excludes only models known incompatible with an explicit connection", async () => {
+      const now = new Date().toISOString();
+      registry.upsert({
+        modelId: "codex:compatible-model",
+        provider: "codex",
+        displayName: "Compatible Codex Model",
+        tierMinimum: "normal",
+        costPer1kInput: 0,
+        costPer1kOutput: 0,
+        maxTokens: 4096,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: false,
+        parameterStyle: "max_completion_tokens",
+        enabled: true,
+        lastSeen: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const compatibilityRouter = new InferenceRouter(
+        db,
+        registry,
+        budget,
+        {
+          supportsConnectionModel: (provider, model) =>
+            provider === "codex" ? model.provider === "codex" : undefined,
+        },
+      );
+      const attempted: string[] = [];
+
+      const result = await compatibilityRouter.route(
+        {
+          messages: [{ role: "user", content: "use active connection" }],
+          taskType: "agent_turn",
+          connectionProvider: "codex",
+          tier: "normal",
+          sessionId: "compatible-session",
+        },
+        async (_messages, options) => {
+          attempted.push(options.model);
+          return {
+            provider: "codex",
+            message: { content: "compatible", role: "assistant" },
+            usage: { promptTokens: 1, completionTokens: 1 },
+            finishReason: "stop",
+          };
+        },
+      );
+
+      expect(attempted).toEqual(["codex:compatible-model"]);
+      expect(result.model).toBe("codex:compatible-model");
+      expect(result.provider).toBe("codex");
+    });
+
+    it("does not treat unknown adapter compatibility as impossible", async () => {
+      const openWorldRouter = new InferenceRouter(
+        db,
+        registry,
+        budget,
+        {
+          supportsConnectionModel: () => undefined,
+        },
+      );
+      const attempted: string[] = [];
+
+      const result = await openWorldRouter.route(
+        {
+          messages: [{ role: "user", content: "unknown is still possible" }],
+          taskType: "agent_turn",
+          connectionProvider: "future-provider",
+          tier: "normal",
+          sessionId: "open-world-session",
+        },
+        async (_messages, options) => {
+          attempted.push(options.model);
+          return {
+            provider: "future-provider",
+            message: { content: "worked", role: "assistant" },
+            usage: { promptTokens: 1, completionTokens: 1 },
+            finishReason: "stop",
+          };
+        },
+      );
+
+      expect(attempted[0]).toBe("gpt-5.2");
+      expect(result.content).toBe("worked");
+    });
+
+    it("discovers a dynamically registered model after preferred candidates fail", async () => {
+      const now = new Date().toISOString();
+      registry.upsert({
+        modelId: "future:discovered-model",
+        provider: "other",
+        displayName: "Discovered Model",
+        tierMinimum: "normal",
+        costPer1kInput: 0,
+        costPer1kOutput: 0,
+        maxTokens: 4096,
+        contextWindow: 128000,
+        supportsTools: true,
+        supportsVision: false,
+        parameterStyle: "max_tokens",
+        enabled: true,
+        lastSeen: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const discoveryRouter = new InferenceRouter(
+        db,
+        registry,
+        budget,
+        {
+          supportsConnectionModel: (_provider, model) =>
+            model.modelId === "gpt-5.2" ||
+            model.modelId === "future:discovered-model",
+        },
+      );
+      const attempted: string[] = [];
+
+      const result = await discoveryRouter.route(
+        {
+          messages: [{ role: "user", content: "discover another model" }],
+          taskType: "agent_turn",
+          connectionProvider: "future-route",
+          tier: "normal",
+          sessionId: "dynamic-discovery-session",
+        },
+        async (_messages, options) => {
+          attempted.push(options.model);
+          if (options.model === "gpt-5.2") {
+            throw new Error("preferred model failed");
+          }
+          return {
+            provider: "future-route",
+            message: { content: "dynamic fallback", role: "assistant" },
+            usage: { promptTokens: 1, completionTokens: 1 },
+            finishReason: "stop",
+          };
+        },
+      );
+
+      expect(attempted).toEqual([
+        "gpt-5.2",
+        "future:discovered-model",
+      ]);
+      expect(result.model).toBe("future:discovered-model");
+    });
+
+    it("can fall back to a cheaper model when the primary exceeds the per-call budget", async () => {
+      const constrainedBudget = new InferenceBudgetTracker(db, {
+        ...DEFAULT_MODEL_STRATEGY_CONFIG,
+        perCallCeilingCents: 1,
+        enableModelFallback: true,
+      });
+      const constrainedRouter = new InferenceRouter(
+        db,
+        registry,
+        constrainedBudget,
+      );
+      const attempted: string[] = [];
+
+      const result = await constrainedRouter.route(
+        {
+          messages: [{ role: "user", content: "stay within budget" }],
+          taskType: "agent_turn",
+          tier: "normal",
+          sessionId: "budget-fallback-session",
+        },
+        async (_messages, options) => {
+          attempted.push(options.model);
+          return {
+            message: { content: "affordable", role: "assistant" },
+            usage: { promptTokens: 1, completionTokens: 1 },
+            finishReason: "stop",
+          };
+        },
+      );
+
+      expect(attempted).toEqual(["gpt-5-mini"]);
+      expect(result.model).toBe("gpt-5-mini");
+      expect(result.finishReason).toBe("stop");
+    });
+
     it("computes actualCostCents accurately from token usage", async () => {
       // gpt-5.2 has costPer1kInput=20, costPer1kOutput=80 (hundredths of cents)
       // Formula: Math.ceil((input/1000)*costPer1kInput/100 + (output/1000)*costPer1kOutput/100)

@@ -54,6 +54,7 @@ import { InferenceRouter } from "../inference/router.js";
 import { RuntimeModelBinding } from "../inference/runtime-binding.js";
 import { loadCodexCatalog, syncCodexCatalogToRegistry } from "../codex/catalog.js";
 import { loadConfig } from "../config.js";
+import { createBuiltinAiConnectionAdapterRegistry } from "../setup/ai-connection-adapters.js";
 import { MemoryRetriever } from "../memory/retrieval.js";
 import { MemoryIngestionPipeline } from "../memory/ingestion.js";
 import { DEFAULT_MEMORY_BUDGET } from "../types.js";
@@ -350,7 +351,16 @@ export async function runAgentLoop(
     await discoverOllamaModels(ollamaBaseUrl, db.raw);
   }
   const budgetTracker = new InferenceBudgetTracker(db.raw, modelStrategyConfig);
-  const inferenceRouter = new InferenceRouter(db.raw, modelRegistry, budgetTracker);
+  const aiConnectionAdapters = createBuiltinAiConnectionAdapterRegistry();
+  const inferenceRouter = new InferenceRouter(
+    db.raw,
+    modelRegistry,
+    budgetTracker,
+    {
+      supportsConnectionModel: (provider, model) =>
+        aiConnectionAdapters.get(provider)?.supportsModel?.(model),
+    },
+  );
   const runtimeModelBinding = new RuntimeModelBinding(modelStrategyConfig);
 
   // Optional orchestration bootstrap (requires V9 goals/task tables)
@@ -1350,7 +1360,11 @@ export async function runAgentLoop(
 
       const survivalTier = getSurvivalTier(financial.creditsCents);
       const selectedModel =
-        inferenceRouter.selectModel(survivalTier, "agent_turn")?.modelId || "none";
+        inferenceRouter.selectModel(
+          survivalTier,
+          "agent_turn",
+          activeConnectionProvider,
+        )?.modelId || "none";
       const providerLabel = activeConnectionProvider || "legacy/auto";
       log(
         config,
