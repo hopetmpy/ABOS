@@ -405,6 +405,8 @@ export interface InferenceOptions {
   temperature?: number;
   tools?: InferenceToolDefinition[];
   stream?: boolean;
+  /** Cooperative cancellation propagated from the routing/task layer. */
+  signal?: AbortSignal;
 }
 
 export interface InferenceToolDefinition {
