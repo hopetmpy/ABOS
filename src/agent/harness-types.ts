@@ -72,6 +72,8 @@ export interface WorkerInferenceClient {
   }): Promise<{
     content: string;
     toolCalls?: InferenceToolCall[];
+    /** Canonical cost for this successful inference response, in cents. */
+    costCents?: number;
   }>;
 }
 
