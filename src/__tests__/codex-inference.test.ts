@@ -10,6 +10,7 @@ class FakeInferenceTransport implements CodexRpcTransport {
   private handlers = new Map<string, Set<(params: unknown) => void>>();
   private notifications = new Map<string, unknown[]>();
   emitBoundaryViolation = false;
+  holdCompletion = false;
 
   async start(): Promise<void> {
     this.started = true;
@@ -70,10 +71,12 @@ class FakeInferenceTransport implements CodexRpcTransport {
         },
       });
 
-      this.queue("turn/completed", {
-        threadId: "thread-1",
-        turn: { id: "turn-1", status: "completed", items: [] },
-      });
+      if (!this.holdCompletion) {
+        this.queue("turn/completed", {
+          threadId: "thread-1",
+          turn: { id: "turn-1", status: "completed", items: [] },
+        });
+      }
 
       return { turn: { id: "turn-1", status: "inProgress" } } as T;
     }
@@ -87,8 +90,11 @@ class FakeInferenceTransport implements CodexRpcTransport {
     predicate: (params: T) => boolean,
   ): Promise<T> {
     const match = (this.notifications.get(method) || []).find((item) => predicate(item as T));
-    if (!match) throw new Error(`No matching fake notification for ${method}`);
-    return match as T;
+    if (match) return match as T;
+    if (this.holdCompletion && method === "turn/completed") {
+      return new Promise<T>(() => {});
+    }
+    throw new Error(`No matching fake notification for ${method}`);
   }
 
   close(): void {
@@ -195,6 +201,37 @@ describe("CodexInferenceRuntime", () => {
     );
     expect(factoryCalls).toBe(2);
     expect(second.started).toBe(true);
+  });
+
+  it("interrupts an in-flight Codex turn when the router aborts", async () => {
+    const fake = new FakeInferenceTransport();
+    fake.holdCompletion = true;
+    const runtime = new CodexInferenceRuntime({ transportFactory: () => fake });
+    const controller = new AbortController();
+
+    const pending = runtime.chat(
+      [{ role: "user", content: "Keep thinking" }],
+      { tools: [tool], signal: controller.signal },
+      "codex:gpt-test",
+    );
+
+    // Let thread/start and turn/start complete so an interruptable turn id exists.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    await Promise.resolve();
+
+    expect(
+      fake.requests.some(
+        (request) =>
+          request.method === "turn/interrupt" &&
+          request.params?.threadId === "thread-1" &&
+          request.params?.turnId === "turn-1",
+      ),
+    ).toBe(true);
   });
 
   it("rejects provider-native side effects instead of bypassing ABOS execution", async () => {
