@@ -41,3 +41,17 @@ export function expandHomePath(value: string): string {
 
   return value;
 }
+
+/**
+ * Convert a native Windows path to the form understood by Git Bash/MSYS.
+ * POSIX paths and non-Windows hosts are returned with normalized separators.
+ */
+export function toPosixShellPath(value: string): string {
+  const normalized = value.replace(/\\/g, "/");
+  if (process.platform !== "win32") return normalized;
+
+  const driveMatch = /^([A-Za-z]):\/(.*)$/.exec(normalized);
+  if (!driveMatch) return normalized;
+
+  return `/${driveMatch[1].toLowerCase()}/${driveMatch[2]}`;
+}
