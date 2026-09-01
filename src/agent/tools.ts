@@ -23,7 +23,7 @@ import type { PolicyEngine } from "./policy-engine.js";
 import { sanitizeToolResult, sanitizeInput } from "./injection-defense.js";
 import { createLogger } from "../observability/logger.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
-import { expandHomePath, getHomeDir } from "../platform/home.js";
+import { expandHomePath, getHomeDir, toPosixShellPath } from "../platform/home.js";
 
 const logger = createLogger("tools");
 
@@ -510,17 +510,17 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
       riskLevel: "caution",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
-        const repoRoot = RUNTIME_ROOT;
+        const repoRoot = escapeShellArg(toPosixShellPath(RUNTIME_ROOT));
 
         // Show what we're reverting
         const lastCommit = await ctx.conway.exec(
-          `cd '${repoRoot}' && git log -1 --oneline`,
+          `cd ${repoRoot} && git log -1 --oneline`,
           10_000,
         );
 
         // Revert
         const result = await ctx.conway.exec(
-          `cd '${repoRoot}' && git revert HEAD --no-edit`,
+          `cd ${repoRoot} && git revert HEAD --no-edit`,
           30_000,
         );
         if (result.exitCode !== 0) {
@@ -529,7 +529,7 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
 
         // Rebuild
         const build = await ctx.conway.exec(
-          `cd '${repoRoot}' && pnpm run build`,
+          `cd ${repoRoot} && pnpm run build`,
           60_000,
         );
 
@@ -550,7 +550,7 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
       riskLevel: "dangerous",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
-        const repoRoot = RUNTIME_ROOT;
+        const repoRoot = escapeShellArg(toPosixShellPath(RUNTIME_ROOT));
         try {
           const { ensureCanonicalOrigin } = await import("../self-mod/upstream.js");
           ensureCanonicalOrigin();
@@ -560,7 +560,7 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
 
         // Fetch latest canonical ABOS main
         const fetch = await ctx.conway.exec(
-          `cd '${repoRoot}' && git fetch origin main`,
+          `cd ${repoRoot} && git fetch origin main`,
           30_000,
         );
         if (fetch.exitCode !== 0) {
@@ -569,13 +569,13 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
 
         // Record what we're about to lose
         const localCommits = await ctx.conway.exec(
-          `cd '${repoRoot}' && git log origin/main..HEAD --oneline`,
+          `cd ${repoRoot} && git log origin/main..HEAD --oneline`,
           10_000,
         );
 
         // Hard reset
         const reset = await ctx.conway.exec(
-          `cd '${repoRoot}' && git reset --hard origin/main`,
+          `cd ${repoRoot} && git reset --hard origin/main`,
           30_000,
         );
         if (reset.exitCode !== 0) {
@@ -584,7 +584,7 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
 
         // Reinstall + rebuild
         const build = await ctx.conway.exec(
-          `cd '${repoRoot}' && pnpm install --frozen-lockfile && pnpm run build`,
+          `cd ${repoRoot} && pnpm install --frozen-lockfile && pnpm run build`,
           120_000,
         );
 
@@ -690,9 +690,12 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
           return `Refusing update: ${error?.message || String(error)}`;
         }
 
-        // Run git commands inside sandbox via conway.exec()
+        // Run repository commands from the actual runtime checkout. On
+        // Windows local mode the Conway client executes through Git Bash, so
+        // convert the native runtime path to its MSYS/POSIX form first.
+        const repoRoot = escapeShellArg(toPosixShellPath(RUNTIME_ROOT));
         const run = async (cmd: string) => {
-          const result = await ctx.conway.exec(cmd, 120_000);
+          const result = await ctx.conway.exec(`cd ${repoRoot} && ${cmd}`, 120_000);
           if (result.exitCode !== 0) {
             throw new Error(
               result.stderr ||
