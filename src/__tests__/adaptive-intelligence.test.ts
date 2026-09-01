@@ -133,6 +133,110 @@ describe("adaptive path persistence", () => {
     }
   });
 
+  it("keeps a strategic path executing during a justified transient retry", () => {
+    const db = memoryDb();
+    try {
+      const engine = new AdaptivePathEngine(db);
+      const decision = engine.recordFailure({
+        candidate: candidate(),
+        error: "ETIMEDOUT contacting provider",
+        conditions: { network: "degraded" },
+      });
+
+      expect(decision.action).toBe("technical_retry");
+      expect(decision.attempt.retryEligible).toBe(true);
+      expect(engine.store.getPath(decision.path.id)?.status).toBe("executing");
+    } finally {
+      db.close();
+    }
+  });
+
+  it("marks a capability-missing path blocked rather than impossible", () => {
+    const db = memoryDb();
+    try {
+      const engine = new AdaptivePathEngine(db);
+      const decision = engine.recordFailure({
+        candidate: candidate(),
+        error: "command not found: terraform",
+      });
+
+      expect(decision.action).toBe("acquire_capability");
+      expect(engine.store.getPath(decision.path.id)?.status).toBe("blocked");
+    } finally {
+      db.close();
+    }
+  });
+
+  it("attaches task attempts to the originating strategic path when a binding supplies pathId", () => {
+    const db = memoryDb();
+    try {
+      const engine = new AdaptivePathEngine(db);
+      const strategic = engine.selectCandidate(
+        candidate({
+          taskId: null,
+          strategy: "Strategic route A",
+          sequence: ["Task A", "Task B"],
+        }),
+        { environment: "local" },
+      );
+
+      engine.store.setPathStatus(strategic.path.id, "executing");
+
+      const taskCandidate = candidate({
+        taskId: "task-bound-1",
+        strategy: "Task A execution",
+        sequence: ["Execute Task A"],
+      });
+
+      const decision = engine.recordFailure({
+        candidate: taskCandidate,
+        pathId: strategic.path.id,
+        error: "The task implementation produced an invalid result",
+        conditions: { environment: "local" },
+      });
+
+      expect(decision.path.id).toBe(strategic.path.id);
+      expect(engine.store.listPaths("goal-1")).toHaveLength(1);
+      expect(decision.attempt.pathId).toBe(strategic.path.id);
+      expect(engine.store.getPath(strategic.path.id)?.status).toBe("failed");
+    } finally {
+      db.close();
+    }
+  });
+
+  it("does not mark a multi-task strategic path succeeded until explicit path completion", () => {
+    const db = memoryDb();
+    try {
+      const engine = new AdaptivePathEngine(db);
+      const strategic = engine.selectCandidate(
+        candidate({
+          taskId: null,
+          strategy: "Multi-task route",
+          sequence: ["Task A", "Task B"],
+        }),
+      );
+      engine.store.setPathStatus(strategic.path.id, "executing");
+
+      engine.recordSuccess({
+        candidate: candidate({
+          taskId: "task-bound-1",
+          strategy: "Task A",
+          sequence: ["Task A"],
+        }),
+        pathId: strategic.path.id,
+        markPathSucceeded: false,
+        observations: ["Task A complete"],
+      });
+
+      expect(engine.store.getPath(strategic.path.id)?.status).toBe("executing");
+
+      engine.completePath(strategic.path.id, ["All route tasks complete"]);
+      expect(engine.store.getPath(strategic.path.id)?.status).toBe("succeeded");
+    } finally {
+      db.close();
+    }
+  });
+
   it("tracks assumptions and validates them when a path succeeds", () => {
     const db = memoryDb();
     try {
