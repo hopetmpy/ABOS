@@ -20,7 +20,7 @@ import {
   loadHeartbeatConfig,
   syncHeartbeatToDb,
 } from "./heartbeat/config.js";
-import { consumeNextWakeEvent, insertWakeEvent } from "./state/database.js";
+import { consumeNextWakeEvent } from "./state/database.js";
 import { runAgentLoop } from "./agent/loop.js";
 import { ModelRegistry } from "./inference/registry.js";
 import { loadCodexCatalog, syncCodexCatalogToRegistry } from "./codex/catalog.js";
@@ -518,9 +518,9 @@ async function run(): Promise<void> {
     conway,
     social,
     onWakeRequest: (reason) => {
+      // DurableScheduler is the single persistence authority for heartbeat
+      // wake events. This callback is notification-only.
       logger.info(`[HEARTBEAT] Wake request: ${reason}`);
-      // Phase 1.1: Use wake_events table instead of KV wake_request
-      insertWakeEvent(db.raw, 'heartbeat', reason);
     },
   });
 
