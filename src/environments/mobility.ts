@@ -846,7 +846,10 @@ function stableStringify(value: unknown): string {
 function failedResourceIds(
   migration: EnvironmentMigrationRecord,
 ): string[] {
-  return stringMetadata(migration.metadata, "failedResourceIds");
+  return uniqueStrings([
+    ...stringMetadata(migration.metadata, "failedResourceIds"),
+    ...stringMetadata(migration.metadata, "excludedResourceIds"),
+  ]);
 }
 
 function stringMetadata(
