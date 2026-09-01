@@ -85,6 +85,11 @@ function makeOrchestrator(
       assignment: { agentAddress: string; agentName: string; spawned: boolean },
       task: any,
     ) => Promise<TaskResult | void>;
+    prepareTaskResultForPersistence?: (
+      sourceAddress: string,
+      task: any,
+      result: TaskResult,
+    ) => Promise<TaskResult>;
   } = {},
 ): Orchestrator {
   const { messaging } = makeMessaging(db);
@@ -99,6 +104,8 @@ function makeOrchestrator(
     resolveAgentEnvironment: overrides.resolveAgentEnvironment,
     isWorkerAlive: overrides.isWorkerAlive,
     dispatchAgentTask: overrides.dispatchAgentTask,
+    prepareTaskResultForPersistence:
+      overrides.prepareTaskResultForPersistence,
   });
 }
 
@@ -800,6 +807,63 @@ describe("orchestration/Orchestrator", () => {
       expect(results).toHaveLength(1);
       expect(results[0].success).toBe(true);
       expect(results[0].output).toBe("done");
+    });
+
+    it("prepares an authenticated async result before exposing it for canonical persistence", async () => {
+      const goalId = insertGoal(db);
+      const taskId = insertTask(db, {
+        goalId,
+        assignedTo: "0xagent",
+        status: "running",
+      });
+      const content = JSON.stringify({
+        taskId,
+        success: true,
+        output: "remote done",
+        artifacts: ["outputs/remote.bin"],
+        costCents: 2,
+        duration: 50,
+      });
+      const messaging = buildMessagingWithResults(db, [{
+        type: "task_result",
+        content,
+        from: "0xagent",
+        goalId,
+        taskId,
+      }]);
+      const prepareTaskResultForPersistence = vi.fn(
+        async (
+          sourceAddress: string,
+          task: { id: string; goalId: string },
+          result: TaskResult,
+        ): Promise<TaskResult> => {
+          expect(sourceAddress).toBe("0xagent");
+          expect(task.id).toBe(taskId);
+          expect(task.goalId).toBe(goalId);
+          expect(result.artifacts).toEqual([
+            "outputs/remote.bin",
+          ]);
+          return {
+            ...result,
+            artifacts: ["/parent/verified.bin"],
+          };
+        },
+      );
+      const orc = makeOrchestrator(db, {
+        messaging,
+        prepareTaskResultForPersistence,
+      });
+
+      const results = await orc.collectResults();
+
+      expect(prepareTaskResultForPersistence).toHaveBeenCalledTimes(1);
+      expect(results).toEqual([
+        expect.objectContaining({
+          success: true,
+          output: "remote done",
+          artifacts: ["/parent/verified.bin"],
+        }),
+      ]);
     });
 
     it("ignores a task_result from an agent that is not the current assignee", async () => {
