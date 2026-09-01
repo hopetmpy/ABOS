@@ -129,32 +129,104 @@ describe("DurableScheduler", () => {
   });
 
   describe("task timeout", () => {
-    it("times out tasks that exceed their timeout", async () => {
-      const neverFinish: HeartbeatTaskFn = async () => {
-        // A pending promise has no active timer handle. The scheduler's own
-        // timeout is what this test validates, so the test must not leave a
-        // 60-second host timer alive after Promise.race resolves.
-        await new Promise<void>(() => {});
+    it("aborts cooperatively and keeps the lease until the timed-out attempt actually settles", async () => {
+      let release!: () => void;
+      let executions = 0;
+      let observedSignal: AbortSignal | undefined;
+
+      const slowTask: HeartbeatTaskFn = async (ctx) => {
+        executions++;
+        observedSignal = ctx.abortSignal;
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
         return { shouldWake: false };
       };
 
-      // Set a very short timeout
-      seedScheduleRow(rawDb, "never_finish", { timeoutMs: 50 });
-      const tasks = new Map<string, HeartbeatTaskFn>([["never_finish", neverFinish]]);
+      seedScheduleRow(rawDb, "slow_timeout", {
+        timeoutMs: 25,
+        maxRetries: 1,
+      });
+      const tasks = new Map<string, HeartbeatTaskFn>([["slow_timeout", slowTask]]);
       const scheduler = new DurableScheduler(
         rawDb,
         DEFAULT_HB_CONFIG,
         tasks,
         createLegacyContext(db, conway),
       );
+      const context = await buildTickContext(
+        rawDb,
+        conway,
+        DEFAULT_HB_CONFIG,
+      );
 
-      await scheduler.tick();
+      await scheduler.executeTask("slow_timeout", context);
 
-      // Check that the task was recorded as timeout
-      const history = getHeartbeatHistory(rawDb, "never_finish");
-      expect(history.length).toBe(1);
+      const history = getHeartbeatHistory(rawDb, "slow_timeout");
+      expect(history).toHaveLength(1);
       expect(history[0].result).toBe("timeout");
       expect(history[0].error).toContain("timed out");
+      expect(observedSignal?.aborted).toBe(true);
+      expect(executions).toBe(1);
+
+      let schedule = getHeartbeatSchedule(rawDb).find(
+        (row) => row.taskName === "slow_timeout",
+      );
+      expect(schedule?.leaseOwner).not.toBeNull();
+      expect(schedule?.nextRunAt).not.toBeNull();
+
+      // A retry attempt cannot overlap while the original promise is alive.
+      await scheduler.executeTask("slow_timeout", context);
+      expect(executions).toBe(1);
+
+      // The timed-out operation eventually completed successfully. Release its
+      // lease and suppress the pending retry so work is not duplicated.
+      release();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      schedule = getHeartbeatSchedule(rawDb).find(
+        (row) => row.taskName === "slow_timeout",
+      );
+      expect(schedule?.leaseOwner).toBeNull();
+      expect(schedule?.nextRunAt).toBeNull();
+    });
+
+    it("treats maxRetries as retries after the initial attempt and consumes each retry slot", async () => {
+      let executions = 0;
+      const failingTask: HeartbeatTaskFn = async () => {
+        executions++;
+        throw new Error(`failure-${executions}`);
+      };
+
+      seedScheduleRow(rawDb, "retry_budget", {
+        maxRetries: 1,
+      });
+      const scheduler = new DurableScheduler(
+        rawDb,
+        DEFAULT_HB_CONFIG,
+        new Map([["retry_budget", failingTask]]),
+        createLegacyContext(db, conway),
+      );
+      const context = await buildTickContext(
+        rawDb,
+        conway,
+        DEFAULT_HB_CONFIG,
+      );
+
+      await scheduler.executeTask("retry_budget", context);
+      let schedule = getHeartbeatSchedule(rawDb).find(
+        (row) => row.taskName === "retry_budget",
+      );
+      expect(schedule?.nextRunAt).not.toBeNull();
+
+      await scheduler.executeTask("retry_budget", context);
+      schedule = getHeartbeatSchedule(rawDb).find(
+        (row) => row.taskName === "retry_budget",
+      );
+
+      expect(executions).toBe(2);
+      expect(getHeartbeatHistory(rawDb, "retry_budget")).toHaveLength(2);
+      expect(schedule?.nextRunAt).toBeNull();
     });
   });
 
@@ -231,6 +303,30 @@ describe("DurableScheduler", () => {
   });
 
   describe("wake requests", () => {
+    it("persists a wake event even when no host callback is attached", async () => {
+      seedScheduleRow(rawDb, "callbackless_wake");
+      const scheduler = new DurableScheduler(
+        rawDb,
+        DEFAULT_HB_CONFIG,
+        new Map([
+          [
+            "callbackless_wake",
+            async () => ({ shouldWake: true, message: "durable wake" }),
+          ],
+        ]),
+        createLegacyContext(db, conway),
+      );
+
+      await scheduler.tick();
+
+      const events = getUnconsumedWakeEvents(rawDb);
+      expect(events).toHaveLength(1);
+      expect(events[0].reason).toBe("durable wake");
+      expect(JSON.parse(events[0].payload)).toEqual({
+        taskName: "callbackless_wake",
+      });
+    });
+
     it("persists exactly one wake event and notifies the host callback once", async () => {
       const wakeTask: HeartbeatTaskFn = async () => ({
         shouldWake: true,
