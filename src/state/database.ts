@@ -494,7 +494,7 @@ export function createDatabase(dbPath: string): AbosDatabase {
 
   const markInboxMessageProcessed = (id: string): void => {
     db.prepare(
-      "UPDATE inbox_messages SET processed_at = datetime('now') WHERE id = ?",
+      "UPDATE inbox_messages SET processed_at = datetime('now'), status = 'processed' WHERE id = ?",
     ).run(id);
   };
 
@@ -1403,31 +1403,102 @@ export function isDeduplicated(db: DatabaseType, key: string): boolean {
 
 // ─── Inbox State Machine Helpers (Phase 1.2) ─────────────────────
 
-export function claimInboxMessages(db: DatabaseType, limit: number): InboxMessageRow[] {
-  // Atomically claim messages: received → in_progress, increment retry_count
-  // Wrapped in a transaction to prevent race conditions where concurrent callers
-  // SELECT the same rows before either UPDATE runs.
+export interface InboxClaimOptions {
+  /** Only claim valid-JSON messages whose envelope/direct protocol matches. */
+  includeProtocols?: string[];
+  /** Leave matching protocols for a different structured consumer. */
+  excludeProtocols?: string[];
+  /**
+   * Match the canonical message type at $.message.type (enveloped) or $.type
+   * (legacy direct AgentMessage). Values are runtime data supplied by the
+   * caller; the state layer owns no closed message-type allowlist.
+   */
+  includeMessageTypes?: string[];
+  /** Leave matching structured message types for another consumer. */
+  excludeMessageTypes?: string[];
+}
+
+export function claimInboxMessages(
+  db: DatabaseType,
+  limit: number,
+  options: InboxClaimOptions = {},
+): InboxMessageRow[] {
+  // Atomically claim messages: received → in_progress, increment retry_count.
+  // Optional JSON predicates let multiple consumers share the same durable
+  // inbox without racing for each other's protocol messages.
   const claimTx = db.transaction(() => {
+    const clauses = [
+      "status = 'received'",
+      "retry_count < max_retries",
+    ];
+    const params: unknown[] = [];
+
+    const addListPredicate = (
+      expression: string,
+      values: string[] | undefined,
+      mode: "include" | "exclude",
+    ) => {
+      const normalized = [...new Set(
+        (values ?? []).map((value) => value.trim()).filter(Boolean),
+      )];
+      if (normalized.length === 0) return;
+
+      const placeholders = normalized.map(() => "?").join(",");
+      if (mode === "include") {
+        clauses.push(
+          `json_valid(content) = 1 AND ${expression} IN (${placeholders})`,
+        );
+      } else {
+        clauses.push(
+          `(json_valid(content) = 0 OR COALESCE(${expression}, '') NOT IN (${placeholders}))`,
+        );
+      }
+      params.push(...normalized);
+    };
+
+    addListPredicate(
+      "json_extract(content, '$.protocol')",
+      options.includeProtocols,
+      "include",
+    );
+    addListPredicate(
+      "json_extract(content, '$.protocol')",
+      options.excludeProtocols,
+      "exclude",
+    );
+
+    const messageTypeExpression =
+      "COALESCE(json_extract(content, '$.message.type'), json_extract(content, '$.type'))";
+    addListPredicate(
+      messageTypeExpression,
+      options.includeMessageTypes,
+      "include",
+    );
+    addListPredicate(
+      messageTypeExpression,
+      options.excludeMessageTypes,
+      "exclude",
+    );
+
     const rows = db.prepare(
       `SELECT id, from_address, content, received_at, processed_at, reply_to, to_address, raw_content,
               status, retry_count, max_retries
        FROM inbox_messages
-       WHERE status = 'received' AND retry_count < max_retries
+       WHERE ${clauses.join(" AND ")}
        ORDER BY received_at ASC
        LIMIT ?`,
-    ).all(limit) as any[];
+    ).all(...params, limit) as any[];
 
     if (rows.length === 0) return [];
 
-    const ids = rows.map((r: any) => r.id);
-    const placeholders = ids.map(() => '?').join(',');
+    const ids = rows.map((row: any) => row.id);
+    const placeholders = ids.map(() => "?").join(",");
     db.prepare(
       `UPDATE inbox_messages
        SET status = 'in_progress', retry_count = retry_count + 1
        WHERE id IN (${placeholders})`,
     ).run(...ids);
 
-    // Return rows with updated retry_count
     return rows.map((row: any) => ({
       id: row.id,
       fromAddress: row.from_address,
@@ -1437,7 +1508,7 @@ export function claimInboxMessages(db: DatabaseType, limit: number): InboxMessag
       replyTo: row.reply_to ?? null,
       toAddress: row.to_address ?? null,
       rawContent: row.raw_content ?? null,
-      status: 'in_progress' as const,
+      status: "in_progress" as const,
       retryCount: (row.retry_count ?? 0) + 1,
       maxRetries: row.max_retries ?? 3,
     }));
