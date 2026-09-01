@@ -170,6 +170,13 @@ export class EnvironmentRetentionCoordinator {
   private retentionDecision(resource: EnvironmentResource): RetentionDecision {
     switch (resource.retentionPolicy) {
       case "ephemeral": {
+        if (resource.status === "failed") {
+          return {
+            release: true,
+            reason: "ephemeral resource itself failed before or during execution",
+          };
+        }
+
         if (!resource.taskId) {
           return {
             release: false,
