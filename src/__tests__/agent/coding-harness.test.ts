@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -129,17 +129,63 @@ describe("agent/CodingHarness confinement", () => {
     expect(out).toContain("outside workspace");
   });
 
-  it("allows patch_file inside the allowed edit root via local fallback", async () => {
+  it("fails closed when exec throws instead of running the command on the local host", async () => {
+    const conway = createConwayStub({
+      exec: async () => {
+        throw new Error("remote executor denied");
+      },
+    });
+
+    const out = await runTool(conway, "exec", {
+      command: "node -e \"process.stdout.write('LOCAL_FALLBACK_RAN')\"",
+    });
+
+    expect(out).toContain("exec error: remote executor denied");
+    expect(out).not.toContain("LOCAL_FALLBACK_RAN");
+  });
+
+  it("fails closed when write_file cannot write through the selected executor", async () => {
+    const filePath = path.join(testRoot, "src", "must-not-exist.ts");
+    const conway = createConwayStub({
+      writeFile: async () => {
+        throw new Error("remote write denied");
+      },
+    });
+
+    const out = await runTool(conway, "write_file", {
+      path: filePath,
+      content: "export const leaked = true;\n",
+    });
+
+    expect(out).toContain("write error: remote write denied");
+    expect(existsSync(filePath)).toBe(false);
+  });
+
+  it("fails closed when read_file cannot read through the selected executor", async () => {
+    const filePath = path.join(testRoot, "src", "local-only.ts");
+    mkdirSync(path.dirname(filePath), { recursive: true });
+    writeFileSync(filePath, "LOCAL_FILE_MUST_NOT_LEAK\n", "utf8");
+
+    const conway = createConwayStub({
+      readFile: async () => {
+        throw new Error("remote read denied");
+      },
+    });
+
+    const out = await runTool(conway, "read_file", { path: filePath });
+
+    expect(out).toContain("read error: remote read denied");
+    expect(out).not.toContain("LOCAL_FILE_MUST_NOT_LEAK");
+  });
+
+  it("fails closed when patch_file cannot read through the selected executor", async () => {
     const filePath = path.join(testRoot, "src", "example.ts");
     mkdirSync(path.dirname(filePath), { recursive: true });
     writeFileSync(filePath, "const value = 'before';\n", "utf8");
 
     const conway = createConwayStub({
       readFile: async () => {
-        throw new Error("force local fallback");
-      },
-      writeFile: async () => {
-        throw new Error("force local fallback");
+        throw new Error("remote read denied");
       },
     });
 
@@ -149,7 +195,31 @@ describe("agent/CodingHarness confinement", () => {
       replace: "'after'",
     });
 
-    expect(out).toContain("Patched");
-    expect(readFileSync(filePath, "utf8")).toContain("'after'");
+    expect(out).toContain("patch error: remote read denied");
+    expect(readFileSync(filePath, "utf8")).toContain("'before'");
+    expect(readFileSync(filePath, "utf8")).not.toContain("'after'");
+  });
+
+  it("fails closed when patch_file cannot write through the selected executor", async () => {
+    const filePath = path.join(testRoot, "src", "example.ts");
+    mkdirSync(path.dirname(filePath), { recursive: true });
+    writeFileSync(filePath, "const value = 'before';\n", "utf8");
+
+    const conway = createConwayStub({
+      readFile: async () => "const value = 'before';\n",
+      writeFile: async () => {
+        throw new Error("remote write denied");
+      },
+    });
+
+    const out = await runTool(conway, "patch_file", {
+      path: filePath,
+      search: "'before'",
+      replace: "'after'",
+    });
+
+    expect(out).toContain("patch error: remote write denied");
+    expect(readFileSync(filePath, "utf8")).toContain("'before'");
+    expect(readFileSync(filePath, "utf8")).not.toContain("'after'");
   });
 });
