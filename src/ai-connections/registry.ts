@@ -42,6 +42,12 @@ export interface AiConnectionAdapter {
   /** Adapter-native model compatibility, independent of model-name heuristics. */
   supportsModel?: (model: ModelEntry) => boolean;
 
+  /** Optional provider-native model configuration (reasoning, service tier, etc.). */
+  configureModel?: (
+    config: AbosConfig,
+    model: ModelEntry,
+  ) => Promise<void>;
+
   /**
    * Optional runtime inference hook. Providers that do not implement this are
    * known/configurable but not executable through this process yet.
