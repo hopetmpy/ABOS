@@ -61,6 +61,7 @@ export function classifyFailure(error: string): FailureDiagnosis {
   ])) {
     return {
       classification: "capability_missing",
+      subject: extractMissingCapability(error),
       reason: "The path requires a capability that is not currently available.",
       technicalRetryEligible: false,
       strategicReplanRequired: true,
@@ -199,4 +200,21 @@ export function classifyFailure(error: string): FailureDiagnosis {
       "Generate a materially different path.",
     ],
   };
+}
+
+
+function extractMissingCapability(error: string): string | undefined {
+  const patterns = [
+    /command not found:\s*([^\s]+)/i,
+    /cannot find module\s+['"]([^'"]+)['"]/i,
+    /module not found[:\s]+([^\s]+)/i,
+    /no such tool[:\s]+([^\s]+)/i,
+    /missing dependency[:\s]+([^\s]+)/i,
+    /unsupported capability[:\s]+([^\s]+)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = pattern.exec(error);
+    if (match?.[1]) return match[1].trim();
+  }
+  return undefined;
 }
