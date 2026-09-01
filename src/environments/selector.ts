@@ -86,7 +86,7 @@ export class EnvironmentSelector {
       if (!policy.allowed) {
         candidate.executionEligible = false;
         candidate.blockers.push(
-          policy.reason ? \`policy: \${policy.reason}\` : "policy: candidate denied",
+          policy.reason ? `policy: ${policy.reason}` : "policy: candidate denied",
         );
       }
 
@@ -148,17 +148,17 @@ export class EnvironmentSelector {
 
     const blockers: string[] = [];
     if (!["available", "degraded"].includes(snapshot.availability)) {
-      blockers.push(\`availability=\${snapshot.availability}\`);
+      blockers.push(`availability=${snapshot.availability}`);
     }
     if (satisfaction.satisfiable === false || missingCapabilities.length > 0) {
       blockers.push(
         missingCapabilities.length
-          ? \`missing capabilities: \${missingCapabilities.join(", ")}\`
+          ? `missing capabilities: ${missingCapabilities.join(", ")}`
           : "provider reports request unsatisfied",
       );
     }
     if (missingOperations.length > 0) {
-      blockers.push(\`unsupported operations: \${missingOperations.join(", ")}\`);
+      blockers.push(`unsupported operations: ${missingOperations.join(", ")}`);
     }
 
     if (requirements.maxEstimatedCostCents != null) {
@@ -166,7 +166,7 @@ export class EnvironmentSelector {
         blockers.push("estimated cost is unknown under an explicit budget");
       } else if (estimate.estimatedCostCents > requirements.maxEstimatedCostCents) {
         blockers.push(
-          \`estimated cost \${estimate.estimatedCostCents} exceeds budget \${requirements.maxEstimatedCostCents}\`,
+          `estimated cost ${estimate.estimatedCostCents} exceeds budget ${requirements.maxEstimatedCostCents}`,
         );
       }
     }
@@ -241,7 +241,7 @@ function genericSatisfaction(
     capabilityFit: fit,
     missingCapabilities: missing,
     evidence: [
-      \`generic capability fit=\${matched.length}/\${required.length}\`,
+      `generic capability fit=${matched.length}/${required.length}`,
     ],
   };
 }
@@ -292,7 +292,7 @@ async function safeSatisfaction(
       satisfiable: null,
       evidence: [
         ...(fallback.evidence ?? []),
-        \`provider canSatisfy failed: \${error instanceof Error ? error.message : String(error)}\`,
+        `provider canSatisfy failed: ${error instanceof Error ? error.message : String(error)}`,
       ],
     };
   }
@@ -308,7 +308,7 @@ async function safeEstimate(
   } catch (error) {
     return {
       evidence: [
-        \`provider estimate failed: \${error instanceof Error ? error.message : String(error)}\`,
+        `provider estimate failed: ${error instanceof Error ? error.message : String(error)}`,
       ],
     };
   }
@@ -431,13 +431,13 @@ function buildUnresolved(
   const messages = new Set<string>();
   for (const candidate of candidates) {
     for (const blocker of candidate.blockers) {
-      messages.add(\`\${candidate.environmentId}: \${blocker}\`);
+      messages.add(`${candidate.environmentId}: ${blocker}`);
     }
   }
 
   if (messages.size === 0) {
     messages.add(
-      \`No currently executable candidate was proven for capabilities: \${requirements.requiredCapabilities.join(", ") || "unspecified"}.\`,
+      `No currently executable candidate was proven for capabilities: ${requirements.requiredCapabilities.join(", ") || "unspecified"}.`,
     );
   }
   messages.add(
