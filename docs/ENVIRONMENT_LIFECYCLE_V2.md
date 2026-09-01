@@ -138,7 +138,8 @@ The AWS provider now implements real EC2 lifecycle control through the AWS CLI:
 - semantic `TaskResult` returned to the parent Orchestrator;
 - health, collect, resize, suspend, resume, recover, destroy, and reconcile;
 - restart recovery by `abos:resource-id` tag if provisioning succeeded before the InstanceId was persisted;
-- compute-only price estimates kept explicitly separate from actual AWS billing.
+- compute-only price estimates kept explicitly separate from actual AWS billing;
+- AWS cost coverage is marked `partial`; an explicit budget fails closed unless a provider estimate declares `complete` coverage.
 
 The EC2 Task executor currently requires SSM reachability. In practice the instance needs an IAM
 instance profile that authorizes Systems Manager (for example a profile containing the AWS managed
