@@ -120,7 +120,25 @@ describe("agent/GeneralHarness", () => {
   });
 
   it("routes the web_fetch SPEC alias through the current x402_fetch surface", async () => {
-    const { harness, appDb } = await createHarness();
+    const identity = createTestIdentity();
+    const x402Stub: AbosTool = {
+      name: "x402_fetch",
+      description: "Deterministic x402 test surface",
+      parameters: {
+        type: "object",
+        properties: { url: { type: "string" } },
+        required: ["url"],
+      },
+      riskLevel: "dangerous",
+      category: "financial",
+      execute: async (args) => `stubbed x402 response for ${String(args.url)}`,
+    };
+    const toolCatalog = [
+      ...createBuiltinTools(identity.sandboxId).filter((tool) => tool.name !== "x402_fetch"),
+      x402Stub,
+    ];
+
+    const { harness, appDb } = await createHarness({ toolCatalog });
     const aliasTool = harness.getToolDefs().find((tool) => tool.name === "web_fetch");
     const wrappedTool = harness.getToolDefs().find((tool) => tool.name === "x402_fetch");
 
@@ -131,6 +149,7 @@ describe("agent/GeneralHarness", () => {
     const aliasResult = await aliasTool!.execute({ url: "https://example.com" });
     const wrappedResult = await wrappedTool!.execute({ url: "https://example.com" });
 
+    expect(aliasResult).toBe("stubbed x402 response for https://example.com");
     expect(aliasResult).toBe(wrappedResult);
     appDb.close();
   });
