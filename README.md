@@ -52,7 +52,7 @@ pnpm run build
 node dist/index.js --run
 ```
 
-On first run, the runtime launches an interactive setup wizard — generates a wallet, provisions Conway identity, asks for a name, genesis prompt, creator address and optional inference providers, then writes config and starts the agent loop. The wizard can also connect an existing ChatGPT/Codex session with device-code OAuth; ABOS never asks you to paste ChatGPT OAuth tokens.
+On first run, the runtime launches an interactive setup wizard — generates a wallet, provisions Conway identity, asks for a name, genesis prompt and creator address, writes the base config, then opens the shared **Connect AI** flow. Authentication method, inference provider and model are selected independently.
 
 Runtime source and identity/state are deliberately separate. ABOS state lives in `~/.abos`. Do not place the runtime checkout inside that directory. The installer uses `/opt/abos` for root installs and `${XDG_DATA_HOME:-$HOME/.local/share}/abos/runtime` for non-root installs; override with `ABOS_RUNTIME_DIR` when needed.
 
@@ -60,6 +60,36 @@ For automated sandbox provisioning:
 The canonical source is the private ABOS repository. Install from an authenticated checkout so code always comes from `hopetmpy/ABOS`.
 
 Note: Conway Cloud, Domains, and Inference has seen immense demand. We are working on scaling & perfomance.
+
+### Connect AI
+
+The setup wizard, `--configure`, and `--connect-ai` use the same hierarchical connection flow:
+
+```text
+Connect AI
+├── 1. Connect with OAuth
+│   ├── ChatGPT / Codex
+│   └── Other OAuth provider [future]
+├── 2. Connect with API Key
+│   ├── OpenAI
+│   ├── Anthropic
+│   ├── Conway
+│   ├── Groq [future]
+│   ├── Together [future]
+│   └── Other compatible provider [future]
+└── 3. Local / Self-hosted
+    ├── Ollama
+    ├── OpenAI-compatible endpoint [future]
+    └── Other local runtime [future]
+```
+
+A provider credential can be configured without becoming active. ABOS only changes the active AI connection after a compatible model is selected. This prevents a newly added provider from inheriting an incompatible model from the previous route.
+
+The active connection is persisted separately from the model, for example `api_key → conway → gpt-5.2` versus `api_key → openai → gpt-5.2`. This means identical model names can be routed through different connection providers without relying on naming heuristics.
+
+```bash
+node dist/index.js --connect-ai
+```
 
 ### Codex / ChatGPT OAuth
 

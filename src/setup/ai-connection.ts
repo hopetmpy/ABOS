@@ -7,7 +7,7 @@ import type {
 } from "../types.js";
 import { connectCodex } from "../codex/commands.js";
 import { runModelPicker } from "./model-picker.js";
-import { promptOptional } from "./prompts.js";
+import { promptOptional, closePrompts } from "./prompts.js";
 import {
   AI_CONNECTION_METHODS,
   getAiProvidersForMethod,
@@ -28,8 +28,9 @@ export async function runAiConnectionFlow(
 ): Promise<AbosConfig> {
   let working = config;
 
-  while (true) {
-    printConnectionSummary(working);
+  try {
+    while (true) {
+      printConnectionSummary(working, options.manage ?? false);
     const method = await chooseConnectionMethod(options.allowSkip ?? true);
     if (!method) return loadConfig() ?? working;
 
@@ -73,13 +74,17 @@ export async function runAiConnectionFlow(
       await runModelPicker();
       working = loadConfig() ?? working;
     }
-    return working;
+      return working;
+    }
+  } finally {
+    closePrompts();
   }
 }
 
-function printConnectionSummary(config: AbosConfig): void {
+function printConnectionSummary(config: AbosConfig, manage: boolean): void {
   const active = config.aiConnection?.active;
-  console.log(chalk.cyan("\n  ── Connect AI ─────────────────────────────────\n"));
+  const title = manage ? "Manage AI Connections" : "Connect AI";
+  console.log(chalk.cyan(`\n  ── ${title} ─────────────────────────────────\n`));
   console.log(chalk.dim("  Choose how ABOS should connect to an inference provider."));
   console.log(chalk.dim("  Authentication method, provider, and model are independent choices.\n"));
 

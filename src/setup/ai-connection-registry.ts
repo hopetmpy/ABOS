@@ -57,6 +57,14 @@ export const AI_CONNECTION_PROVIDERS: readonly AiConnectionProviderDefinition[] 
   },
 
   {
+    id: "oauth-other",
+    label: "Other OAuth provider",
+    method: "oauth",
+    description: "Extensible OAuth provider slot reserved for future adapters.",
+    availability: "future",
+  },
+
+  {
     id: "openai",
     label: "OpenAI",
     method: "api_key",

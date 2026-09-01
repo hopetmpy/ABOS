@@ -19,6 +19,7 @@ describe("AI connection registry", () => {
     const oauth = getAiProvidersForMethod("oauth");
     expect(oauth.map((provider) => provider.id)).toContain("codex");
     expect(oauth.find((provider) => provider.id === "codex")?.runtimeProvider).toBe("codex");
+    expect(oauth.find((provider) => provider.id === "oauth-other")?.availability).toBe("future");
   });
 
   it("exposes current API-key providers and future extension slots", () => {

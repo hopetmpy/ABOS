@@ -372,27 +372,40 @@ Every decision is persisted to the `policy_decisions` table with full context fo
 
 ## Inference Pipeline
 
-**Files:** `src/inference/router.ts`, `src/inference/registry.ts`, `src/inference/budget.ts`, `src/inference/runtime-binding.ts`, `src/codex/`
+**Files:** `src/inference/router.ts`, `src/inference/registry.ts`, `src/inference/budget.ts`, `src/inference/runtime-binding.ts`, `src/setup/ai-connection*.ts`, `src/codex/`
 
-The inference pipeline is provider-neutral. Main agent turns honor the explicitly selected model first; specialized/background tasks can continue to use the task routing matrix.
+The inference pipeline separates three authorities:
+
+1. **Connection method** — OAuth, API key, or local/self-hosted.
+2. **Connection provider** — Codex, OpenAI, Anthropic, Conway, Ollama, or a future adapter.
+3. **Model identity** — the model selected for inference.
+
+Main agent turns honor both the explicitly selected connection route and the explicitly selected model. Specialized/background tasks can continue to use the task routing matrix when no explicit connection override is supplied.
 
 ```
 InferenceRouter.route(request)
   1. Refresh live model strategy if abos.json changed
-  2. For agent_turn: evaluate the explicit active model
+  2. Read the active connection route for agent_turn (method + provider)
+  3. Evaluate the explicit active model
      - externally-funded/free active models remain eligible at every survival tier
      - paid active models must satisfy the current survival tier
-  3. Otherwise evaluate tier-specific configured fallbacks / routing matrix
-  4. Check model availability and budget
-  5. Transform provider-specific message format where required
-  6. Invoke Conway / direct API / Ollama / Codex adapter
-  7. Record token usage and ABOS-ledger cost in inference_costs
-  8. Return normalized content + tool-call metadata
+  4. Otherwise evaluate tier-specific configured fallbacks / routing matrix
+  5. Check model availability and budget
+  6. Route through the explicitly selected provider when present
+     - never silently replace a selected provider because a model name looks like another vendor
+  7. Transform provider-specific message format where required
+  8. Invoke Conway / direct API / Ollama / Codex adapter
+  9. Record the actual connection provider + token/cost metadata
+  10. Return normalized content + tool-call metadata
 ```
 
 **Routing matrix:** Maps `SurvivalTier x InferenceTaskType -> ModelPreference[]`. It remains the authority for specialized/background inference and a fallback for main turns when the configured active model is unavailable or incompatible with the current tier.
 
-**Model registry:** DB-backed catalog with provider, pricing and routing capabilities. Static baseline models are upserted at startup. Dynamic providers manage their own lifecycle. Codex models use provider-qualified registry IDs (`codex:<model>`) so identical upstream model names cannot collide across providers.
+**Connection registry:** `src/setup/ai-connection-registry.ts` defines the available authentication families and provider adapters. It is intentionally data-driven: adding another OAuth/API/local provider does not require redesigning the setup hierarchy. Future providers may be represented in the registry without being selectable until an adapter exists.
+
+**Active connection:** `aiConnection.active` persists `method + provider` independently from `inferenceModel`. A configured credential is not promoted to active until a compatible model is selected. Explicit routes fail closed if their required credential/session is missing rather than silently falling back to another provider.
+
+**Model registry:** DB-backed catalog with model ownership, pricing and routing capabilities. Static baseline models are upserted at startup. Dynamic providers manage their own lifecycle. Codex models use provider-qualified registry IDs (`codex:<model>`) so identical upstream model names cannot collide across providers.
 
 **Codex authority split:** The official Codex runtime owns ChatGPT authentication, token refresh, account state and `model/list`. ABOS persists only non-secret provider preferences such as selected model and reasoning effort. The full model metadata returned by Codex is cached separately and can be rebuilt at any time.
 

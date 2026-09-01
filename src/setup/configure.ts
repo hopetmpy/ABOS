@@ -189,7 +189,7 @@ function printMainMenu(config: AbosConfig): void {
     config.anthropicApiKey ? "Anthropic" : null,
     config.ollamaBaseUrl ? "Ollama" : null,
     config.codex?.enabled ? "Codex" : null,
-    "Conway",
+    config.conwayApiKey ? "Conway" : null,
   ].filter(Boolean).join(", ");
 
   const strategy = config.modelStrategy ?? DEFAULT_MODEL_STRATEGY_CONFIG;

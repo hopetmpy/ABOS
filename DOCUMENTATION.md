@@ -139,11 +139,28 @@ API key provisioned: cnwy_k_...
 - **Name** — Give your ABOS a name (e.g., "Atlas", "Minerva")
 - **Genesis prompt** — The seed instruction that defines the ABOS's purpose. This is the most important input. Be specific about what you want it to do.
 - **Creator wallet address** — Your Ethereum address (the human creator/owner). This address has audit rights over the ABOS.
-- **OpenAI API key** (optional) — Bring your own key for direct OpenAI inference
-- **Anthropic API key** (optional) — Bring your own key for direct Anthropic inference
-- **Ollama URL** (optional) — Use a local OpenAI-compatible Ollama endpoint
 
-After the configuration file is created, setup can optionally start the ChatGPT/Codex device-code OAuth flow. The official Codex runtime owns that session; ABOS stores only non-secret selection metadata.
+Provider credentials are no longer asked as an unrelated sequence of fields. After the base configuration is written, setup enters the shared **Connect AI** flow:
+
+```text
+Connect AI
+├── Connect with OAuth
+│   ├── ChatGPT / Codex
+│   └── Other OAuth provider [future]
+├── Connect with API Key
+│   ├── OpenAI
+│   ├── Anthropic
+│   ├── Conway
+│   ├── Groq [future]
+│   ├── Together [future]
+│   └── Other compatible provider [future]
+└── Local / Self-hosted
+    ├── Ollama
+    ├── OpenAI-compatible endpoint [future]
+    └── Other local runtime [future]
+```
+
+For Codex, the flow continues through device code → browser authorization → model discovery → model selection → reasoning selection. For API-key/local providers it configures the credential/endpoint and then presents only compatible registered models when possible. A provider can be connected without replacing the current active route if no compatible model is selected.
 
 ### Step 4: Financial Safety Policy
 
@@ -187,7 +204,8 @@ node dist/index.js [command]
 |---|---|
 | `--run` | Start the ABOS (first run triggers setup wizard) |
 | `--setup` | Re-run the interactive setup wizard |
-| `--configure` | Edit providers, Codex OAuth state, model strategy, treasury and general settings |
+| `--configure` | Edit AI connections, model strategy, treasury and general settings |
+| `--connect-ai` | Open the shared OAuth / API Key / Local connection flow |
 | `--pick-model` | Interactively select the active model |
 | `--model <id>` | Change the active model; a running ABOS picks it up on the next inference turn |
 | `--reasoning <effort>` | Codex reasoning effort when used with `--model` |
@@ -923,13 +941,21 @@ Agents can leave on-chain feedback for each other:
 
 ## Inference and Models
 
-### Supported backends
+### Connection methods and providers
 
-1. **Conway proxy** (default) — routes through `api.conway.tech`, billed from credits
-2. **Codex / ChatGPT OAuth** — uses the official Codex runtime and its existing ChatGPT session; no pasted OpenAI API key or copied OAuth token is required
-3. **OpenAI direct** — uses BYOK OpenAI API key (sk-...)
-4. **Anthropic direct** — uses BYOK Anthropic API key (sk-ant-...)
-5. **Ollama/local** — OpenAI-compatible local inference
+ABOS does not equate authentication with model identity. The active route is stored independently as **connection method + connection provider**, while `inferenceModel` stores the selected model.
+
+Current implemented routes:
+
+1. **OAuth → ChatGPT / Codex** — official Codex runtime owns the ChatGPT session and refresh lifecycle.
+2. **API Key → OpenAI** — direct OpenAI API credential.
+3. **API Key → Anthropic** — direct Anthropic API credential.
+4. **API Key → Conway** — Conway inference using the Conway credential; the identity-provisioned key can be reused.
+5. **Local → Ollama** — local/self-hosted Ollama runtime.
+
+The registry already has extension slots for future OAuth providers, Groq, Together, generic API-key providers, OpenAI-compatible local endpoints, and other local runtimes. They are displayed as future rather than falsely treated as implemented.
+
+If a connection route is explicitly selected, ABOS fails closed when its required credential/session is unavailable. It does not silently switch to another provider merely because a model name matches another vendor.
 
 ### Model selection
 
