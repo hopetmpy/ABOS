@@ -12,6 +12,11 @@ describe("agent/worker-inference-bridge", () => {
           function: { name: "delegate_task", arguments: "{}" },
         },
       ],
+      cost: {
+        inputCostCents: 0.25,
+        outputCostCents: 0.5,
+        totalCostCents: 0.75,
+      },
     });
 
     const bridge = createWorkerInferenceBridge({ chat } as any);
@@ -34,6 +39,7 @@ describe("agent/worker-inference-bridge", () => {
     });
     expect(result.content).toBe('{"analysis":"ok"}');
     expect(result.toolCalls?.[0].function.name).toBe("delegate_task");
+    expect(result.costCents).toBeCloseTo(0.75);
   });
 
   it("defaults tier to fast when omitted", async () => {
