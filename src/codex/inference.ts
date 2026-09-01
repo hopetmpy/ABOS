@@ -217,7 +217,11 @@ export class CodexInferenceRuntime {
   }
 
   private async ensureTransport(): Promise<CodexRpcTransport> {
-    if (this.transport) return this.transport;
+    if (this.transport?.isReady()) return this.transport;
+    if (this.transport) {
+      this.transport.close();
+      this.transport = null;
+    }
     if (this.startPromise) return this.startPromise;
 
     const transport = this.transportFactory();

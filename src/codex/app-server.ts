@@ -25,6 +25,7 @@ interface RecentNotification {
 
 export interface CodexRpcTransport {
   start(): Promise<void>;
+  isReady(): boolean;
   request<T>(method: string, params?: Record<string, unknown>): Promise<T>;
   onNotification(method: string, handler: NotificationHandler): () => void;
   waitForNotification<T>(
@@ -136,6 +137,10 @@ export class CodexAppServerClient implements CodexRpcTransport {
     });
     this.writeMessage({ method: "initialized" });
     this.initialized = true;
+  }
+
+  isReady(): boolean {
+    return !!this.child && this.initialized && !this.child.killed && this.child.exitCode === null;
   }
 
   async request<T>(method: string, params?: Record<string, unknown>): Promise<T> {

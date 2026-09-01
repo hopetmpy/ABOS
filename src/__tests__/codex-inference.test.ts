@@ -13,6 +13,11 @@ class FakeInferenceTransport implements CodexRpcTransport {
 
   async start(): Promise<void> {
     this.started = true;
+    this.closed = false;
+  }
+
+  isReady(): boolean {
+    return this.started && !this.closed;
   }
 
   onNotification(method: string, handler: (params: unknown) => void): () => void {
@@ -90,6 +95,10 @@ class FakeInferenceTransport implements CodexRpcTransport {
     this.closed = true;
   }
 
+  simulateCrash(): void {
+    this.closed = true;
+  }
+
   private emit(method: string, params: unknown): void {
     for (const handler of this.handlers.get(method) || []) handler(params);
   }
@@ -158,6 +167,34 @@ describe("CodexInferenceRuntime", () => {
       effort: "high",
     });
     expect(turnStart?.params?.outputSchema).toBeDefined();
+  });
+
+  it("restarts the app-server transport after it becomes unhealthy", async () => {
+    const first = new FakeInferenceTransport();
+    const second = new FakeInferenceTransport();
+    const transports = [first, second];
+    let factoryCalls = 0;
+
+    const runtime = new CodexInferenceRuntime({
+      transportFactory: () => transports[factoryCalls++],
+    });
+
+    await runtime.chat(
+      [{ role: "user", content: "First turn" }],
+      { tools: [tool] },
+      "codex:gpt-test",
+    );
+    expect(factoryCalls).toBe(1);
+
+    first.simulateCrash();
+
+    await runtime.chat(
+      [{ role: "user", content: "Second turn" }],
+      { tools: [tool] },
+      "codex:gpt-test",
+    );
+    expect(factoryCalls).toBe(2);
+    expect(second.started).toBe(true);
   });
 
   it("rejects provider-native side effects instead of bypassing ABOS execution", async () => {

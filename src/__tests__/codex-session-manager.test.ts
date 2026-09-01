@@ -13,6 +13,10 @@ class FakeTransport implements CodexRpcTransport {
     this.started = true;
   }
 
+  isReady(): boolean {
+    return this.started && !this.closed;
+  }
+
   async request<T>(method: string, params?: Record<string, unknown>): Promise<T> {
     this.requests.push({ method, params });
     const queue = this.responses.get(method) || [];
