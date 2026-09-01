@@ -17,7 +17,10 @@ import type {
 import type { ChildLifecycle } from "./lifecycle.js";
 import { ulid } from "ulid";
 import { propagateConstitution } from "./constitution.js";
-import { installCurrentAbosSource } from "./source.js";
+import {
+  ABOS_CANONICAL_BRANCH,
+  ABOS_CANONICAL_REPOSITORY,
+} from "../self-mod/upstream.js";
 
 /** Valid Conway sandbox pricing tiers. */
 const SANDBOX_TIERS = [
@@ -31,6 +34,25 @@ const SANDBOX_TIERS = [
 /** Find the smallest valid tier that has at least the requested memory. */
 function selectSandboxTier(requestedMemoryMb: number) {
   return SANDBOX_TIERS.find((t) => t.memoryMb >= requestedMemoryMb) ?? SANDBOX_TIERS[SANDBOX_TIERS.length - 1];
+}
+
+
+async function installAbosRuntime(childConway: ConwayClient): Promise<void> {
+  const command = [
+    "rm -rf /root/abos",
+    `git clone --branch '${ABOS_CANONICAL_BRANCH}' --single-branch '${ABOS_CANONICAL_REPOSITORY}' /root/abos`,
+    "cd /root/abos",
+    "(command -v pnpm >/dev/null 2>&1 || corepack enable pnpm)",
+    "pnpm install --frozen-lockfile",
+    "pnpm run build",
+  ].join(" && ");
+
+  const result = await childConway.exec(command, 180_000);
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `Failed to clone/install/build ABOS runtime: ${result.stderr || result.stdout || `exit ${result.exitCode}`}`,
+    );
+  }
 }
 
 import { isValidAddress } from "../identity/chain.js";
@@ -127,9 +149,9 @@ export async function spawnChild(
       `sandbox ${sandbox.id} created`,
     );
 
-    // Install runtime prerequisites, then inherit the parent's committed ABOS source.
+    // Install runtime prerequisites, then clone the canonical public ABOS repository.
     await childConway.exec("apt-get update -qq && apt-get install -y -qq nodejs npm git curl", 120_000);
-    await installCurrentAbosSource(childConway);
+    await installAbosRuntime(childConway);
 
     // Write genesis configuration (on the CHILD sandbox)
     await childConway.exec("mkdir -p /root/.abos", 10_000);
@@ -271,7 +293,7 @@ async function spawnChildLegacy(
       "apt-get update -qq && apt-get install -y -qq nodejs npm git curl",
       120_000,
     );
-    await installCurrentAbosSource(childConway);
+    await installAbosRuntime(childConway);
     await childConway.exec("mkdir -p /root/.abos", 10_000);
 
     const legacyGenesisJson = JSON.stringify(

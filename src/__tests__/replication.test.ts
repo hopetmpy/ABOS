@@ -21,15 +21,6 @@ import {
 import type { AbosDatabase, GenesisConfig } from "../types.js";
 import { MIGRATION_V7 } from "../state/schema.js";
 
-// Mock source bootstrap in spawn tests. The real bootstrap is covered separately;
-// spawnChild tests should exercise lifecycle/wallet behavior without reading a real Git bundle.
-vi.mock("../replication/source.js", () => ({
-  installCurrentAbosSource: vi.fn(async () => ({
-    headSha: "0".repeat(40),
-    repoRoot: "/root/abos",
-  })),
-}));
-
 // Mock fs for constitution propagation
 vi.mock("fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("fs")>();
@@ -132,6 +123,13 @@ describe("spawnChild", () => {
     await spawnChild(conway, identity, db, genesis);
 
     expect(commands).toContain("cd /root/abos && node dist/index.js --init 2>&1");
+    expect(
+      commands.some((command) =>
+        command.includes(
+          "git clone --branch 'main' --single-branch 'https://github.com/hopetmpy/ABOS.git' /root/abos",
+        ),
+      ),
+    ).toBe(true);
   });
 
   it("validates wallet address before creating child record", async () => {
