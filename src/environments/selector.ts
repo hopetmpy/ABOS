@@ -78,9 +78,10 @@ export class EnvironmentSelector {
 
     const evaluated: EnvironmentSelectionCandidate[] = [];
     for (const candidate of provisional) {
-      const policy = this.options.policyEvaluator
-        ? await this.options.policyEvaluator(candidate, requirements)
-        : { allowed: true };
+      const policy: EnvironmentSelectionPolicyDecision =
+        this.options.policyEvaluator
+          ? await this.options.policyEvaluator(candidate, requirements)
+          : { allowed: true };
 
       if (!policy.allowed) {
         candidate.executionEligible = false;
