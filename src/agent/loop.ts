@@ -6,6 +6,7 @@
  */
 
 import path from "node:path";
+import { getHomeDir } from "../platform/home.js";
 import type {
   AbosIdentity,
   AbosConfig,
@@ -157,7 +158,7 @@ export async function runAgentLoop(
       }
 
       const providersPath = path.join(
-        process.env.HOME || process.cwd(),
+        getHomeDir(),
         ".abos",
         "inference-providers.json",
       );
