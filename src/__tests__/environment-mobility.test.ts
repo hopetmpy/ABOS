@@ -498,6 +498,7 @@ describe("Environment mobility", () => {
         "task-mobility-1",
         "path-mobility-1",
       )!;
+      expect(active.status).toBe("source_failed");
       expect(active.metadata.failedResourceIds).toEqual([failed.id]);
       expect(active.metadata.providerFailureEnvironments).toEqual([]);
       expect(
