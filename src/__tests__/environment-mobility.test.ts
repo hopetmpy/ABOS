@@ -718,6 +718,55 @@ describe("Environment mobility", () => {
     }
   });
 
+  it("does not recover resources already owned by retention release", async () => {
+    const db = createDb();
+    try {
+      const registry = new EnvironmentRegistry();
+      const reconcile = vi.fn(async (resource: any) => ({
+        resource,
+        actualExists: true,
+        action: "should-not-run",
+      }));
+      const recover = vi.fn(async () => ({
+        status: "running" as const,
+      }));
+      registry.register({
+        ...provider("cloud"),
+        reconcile,
+        recover,
+      });
+      const lifecycle = new EnvironmentLifecycleManager(
+        registry,
+        new EnvironmentResourceStore(db),
+      );
+      lifecycle.adopt({
+        provider: "cloud",
+        externalId: "cloud-release-1",
+        type: "executor",
+        status: "unknown",
+        retentionPolicy: "until_goal_complete",
+        metadata: {
+          retentionReleaseState: "pending_observation",
+        },
+      });
+      const mobility = new EnvironmentMobilityCoordinator(
+        registry,
+        new EnvironmentSelector(registry),
+        lifecycle,
+        new EnvironmentMigrationStore(db),
+        {} as EnvironmentExecutionBridge,
+      );
+
+      const sweep = await mobility.sweepRecovery();
+
+      expect(sweep.retentionOwnedSkipped).toBe(1);
+      expect(reconcile).not.toHaveBeenCalled();
+      expect(recover).not.toHaveBeenCalled();
+    } finally {
+      db.close();
+    }
+  });
+
   it("does not blindly repeat resource recovery against the same observed condition", async () => {
     const db = createDb();
     try {
