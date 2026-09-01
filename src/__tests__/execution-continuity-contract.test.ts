@@ -166,6 +166,7 @@ describe("ExecutionContinuationContext contract", () => {
 
     expect(scoped.identity.taskId).toBe("task-1");
     expect(scoped.identity.pathId).toBe("path-b");
+    expect(scoped.path).toBeNull();
     expect(scoped.checkpoint).toBeNull();
 
     expect(scoped.history.failures).toEqual(original.history.failures);
@@ -211,6 +212,7 @@ describe("ExecutionContinuationContext contract", () => {
     const scoped = scopeExecutionContinuationContext(context(), null);
 
     expect(scoped.identity.pathId).toBeNull();
+    expect(scoped.path).toBeNull();
     expect(scoped.checkpoint).toBeNull();
     expect(scoped.history.failures).toHaveLength(1);
   });
