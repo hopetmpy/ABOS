@@ -225,6 +225,13 @@ describe("orchestration/Orchestrator", () => {
           content: JSON.stringify({
             analysis: "Analysis text",
             strategy: "Strategy text",
+            path: {
+              hypothesis: "The local CLI route can complete the goal",
+              assumptions: ["The CLI is installed"],
+              requiredCapabilities: ["cli"],
+              preferredEnvironment: "local",
+              expectedOutcome: "Task completes successfully",
+            },
             customRoles: [],
             tasks: [
               {
@@ -235,6 +242,8 @@ describe("orchestration/Orchestrator", () => {
                 estimatedCostCents: 50,
                 priority: 50,
                 timeoutMs: 60000,
+                requiredCapabilities: ["cli"],
+                preferredEnvironment: "local",
               },
             ],
             risks: [],
@@ -248,6 +257,20 @@ describe("orchestration/Orchestrator", () => {
       const orc = makeOrchestrator(db, { inference: inference as any });
       const result = await orc.tick();
       expect(result.phase).toBe("plan_review");
+
+      const binding = db.prepare(
+        `SELECT required_capabilities, preferred_environment, path_id
+         FROM adaptive_task_bindings
+         WHERE goal_id = ?`,
+      ).get(goalId) as {
+        required_capabilities: string;
+        preferred_environment: string | null;
+        path_id: string | null;
+      };
+
+      expect(JSON.parse(binding.required_capabilities)).toEqual(["cli"]);
+      expect(binding.preferred_environment).toBe("local");
+      expect(binding.path_id).toBeTruthy();
     });
 
     it("planner inference failure preserves the objective instead of inventing a single-task route", async () => {
