@@ -28,3 +28,28 @@ export interface CapabilityDescriptor {
   evidence?: string[];
   metadata?: Record<string, unknown>;
 }
+
+
+export interface CapabilityRequest {
+  requirement: string;
+  preferredEnvironment?: string | null;
+  requiredPermissions?: string[];
+  maxCostCents?: number | null;
+}
+
+export type CapabilityResolutionKind =
+  | "use_existing"
+  | "change_environment"
+  | "acquire"
+  | "compose"
+  | "construct"
+  | "unknown";
+
+export interface CapabilityResolution {
+  kind: CapabilityResolutionKind;
+  requirement: string;
+  candidates: CapabilityDescriptor[];
+  missingRequirements: string[];
+  rationale: string;
+  nextActions: string[];
+}
