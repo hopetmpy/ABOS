@@ -7,7 +7,7 @@
  * using the same canonical format as the runtime client.
  */
 
-import { loadConfig } from "@abos/runtime/config.js";
+import { getConfigPath, loadConfig } from "@abos/runtime/config.js";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { keccak256, toBytes } from "viem";
 import fs from "fs";
@@ -25,11 +25,7 @@ if (!toAddress || !messageText) {
 }
 
 // Load wallet
-const walletPath = path.join(
-  process.env.HOME || "/root",
-  ".abos",
-  "wallet.json",
-);
+const walletPath = path.join(path.dirname(getConfigPath()), "wallet.json");
 
 if (!fs.existsSync(walletPath)) {
   console.log("No wallet found at ~/.abos/wallet.json");
