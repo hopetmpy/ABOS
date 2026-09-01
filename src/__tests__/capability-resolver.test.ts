@@ -25,6 +25,27 @@ describe("CapabilityResolver", () => {
     expect(result.candidates[0]?.id).toBe("local:python");
   });
 
+  it("does not treat an empty permission declaration as universal authorization", () => {
+    const registry = new CapabilityRegistry();
+    registry.register({
+      id: "service:write",
+      type: "service",
+      provider: "test",
+      description: "A service capability",
+      requirements: ["write data"],
+      permissions: [],
+      environment: "local",
+      available: true,
+    });
+
+    const result = new CapabilityResolver(registry).resolve({
+      requirement: "write data",
+      requiredPermissions: ["data:write"],
+    });
+
+    expect(result.kind).not.toBe("use_existing");
+  });
+
   it("changes environment instead of declaring failure when capability exists elsewhere", () => {
     const registry = new CapabilityRegistry();
     registry.register({
