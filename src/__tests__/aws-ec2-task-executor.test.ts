@@ -76,6 +76,7 @@ function lifecycleStub(existing: EnvironmentResource[] = []) {
     operation: string;
     metadata?: Record<string, unknown>;
   }> = [];
+  let provisionCalls = 0;
 
   const lifecycle = {
     resources: {
@@ -107,6 +108,7 @@ function lifecycleStub(existing: EnvironmentResource[] = []) {
       },
     },
     provision: async () => {
+      provisionCalls += 1;
       const created = resource();
       resources.push(created);
       return created;
@@ -124,7 +126,14 @@ function lifecycleStub(existing: EnvironmentResource[] = []) {
     },
   } as unknown as EnvironmentLifecycleManager;
 
-  return { lifecycle, resources, mutations };
+  return {
+    lifecycle,
+    resources,
+    mutations,
+    get provisionCalls() {
+      return provisionCalls;
+    },
+  };
 }
 
 function encodedResult(result: TaskResult): string {
@@ -171,6 +180,7 @@ describe("AwsEc2TaskExecutor", () => {
     const provider = new AwsEnvironmentProvider({
       runner,
       defaultRegion: "us-east-1",
+      defaultIamInstanceProfile: "ABOS-SSM",
     });
     const { lifecycle, mutations } = lifecycleStub();
     const executor = new AwsEc2TaskExecutor({
@@ -196,6 +206,62 @@ describe("AwsEc2TaskExecutor", () => {
     expect(
       mutations.some((entry) => entry.operation === "executor_ready"),
     ).toBe(true);
+  });
+
+  it("blocks before provisioning when a new SSM executor has no IAM instance profile", async () => {
+    const runner: EnvironmentCommandRunner = async (_command, args) => {
+      if (args[0] === "--version") {
+        return {
+          stdout: "aws-cli/2",
+          stderr: "",
+          exitCode: 0,
+        };
+      }
+      if (args[0] === "sts" && args[1] === "get-caller-identity") {
+        return {
+          stdout: JSON.stringify({ Account: "123" }),
+          stderr: "",
+          exitCode: 0,
+        };
+      }
+      if (args[0] === "configure") {
+        return {
+          stdout: "us-east-1\n",
+          stderr: "",
+          exitCode: 0,
+        };
+      }
+      throw new Error(
+        `AWS provisioning/inventory should not be reached: ${args.join(" ")}`,
+      );
+    };
+
+    const provider = new AwsEnvironmentProvider({
+      runner,
+      defaultRegion: "us-east-1",
+    });
+    const stub = lifecycleStub();
+    const executor = new AwsEc2TaskExecutor({
+      provider,
+      lifecycle: stub.lifecycle,
+      identity: {} as any,
+      config: {} as any,
+    });
+
+    const assessment = await executor.assess(task());
+
+    expect(assessment.executable).toBe(false);
+    expect(assessment.evidence?.join(" ")).toContain(
+      "IAM instance profile",
+    );
+    expect(assessment.evidence?.join(" ")).toContain(
+      "not proof that the objective is impossible",
+    );
+
+    await expect(executor.spawn(task())).rejects.toThrow(
+      "requires an IAM instance profile",
+    );
+    expect(stub.provisionCalls).toBe(0);
   });
 
   it("returns an immediate semantic TaskResult from SSM transport", async () => {
