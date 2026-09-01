@@ -56,7 +56,10 @@ import { MemoryIngestionPipeline } from "../memory/ingestion.js";
 import { DEFAULT_MEMORY_BUDGET } from "../types.js";
 import { formatMemoryBlock } from "./context.js";
 import { createLogger } from "../observability/logger.js";
-import { Orchestrator } from "../orchestration/orchestrator.js";
+import {
+  Orchestrator,
+  calculateTaskFundingCents,
+} from "../orchestration/orchestrator.js";
 import { PlanModeController } from "../orchestration/plan-mode.js";
 import { generateTodoMd, injectTodoContext } from "../orchestration/attention.js";
 import { ColonyMessaging, LocalDBTransport } from "../orchestration/messaging.js";
@@ -79,6 +82,7 @@ import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
 import { EnvironmentSelector } from "../environments/selector.js";
 import {
   EnvironmentExecutionBridge,
+  EnvironmentTaskExecutionError,
   EnvironmentTaskExecutorRegistry,
 } from "../environments/task-executor.js";
 
@@ -336,6 +340,20 @@ export async function runAgentLoop(
             ],
           };
         },
+        dispatch: async (task, target) => {
+          if (!target.spawned) {
+            throw new Error(
+              "The current LocalWorkerPool executor is single-task and cannot reuse a completed worker instance. A new local executor path must be spawned.",
+            );
+          }
+
+          return {
+            evidence: [
+              `Local worker ${target.address} already received task ${task.id} directly at spawn time.`,
+            ],
+            metadata: { delivery: "spawn_direct" },
+          };
+        },
       });
 
       taskExecutors.register({
@@ -447,6 +465,51 @@ export async function runAgentLoop(
             }
           }
         },
+        dispatch: async (task, target) => {
+          const amountCents = calculateTaskFundingCents(task, config);
+          if (amountCents > 0) {
+            const funded = await funding.fundChild(target.address, amountCents);
+            if (!funded.success) {
+              throw new Error(
+                `Conway task funding failed for ${target.address}.`,
+              );
+            }
+          }
+
+          const message = messaging.createMessage({
+            type: "task_assignment",
+            to: target.address,
+            goalId: task.goalId,
+            taskId: task.id,
+            priority: "high",
+            requiresResponse: true,
+            content: JSON.stringify({
+              taskId: task.id,
+              title: task.title,
+              description: task.description,
+              agentRole: task.agentRole,
+              dependencies: task.dependencies,
+              timeoutMs: task.metadata.timeoutMs,
+              requiredCapabilities: task.requiredCapabilities ?? [],
+              preferredEnvironment: task.preferredEnvironment ?? null,
+              strategicPathId: task.strategicPathId ?? null,
+            }),
+          });
+          await messaging.send(message);
+
+          return {
+            evidence: [
+              `Task ${task.id} delivered to Conway executor ${target.address}.`,
+              ...(amountCents > 0
+                ? [`Conway task funding amount=${amountCents} cents.`]
+                : []),
+            ],
+            metadata: {
+              delivery: "colony_message",
+              fundedAmountCents: amountCents,
+            },
+          };
+        },
       });
 
       const environmentExecution = new EnvironmentExecutionBridge(
@@ -456,6 +519,33 @@ export async function runAgentLoop(
       );
 
 
+      const resolveExecutionEnvironment = (address: string): string | null => {
+        if (address === identity.address || address.startsWith("local://")) {
+          return "local";
+        }
+
+        const owned = environmentResources
+          .list({ includeTerminated: true })
+          .find(
+            (resource) =>
+              resource.metadata.executorAddress === address ||
+              resource.metadata.childAddress === address,
+          );
+        if (owned) {
+          return owned.provider;
+        }
+
+        const child = db.raw.prepare(
+          "SELECT 1 FROM children WHERE address = ? OR sandbox_id = ? LIMIT 1",
+        ).get(address, address);
+        if (child) {
+          return "conway";
+        }
+
+        const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(address)?.[1];
+        return scheme?.toLowerCase() ?? null;
+      };
+
       orchestrator = new Orchestrator({
         db: db.raw,
         agentTracker,
@@ -463,48 +553,50 @@ export async function runAgentLoop(
         messaging,
         inference: unifiedInference,
         identity,
-        resolveAgentEnvironment: (address: string) => {
-          if (address === identity.address || address.startsWith("local://")) {
-            return "local";
-          }
-
-          const owned = environmentResources
-            .list({ includeTerminated: true })
-            .find((resource) => resource.metadata.executorAddress === address);
-          if (owned) {
-            return owned.provider;
-          }
-
-          const child = db.raw.prepare(
-            "SELECT 1 FROM children WHERE address = ? OR sandbox_id = ? LIMIT 1",
-          ).get(address, address);
-          if (child) {
-            return "conway";
-          }
-
-          const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(address)?.[1];
-          return scheme?.toLowerCase() ?? null;
-        },
+        resolveAgentEnvironment: resolveExecutionEnvironment,
         isWorkerAlive: (address: string) => {
           if (address.startsWith("local://")) {
             return initializedWorkerPool.hasWorker(address);
           }
-          const owned = environmentResources
-            .list({ includeTerminated: true })
-            .find((resource) => resource.metadata.executorAddress === address);
-          if (
-            owned &&
-            ["ready", "running", "degraded", "recovering"].includes(owned.status)
-          ) {
-            return true;
-          }
 
-          // Legacy Conway workers remain recoverable from the children table.
+          // Legacy Conway child lifecycle remains authoritative when present.
           const child = db.raw.prepare(
             "SELECT status FROM children WHERE sandbox_id = ? OR address = ?",
           ).get(address, address) as { status: string } | undefined;
-          if (!child) return false;
-          return !["failed", "dead", "cleaned_up"].includes(child.status);
+          if (child) {
+            return !["failed", "dead", "cleaned_up"].includes(child.status);
+          }
+
+          const owned = environmentResources
+            .list({ includeTerminated: true })
+            .find(
+              (resource) =>
+                resource.metadata.executorAddress === address ||
+                resource.metadata.childAddress === address,
+            );
+          return !!owned &&
+            ["ready", "running", "degraded", "recovering"].includes(owned.status);
+        },
+        dispatchAgentTask: async (assignment, task) => {
+          const environmentId = resolveExecutionEnvironment(
+            assignment.agentAddress,
+          );
+          if (!environmentId) {
+            throw new EnvironmentTaskExecutionError(
+              null,
+              `Execution environment is unknown for agent ${assignment.agentAddress}.`,
+              [
+                "Agent environment could not be resolved for Task dispatch.",
+                "Unknown execution environment is not proof that the objective is impossible.",
+              ],
+            );
+          }
+
+          await environmentExecution.dispatch(environmentId, task, {
+            address: assignment.agentAddress,
+            name: assignment.agentName,
+            spawned: assignment.spawned,
+          });
         },
         environmentRegistry,
         capabilityRegistry,
