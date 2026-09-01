@@ -50,6 +50,9 @@ durable evidence.
 15. Resource ownership and lifecycle remain authoritative in
     `environment_resources`; mobility does not create a second resource ledger.
 16. Migration transactions persist across restart.
+17. Retention release authority outranks mobility recovery: resources already in
+    artifact hold, destroy observation, unavailable-destroy, or released states
+    are never revived by the mobility coordinator.
 
 ## Persistent mobility authority
 
@@ -198,7 +201,11 @@ Recovery tries to restore an existing owned resource. It:
    unchanged.
 
 The recovery sweep does not provision replacements and does not destroy
-resources.
+resources. It also refuses to reconcile/recover resources whose
+`retentionReleaseState` is already owned by the retention lifecycle
+(`artifact_hold`, `destroy_requested`, `pending_observation`,
+`destroy_unavailable`, or `released`). This prevents recovery and cleanup
+authorities from fighting each other.
 
 ## Migration planning
 
