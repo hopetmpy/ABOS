@@ -20,15 +20,13 @@ export const DEFAULT_CONTINUATION_ARTIFACT_DIR =
 export function isOpaqueExternalArtifactReference(
   value: string,
 ): boolean {
-  const trimmed = value.trim();
-  const match =
-    /^([a-z][a-z0-9+.-]*):\/\//i.exec(trimmed);
-  if (!match) return false;
-
-  // file:// is executor-local filesystem state and must not be promoted into
-  // a parent-durable reference merely because it is URI-shaped. All other
-  // schemes remain open/opaque so future providers need no central allowlist.
-  return match[1].toLowerCase() !== "file";
+  // Any scheme is opaque by default. In particular, file:// received from a
+  // remote executor names that executor's filesystem, not the parent's. A
+  // future resolver may understand additional schemes without changing this
+  // central classifier or inventing a closed allowlist.
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(
+    value.trim(),
+  );
 }
 
 /**
