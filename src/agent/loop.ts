@@ -222,7 +222,7 @@ export async function runAgentLoop(
       retention.pendingObservation > 0 ||
       retention.unavailable > 0
     ) {
-      logger.info("Environment retention startup sweep", retention);
+      logger.info("Environment retention startup sweep", { retention });
     }
   } catch (error) {
     logger.warn("Environment retention startup sweep failed", {
@@ -918,7 +918,7 @@ export async function runAgentLoop(
           retention.pendingObservation > 0 ||
           retention.unavailable > 0
         ) {
-          logger.info("Environment retention sweep", retention);
+          logger.info("Environment retention sweep", { retention });
         }
         const localWorkersActive = workerPool?.getActiveCount() ?? 0;
         const hasSelfAssignedParentTask = !!db.raw.prepare(
