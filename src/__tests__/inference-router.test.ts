@@ -341,6 +341,37 @@ describe("InferenceRouter", () => {
       expect(costs[0].model).toBe("gpt-5.2");
     });
 
+    it("records the actual connection provider independently from model ownership", async () => {
+      const seenOptions: any[] = [];
+      const mockChat = async (_msgs: any[], opts: any) => {
+        seenOptions.push(opts);
+        return {
+          provider: "conway",
+          message: { content: "proxied", role: "assistant" },
+          usage: { promptTokens: 10, completionTokens: 5 },
+          finishReason: "stop",
+        };
+      };
+
+      const result = await router.route(
+        {
+          messages: [{ role: "user", content: "Use Conway" }],
+          taskType: "agent_turn",
+          connectionProvider: "conway",
+          tier: "normal",
+          sessionId: "connection-provider-session",
+        },
+        mockChat,
+      );
+
+      expect(seenOptions[0].connectionProvider).toBe("conway");
+      expect(result.model).toBe("gpt-5.2");
+      expect(result.provider).toBe("conway");
+
+      const costs = inferenceGetSessionCosts(db, "connection-provider-session");
+      expect(costs[0].provider).toBe("conway");
+    });
+
     it("computes actualCostCents accurately from token usage", async () => {
       // gpt-5.2 has costPer1kInput=20, costPer1kOutput=80 (hundredths of cents)
       // Formula: Math.ceil((input/1000)*costPer1kInput/100 + (output/1000)*costPer1kOutput/100)

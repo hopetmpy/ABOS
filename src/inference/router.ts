@@ -43,7 +43,15 @@ export class InferenceRouter {
     request: InferenceRequest,
     inferenceChat: (messages: any[], options: any) => Promise<any>,
   ): Promise<InferenceResult> {
-    const { messages, taskType, tier, sessionId, turnId, tools } = request;
+    const {
+      messages,
+      taskType,
+      tier,
+      sessionId,
+      turnId,
+      tools,
+      connectionProvider,
+    } = request;
 
     // 1. Select model from routing matrix
     const model = this.selectModel(tier, taskType);
@@ -73,7 +81,7 @@ export class InferenceRouter {
       return {
         content: `Budget exceeded: ${budgetCheck.reason}`,
         model: model.modelId,
-        provider: model.provider,
+        provider: connectionProvider || model.provider,
         inputTokens: 0,
         outputTokens: 0,
         costCents: 0,
@@ -89,7 +97,7 @@ export class InferenceRouter {
         return {
           content: `Session budget exceeded: ${sessionCost}c spent + ${estimatedCostCents}c estimated > ${this.budget.config.sessionBudgetCents}c limit`,
           model: model.modelId,
-          provider: model.provider,
+          provider: connectionProvider || model.provider,
           inputTokens: 0,
           outputTokens: 0,
           costCents: 0,
@@ -100,7 +108,8 @@ export class InferenceRouter {
     }
 
     // 4. Transform messages for provider
-    const transformedMessages = this.transformMessagesForProvider(messages, model.provider);
+    const expectedProvider = connectionProvider || model.provider;
+    const transformedMessages = this.transformMessagesForProvider(messages, expectedProvider);
 
     // 5. Build inference options
     const preference = this.getPreference(tier, taskType);
@@ -111,6 +120,7 @@ export class InferenceRouter {
       model: model.modelId,
       maxTokens,
       tools: tools,
+      connectionProvider,
     };
 
     // 6. Call inference with timeout
@@ -132,7 +142,7 @@ export class InferenceRouter {
         return {
           content: `Inference timeout after ${timeout}ms`,
           model: model.modelId,
-          provider: model.provider,
+          provider: connectionProvider || model.provider,
           inputTokens: 0,
           outputTokens: 0,
           costCents: 0,
@@ -143,6 +153,8 @@ export class InferenceRouter {
       throw error;
     }
     const latencyMs = Date.now() - startTime;
+
+    const actualProvider = response.provider || expectedProvider;
 
     // 7. Calculate actual cost
     const inputTokens = response.usage?.promptTokens || 0;
@@ -157,7 +169,7 @@ export class InferenceRouter {
       sessionId,
       turnId: turnId || null,
       model: model.modelId,
-      provider: model.provider,
+      provider: actualProvider,
       inputTokens,
       outputTokens,
       costCents: actualCostCents,
@@ -171,7 +183,7 @@ export class InferenceRouter {
     return {
       content: response.message?.content || "",
       model: model.modelId,
-      provider: model.provider,
+      provider: actualProvider,
       inputTokens,
       outputTokens,
       costCents: actualCostCents,

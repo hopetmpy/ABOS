@@ -40,6 +40,19 @@ export interface ProvisionResult {
 
 // ─── Configuration ───────────────────────────────────────────────
 
+export type AiConnectionMethod = "oauth" | "api_key" | "local";
+export type AiRuntimeProvider = "codex" | "openai" | "anthropic" | "conway" | "ollama";
+
+export interface AiConnectionConfig {
+  active?: {
+    method: AiConnectionMethod;
+    provider: AiRuntimeProvider;
+    updatedAt: string;
+  };
+}
+
+export const DEFAULT_AI_CONNECTION_CONFIG: AiConnectionConfig = {};
+
 export interface CodexProviderConfig {
   /** Whether ABOS should treat the existing Codex/ChatGPT session as available. */
   enabled: boolean;
@@ -70,6 +83,12 @@ export interface AbosConfig {
   ollamaBaseUrl?: string;
   /** Codex OAuth integration metadata only. OAuth credentials remain owned by Codex. */
   codex?: CodexProviderConfig;
+  /**
+   * Active connection route. Authentication method/provider are deliberately
+   * separate from model identity so the same model family can be reached
+   * through different providers without heuristic routing.
+   */
+  aiConnection?: AiConnectionConfig;
   inferenceModel: string;
   maxTokensPerTurn: number;
   heartbeatConfigPath: string;
@@ -109,6 +128,7 @@ export const DEFAULT_CONFIG: Partial<AbosConfig> = {
   childSandboxMemoryMb: 1024,
   socialRelayUrl: "https://social.conway.tech",
   codex: DEFAULT_CODEX_PROVIDER_CONFIG,
+  aiConnection: DEFAULT_AI_CONNECTION_CONFIG,
 };
 
 // ─── Agent State ─────────────────────────────────────────────────
@@ -348,6 +368,8 @@ export interface InferenceToolCall {
 export interface InferenceResponse {
   id: string;
   model: string;
+  /** Actual connection provider used for this response. */
+  provider?: ModelProvider;
   message: ChatMessage;
   toolCalls?: InferenceToolCall[];
   usage: TokenUsage;
@@ -356,6 +378,8 @@ export interface InferenceResponse {
 
 export interface InferenceOptions {
   model?: string;
+  /** Optional explicit connection route for this inference call. */
+  connectionProvider?: AiRuntimeProvider;
   maxTokens?: number;
   temperature?: number;
   tools?: InferenceToolDefinition[];
@@ -1199,6 +1223,8 @@ export type RoutingMatrix = Record<SurvivalTier, Record<InferenceTaskType, Model
 export interface InferenceRequest {
   messages: ChatMessage[];
   taskType: InferenceTaskType;
+  /** Explicit connection route for this request, independent of model owner. */
+  connectionProvider?: AiRuntimeProvider;
   tier: SurvivalTier;
   sessionId: string;
   turnId?: string;

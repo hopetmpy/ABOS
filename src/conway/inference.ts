@@ -83,13 +83,17 @@ export function createInferenceClient(
     const model = opts?.model || currentModel;
     const tools = opts?.tools;
 
-    const backend = resolveInferenceBackend(model, {
-      openaiApiKey,
-      anthropicApiKey,
-      ollamaBaseUrl,
-      codexEnabled: getCodexConfig?.()?.enabled ?? codex?.enabled ?? false,
-      getModelProvider,
-    });
+    const backend = resolveInferenceBackend(
+      model,
+      {
+        openaiApiKey,
+        anthropicApiKey,
+        ollamaBaseUrl,
+        codexEnabled: getCodexConfig?.()?.enabled ?? codex?.enabled ?? false,
+        getModelProvider,
+      },
+      opts?.connectionProvider,
+    );
 
     // Newer models (o-series, gpt-5.x, gpt-4.1) require max_completion_tokens.
     // Ollama always uses max_tokens.
@@ -119,7 +123,8 @@ export function createInferenceClient(
     }
 
     if (backend === "codex") {
-      return codexRuntime.chat(messages, { ...(opts || {}), model }, model);
+      const response = await codexRuntime.chat(messages, { ...(opts || {}), model }, model);
+      return { ...response, provider: "codex" };
     }
 
     if (backend === "anthropic") {
@@ -198,7 +203,7 @@ function formatMessage(
  * When InferenceRouter is available, it uses the model registry's provider field.
  * This function is kept for backward compatibility with direct inference calls.
  */
-function resolveInferenceBackend(
+export function resolveInferenceBackend(
   model: string,
   keys: {
     openaiApiKey?: string;
@@ -207,7 +212,30 @@ function resolveInferenceBackend(
     codexEnabled?: boolean;
     getModelProvider?: (modelId: string) => string | undefined;
   },
+  preferredProvider?: "codex" | "openai" | "anthropic" | "conway" | "ollama",
 ): InferenceBackend {
+  // An explicit connection route is authoritative. Never silently fall back
+  // to a different credential/provider after the user selected one.
+  if (preferredProvider) {
+    if (preferredProvider === "codex") {
+      if (!keys.codexEnabled) throw new Error("Codex OAuth is selected but not connected");
+      return "codex";
+    }
+    if (preferredProvider === "openai") {
+      if (!keys.openaiApiKey) throw new Error("OpenAI API Key is selected but no key is configured");
+      return "openai";
+    }
+    if (preferredProvider === "anthropic") {
+      if (!keys.anthropicApiKey) throw new Error("Anthropic API Key is selected but no key is configured");
+      return "anthropic";
+    }
+    if (preferredProvider === "ollama") {
+      if (!keys.ollamaBaseUrl) throw new Error("Ollama is selected but no local base URL is configured");
+      return "ollama";
+    }
+    return "conway";
+  }
+
   // Registry-based routing: most accurate, no name guessing
   if (keys.getModelProvider) {
     const provider = keys.getModelProvider(model);
@@ -281,6 +309,11 @@ async function chatViaOpenAiCompatible(params: {
   return {
     id: data.id || "",
     model: data.model || params.model,
+    provider: params.backend === "openai"
+      ? "openai"
+      : params.backend === "ollama"
+        ? "ollama"
+        : "conway",
     message: {
       role: message.role,
       content: message.content || "",
@@ -381,6 +414,7 @@ async function chatViaAnthropic(params: {
   return {
     id: data.id || "",
     model: data.model || params.model,
+    provider: "anthropic",
     message: {
       role: "assistant",
       content: textContent,

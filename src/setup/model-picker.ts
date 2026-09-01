@@ -20,7 +20,13 @@ import {
 import { CodexSessionManager } from "../codex/session-manager.js";
 import { stripCodexRegistryPrefix } from "../codex/inference.js";
 import { DEFAULT_MODEL_STRATEGY_CONFIG } from "../types.js";
-import type { AbosConfig, ModelEntry } from "../types.js";
+import type {
+  AbosConfig,
+  AiConnectionMethod,
+  AiRuntimeProvider,
+  ModelEntry,
+  ModelProvider,
+} from "../types.js";
 import { promptOptional, closePrompts } from "./prompts.js";
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -35,11 +41,13 @@ const PROVIDER_LABEL: Record<string, string> = {
 export async function runModelPicker(
   requestedModel?: string,
   requestedReasoning?: string,
-): Promise<void> {
+  providerFilters?: ModelProvider[],
+  connectionProvider?: AiRuntimeProvider,
+): Promise<boolean> {
   const config = loadConfig();
   if (!config) {
     console.log(chalk.red("  ABOS is not configured. Run: abos --setup"));
-    return;
+    return false;
   }
 
   const dbPath = resolvePath(config.dbPath);
@@ -73,13 +81,20 @@ export async function runModelPicker(
     if (codexCatalog) syncCodexCatalogToRegistry(registry, codexCatalog);
   }
 
-  const models = registry.getAll().filter((m) => m.enabled);
+  const allModels = registry.getAll().filter((m) => m.enabled);
+  const models =
+    providerFilters && providerFilters.length > 0
+      ? allModels.filter((model) => providerFilters.includes(model.provider))
+      : allModels;
 
   if (models.length === 0) {
-    console.log(chalk.yellow("  No models available in registry."));
+    const scope = providerFilters?.length
+      ? ` for provider(s): ${providerFilters.join(", ")}`
+      : "";
+    console.log(chalk.yellow(`  No registered models available${scope}.`));
     db.close();
     closePrompts();
-    return;
+    return false;
   }
 
   if (requestedModel) {
@@ -90,15 +105,22 @@ export async function runModelPicker(
       console.log(chalk.red(`  ${error instanceof Error ? error.message : String(error)}`));
       db.close();
       closePrompts();
-      return;
+      return false;
     }
     try {
-      await applyModelSelection(config, selected, codexCatalog, requestedReasoning, false);
+      await applyModelSelection(
+        config,
+        selected,
+        codexCatalog,
+        requestedReasoning,
+        false,
+        connectionProvider,
+      );
     } catch (error) {
       console.log(chalk.red(`  ${error instanceof Error ? error.message : String(error)}`));
       db.close();
       closePrompts();
-      return;
+      return false;
     }
     saveConfig(config);
     console.log(chalk.green(`\n  Active model set to: ${selected.modelId} (${selected.displayName})`));
@@ -108,7 +130,7 @@ export async function runModelPicker(
     console.log(chalk.dim("  The running ABOS process will use this selection on its next inference turn.\n"));
     db.close();
     closePrompts();
-    return;
+    return true;
   }
 
   console.log(chalk.cyan("\n  Available Models\n"));
@@ -121,7 +143,7 @@ export async function runModelPicker(
     console.log(chalk.dim("  Cancelled."));
     db.close();
     closePrompts();
-    return;
+    return false;
   }
 
   const idx = parseInt(input, 10) - 1;
@@ -129,11 +151,18 @@ export async function runModelPicker(
     console.log(chalk.red(`  Invalid selection: "${input}"`));
     db.close();
     closePrompts();
-    return;
+    return false;
   }
 
   const selected = models[idx];
-  await applyModelSelection(config, selected, codexCatalog, requestedReasoning, true);
+  await applyModelSelection(
+    config,
+    selected,
+    codexCatalog,
+    requestedReasoning,
+    true,
+    connectionProvider,
+  );
   saveConfig(config);
   closePrompts();
 
@@ -141,6 +170,7 @@ export async function runModelPicker(
   console.log(chalk.dim("  The running ABOS process will use this selection on its next inference turn.\n"));
 
   db.close();
+  return true;
 }
 
 function printModelTable(models: ModelEntry[], currentModelId: string): void {
@@ -199,6 +229,7 @@ async function applyModelSelection(
   codexCatalog: ReturnType<typeof loadCodexCatalog>,
   requestedReasoning: string | undefined,
   interactive: boolean,
+  connectionProvider?: AiRuntimeProvider,
 ): Promise<void> {
   config.inferenceModel = selected.modelId;
   config.modelStrategy = {
@@ -206,6 +237,22 @@ async function applyModelSelection(
     ...(config.modelStrategy || {}),
     inferenceModel: selected.modelId,
   };
+
+  const selectedConnectionProvider =
+    connectionProvider ||
+    (selected.provider === "codex" || selected.provider === "ollama"
+      ? selected.provider
+      : undefined);
+  if (selectedConnectionProvider) {
+    config.aiConnection = {
+      ...(config.aiConnection || {}),
+      active: {
+        method: connectionMethodForProvider(selectedConnectionProvider),
+        provider: selectedConnectionProvider,
+        updatedAt: new Date().toISOString(),
+      },
+    };
+  }
 
   if (selected.provider !== "codex") return;
 
@@ -259,4 +306,11 @@ async function applyModelSelection(
     effortIndex >= 0 && effortIndex < efforts.length
       ? efforts[effortIndex].reasoningEffort
       : descriptor?.defaultReasoningEffort || config.codex.reasoningEffort || efforts[0].reasoningEffort;
+}
+
+
+function connectionMethodForProvider(provider: AiRuntimeProvider): AiConnectionMethod {
+  if (provider === "codex") return "oauth";
+  if (provider === "ollama") return "local";
+  return "api_key";
 }

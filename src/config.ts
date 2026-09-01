@@ -6,13 +6,21 @@
 
 import fs from "fs";
 import path from "path";
-import type { AbosConfig, TreasuryPolicy, ModelStrategyConfig, SoulConfig, CodexProviderConfig } from "./types.js";
+import type {
+  AbosConfig,
+  TreasuryPolicy,
+  ModelStrategyConfig,
+  SoulConfig,
+  CodexProviderConfig,
+  AiConnectionConfig,
+} from "./types.js";
 import {
   DEFAULT_CONFIG,
   DEFAULT_TREASURY_POLICY,
   DEFAULT_MODEL_STRATEGY_CONFIG,
   DEFAULT_SOUL_CONFIG,
   DEFAULT_CODEX_PROVIDER_CONFIG,
+  DEFAULT_AI_CONNECTION_CONFIG,
 } from "./types.js";
 import { getAbosDir } from "./identity/wallet.js";
 import { loadApiKeyFromConfig } from "./identity/provision.js";
@@ -67,6 +75,14 @@ export function loadConfig(): AbosConfig | null {
       ...(raw.codex ?? {}),
     };
 
+    const aiConnection: AiConnectionConfig = {
+      ...DEFAULT_AI_CONNECTION_CONFIG,
+      ...(raw.aiConnection ?? {}),
+      active: raw.aiConnection?.active
+        ? { ...raw.aiConnection.active }
+        : undefined,
+    };
+
     // Deep-merge soul config with defaults
     const soulConfig: SoulConfig = {
       ...DEFAULT_SOUL_CONFIG,
@@ -84,6 +100,7 @@ export function loadConfig(): AbosConfig | null {
       treasuryPolicy,
       modelStrategy,
       codex,
+      aiConnection,
       soulConfig,
       chainType: raw.chainType || "evm",
     } as AbosConfig;
@@ -108,6 +125,7 @@ export function saveConfig(config: AbosConfig): void {
     treasuryPolicy: config.treasuryPolicy ?? DEFAULT_TREASURY_POLICY,
     modelStrategy: config.modelStrategy ?? DEFAULT_MODEL_STRATEGY_CONFIG,
     codex: config.codex ?? DEFAULT_CODEX_PROVIDER_CONFIG,
+    aiConnection: config.aiConnection ?? DEFAULT_AI_CONNECTION_CONFIG,
     soulConfig: config.soulConfig ?? DEFAULT_SOUL_CONFIG,
   };
   fs.writeFileSync(configPath, JSON.stringify(toSave, null, 2), {
@@ -166,6 +184,7 @@ export function createConfig(params: {
     anthropicApiKey: params.anthropicApiKey,
     ollamaBaseUrl: params.ollamaBaseUrl,
     codex: DEFAULT_CODEX_PROVIDER_CONFIG,
+    aiConnection: DEFAULT_AI_CONNECTION_CONFIG,
     inferenceModel: DEFAULT_CONFIG.inferenceModel || "gpt-5.2",
     maxTokensPerTurn: DEFAULT_CONFIG.maxTokensPerTurn || 4096,
     heartbeatConfigPath:

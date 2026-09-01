@@ -50,7 +50,7 @@ export async function runCodexLogin(): Promise<void> {
   const discovered = await connectCodex(config);
   if (discovered > 0) {
     const { runModelPicker } = await import("../setup/model-picker.js");
-    await runModelPicker();
+    await runModelPicker(undefined, undefined, ["codex"], "codex");
   }
 }
 
@@ -77,6 +77,12 @@ export async function disconnectCodex(config: AbosConfig): Promise<void> {
     ...(config.codex || {}),
     enabled: false,
   };
+  if (config.aiConnection?.active?.provider === "codex") {
+    config.aiConnection = {
+      ...config.aiConnection,
+      active: undefined,
+    };
+  }
   saveConfig(config);
   console.log(chalk.green("  ✓ Codex disconnected."));
 }

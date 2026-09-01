@@ -22,8 +22,8 @@ import {
   syncCodexCatalogToRegistry,
 } from "../codex/catalog.js";
 import { CodexSessionManager } from "../codex/session-manager.js";
-import { connectCodex, disconnectCodex } from "../codex/commands.js";
 import { stripCodexRegistryPrefix } from "../codex/inference.js";
+import { runAiConnectionFlow } from "./ai-connection.js";
 
 // ─── Readline helpers ─────────────────────────────────────────────
 
@@ -193,12 +193,15 @@ function printMainMenu(config: AbosConfig): void {
   ].filter(Boolean).join(", ");
 
   const strategy = config.modelStrategy ?? DEFAULT_MODEL_STRATEGY_CONFIG;
+  const activeConnection = config.aiConnection?.active
+    ? `${config.aiConnection.active.method} → ${config.aiConnection.active.provider}`
+    : "auto / legacy";
 
   console.log(chalk.cyan("  ┌────────────────────────────────────────────┐"));
   console.log(chalk.cyan("  │  Configure ABOS                        │"));
   console.log(chalk.cyan("  └────────────────────────────────────────────┘"));
   console.log("");
-  console.log(`  ${chalk.white("1.")} Inference Providers   ${dim(providers)}`);
+  console.log(`  ${chalk.white("1.")} AI Connections       ${dim(activeConnection)} / ${dim(providers)}`);
   console.log(`  ${chalk.white("2.")} Model Strategy        ${dim(config.inferenceModel)} / ${dim(strategy.maxTokensPerTurn + " tokens")}`);
   console.log(`  ${chalk.white("3.")} Treasury Policy       ${dim("max transfer: " + (config.treasuryPolicy?.maxSingleTransferCents ?? DEFAULT_TREASURY_POLICY.maxSingleTransferCents) + "¢")}`);
   console.log(`  ${chalk.white("4.")} General               ${dim(config.name)} / ${dim(config.logLevel)}`);
@@ -210,36 +213,18 @@ function printMainMenu(config: AbosConfig): void {
 // ─── Section: Inference Providers ────────────────────────────────
 
 async function configureProviders(config: AbosConfig): Promise<void> {
-  console.log(chalk.cyan("\n  ── Inference Providers ─────────────────────────\n"));
-  console.log(chalk.dim("  Press Enter to keep the current value. Type - to clear an optional field.\n"));
-
-  config.conwayApiKey = await askRequiredString(
-    "Conway API key",
-    config.conwayApiKey,
-  );
-
-  config.openaiApiKey = await askString("OpenAI API key  (sk-...)", config.openaiApiKey) || undefined;
-  config.anthropicApiKey = await askString("Anthropic API key  (sk-ant-...)", config.anthropicApiKey) || undefined;
-  config.ollamaBaseUrl = await askString("Ollama base URL  (http://localhost:11434)", config.ollamaBaseUrl) || undefined;
-
-  const codexState = config.codex?.enabled ? chalk.green("connected") : chalk.dim("disconnected");
-  console.log(`\n  Codex / ChatGPT OAuth: ${codexState}`);
-  const codexAction = await ask(
-    `  ${chalk.white("→")} Codex action ${chalk.dim("[Enter=keep, c=connect, d=disconnect, r=refresh models]")}: `,
-  );
-  if (codexAction === "c" || codexAction === "connect") {
-    await connectCodex(config);
-  } else if (codexAction === "d" || codexAction === "disconnect") {
-    await disconnectCodex(config);
-  } else if ((codexAction === "r" || codexAction === "refresh") && config.codex?.enabled) {
-    const snapshot = await refreshCodexCatalog(
-      new CodexSessionManager(),
-      config.codex.includeHiddenModels ?? false,
-    );
-    console.log(chalk.green(`  ✓ Refreshed ${snapshot.models.length} Codex model(s).`));
+  // Avoid two readline interfaces competing for stdin while the shared
+  // Connect AI flow uses setup/prompts.ts.
+  if (rl) {
+    rl.close();
+    rl = null;
   }
 
-  console.log("");
+  const updated = await runAiConnectionFlow(config, {
+    manage: true,
+    allowSkip: true,
+  });
+  Object.assign(config, updated);
 }
 
 // ─── Section: Model Strategy ──────────────────────────────────────

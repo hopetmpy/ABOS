@@ -53,6 +53,7 @@ import { InferenceBudgetTracker } from "../inference/budget.js";
 import { InferenceRouter } from "../inference/router.js";
 import { RuntimeModelBinding } from "../inference/runtime-binding.js";
 import { loadCodexCatalog, syncCodexCatalogToRegistry } from "../codex/catalog.js";
+import { loadConfig } from "../config.js";
 import { MemoryRetriever } from "../memory/retrieval.js";
 import { MemoryIngestionPipeline } from "../memory/ingestion.js";
 import { DEFAULT_MEMORY_BUDGET } from "../types.js";
@@ -619,15 +620,25 @@ export async function runAgentLoop(
         }
       }
 
+      const liveConfig = loadConfig();
+      const activeConnectionProvider =
+        liveConfig?.aiConnection?.active?.provider ??
+        config.aiConnection?.active?.provider;
+
       const survivalTier = getSurvivalTier(financial.creditsCents);
       const selectedModel = inferenceRouter.selectModel(survivalTier, "agent_turn")?.modelId || "none";
-      log(config, `[THINK] Routing inference (tier: ${survivalTier}, model: ${selectedModel})...`);
+      const providerLabel = activeConnectionProvider || "auto";
+      log(
+        config,
+        `[THINK] Routing inference (tier: ${survivalTier}, connection: ${providerLabel}, model: ${selectedModel})...`,
+      );
 
       const inferenceTools = toolsToInferenceFormat(tools);
       const routerResult = await inferenceRouter.route(
         {
           messages: messages,
           taskType: "agent_turn",
+          connectionProvider: activeConnectionProvider,
           tier: survivalTier,
           sessionId: db.getKV("session_id") || "default",
           turnId: ulid(),

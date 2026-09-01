@@ -129,6 +129,17 @@ Environment:
     process.exit(0);
   }
 
+  if (args.includes("--connect-ai")) {
+    const config = loadConfig();
+    if (!config) {
+      logger.error("ABOS is not configured. Run: abos --setup");
+      process.exit(1);
+    }
+    const { runAiConnectionFlow } = await import("./setup/ai-connection.js");
+    await runAiConnectionFlow(config, { manage: true, allowSkip: true });
+    process.exit(0);
+  }
+
   if (args.includes("--codex-login")) {
     const { runCodexLogin } = await import("./codex/commands.js");
     await runCodexLogin();
@@ -232,6 +243,7 @@ Skills:     ${skills.length} active
 Heartbeats: ${heartbeats.filter((h) => h.enabled).length} active
 Children:   ${children.filter((c) => c.status !== "dead").length} alive / ${children.length} total
 Agent ID:   ${registry?.agentId || "not registered"}
+Connection: ${config.aiConnection?.active ? `${config.aiConnection.active.method} / ${config.aiConnection.active.provider}` : "auto / legacy"}
 Model:      ${config.inferenceModel}
 Version:    ${config.version}
 ========================
