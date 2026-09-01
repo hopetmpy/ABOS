@@ -68,6 +68,7 @@ import { ProviderRegistry } from "../inference/provider-registry.js";
 import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import { isIdleOnlyTool } from "./idle-only-tools.js";
 import { CapabilityRegistry } from "../capabilities/registry.js";
+import { createCapabilityTools } from "../capabilities/tools.js";
 import { EnvironmentRegistry } from "../environments/registry.js";
 import { LocalEnvironmentProvider } from "../environments/local.js";
 import { ConwayEnvironmentProvider } from "../environments/conway.js";
@@ -112,13 +113,16 @@ export async function runAgentLoop(
   const builtinTools = createBuiltinTools(identity.sandboxId);
   const installedTools = loadInstalledTools(db);
   const environmentTools = createEnvironmentTools(environmentRegistry);
-  const tools = [...builtinTools, ...installedTools, ...environmentTools];
 
   // Unified capability/environment view. Existing tool and skill systems remain
   // authoritative implementations; this registry lets planning reason across
   // them and across execution environments without provider-specific branches.
   const capabilityRegistry = new CapabilityRegistry();
-  capabilityRegistry.ingestTools(tools);
+  capabilityRegistry.ingestTools([
+    ...builtinTools,
+    ...installedTools,
+    ...environmentTools,
+  ]);
   capabilityRegistry.ingestSkills(skills ?? []);
 
   // Prime capability discovery once. Inspection failures are represented as
@@ -126,6 +130,18 @@ export async function runAgentLoop(
   for (const snapshot of await environmentRegistry.inspectAll()) {
     capabilityRegistry.registerMany(snapshot.capabilities);
   }
+
+  const capabilityTools = createCapabilityTools(
+    capabilityRegistry,
+    environmentRegistry,
+  );
+  capabilityRegistry.ingestTools(capabilityTools);
+  const tools = [
+    ...builtinTools,
+    ...installedTools,
+    ...environmentTools,
+    ...capabilityTools,
+  ];
 
   const toolContext: ToolContext = {
     identity,
