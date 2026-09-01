@@ -142,7 +142,10 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
 
     const provisioned = await this.options.lifecycle.provision("aws", {
       resourceType: "ec2",
-      retentionPolicy: "until_goal_complete",
+      // A newly provisioned VM is only a candidate executor. Keep it Task-scoped
+      // until bootstrap succeeds; EnvironmentExecutionBridge promotes the
+      // proven executor to until_goal_complete through canonical adopt().
+      retentionPolicy: "ephemeral",
       requiredCapabilities: [
         "remote compute",
         "virtual machine",
@@ -227,6 +230,20 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
     );
 
     if (!["running", "ready"].includes(bootstrapped.status)) {
+      this.options.lifecycle.resources.applyMutation(
+        bootstrapped.id,
+        {
+          status: "failed",
+          evidence: [
+            "AWS EC2 candidate failed to become a runnable Task executor; ephemeral retention is now eligible for cleanup.",
+          ],
+          metadata: {
+            executorBootstrapFailedAt: new Date().toISOString(),
+          },
+        },
+        "executor_bootstrap_failed",
+        "Provisioned AWS resource did not become a runnable executor.",
+      );
       throw new Error(
         `AWS EC2 bootstrap did not produce a runnable executor: status=${bootstrapped.status} providerState=${bootstrapped.providerState ?? "unknown"}.`,
       );
