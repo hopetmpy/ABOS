@@ -158,9 +158,7 @@ describe("agent/general-harness security", () => {
     writeFileSync(filePath, "hello", "utf8");
 
     const conway = createConwayStub({
-      readFile: async () => {
-        throw new Error("force local fallback");
-      },
+      readFile: async (selectedPath) => readFileSync(selectedPath, "utf8"),
     });
 
     const out = await runTool(conway, "read_file", { path: filePath });
@@ -170,8 +168,9 @@ describe("agent/general-harness security", () => {
   it("allows normal write_file paths inside the allowed edit root", async () => {
     const filePath = path.join(testRoot, "out", "data.txt");
     const conway = createConwayStub({
-      writeFile: async () => {
-        throw new Error("force local fallback");
+      writeFile: async (selectedPath, content) => {
+        mkdirSync(path.dirname(selectedPath), { recursive: true });
+        writeFileSync(selectedPath, content, "utf8");
       },
     });
 
