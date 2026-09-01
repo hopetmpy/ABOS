@@ -141,13 +141,23 @@ export async function runAgentLoop(
           typeof requirements.metadata?.mobilitySourceResourceId === "string"
             ? requirements.metadata.mobilitySourceResourceId
             : null;
+        const releaseStates = new Set([
+          "artifact_hold",
+          "destroy_requested",
+          "pending_observation",
+          "released",
+        ]);
         return environmentResources
           .list({ provider: environmentId })
           .filter(
             (resource) =>
               resource.id !== sourceResourceId &&
               ["ready", "running", "suspended"].includes(resource.status) &&
-              resource.metadata.retentionReleaseState !== "released" &&
+              !releaseStates.has(
+                typeof resource.metadata.retentionReleaseState === "string"
+                  ? resource.metadata.retentionReleaseState
+                  : "",
+              ) &&
               resource.metadata.artifactCollectionState !== "pending",
           ).length;
       },
