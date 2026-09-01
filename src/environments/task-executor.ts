@@ -1,5 +1,6 @@
 import type { TaskNode, TaskResult } from "../orchestration/task-graph.js";
 import type { EnvironmentLifecycleManager } from "./lifecycle.js";
+import type { ExecutionContinuationContext } from "./continuity.js";
 import type {
   EnvironmentSelectionCandidate,
   EnvironmentSelectionResult,
@@ -60,6 +61,11 @@ export interface EnvironmentTaskSpawnOptions {
    * does not automatically make every resource from the same provider invalid.
    */
   excludedResourceIds?: string[];
+  /**
+   * Derived continuation view for the same canonical Task. Executors may
+   * consume it, but it does not become provider-owned state.
+   */
+  continuationContext?: ExecutionContinuationContext;
   metadata?: Record<string, unknown>;
 }
 
