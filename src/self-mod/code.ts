@@ -21,7 +21,7 @@ import type {
 } from "../types.js";
 import { logModification } from "./audit-log.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
-import { expandHomePath } from "../platform/home.js";
+import { expandHomePath, toPosixShellPath } from "../platform/home.js";
 
 // ─── IMMUTABLE SAFETY INVARIANTS ─────────────────────────────
 // These are hard-coded and CANNOT be changed by the agent.
@@ -308,7 +308,8 @@ export async function editFile(
   // 10. Rebuild if source file was edited
   if (/\.(ts|js|tsx|jsx)$/.test(filePath)) {
     try {
-      const build = await conway.exec("pnpm run build", 60_000);
+      const buildRoot = escapeShellArg(toPosixShellPath(RUNTIME_ROOT));
+      const build = await conway.exec(`cd ${buildRoot} && pnpm run build`, 60_000);
       if (build.exitCode !== 0) {
         const detail = build.stderr || build.stdout || `exit code ${build.exitCode}`;
         return {
@@ -426,4 +427,9 @@ function generateSimpleDiff(
   }
 
   return lines.join("\n");
+}
+
+/** Escape a path/value for the POSIX shell used by Conway exec. */
+function escapeShellArg(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }
