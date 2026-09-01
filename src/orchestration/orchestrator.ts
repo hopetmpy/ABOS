@@ -115,6 +115,7 @@ const DEFAULT_STATE: OrchestratorState = {
 
 export class Orchestrator {
   private pendingTaskResults: TaskResultEnvelope[] = [];
+  private directTaskResults: TaskResultEnvelope[] = [];
   private readonly adaptive: AdaptivePathEngine;
 
   constructor(private readonly params: {
@@ -135,7 +136,7 @@ export class Orchestrator {
     dispatchAgentTask?: (
       assignment: AgentAssignment,
       task: TaskNode,
-    ) => Promise<void>;
+    ) => Promise<TaskResult | void>;
   }) {
     this.adaptive = new AdaptivePathEngine(params.db);
   }
@@ -306,7 +307,10 @@ export class Orchestrator {
   }
 
   async collectResults(): Promise<TaskResult[]> {
-    this.pendingTaskResults = [];
+    // Synchronous environment transports can complete inside dispatch. Preserve
+    // those results alongside asynchronous Colony inbox results for the same
+    // canonical completion/failure path.
+    this.pendingTaskResults = this.directTaskResults.splice(0);
 
     const processed = await this.params.messaging.processInbox();
     for (const entry of processed) {
@@ -711,7 +715,16 @@ export class Orchestrator {
         const isSelfAssigned = assignment.agentAddress === this.params.identity?.address;
 
         if (!isSelfAssigned && this.params.dispatchAgentTask) {
-          await this.params.dispatchAgentTask(assignment, executionTask);
+          const immediateResult = await this.params.dispatchAgentTask(
+            assignment,
+            executionTask,
+          );
+          if (immediateResult) {
+            this.directTaskResults.push({
+              taskId: executionTask.id,
+              result: immediateResult,
+            });
+          }
         } else if (!isLocalWorker && !isSelfAssigned) {
           // Compatibility path for runtimes that have not installed the
           // provider-neutral dispatch hook yet.
