@@ -335,10 +335,19 @@ export class EnvironmentMobilityCoordinator {
     target: EnvironmentTaskTarget,
   ): Promise<EnvironmentTaskDispatchResult> {
     try {
+      const continuationContext = this.continuity
+        ? this.continuity.assemble(
+            task.id,
+            task.strategicPathId !== undefined
+              ? { targetPathId: task.strategicPathId }
+              : {},
+          )
+        : undefined;
       const result = await this.execution.dispatch(
         environmentId,
         task,
         target,
+        { continuationContext },
       );
 
       const active = this.store.findActiveForTask(
