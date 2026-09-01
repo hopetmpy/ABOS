@@ -78,17 +78,19 @@ function insertInbox(raw: BetterSqlite3.Database, params: {
   from: string;
   to?: string;
   content: string;
+  rawContent?: string;
   receivedAt?: string;
 }): void {
   raw.prepare(
     `INSERT INTO inbox_messages
-     (id, from_address, to_address, content, received_at, status, retry_count, max_retries)
-     VALUES (?, ?, ?, ?, ?, 'received', 0, 3)`,
+     (id, from_address, to_address, content, raw_content, received_at, status, retry_count, max_retries)
+     VALUES (?, ?, ?, ?, ?, ?, 'received', 0, 3)`,
   ).run(
     params.id,
     params.from,
     params.to ?? "0xself",
     params.content,
+    params.rawContent ?? null,
     params.receivedAt ?? new Date().toISOString(),
   );
 }
@@ -273,6 +275,45 @@ describe("orchestration/messaging", () => {
       const processed = await messaging.processInbox();
       expect(processed[0].message.id).toBe("enveloped");
       expect(processed[0].success).toBe(true);
+    });
+
+    it("parses structured Colony JSON from raw_content when the conversational view was sanitized", async () => {
+      const ctx = createTestDb();
+      raw = ctx.raw;
+      const handler = vi.fn(async () => undefined);
+      const messaging = new ColonyMessaging(
+        { deliver: vi.fn(), getRecipients: () => [] },
+        ctx.db,
+        {
+          handlers: {
+            task_assignment: handler,
+          },
+        },
+      );
+      const message = makeMessage({
+        id: "raw-assignment",
+        type: "task_assignment",
+      });
+      const rawEnvelope = JSON.stringify({
+        protocol: "colony_message_v1",
+        sentAt: "2026-01-01T00:00:00.000Z",
+        message,
+      });
+
+      insertInbox(raw, {
+        id: "inbox-raw-assignment",
+        from: "0xfrom",
+        content: "[Message from 0xfrom]:\n" + rawEnvelope,
+        rawContent: rawEnvelope,
+      });
+
+      const processed = await messaging.processInbox({
+        types: ["task_assignment"],
+      });
+
+      expect(handler).toHaveBeenCalledWith(message);
+      expect(processed[0]?.message.id).toBe("raw-assignment");
+      expect(processed[0]?.success).toBe(true);
     });
 
     it("processes only requested structured message types and leaves others durable", async () => {
