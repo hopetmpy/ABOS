@@ -4,7 +4,7 @@ import type { ExecutionContinuationContext } from "./continuity.js";
 import {
   ARTIFACT_MATERIALIZATION_PROTOCOL_VERSION,
   applyArtifactMaterializationResult,
-  isDurableExternalArtifactReference,
+  isOpaqueExternalArtifactReference,
   prepareArtifactMaterialization,
   remoteEnvironmentArtifactReference,
   type ArtifactMaterializationRequest,
@@ -332,11 +332,11 @@ export class EnvironmentExecutionBridge {
     result: TaskResult,
   ): Promise<TaskResult> {
     const durableArtifacts = result.artifacts.filter(
-      isDurableExternalArtifactReference,
+      isOpaqueExternalArtifactReference,
     );
     const executorLocalArtifacts = result.artifacts.filter(
       (artifact) =>
-        !isDurableExternalArtifactReference(artifact),
+        !isOpaqueExternalArtifactReference(artifact),
     );
 
     if (executorLocalArtifacts.length === 0) {
