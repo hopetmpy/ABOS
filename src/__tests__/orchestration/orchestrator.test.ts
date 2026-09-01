@@ -78,6 +78,12 @@ function makeOrchestrator(
     inference?: ReturnType<typeof makeInference>;
     config?: any;
     messaging?: ColonyMessaging;
+    resolveAgentEnvironment?: (address: string) => string | null;
+    isWorkerAlive?: (address: string) => boolean;
+    dispatchAgentTask?: (
+      assignment: { agentAddress: string; agentName: string; spawned: boolean },
+      task: any,
+    ) => Promise<void>;
   } = {},
 ): Orchestrator {
   const { messaging } = makeMessaging(db);
@@ -89,6 +95,9 @@ function makeOrchestrator(
     inference: overrides.inference ?? (makeInference() as any),
     identity: IDENTITY,
     config: overrides.config ?? {},
+    resolveAgentEnvironment: overrides.resolveAgentEnvironment,
+    isWorkerAlive: overrides.isWorkerAlive,
+    dispatchAgentTask: overrides.dispatchAgentTask,
   });
 }
 
@@ -390,7 +399,14 @@ describe("orchestration/Orchestrator", () => {
   // ─── matchTaskToAgent ────────────────────────────────────────
 
   describe("matchTaskToAgent", () => {
-    function makeTask(goalId: string, overrides: Partial<{ agentRole: string; id: string }> = {}) {
+    function makeTask(
+      goalId: string,
+      overrides: Partial<{
+        agentRole: string;
+        id: string;
+        preferredEnvironment: string | null;
+      }> = {},
+    ) {
       return {
         id: overrides.id ?? ulid(),
         parentId: null,
@@ -403,6 +419,7 @@ describe("orchestration/Orchestrator", () => {
         priority: 50,
         dependencies: [],
         result: null,
+        preferredEnvironment: overrides.preferredEnvironment ?? null,
         metadata: {
           estimatedCostCents: 10,
           actualCostCents: 0,
@@ -497,6 +514,101 @@ describe("orchestration/Orchestrator", () => {
       expect(result.agentName).toBe(IDENTITY.name);
       expect(result.spawned).toBe(false);
     });
+
+    it("does not reuse an idle agent from a different preferred environment", async () => {
+      const goalId = insertGoal(db);
+      const agentTracker = makeAgentTracker({
+        getIdle: vi.fn().mockReturnValue([
+          { address: "local://idle", name: "Local", role: "generalist", status: "healthy" },
+        ]),
+        getBestForTask: vi.fn().mockReturnValue({
+          address: "local://idle",
+          name: "Local",
+        }),
+      });
+      const spawnAgent = vi.fn().mockResolvedValue({
+        address: "conway://spawned",
+        name: "Conway",
+        sandboxId: "sb-conway",
+      });
+      const orc = makeOrchestrator(db, {
+        agentTracker,
+        config: { spawnAgent },
+        resolveAgentEnvironment: (address) =>
+          address.startsWith("local://")
+            ? "local"
+            : address.startsWith("conway://")
+              ? "conway"
+              : null,
+      });
+
+      const result = await orc.matchTaskToAgent(
+        makeTask(goalId, { preferredEnvironment: "conway" }),
+      );
+
+      expect(result.agentAddress).toBe("conway://spawned");
+      expect(spawnAgent).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not self-assign across an explicit non-local environment preference", async () => {
+      const goalId = insertGoal(db);
+      const orc = makeOrchestrator(db, {
+        agentTracker: makeAgentTracker(),
+        config: { disableSpawn: true },
+        resolveAgentEnvironment: () => null,
+      });
+
+      await expect(
+        orc.matchTaskToAgent(
+          makeTask(goalId, { preferredEnvironment: "future-cloud" }),
+        ),
+      ).rejects.toThrow("No available agent");
+    });
+
+  });
+
+
+  describe("provider-neutral dispatch", () => {
+    it("uses runtime dispatch hook instead of universal remote Conway funding/messaging", async () => {
+      const goalId = insertGoal(db);
+      insertTask(db, { goalId, title: "Dispatch Task" });
+      setOrchestratorState(db, {
+        phase: "executing",
+        goalId,
+        replanCount: 0,
+        failedTaskId: null,
+        failedError: null,
+      });
+
+      const agentTracker = makeAgentTracker({
+        getIdle: vi.fn().mockReturnValue([
+          { address: "future://worker-1", name: "Future", role: "generalist", status: "healthy" },
+        ]),
+      });
+      const funding = makeFunding();
+      const dispatchAgentTask = vi.fn().mockResolvedValue(undefined);
+      const messaging = {
+        processInbox: vi.fn().mockResolvedValue([]),
+        createMessage: vi.fn(),
+        send: vi.fn(),
+      } as unknown as ColonyMessaging;
+
+      const orc = makeOrchestrator(db, {
+        agentTracker,
+        funding,
+        messaging,
+        isWorkerAlive: () => true,
+        resolveAgentEnvironment: () => "future",
+        dispatchAgentTask,
+      });
+
+      await orc.tick();
+
+      expect(dispatchAgentTask).toHaveBeenCalledTimes(1);
+      expect(funding.fundChild).not.toHaveBeenCalled();
+      expect((messaging.createMessage as any)).not.toHaveBeenCalled();
+      expect((messaging.send as any)).not.toHaveBeenCalled();
+    });
   });
 
   // ─── fundAgentForTask ────────────────────────────────────────
@@ -554,6 +666,34 @@ describe("orchestration/Orchestrator", () => {
         "Funding transfer failed for 0xagent",
       );
     });
+
+    it("does not reuse an idle worker that runtime evidence says is dead", async () => {
+      const goalId = insertGoal(db);
+      const agentTracker = makeAgentTracker({
+        getIdle: vi.fn().mockReturnValue([
+          { address: "local://dead", name: "Dead", role: "generalist", status: "healthy" },
+        ]),
+        getBestForTask: vi.fn().mockReturnValue({
+          address: "local://dead",
+          name: "Dead",
+        }),
+      });
+      const spawnAgent = vi.fn().mockResolvedValue({
+        address: "local://fresh",
+        name: "Fresh",
+        sandboxId: "fresh",
+      });
+      const orc = makeOrchestrator(db, {
+        agentTracker,
+        config: { spawnAgent },
+        isWorkerAlive: (address) => address !== "local://dead",
+      });
+
+      const result = await orc.matchTaskToAgent(makeTaskWithCost(goalId, 10));
+      expect(result.agentAddress).toBe("local://fresh");
+      expect(result.spawned).toBe(true);
+    });
+
   });
 
   // ─── collectResults ──────────────────────────────────────────

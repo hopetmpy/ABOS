@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AwsEnvironmentProvider } from "../environments/aws.js";
+import { ConwayEnvironmentProvider } from "../environments/conway.js";
 import { EnvironmentRegistry } from "../environments/registry.js";
 import { LocalEnvironmentProvider } from "../environments/local.js";
 import type { EnvironmentCommandRunner } from "../environments/types.js";
@@ -69,3 +70,50 @@ describe("environment registry", () => {
     expect(matches.map((entry) => entry.id)).toContain("local");
   });
 });
+
+
+describe("lifecycle operation discovery", () => {
+  it("exposes only Conway lifecycle operations backed by the current client", () => {
+    const registry = new EnvironmentRegistry();
+    registry.register(new ConwayEnvironmentProvider({
+      getCreditsBalance: async () => 1000,
+      createSandbox: async () => ({
+        id: "sandbox-1",
+        status: "running",
+        region: "test",
+        vcpu: 1,
+        memoryMb: 1024,
+        diskGb: 10,
+      }),
+      listSandboxes: async () => [],
+    }));
+
+    const operations = registry.getSupportedOperations("conway");
+    expect(operations).toContain("provision");
+    expect(operations).toContain("health");
+    expect(operations).toContain("reconcile");
+    expect(operations).not.toContain("destroy");
+  });
+
+  it("keeps future provider-native operations discoverable", () => {
+    const registry = new EnvironmentRegistry();
+    registry.register({
+      id: "future",
+      operations: ["provider_native_snapshot", "quantum_prepare"],
+      inspect: async () => ({
+        id: "future",
+        label: "Future provider",
+        availability: "unknown",
+        capabilities: [],
+        evidence: [],
+        constraints: [],
+        observedAt: new Date().toISOString(),
+      }),
+    });
+
+    expect(registry.getSupportedOperations("future")).toEqual(
+      expect.arrayContaining(["inspect", "provider_native_snapshot", "quantum_prepare"]),
+    );
+  });
+});
+

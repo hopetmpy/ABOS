@@ -5,7 +5,7 @@
  * The database IS the abos's memory.
  */
 
-export const SCHEMA_VERSION = 12;
+export const SCHEMA_VERSION = 13;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -836,4 +836,68 @@ export const MIGRATION_V12 = `
 
   CREATE INDEX IF NOT EXISTS idx_adaptive_opportunities_goal
     ON adaptive_opportunities(goal_id, status, created_at);
+`;
+
+// === Environment Execution & Lifecycle v2 ===
+
+export const MIGRATION_V13 = `
+  -- Schema version: 13
+  -- Canonical resource inventory + lifecycle evidence for all environment providers.
+  -- Provider-specific state remains in provider_state/metadata.
+
+  CREATE TABLE IF NOT EXISTS environment_resources (
+    id TEXT PRIMARY KEY,
+    provider TEXT NOT NULL,
+    external_id TEXT,
+    type TEXT NOT NULL,
+    goal_id TEXT REFERENCES goals(id),
+    path_id TEXT REFERENCES adaptive_paths(id),
+    task_id TEXT REFERENCES task_graph(id),
+    status TEXT NOT NULL DEFAULT 'requested'
+      CHECK(status IN (
+        'requested','preparing','provisioning','ready','bootstrapping',
+        'running','degraded','suspended','recovering','terminating',
+        'terminated','failed','unknown'
+      )),
+    region TEXT,
+    capabilities TEXT NOT NULL DEFAULT '[]',
+    estimated_cost_cents INTEGER,
+    actual_cost_cents INTEGER NOT NULL DEFAULT 0,
+    credentials_reference TEXT,
+    retention_policy TEXT NOT NULL DEFAULT 'until_goal_complete',
+    provider_state TEXT,
+    evidence TEXT NOT NULL DEFAULT '[]',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    last_health_check TEXT,
+    UNIQUE(provider, external_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_environment_resources_provider_status
+    ON environment_resources(provider, status);
+  CREATE INDEX IF NOT EXISTS idx_environment_resources_goal
+    ON environment_resources(goal_id, status);
+  CREATE INDEX IF NOT EXISTS idx_environment_resources_path
+    ON environment_resources(path_id, status);
+  CREATE INDEX IF NOT EXISTS idx_environment_resources_task
+    ON environment_resources(task_id, status);
+
+  CREATE TABLE IF NOT EXISTS environment_resource_events (
+    id TEXT PRIMARY KEY,
+    resource_id TEXT NOT NULL REFERENCES environment_resources(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    from_status TEXT,
+    to_status TEXT,
+    reason TEXT,
+    evidence TEXT NOT NULL DEFAULT '[]',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_environment_resource_events_resource
+    ON environment_resource_events(resource_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_environment_resource_events_provider
+    ON environment_resource_events(provider, created_at);
 `;

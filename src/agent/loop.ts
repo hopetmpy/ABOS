@@ -56,7 +56,10 @@ import { MemoryIngestionPipeline } from "../memory/ingestion.js";
 import { DEFAULT_MEMORY_BUDGET } from "../types.js";
 import { formatMemoryBlock } from "./context.js";
 import { createLogger } from "../observability/logger.js";
-import { Orchestrator } from "../orchestration/orchestrator.js";
+import {
+  Orchestrator,
+  calculateTaskFundingCents,
+} from "../orchestration/orchestrator.js";
 import { PlanModeController } from "../orchestration/plan-mode.js";
 import { generateTodoMd, injectTodoContext } from "../orchestration/attention.js";
 import { ColonyMessaging, LocalDBTransport } from "../orchestration/messaging.js";
@@ -74,6 +77,14 @@ import { LocalEnvironmentProvider } from "../environments/local.js";
 import { ConwayEnvironmentProvider } from "../environments/conway.js";
 import { AwsEnvironmentProvider } from "../environments/aws.js";
 import { createEnvironmentTools } from "../environments/tools.js";
+import { EnvironmentResourceStore } from "../environments/resource-store.js";
+import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
+import { EnvironmentSelector } from "../environments/selector.js";
+import {
+  EnvironmentExecutionBridge,
+  EnvironmentTaskExecutionError,
+  EnvironmentTaskExecutorRegistry,
+} from "../environments/task-executor.js";
 
 const logger = createLogger("loop");
 const MAX_TOOL_CALLS_PER_TURN = 10;
@@ -110,9 +121,73 @@ export async function runAgentLoop(
   environmentRegistry.register(new ConwayEnvironmentProvider(conway));
   environmentRegistry.register(new AwsEnvironmentProvider());
 
+  const environmentResources = new EnvironmentResourceStore(db.raw);
+  const environmentLifecycle = new EnvironmentLifecycleManager(
+    environmentRegistry,
+    environmentResources,
+  );
+  const environmentSelector = new EnvironmentSelector(environmentRegistry);
+
+  // Establish canonical ownership for the already-present host.
+  environmentLifecycle.adopt({
+    provider: "local",
+    externalId: "host",
+    type: "local-host",
+    status: "running",
+    capabilities: ["filesystem", "shell", "cli", "process"],
+    retentionPolicy: "persistent",
+    evidence: ["Local host adopted during ABOS runtime initialization."],
+    metadata: {
+      sandboxId: identity.sandboxId || null,
+    },
+  });
+
+  // Import legacy Conway child/sandbox knowledge into the provider-neutral
+  // inventory. This is adoption, not creation: no remote side effect occurs.
+  for (const child of db.getChildren()) {
+    if (!child.sandboxId) continue;
+    environmentLifecycle.adopt({
+      provider: "conway",
+      externalId: child.sandboxId,
+      type: "conway-sandbox",
+      status: "unknown",
+      capabilities: ["remote compute", "linux", "sandbox"],
+      retentionPolicy: "manual_retention",
+      evidence: [
+        `Adopted legacy child resource ${child.id} with recorded status=${child.status}.`,
+      ],
+      metadata: {
+        childId: child.id,
+        childAddress: child.address,
+        childName: child.name,
+        legacyStatus: child.status,
+      },
+    });
+  }
+
+  // Reconcile resources once at runtime start. Providers without a reconcile
+  // operation remain visible as-is rather than being guessed or discarded.
+  for (const resource of environmentResources.list()) {
+    if (!environmentRegistry.supportsOperation(resource.provider, "reconcile")) {
+      continue;
+    }
+    try {
+      await environmentLifecycle.reconcile(resource.id);
+    } catch (error) {
+      logger.warn("Environment startup reconciliation failed", {
+        resourceId: resource.id,
+        provider: resource.provider,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   const builtinTools = createBuiltinTools(identity.sandboxId);
   const installedTools = loadInstalledTools(db);
-  const environmentTools = createEnvironmentTools(environmentRegistry);
+  const environmentTools = createEnvironmentTools(environmentRegistry, {
+    selector: environmentSelector,
+    lifecycle: environmentLifecycle,
+  });
 
   // Unified capability/environment view. Existing tool and skill systems remain
   // authoritative implementations; this registry lets planning reason across
@@ -227,8 +302,8 @@ export async function runAgentLoop(
       // harnesses can preserve tier + responseFormat contracts.
       const workerInference = createWorkerInferenceBridge(unifiedInference);
 
-      // Local worker pool: runs inference-driven agents in-process
-      // as async tasks. Falls back from Conway sandbox spawning.
+      // Local worker pool: runs inference-driven agents in-process.
+      // Environment selection is handled separately by the execution bridge.
       const initializedWorkerPool = new LocalWorkerPool({
         db: db.raw,
         inference: workerInference,
@@ -244,6 +319,233 @@ export async function runAgentLoop(
       });
       workerPool = initializedWorkerPool;
 
+      const taskExecutors = new EnvironmentTaskExecutorRegistry();
+
+      taskExecutors.register({
+        environmentId: "local",
+        assess: async () => ({
+          executable: true,
+          evidence: [
+            "LocalWorkerPool is initialized in the current ABOS runtime.",
+          ],
+        }),
+        spawn: async (task) => {
+          const spawned = initializedWorkerPool.spawn(task);
+          return {
+            ...spawned,
+            resourceExternalId: spawned.sandboxId,
+            resourceType: "local-worker",
+            evidence: [
+              `Local worker ${spawned.sandboxId} started for task ${task.id}.`,
+            ],
+          };
+        },
+        dispatch: async (task, target) => {
+          if (!target.spawned) {
+            throw new Error(
+              "The current LocalWorkerPool executor is single-task and cannot reuse a completed worker instance. A new local executor path must be spawned.",
+            );
+          }
+
+          return {
+            evidence: [
+              `Local worker ${target.address} already received task ${task.id} directly at spawn time.`,
+            ],
+            metadata: { delivery: "spawn_direct" },
+          };
+        },
+      });
+
+      taskExecutors.register({
+        environmentId: "conway",
+        assess: async () => ({
+          executable: null,
+          evidence: [
+            "Conway Task execution is verified at spawn time through the existing child lifecycle; unknown preflight state remains eligible for evidence-gathering.",
+          ],
+        }),
+        spawn: async (task) => {
+          const spawnOnce = async () => {
+            const { generateGenesisConfig } = await import("../replication/genesis.js");
+            const { spawnChild } = await import("../replication/spawn.js");
+            const { ChildLifecycle } = await import("../replication/lifecycle.js");
+
+            const role = task.agentRole ?? "generalist";
+            const genesis = generateGenesisConfig(identity, config, {
+              name: `worker-${role}-${Date.now().toString(36)}`,
+              specialization: `${role}: ${task.title}`,
+            });
+            const lifecycle = new ChildLifecycle(db.raw);
+            return spawnChild(conway, identity, db, genesis, lifecycle);
+          };
+
+          try {
+            const child = await spawnOnce();
+            return {
+              address: child.address,
+              name: child.name,
+              sandboxId: child.sandboxId,
+              resourceExternalId: child.sandboxId,
+              resourceType: "conway-sandbox",
+              evidence: [
+                `Conway child ${child.id} spawned for task ${task.id}.`,
+              ],
+              metadata: {
+                childId: child.id,
+                childAddress: child.address,
+              },
+            };
+          } catch (sandboxError: any) {
+            const is402 =
+              sandboxError?.status === 402 ||
+              sandboxError?.message?.includes("INSUFFICIENT_CREDITS");
+
+            if (!is402) {
+              throw sandboxError;
+            }
+
+            const SANDBOX_TOPUP_COOLDOWN_MS = 60_000;
+            const lastAttempt = db.getKV("last_sandbox_topup_attempt");
+            const cooldownExpired =
+              !lastAttempt ||
+              Date.now() - new Date(lastAttempt).getTime() >=
+                SANDBOX_TOPUP_COOLDOWN_MS;
+
+            if (!cooldownExpired) {
+              throw sandboxError;
+            }
+
+            db.setKV("last_sandbox_topup_attempt", new Date().toISOString());
+
+            try {
+              const { topupForSandbox } = await import("../conway/topup.js");
+              const topupResult = await topupForSandbox({
+                apiUrl: config.conwayApiUrl,
+                account: identity.account,
+                error: sandboxError,
+                chainType: config.chainType || identity.chainType || "evm",
+              });
+
+              if (!topupResult?.success) {
+                throw sandboxError;
+              }
+
+              logger.info(
+                `Sandbox topup succeeded (${topupResult.amountUsd}); retrying Conway spawn after the credit condition changed`,
+                { taskId: task.id },
+              );
+
+              const child = await spawnOnce();
+              return {
+                address: child.address,
+                name: child.name,
+                sandboxId: child.sandboxId,
+                resourceExternalId: child.sandboxId,
+                resourceType: "conway-sandbox",
+                evidence: [
+                  `Conway child ${child.id} spawned after a successful credit-condition change for task ${task.id}.`,
+                ],
+                metadata: {
+                  childId: child.id,
+                  childAddress: child.address,
+                  topupAmountUsd: topupResult.amountUsd,
+                },
+              };
+            } catch (topupOrRetryError) {
+              if (topupOrRetryError === sandboxError) {
+                throw sandboxError;
+              }
+              const detail =
+                topupOrRetryError instanceof Error
+                  ? topupOrRetryError.message
+                  : String(topupOrRetryError);
+              throw new Error(
+                `INSUFFICIENT_CREDITS recovery path failed after condition-change attempt: ${detail}`,
+              );
+            }
+          }
+        },
+        dispatch: async (task, target) => {
+          const amountCents = calculateTaskFundingCents(task, config);
+          if (amountCents > 0) {
+            const funded = await funding.fundChild(target.address, amountCents);
+            if (!funded.success) {
+              throw new Error(
+                `Conway task funding failed for ${target.address}.`,
+              );
+            }
+          }
+
+          const message = messaging.createMessage({
+            type: "task_assignment",
+            to: target.address,
+            goalId: task.goalId,
+            taskId: task.id,
+            priority: "high",
+            requiresResponse: true,
+            content: JSON.stringify({
+              taskId: task.id,
+              title: task.title,
+              description: task.description,
+              agentRole: task.agentRole,
+              dependencies: task.dependencies,
+              timeoutMs: task.metadata.timeoutMs,
+              requiredCapabilities: task.requiredCapabilities ?? [],
+              preferredEnvironment: task.preferredEnvironment ?? null,
+              strategicPathId: task.strategicPathId ?? null,
+            }),
+          });
+          await messaging.send(message);
+
+          return {
+            evidence: [
+              `Task ${task.id} delivered to Conway executor ${target.address}.`,
+              ...(amountCents > 0
+                ? [`Conway task funding amount=${amountCents} cents.`]
+                : []),
+            ],
+            metadata: {
+              delivery: "colony_message",
+              fundedAmountCents: amountCents,
+            },
+          };
+        },
+      });
+
+      const environmentExecution = new EnvironmentExecutionBridge(
+        environmentSelector,
+        taskExecutors,
+        environmentLifecycle,
+      );
+
+
+      const resolveExecutionEnvironment = (address: string): string | null => {
+        if (address === identity.address || address.startsWith("local://")) {
+          return "local";
+        }
+
+        const owned = environmentResources
+          .list({ includeTerminated: true })
+          .find(
+            (resource) =>
+              resource.metadata.executorAddress === address ||
+              resource.metadata.childAddress === address,
+          );
+        if (owned) {
+          return owned.provider;
+        }
+
+        const child = db.raw.prepare(
+          "SELECT 1 FROM children WHERE address = ? OR sandbox_id = ? LIMIT 1",
+        ).get(address, address);
+        if (child) {
+          return "conway";
+        }
+
+        const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(address)?.[1];
+        return scheme?.toLowerCase() ?? null;
+      };
+
       orchestrator = new Orchestrator({
         db: db.raw,
         agentTracker,
@@ -251,119 +553,63 @@ export async function runAgentLoop(
         messaging,
         inference: unifiedInference,
         identity,
+        resolveAgentEnvironment: resolveExecutionEnvironment,
         isWorkerAlive: (address: string) => {
           if (address.startsWith("local://")) {
             return initializedWorkerPool.hasWorker(address);
           }
-          // Remote workers: check children table
+
+          // Legacy Conway child lifecycle remains authoritative when present.
           const child = db.raw.prepare(
             "SELECT status FROM children WHERE sandbox_id = ? OR address = ?",
           ).get(address, address) as { status: string } | undefined;
-          if (!child) return false;
-          return !["failed", "dead", "cleaned_up"].includes(child.status);
+          if (child) {
+            return !["failed", "dead", "cleaned_up"].includes(child.status);
+          }
+
+          const owned = environmentResources
+            .list({ includeTerminated: true })
+            .find(
+              (resource) =>
+                resource.metadata.executorAddress === address ||
+                resource.metadata.childAddress === address,
+            );
+          return !!owned &&
+            ["ready", "running", "degraded", "recovering"].includes(owned.status);
+        },
+        dispatchAgentTask: async (assignment, task) => {
+          const environmentId = resolveExecutionEnvironment(
+            assignment.agentAddress,
+          );
+          if (!environmentId) {
+            throw new EnvironmentTaskExecutionError(
+              null,
+              `Execution environment is unknown for agent ${assignment.agentAddress}.`,
+              [
+                "Agent environment could not be resolved for Task dispatch.",
+                "Unknown execution environment is not proof that the objective is impossible.",
+              ],
+              "dispatch",
+            );
+          }
+
+          await environmentExecution.dispatch(environmentId, task, {
+            address: assignment.agentAddress,
+            name: assignment.agentName,
+            spawned: assignment.spawned,
+          });
         },
         environmentRegistry,
         capabilityRegistry,
         config: {
           ...config,
           spawnAgent: async (task: any) => {
-            // Try Conway sandbox spawn first (production)
-            try {
-              const { generateGenesisConfig } = await import("../replication/genesis.js");
-              const { spawnChild } = await import("../replication/spawn.js");
-              const { ChildLifecycle } = await import("../replication/lifecycle.js");
-
-              const role = task.agentRole ?? "generalist";
-              const genesis = generateGenesisConfig(identity, config, {
-                name: `worker-${role}-${Date.now().toString(36)}`,
-                specialization: `${role}: ${task.title}`,
-              });
-
-              const lifecycle = new ChildLifecycle(db.raw);
-              const child = await spawnChild(conway, identity, db, genesis, lifecycle);
-
-              return {
-                address: child.address,
-                name: child.name,
-                sandboxId: child.sandboxId,
-              };
-            } catch (sandboxError: any) {
-              // If the error is a 402 (insufficient credits), attempt topup and retry once
-              const is402 = sandboxError?.status === 402 ||
-                sandboxError?.message?.includes("INSUFFICIENT_CREDITS");
-
-              if (is402) {
-                const SANDBOX_TOPUP_COOLDOWN_MS = 60_000;
-                const lastAttempt = db.getKV("last_sandbox_topup_attempt");
-                const cooldownExpired = !lastAttempt ||
-                  Date.now() - new Date(lastAttempt).getTime() >= SANDBOX_TOPUP_COOLDOWN_MS;
-
-                if (cooldownExpired) {
-                  db.setKV("last_sandbox_topup_attempt", new Date().toISOString());
-                  try {
-                    const { topupForSandbox } = await import("../conway/topup.js");
-                    const topupResult = await topupForSandbox({
-                      apiUrl: config.conwayApiUrl,
-                      account: identity.account,
-                      error: sandboxError,
-                      chainType: config.chainType || identity.chainType || "evm",
-                    });
-
-                    if (topupResult?.success) {
-                      logger.info(`Sandbox topup succeeded ($${topupResult.amountUsd}), retrying spawn`, {
-                        taskId: task.id,
-                      });
-                      // Retry spawn once after successful topup
-                      try {
-                        const { generateGenesisConfig: genGenesis } = await import("../replication/genesis.js");
-                        const { spawnChild: retrySpawn } = await import("../replication/spawn.js");
-                        const { ChildLifecycle: RetryLifecycle } = await import("../replication/lifecycle.js");
-
-                        const retryRole = task.agentRole ?? "generalist";
-                        const retryGenesis = genGenesis(identity, config, {
-                          name: `worker-${retryRole}-${Date.now().toString(36)}`,
-                          specialization: `${retryRole}: ${task.title}`,
-                        });
-                        const retryLifecycle = new RetryLifecycle(db.raw);
-                        const child = await retrySpawn(conway, identity, db, retryGenesis, retryLifecycle);
-                        return {
-                          address: child.address,
-                          name: child.name,
-                          sandboxId: child.sandboxId,
-                        };
-                      } catch (retryError) {
-                        logger.warn("Spawn retry after topup failed", {
-                          taskId: task.id,
-                          error: retryError instanceof Error ? retryError.message : String(retryError),
-                        });
-                      }
-                    }
-                  } catch (topupError) {
-                    logger.warn("Sandbox topup attempt failed", {
-                      taskId: task.id,
-                      error: topupError instanceof Error ? topupError.message : String(topupError),
-                    });
-                  }
-                }
-              }
-
-              // Conway sandbox unavailable — fall back to local worker
-              logger.info("Conway sandbox unavailable, spawning local worker", {
-                taskId: task.id,
-                error: sandboxError instanceof Error ? sandboxError.message : String(sandboxError),
-              });
-
-              try {
-                const spawned = initializedWorkerPool.spawn(task);
-                return spawned;
-              } catch (localError) {
-                logger.warn("Failed to spawn local worker", {
-                  taskId: task.id,
-                  error: localError instanceof Error ? localError.message : String(localError),
-                });
-                return null;
-              }
-            }
+            const spawned = await environmentExecution.spawn(task);
+            return {
+              address: spawned.address,
+              name: spawned.name,
+              sandboxId: spawned.sandboxId,
+            };
           },
         },
       });
