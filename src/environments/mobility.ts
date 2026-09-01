@@ -429,9 +429,11 @@ export class EnvironmentMobilityCoordinator {
           ])
         : stringMetadata(afterAttempt.metadata, "failedResourceIds");
 
+      const dispatchFailureStatus =
+        active?.targetProvider ? "target_failed" : "source_failed";
       this.store.transition(
         afterAttempt.id,
-        "target_failed",
+        dispatchFailureStatus,
         {
           sourceResourceId:
             migration.sourceResourceId ?? source?.id ?? null,
