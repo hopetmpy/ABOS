@@ -243,7 +243,13 @@ export class EnvironmentMobilityCoordinator {
       });
 
       const providerFailureEnvironments = source
-        ? stringMetadata(afterAttempt.metadata, "providerFailureEnvironments")
+        ? stringMetadata(
+            afterAttempt.metadata,
+            "providerFailureEnvironments",
+          ).filter(
+            (environmentId) =>
+              environmentId !== executionError.environmentId,
+          )
         : uniqueStrings([
             ...stringMetadata(afterAttempt.metadata, "providerFailureEnvironments"),
             executionError.environmentId,
@@ -404,7 +410,13 @@ export class EnvironmentMobilityCoordinator {
         },
       });
       const providerFailureEnvironments = source
-        ? stringMetadata(afterAttempt.metadata, "providerFailureEnvironments")
+        ? stringMetadata(
+            afterAttempt.metadata,
+            "providerFailureEnvironments",
+          ).filter(
+            (failedEnvironmentId) =>
+              failedEnvironmentId !== environmentId,
+          )
         : uniqueStrings([
             ...stringMetadata(afterAttempt.metadata, "providerFailureEnvironments"),
             environmentId,
