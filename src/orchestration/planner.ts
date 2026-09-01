@@ -5,11 +5,24 @@ import type { ModelTier } from "../inference/provider-registry.js";
 export interface PlannerOutput {
   analysis: string;
   strategy: string;
+  /**
+   * Optional structured identity for the strategic path. Older planner fixtures
+   * remain valid; when absent ABOS derives a path from strategy + tasks.
+   */
+  path?: PlannerPathIntent;
   customRoles: CustomRoleDef[];
   tasks: PlannedTask[];
   risks: string[];
   estimatedTotalCostCents: number;
   estimatedTimeMinutes: number;
+}
+
+export interface PlannerPathIntent {
+  hypothesis: string;
+  assumptions: string[];
+  requiredCapabilities: string[];
+  preferredEnvironment: string | null;
+  expectedOutcome: string;
 }
 
 export interface CustomRoleDef {
@@ -51,6 +64,9 @@ export interface PlannerContext {
   busyAgents: number;
   maxAgents: number;
   workspaceFiles: string[];
+  adaptiveContext?: string;
+  environmentSnapshots?: any[];
+  capabilities?: any[];
 }
 
 export interface PlannerGoalInput {
@@ -215,6 +231,9 @@ export function buildPlannerPrompt(context: PlannerContext): string {
   const marketIntel = context.marketIntel.trim().length > 0 ? context.marketIntel.trim() : "none";
   const modelHints = MODEL_TIERS.map((tier) => `tier:${tier}`).join(", ");
   const toolList = `planner (no direct tool calls), custom-role model shortcuts: ${modelHints}`;
+  const adaptiveContext = context.adaptiveContext?.trim() || "No adaptive path history exists for this goal yet.";
+  const environmentSnapshots = formatJson(context.environmentSnapshots ?? []);
+  const capabilities = formatJson(context.capabilities ?? []);
   const creditsDisplay = `${context.creditsCents} cents`;
   const usdcDisplay = Number.isFinite(context.usdcBalance) ? String(context.usdcBalance) : "0";
 
@@ -248,6 +267,19 @@ graphs - ensuring every task has a clear owner, clear success criteria, and
 realistic cost estimates - so that the orchestrator can execute the plan
 without further planning decisions.
 </mission>
+
+<adaptive_path_principles>
+1. Preserve the objective; strategies are replaceable.
+2. A failed method is evidence about the problem, not automatic evidence that the objective failed.
+3. Before repeating a substantially equivalent path, identify what materially changed: evidence, authorization, environment, capability, hypothesis, or runtime condition.
+4. UNKNOWN is not IMPOSSIBLE. If the current possibility space is insufficient, plan discovery work.
+5. Missing capabilities may be discovered, acquired, composed, or constructed.
+6. Environments are interchangeable means where the objective permits it. Evaluate Local, Conway, AWS, and future registered environments from their actual availability/capabilities.
+7. Explicitly prohibited paths are excluded. Do not invent prohibitions or arbitrary method allowlists.
+8. Prefer evidence-driven replanning over retry counters.
+9. When a path fails, use the supplied adaptive history to generate a materially different route unless conditions genuinely changed.
+10. Every plan should expose its strategic hypothesis, assumptions, required capabilities, preferred environment, and expected outcome through the optional `path` field.
+</adaptive_path_principles>
 
 <state_machine>
 Your operational cycle:
@@ -304,6 +336,12 @@ You have access to (injected at runtime):
 - Market intelligence from knowledge store: ${marketIntel}
 - Agent availability: ${context.idleAgents} idle, ${context.busyAgents} busy, ${context.maxAgents} max
 - Workspace contents: ${workspaceFiles} (outputs from prior tasks)
+- Environment registry snapshots: ${environmentSnapshots}
+- Unified capability registry: ${capabilities}
+
+<adaptive_path_context>
+${adaptiveContext}
+</adaptive_path_context>
 </context>
 
 <capabilities>
@@ -342,9 +380,9 @@ You CANNOT:
 9. Flag tasks that require human interaction vs. fully autonomous
 10. If a goal seems infeasible with current resources, say so - don't
     hallucinate a plan
-11. Maximum 20 tasks per plan (if more needed, decompose into sub-goals)
-12. No task should take more than 4 hours - split longer tasks
-13. Include at least one checkpoint task per 5 execution tasks
+11. If a plan is too large for one execution graph, decompose hierarchically into sub-goals instead of declaring the objective impossible.
+12. Split long tasks when that improves verification, recovery, or parallelism; do not impose an arbitrary duration ceiling.
+13. Add checkpoints according to actual risk and observability needs, not a fixed task count.
 14. Parallelizable tasks should have no mutual dependencies
 </decomposition_rules>
 
@@ -407,6 +445,13 @@ Respond with a JSON object matching the PlannerOutput schema:
 {
   "analysis": "2-3 sentence situation analysis",
   "strategy": "1-2 sentence chosen approach and why",
+  "path": {
+    "hypothesis": "Why this strategic route should achieve the objective",
+    "assumptions": ["Material assumption 1"],
+    "requiredCapabilities": ["capability requirement"],
+    "preferredEnvironment": "local | conway | aws | another registered environment | null",
+    "expectedOutcome": "Observable result that would validate this path"
+  },
   "customRoles": [
     {
       "name": "role-name",
@@ -462,25 +507,18 @@ Before producing ANY plan:
 2. Check if this goal was previously attempted (recall from context)
 3. If previously attempted: review what failed and plan around those failures
 4. Verify at least one agent role is available for each task
-5. If goal requires custom roles: verify the custom role count <= 3 (warn) or <= 5 (hard stop)
-6. If goal involves external services: include a "test connectivity" task first
-7. Calculate critical path duration - if > 4 hours, add checkpoint tasks
+5. If no existing role fits, prefer capability composition; create a custom role when it materially improves execution.
+6. If goal involves external services: include connectivity/authorization validation when relevant.
+7. Review critical-path risk and add checkpoints where failure recovery would otherwise be expensive.
 </pre_action_mandates>
 
 <circuit_breakers>
-- If you cannot decompose a goal after 2 attempts: output an empty task list
-  with analysis explaining why, and recommend the goal be split into
-  smaller sub-goals by the user
-- If estimated total cost > 80% of available credits: flag as HIGH RISK
-  in the analysis and recommend phased execution (build MVP first, validate,
-  then expand)
-- If a goal requires 4-5 custom roles: warn in analysis that complexity is
-  high and recommend splitting into sub-goals. Proceed if no simpler approach.
-- If a goal requires more than 5 custom roles: refuse to plan - the goal
-  is too far outside the colony's current capabilities. Recommend building
-  capability incrementally.
-- If replanning for the 3rd time: include a "root cause analysis" task
-  as the first task in the new plan
+- If the proposed route is substantially equivalent to a recorded failed path and no material condition changed, do not repeat it. Expand the possibility space.
+- If a path is explicitly prohibited, exclude that path and search other eligible routes; do not confuse path prohibition with objective impossibility.
+- If a capability is missing, plan discovery/acquisition/composition/construction rather than abandoning solely because it is absent now.
+- If an environment is unavailable, evaluate another registered environment or identify the condition required to retry.
+- If no currently executable route is known, state that the route is UNKNOWN/UNAVAILABLE and create evidence-gathering or capability-acquisition work where useful. Do not label the objective impossible without evidence.
+- Budget, treasury, policy, and physical constraints remain real and must be respected.
 </circuit_breakers>
 
 ## Available Tools
@@ -491,6 +529,7 @@ export function validatePlannerOutput(output: unknown): PlannerOutput {
   const record = asRecord(output, "planner output");
   const analysis = requiredString(record.analysis, "analysis");
   const strategy = requiredString(record.strategy, "strategy");
+  const pathIntent = record.path === undefined ? undefined : validatePlannerPathIntent(record.path);
 
   const customRolesValue = requiredArray(record.customRoles, "customRoles");
   const customRoles = customRolesValue.map((entry, index) =>
@@ -524,11 +563,37 @@ export function validatePlannerOutput(output: unknown): PlannerOutput {
   return {
     analysis,
     strategy,
+    ...(pathIntent ? { path: pathIntent } : {}),
     customRoles,
     tasks,
     risks,
     estimatedTotalCostCents,
     estimatedTimeMinutes,
+  };
+}
+
+function validatePlannerPathIntent(value: unknown): PlannerPathIntent {
+  const record = asRecord(value, "path");
+  const assumptions = requiredArray(record.assumptions, "path.assumptions")
+    .map((entry, index) => requiredString(entry, `path.assumptions[${index}]`));
+  const requiredCapabilities = requiredArray(
+    record.requiredCapabilities,
+    "path.requiredCapabilities",
+  ).map((entry, index) =>
+    requiredString(entry, `path.requiredCapabilities[${index}]`)
+  );
+
+  const preferredEnvironment =
+    record.preferredEnvironment === null || record.preferredEnvironment === undefined
+      ? null
+      : requiredString(record.preferredEnvironment, "path.preferredEnvironment");
+
+  return {
+    hypothesis: requiredString(record.hypothesis, "path.hypothesis"),
+    assumptions,
+    requiredCapabilities,
+    preferredEnvironment,
+    expectedOutcome: requiredString(record.expectedOutcome, "path.expectedOutcome"),
   };
 }
 
