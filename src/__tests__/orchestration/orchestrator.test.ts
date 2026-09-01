@@ -271,6 +271,17 @@ describe("orchestration/Orchestrator", () => {
       expect(JSON.parse(binding.required_capabilities)).toEqual(["cli"]);
       expect(binding.preferred_environment).toBe("local");
       expect(binding.path_id).toBeTruthy();
+
+      const persistedTask = db.prepare(
+        `SELECT estimated_cost_cents, timeout_ms
+         FROM task_graph
+         WHERE goal_id = ?`,
+      ).get(goalId) as {
+        estimated_cost_cents: number;
+        timeout_ms: number;
+      };
+      expect(persistedTask.estimated_cost_cents).toBe(50);
+      expect(persistedTask.timeout_ms).toBe(60_000);
     });
 
     it("planner inference failure preserves the objective instead of inventing a single-task route", async () => {
