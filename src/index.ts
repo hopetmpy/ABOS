@@ -23,6 +23,7 @@ import {
 import { consumeNextWakeEvent, insertWakeEvent } from "./state/database.js";
 import { runAgentLoop } from "./agent/loop.js";
 import { ModelRegistry } from "./inference/registry.js";
+import { loadCodexCatalog, syncCodexCatalogToRegistry } from "./codex/catalog.js";
 import { loadSkills } from "./skills/loader.js";
 import { initStateRepo } from "./git/state-versioning.js";
 import { createSocialClient } from "./social/client.js";
@@ -59,8 +60,14 @@ Sovereign AI Agent Runtime
 Usage:
   abos --run          Start the abos (first run triggers setup wizard)
   abos --setup        Re-run the interactive setup wizard
-  abos --configure    Edit configuration (providers, model, treasury, general)
-  abos --pick-model   Interactively pick the active inference model
+  abos --configure    Edit configuration (connections, model, treasury, general)
+  abos --connect-ai   Connect/manage AI via OAuth, API key, or local adapter
+  abos --pick-model   Interactively pick a model for the active connection
+  abos --model <id>   Hot-switch active model (use --reasoning <value> when supported)
+  abos --codex-login  Connect ChatGPT/Codex with device-code OAuth
+  abos --codex-status Show current Codex account connection
+  abos --codex-models Refresh/list models available to the Codex account
+  abos --codex-logout Disconnect the Codex/ChatGPT session
   abos --init         Initialize wallet and config directory
   abos --provision    Provision Conway API key via SIWE
   abos --status       Show current abos status
@@ -72,6 +79,7 @@ Environment:
   CONWAY_API_URL           Conway API URL (default: https://api.conway.tech)
   CONWAY_API_KEY           Conway API key (overrides config)
   OLLAMA_BASE_URL          Ollama base URL (overrides config, e.g. http://localhost:11434)
+  CODEX_CLI_PATH           Official Codex executable path override
 `);
     process.exit(0);
   }
@@ -146,6 +154,80 @@ Environment:
     process.exit(0);
   }
 
+  if (args.includes("--connect-ai")) {
+    const config = loadConfig();
+    if (!config) {
+      logger.error("ABOS is not configured. Run: abos --setup");
+      process.exit(1);
+    }
+    const { runAiConnectionFlow } = await import("./setup/ai-connection.js");
+    await runAiConnectionFlow(config, { manage: true, allowSkip: true });
+    process.exit(0);
+  }
+
+  if (args.includes("--codex-login")) {
+    const { runCodexLogin } = await import("./codex/commands.js");
+    await runCodexLogin();
+    process.exit(0);
+  }
+
+  if (args.includes("--codex-status")) {
+    const { runCodexStatus } = await import("./codex/commands.js");
+    await runCodexStatus();
+    process.exit(0);
+  }
+
+  if (args.includes("--codex-models")) {
+    const { runCodexModels } = await import("./codex/commands.js");
+    await runCodexModels();
+    process.exit(0);
+  }
+
+  if (args.includes("--codex-logout")) {
+    const { runCodexLogout } = await import("./codex/commands.js");
+    await runCodexLogout();
+    process.exit(0);
+  }
+
+  const modelArgIndex = args.indexOf("--model");
+  if (modelArgIndex >= 0) {
+    const requestedModel = args[modelArgIndex + 1];
+    if (!requestedModel || requestedModel.startsWith("--")) {
+      throw new Error("--model requires a model id");
+    }
+
+    const reasoningIndex = args.indexOf("--reasoning");
+    const requestedReasoning =
+      reasoningIndex >= 0 &&
+      args[reasoningIndex + 1] &&
+      !args[reasoningIndex + 1].startsWith("--")
+        ? args[reasoningIndex + 1]
+        : undefined;
+
+    const live = loadConfig();
+    const activeProvider = live?.aiConnection?.active?.provider;
+    let adapter;
+    if (activeProvider) {
+      const { createBuiltinAiConnectionAdapterRegistry } = await import(
+        "./setup/ai-connection-adapters.js"
+      );
+      adapter = createBuiltinAiConnectionAdapterRegistry().get(activeProvider);
+      if (!adapter) {
+        throw new Error(
+          `Active AI provider '${activeProvider}' has no loaded setup/runtime adapter`,
+        );
+      }
+    }
+
+    const { runModelPicker } = await import("./setup/model-picker.js");
+    const switched = await runModelPicker({
+      adapter,
+      requestedModel,
+      providerOptions: { reasoning: requestedReasoning },
+    });
+    process.exit(switched ? 0 : 1);
+  }
+
   if (args.includes("--pick-model")) {
     const { runModelPicker } = await import("./setup/model-picker.js");
     await runModelPicker();
@@ -202,6 +284,7 @@ Skills:     ${skills.length} active
 Heartbeats: ${heartbeats.filter((h) => h.enabled).length} active
 Children:   ${children.filter((c) => c.status !== "dead").length} alive / ${children.length} total
 Agent ID:   ${registry?.agentId || "not registered"}
+Connection: ${config.aiConnection?.active ? `${config.aiConnection.active.method} / ${config.aiConnection.active.provider}` : "legacy / automatic"}
 Model:      ${config.inferenceModel}
 Version:    ${config.version}
 ========================
@@ -324,6 +407,16 @@ async function run(): Promise<void> {
   // "gpt-oss:120b" route to Ollama based on their registered provider, not heuristics.
   const modelRegistry = new ModelRegistry(db.raw);
   modelRegistry.initialize();
+
+  // Codex catalog is non-secret derived metadata. Project it into the existing
+  // canonical ModelRegistry; do not create a parallel model authority.
+  if (config.codex?.enabled) {
+    const codexCatalog = loadCodexCatalog();
+    if (codexCatalog) {
+      syncCodexCatalogToRegistry(modelRegistry, codexCatalog);
+    }
+  }
+
   const inference = createInferenceClient({
     apiUrl: config.conwayApiUrl,
     apiKey,
@@ -333,6 +426,9 @@ async function run(): Promise<void> {
     openaiApiKey: config.openaiApiKey,
     anthropicApiKey: config.anthropicApiKey,
     ollamaBaseUrl,
+    codex: config.codex,
+    getCodexConfig: () => loadConfig()?.codex,
+    getConnectionProvider: () => loadConfig()?.aiConnection?.active?.provider,
     getModelProvider: (modelId) => modelRegistry.get(modelId)?.provider,
   });
 
