@@ -72,7 +72,11 @@ export interface Goal {
   deadline: string | null;
 }
 
-type DecomposeTaskInput = Omit<TaskNode, "id" | "metadata">;
+type DecomposeTaskInput = Omit<TaskNode, "id" | "metadata"> & {
+  metadata?: Partial<
+    Pick<TaskNode["metadata"], "estimatedCostCents" | "maxRetries" | "timeoutMs">
+  >;
+};
 
 type CycleTask = {
   id?: string;
@@ -121,7 +125,7 @@ export function createGoal(
 export function decomposeGoal(
   db: Database,
   goalId: string,
-  tasks: Omit<TaskNode, "id" | "metadata">[],
+  tasks: DecomposeTaskInput[],
 ): string[] {
   if (!getGoalById(db, goalId)) {
     throw new Error(`Goal not found: ${goalId}`);
@@ -198,6 +202,9 @@ export function decomposeGoal(
         priority: planned.task.priority,
         dependencies: dependencyRefs,
         result: planned.task.result,
+        estimatedCostCents: planned.task.metadata?.estimatedCostCents,
+        maxRetries: planned.task.metadata?.maxRetries,
+        timeoutMs: planned.task.metadata?.timeoutMs,
       });
 
       localToPersisted.set(planned.localId, taskId);
