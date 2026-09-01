@@ -26,6 +26,7 @@ import { getLineageSummary } from "../replication/lineage.js";
 import { sanitizeInput } from "./injection-defense.js";
 import { loadCurrentSoul } from "../soul/model.js";
 import { getHomeDir } from "../platform/home.js";
+import { RUNTIME_ROOT } from "../runtime-root.js";
 
 function getCoreRules(chainType?: string): string {
   const usdcNetwork = chainType === "solana" ? "USDC on Solana" : "USDC on Base";
@@ -93,7 +94,7 @@ If you fail to create value, you lose compute and die.`;
 function loadConstitution(): string {
   const locations = [
     path.join(getHomeDir(), ".abos", "constitution.md"),
-    path.join(process.cwd(), "constitution.md"),
+    path.join(RUNTIME_ROOT, "constitution.md"),
   ];
   for (const loc of locations) {
     try {
@@ -779,7 +780,7 @@ function loadSoulMd(): string | null {
  */
 function loadWorklog(): string | null {
   try {
-    const home = process.env.HOME || "/root";
+    const home = getHomeDir();
     const worklogPath = path.join(home, ".abos", "WORKLOG.md");
     if (fs.existsSync(worklogPath)) {
       return fs.readFileSync(worklogPath, "utf-8");
