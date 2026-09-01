@@ -123,6 +123,87 @@ describe("EnvironmentExecutionBridge", () => {
     expect(alphaAttempts).toBe(0);
   });
 
+  it("dispatches through the named executor without a second provider fallback", async () => {
+    const environments = new EnvironmentRegistry();
+    environments.register(provider("alpha"));
+    environments.register(provider("beta"));
+
+    const executors = new EnvironmentTaskExecutorRegistry();
+    const deliveries: string[] = [];
+    executors.register({
+      environmentId: "alpha",
+      spawn: async () => ({
+        address: "alpha://1",
+        name: "alpha",
+        sandboxId: "a-1",
+      }),
+      dispatch: async (input, target) => {
+        deliveries.push(`alpha:${input.id}:${target.address}`);
+        return { evidence: ["alpha delivery"] };
+      },
+    });
+    executors.register({
+      environmentId: "beta",
+      spawn: async () => ({
+        address: "beta://1",
+        name: "beta",
+        sandboxId: "b-1",
+      }),
+      dispatch: async () => {
+        deliveries.push("beta");
+        return {};
+      },
+    });
+
+    const bridge = new EnvironmentExecutionBridge(
+      new EnvironmentSelector(environments),
+      executors,
+    );
+
+    const result = await bridge.dispatch("alpha", task(), {
+      address: "alpha://existing",
+      name: "alpha-existing",
+      spawned: false,
+    });
+
+    expect(result.evidence).toContain("alpha delivery");
+    expect(deliveries).toEqual(["alpha:task-1:alpha://existing"]);
+  });
+
+  it("reports a missing dispatch implementation as unavailable, not as impossible", async () => {
+    const environments = new EnvironmentRegistry();
+    environments.register(provider("alpha"));
+    const executors = new EnvironmentTaskExecutorRegistry();
+    executors.register({
+      environmentId: "alpha",
+      spawn: async () => ({
+        address: "alpha://1",
+        name: "alpha",
+        sandboxId: "a-1",
+      }),
+    });
+
+    const bridge = new EnvironmentExecutionBridge(
+      new EnvironmentSelector(environments),
+      executors,
+    );
+
+    try {
+      await bridge.dispatch("alpha", task(), {
+        address: "alpha://existing",
+        name: "alpha",
+        spawned: false,
+      });
+      throw new Error("expected dispatch to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(EnvironmentTaskExecutionError);
+      const typed = error as EnvironmentTaskExecutionError;
+      expect(typed.environmentId).toBe("alpha");
+      expect(typed.evidence.join(" ").toLowerCase()).toContain("not proof");
+      expect(typed.evidence.join(" ").toLowerCase()).toContain("impossible");
+    }
+  });
+
   it("treats a missing executor as unavailable or undiscovered, never impossible", async () => {
     const environments = new EnvironmentRegistry();
     environments.register(provider("future-provider"));
