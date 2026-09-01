@@ -389,7 +389,15 @@ describe("AwsEc2TaskExecutor", () => {
       spawned: true,
     });
 
-    expect(dispatched.result).toEqual(expected);
+    expect(dispatched.result).toMatchObject({
+      success: true,
+      output: expected.output,
+      costCents: expected.costCents,
+      duration: expected.duration,
+    });
+    expect(dispatched.result?.artifacts).toEqual([
+      "aws://ec2/i-new/artifact/%2Ftmp%2Fresult.txt",
+    ]);
     expect(dispatched.metadata?.delivery).toBe("aws_ssm");
     expect(dispatched.metadata?.artifactCollectionState).toBe("pending");
     expect(dispatched.metadata?.remoteArtifacts).toEqual([
