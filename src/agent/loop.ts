@@ -62,8 +62,18 @@ import {
 } from "../orchestration/orchestrator.js";
 import { PlanModeController } from "../orchestration/plan-mode.js";
 import { generateTodoMd, injectTodoContext } from "../orchestration/attention.js";
-import { ColonyMessaging, LocalDBTransport } from "../orchestration/messaging.js";
-import { LocalWorkerPool } from "../orchestration/local-worker.js";
+import {
+  COLONY_MESSAGE_TYPES,
+  ColonyMessaging,
+  LocalDBTransport,
+  SocialRelayTransport,
+} from "../orchestration/messaging.js";
+import {
+  LocalWorkerPool,
+  executeTaskWithHarness,
+} from "../orchestration/local-worker.js";
+import { createTaskExecutionEnvelope } from "../orchestration/task-execution-envelope.js";
+import { createColonyTaskAssignmentConsumer } from "../orchestration/colony-task-assignment.js";
 import { SimpleAgentTracker, SimpleFundingProtocol } from "../orchestration/simple-tracker.js";
 import { HarnessRegistry } from "./harness-registry.js";
 import { createWorkerInferenceBridge } from "./worker-inference-bridge.js";
@@ -83,6 +93,15 @@ import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
 import { EnvironmentRetentionCoordinator } from "../environments/retention.js";
 import { EnvironmentMigrationStore } from "../environments/mobility-store.js";
 import { EnvironmentMobilityCoordinator } from "../environments/mobility.js";
+import { ContinuityAssembler } from "../environments/continuity-assembler.js";
+import {
+  applyArtifactMaterializationResult,
+  materializeArtifactsToFilesystemRoot,
+  prepareArtifactMaterialization,
+} from "../environments/artifact-materialization.js";
+import {
+  materializeArtifactsToConwaySandbox,
+} from "../environments/conway-artifact-materializer.js";
 import { EnvironmentSelector } from "../environments/selector.js";
 import {
   EnvironmentExecutionBridge,
@@ -132,6 +151,10 @@ export async function runAgentLoop(
     environmentResources,
   );
   const environmentMigrations = new EnvironmentMigrationStore(db.raw);
+  const continuityAssembler = new ContinuityAssembler(db.raw, {
+    migrations: environmentMigrations,
+    resources: environmentResources,
+  });
   let environmentMobility: EnvironmentMobilityCoordinator | null = null;
   const environmentSelector = new EnvironmentSelector(
     environmentRegistry,
@@ -375,7 +398,9 @@ export async function runAgentLoop(
       const agentTracker = new SimpleAgentTracker(db);
       const funding = new SimpleFundingProtocol(conway, identity, db);
       const messaging = new ColonyMessaging(
-        new LocalDBTransport(db),
+        social
+          ? new SocialRelayTransport(social, db)
+          : new LocalDBTransport(db),
         db,
       );
 
@@ -385,9 +410,9 @@ export async function runAgentLoop(
       // harnesses can preserve tier + responseFormat contracts.
       const workerInference = createWorkerInferenceBridge(unifiedInference);
 
-      // Local worker pool: runs inference-driven agents in-process.
-      // Environment selection is handled separately by the execution bridge.
-      const initializedWorkerPool = new LocalWorkerPool({
+      // Canonical harness execution config is shared by local workers and by
+      // structured parent -> Conway child task_assignment consumption.
+      const workerExecutionConfig = {
         db: db.raw,
         inference: workerInference,
         conway,
@@ -399,8 +424,35 @@ export async function runAgentLoop(
         toolContext,
         policyEngine,
         spendTracker,
-      });
+      };
+
+      // Local worker pool: runs inference-driven agents in-process.
+      // Environment selection is handled separately by the execution bridge.
+      const initializedWorkerPool = new LocalWorkerPool(
+        workerExecutionConfig,
+      );
       workerPool = initializedWorkerPool;
+
+      if (config.parentAddress) {
+        messaging.setHandler(
+          "task_assignment",
+          createColonyTaskAssignmentConsumer({
+            identityAddress: identity.address,
+            parentAddress: config.parentAddress,
+            db,
+            messaging,
+            executeTask: async (task, executionContinuation) =>
+              executeTaskWithHarness(
+                workerExecutionConfig,
+                task,
+                {
+                  workerId: `colony-${task.id}`,
+                  executionContinuation,
+                },
+              ),
+          }),
+        );
+      }
 
       const taskExecutors = new EnvironmentTaskExecutorRegistry();
 
@@ -412,8 +464,49 @@ export async function runAgentLoop(
             "LocalWorkerPool is initialized in the current ABOS runtime.",
           ],
         }),
-        spawn: async (task) => {
-          const spawned = initializedWorkerPool.spawn(task);
+        spawn: async (task, options) => {
+          let executionContinuation =
+            options?.continuationContext;
+          let artifactMaterialization:
+            | Record<string, unknown>
+            | null = null;
+
+          if (executionContinuation) {
+            const prepared = prepareArtifactMaterialization(
+              task,
+              executionContinuation,
+            );
+            executionContinuation =
+              prepared.continuationContext;
+
+            if (prepared.request.sources.length > 0) {
+              const materialized =
+                materializeArtifactsToFilesystemRoot(
+                  prepared.request,
+                  RUNTIME_ROOT,
+                );
+              const applied =
+                applyArtifactMaterializationResult(
+                  prepared,
+                  materialized,
+                  {
+                    environmentId: "local",
+                    address: "local://host",
+                  },
+                );
+              executionContinuation =
+                applied.continuationContext;
+              artifactMaterialization =
+                applied.manifest as unknown as Record<
+                  string,
+                  unknown
+                >;
+            }
+          }
+
+          const spawned = initializedWorkerPool.spawn(task, {
+            executionContinuation,
+          });
           return {
             ...spawned,
             resourceExternalId: spawned.sandboxId,
@@ -421,8 +514,35 @@ export async function runAgentLoop(
             evidence: [
               `Local worker ${spawned.sandboxId} started for task ${task.id}.`,
             ],
+            metadata: {
+              ...(artifactMaterialization
+                ? { artifactMaterialization }
+                : {}),
+            },
           };
         },
+        materializeArtifacts: async (
+          _task,
+          _target,
+          request,
+        ) => ({
+          protocolVersion: 1,
+          entries: request.sources.map((source) => ({
+            reference: source.reference,
+            state: "available",
+            targetPath: source.localPath,
+            integrity: source.integrity,
+            evidence: [
+              "Local target shares the current ABOS runtime filesystem; parent-observed staged artifact remains directly available.",
+            ],
+          })),
+          evidence: [
+            "Local artifact materialization reused the already-staged host file without a duplicate copy.",
+          ],
+          metadata: {
+            transport: "shared_local_filesystem",
+          },
+        }),
         dispatch: async (task, target) => {
           if (!target.spawned) {
             throw new Error(
@@ -439,14 +559,47 @@ export async function runAgentLoop(
         },
       });
 
+      const resolveConwayChildForTarget = (
+        targetAddress: string,
+      ) => {
+        const resource = environmentResources
+          .list({
+            provider: "conway",
+            includeTerminated: true,
+          })
+          .find(
+            (entry) =>
+              entry.metadata.childAddress === targetAddress ||
+              entry.metadata.executorAddress === targetAddress,
+          );
+        const childId =
+          typeof resource?.metadata.childId === "string"
+            ? resource.metadata.childId
+            : null;
+        return childId
+          ? db.getChildById(childId)
+          : db.getChildren().find(
+              (entry) => entry.address === targetAddress,
+            );
+      };
+
       taskExecutors.register({
         environmentId: "conway",
-        assess: async () => ({
-          executable: null,
-          evidence: [
-            "Conway Task execution is verified at spawn time through the existing child lifecycle; unknown preflight state remains eligible for evidence-gathering.",
-          ],
-        }),
+        assess: async () =>
+          social
+            ? {
+                executable: null,
+                evidence: [
+                  "Conway child provisioning is verified at spawn time and Task delivery uses the configured signed Social relay.",
+                ],
+              }
+            : {
+                executable: false,
+                evidence: [
+                  "Conway remote Task delivery is currently unavailable because no Social relay client is configured.",
+                  "Missing relay configuration is current unavailability, not proof that the objective is impossible.",
+                ],
+              },
         spawn: async (task) => {
           const spawnOnce = async () => {
             const { generateGenesisConfig } = await import("../replication/genesis.js");
@@ -548,7 +701,45 @@ export async function runAgentLoop(
             }
           }
         },
-        dispatch: async (task, target) => {
+        materializeArtifacts: async (
+          _task,
+          target,
+          request,
+        ) => {
+          const child =
+            resolveConwayChildForTarget(target.address);
+          if (!child) {
+            throw new Error(
+              `Conway executor child identity not found for ${target.address}.`,
+            );
+          }
+          return materializeArtifactsToConwaySandbox(
+            conway,
+            child.sandboxId,
+            request,
+          );
+        },
+        dispatch: async (task, target, options) => {
+          if (!social) {
+            throw new Error(
+              "Conway Task delivery is currently unavailable because the Social relay is not configured.",
+            );
+          }
+
+          const child =
+            resolveConwayChildForTarget(target.address);
+          if (!child) {
+            throw new Error(
+              `Conway executor child identity not found for ${target.address}.`,
+            );
+          }
+
+          const { ChildLifecycle } =
+            await import("../replication/lifecycle.js");
+          const { ensureChildRuntimeRunning } =
+            await import("../replication/spawn.js");
+          const lifecycle = new ChildLifecycle(db.raw);
+
           const amountCents = calculateTaskFundingCents(task, config);
           if (amountCents > 0) {
             const funded = await funding.fundChild(target.address, amountCents);
@@ -559,6 +750,33 @@ export async function runAgentLoop(
             }
           }
 
+          const lifecycleState = lifecycle.getCurrentState(child.id);
+          if (lifecycleState === "wallet_verified") {
+            lifecycle.transition(
+              child.id,
+              "funded",
+              amountCents > 0
+                ? `funded for Task ${task.id} with ${amountCents} cents`
+                : `Task ${task.id} requires no additional credit transfer`,
+              {
+                taskId: task.id,
+                amountCents,
+              },
+            );
+          }
+
+          const runtime = await ensureChildRuntimeRunning(
+            conway,
+            db,
+            child.id,
+            lifecycle,
+          );
+          if (!runtime.healthy) {
+            throw new Error(
+              `Conway child ${child.id} runtime was not observed healthy before Task delivery.`,
+            );
+          }
+
           const message = messaging.createMessage({
             type: "task_assignment",
             to: target.address,
@@ -566,30 +784,33 @@ export async function runAgentLoop(
             taskId: task.id,
             priority: "high",
             requiresResponse: true,
-            content: JSON.stringify({
-              taskId: task.id,
-              title: task.title,
-              description: task.description,
-              agentRole: task.agentRole,
-              dependencies: task.dependencies,
-              timeoutMs: task.metadata.timeoutMs,
-              requiredCapabilities: task.requiredCapabilities ?? [],
-              preferredEnvironment: task.preferredEnvironment ?? null,
-              strategicPathId: task.strategicPathId ?? null,
-            }),
+            content: JSON.stringify(
+              createTaskExecutionEnvelope(
+                task,
+                options?.continuationContext,
+              ),
+            ),
           });
           await messaging.send(message);
 
           return {
             evidence: [
-              `Task ${task.id} delivered to Conway executor ${target.address}.`,
+              ...runtime.evidence,
+              `Task ${task.id} delivered through the Social relay to Conway executor ${target.address}.`,
               ...(amountCents > 0
                 ? [`Conway task funding amount=${amountCents} cents.`]
                 : []),
             ],
             metadata: {
-              delivery: "colony_message",
+              delivery: "colony_social_relay",
+              childId: child.id,
+              sandboxId: child.sandboxId,
+              runtimeAlreadyRunning: runtime.alreadyRunning,
               fundedAmountCents: amountCents,
+              continuationDelivered:
+                options?.continuationContext != null,
+              continuationProtocolVersion:
+                options?.continuationContext?.protocolVersion ?? null,
             },
           };
         },
@@ -621,6 +842,7 @@ export async function runAgentLoop(
         environmentLifecycle,
         environmentMigrations,
         environmentExecution,
+        continuityAssembler,
       );
 
       // Restart recovery is observation-first and non-destructive. It does not
@@ -751,6 +973,21 @@ export async function runAgentLoop(
           );
           return dispatched.result;
         },
+        prepareTaskResultForPersistence: async (
+          sourceAddress,
+          task,
+          result,
+        ) => {
+          const environmentId =
+            resolveExecutionEnvironment(sourceAddress) ??
+            "unknown";
+          return environmentExecution.collectRemoteResultArtifacts(
+            environmentId,
+            task,
+            sourceAddress,
+            result,
+          );
+        },
         environmentRegistry,
         capabilityRegistry,
         config: {
@@ -865,7 +1102,9 @@ export async function runAgentLoop(
       // Check for unprocessed inbox messages using the state machine:
       // received → in_progress (claim) → processed (on success) or received/failed (on failure)
       if (!pendingInput) {
-        claimedMessages = claimInboxMessages(db.raw, 10);
+        claimedMessages = claimInboxMessages(db.raw, 10, {
+          excludeMessageTypes: [...COLONY_MESSAGE_TYPES],
+        });
         if (claimedMessages.length > 0) {
           const formatted = claimedMessages
             .map((m) => {

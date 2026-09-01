@@ -14,6 +14,7 @@ import type {
   ToolContext,
 } from "../types.js";
 import type { AgentWorkspace } from "../orchestration/workspace.js";
+import type { ExecutionContinuationContext } from "../environments/continuity.js";
 import { getTasksByGoal } from "../state/database.js";
 import type { PolicyEngine } from "./policy-engine.js";
 
@@ -52,6 +53,8 @@ export interface HarnessContext {
   policyEngine?: PolicyEngine;
   spendTracker?: SpendTrackerInterface;
   inputSource?: InputSource;
+  /** Derived, non-authoritative context for resuming the same Task. */
+  executionContinuation?: ExecutionContinuationContext;
 }
 
 export interface WorkerInferenceClient {

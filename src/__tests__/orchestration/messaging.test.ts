@@ -78,17 +78,19 @@ function insertInbox(raw: BetterSqlite3.Database, params: {
   from: string;
   to?: string;
   content: string;
+  rawContent?: string;
   receivedAt?: string;
 }): void {
   raw.prepare(
     `INSERT INTO inbox_messages
-     (id, from_address, to_address, content, received_at, status, retry_count, max_retries)
-     VALUES (?, ?, ?, ?, ?, 'received', 0, 3)`,
+     (id, from_address, to_address, content, raw_content, received_at, status, retry_count, max_retries)
+     VALUES (?, ?, ?, ?, ?, ?, 'received', 0, 3)`,
   ).run(
     params.id,
     params.from,
     params.to ?? "0xself",
     params.content,
+    params.rawContent ?? null,
     params.receivedAt ?? new Date().toISOString(),
   );
 }
@@ -275,6 +277,179 @@ describe("orchestration/messaging", () => {
       expect(processed[0].success).toBe(true);
     });
 
+    it("parses structured Colony JSON from raw_content when the conversational view was sanitized", async () => {
+      const ctx = createTestDb();
+      raw = ctx.raw;
+      const handler = vi.fn(async () => undefined);
+      const messaging = new ColonyMessaging(
+        { deliver: vi.fn(), getRecipients: () => [] },
+        ctx.db,
+        {
+          handlers: {
+            task_assignment: handler,
+          },
+        },
+      );
+      const message = makeMessage({
+        id: "raw-assignment",
+        type: "task_assignment",
+      });
+      const rawEnvelope = JSON.stringify({
+        protocol: "colony_message_v1",
+        sentAt: "2026-01-01T00:00:00.000Z",
+        message,
+      });
+
+      insertInbox(raw, {
+        id: "inbox-raw-assignment",
+        from: "0xfrom",
+        content: "[Message from 0xfrom]:\n" + rawEnvelope,
+        rawContent: rawEnvelope,
+      });
+
+      const processed = await messaging.processInbox({
+        types: ["task_assignment"],
+      });
+
+      expect(handler).toHaveBeenCalledWith(message);
+      expect(processed[0]?.message.id).toBe("raw-assignment");
+      expect(processed[0]?.success).toBe(true);
+    });
+
+    it("processes only requested structured message types and leaves others durable", async () => {
+      const ctx = createTestDb();
+      raw = ctx.raw;
+      const messaging = new ColonyMessaging(
+        { deliver: vi.fn(), getRecipients: () => [] },
+        ctx.db,
+      );
+
+      insertInbox(raw, {
+        id: "inbox-assignment",
+        from: "0xfrom",
+        content: JSON.stringify(
+          makeMessage({ id: "assignment", type: "task_assignment" }),
+        ),
+      });
+      insertInbox(raw, {
+        id: "inbox-result",
+        from: "0xfrom",
+        content: JSON.stringify(
+          makeMessage({ id: "result", type: "task_result" }),
+        ),
+      });
+
+      const processed = await messaging.processInbox({
+        types: ["task_assignment"],
+      });
+
+      expect(processed.map((entry) => entry.message.id)).toEqual([
+        "assignment",
+      ]);
+      const rows = raw.prepare(
+        "SELECT id, status, processed_at FROM inbox_messages ORDER BY id",
+      ).all() as Array<{
+        id: string;
+        status: string;
+        processed_at: string | null;
+      }>;
+      expect(rows.find((row) => row.id === "inbox-assignment")).toMatchObject({
+        status: "processed",
+      });
+      expect(
+        rows.find((row) => row.id === "inbox-assignment")?.processed_at,
+      ).toBeTruthy();
+      expect(rows.find((row) => row.id === "inbox-result")).toEqual(
+        expect.objectContaining({
+          status: "received",
+          processed_at: null,
+        }),
+      );
+    });
+
+    it("invokes a registered structured handler before marking the message processed", async () => {
+      const ctx = createTestDb();
+      raw = ctx.raw;
+      const handler = vi.fn(async () => undefined);
+      const messaging = new ColonyMessaging(
+        { deliver: vi.fn(), getRecipients: () => [] },
+        ctx.db,
+        {
+          handlers: {
+            task_assignment: handler,
+          },
+        },
+      );
+      const message = makeMessage({
+        id: "handled-assignment",
+        type: "task_assignment",
+      });
+      insertInbox(raw, {
+        id: "inbox-handler",
+        from: "0xfrom",
+        content: JSON.stringify(message),
+      });
+
+      const processed = await messaging.processInbox({
+        types: ["task_assignment"],
+      });
+
+      expect(handler).toHaveBeenCalledWith(message);
+      expect(processed[0]?.success).toBe(true);
+      const row = raw.prepare(
+        "SELECT status FROM inbox_messages WHERE id = ?",
+      ).get("inbox-handler") as { status: string };
+      expect(row.status).toBe("processed");
+    });
+
+    it("returns a failed handler message to received until retry budget is exhausted", async () => {
+      const ctx = createTestDb();
+      raw = ctx.raw;
+      const messaging = new ColonyMessaging(
+        { deliver: vi.fn(), getRecipients: () => [] },
+        ctx.db,
+        {
+          handlers: {
+            task_assignment: async () => {
+              throw new Error("transient handler failure");
+            },
+          },
+        },
+      );
+      insertInbox(raw, {
+        id: "inbox-retry-handler",
+        from: "0xfrom",
+        content: JSON.stringify(
+          makeMessage({
+            id: "retry-handler",
+            type: "task_assignment",
+          }),
+        ),
+      });
+
+      const first = await messaging.processInbox({
+        types: ["task_assignment"],
+      });
+      expect(first[0]?.success).toBe(false);
+      let row = raw.prepare(
+        "SELECT status, retry_count FROM inbox_messages WHERE id = ?",
+      ).get("inbox-retry-handler") as {
+        status: string;
+        retry_count: number;
+      };
+      expect(row).toEqual({ status: "received", retry_count: 1 });
+
+      await messaging.processInbox({ types: ["task_assignment"] });
+      await messaging.processInbox({ types: ["task_assignment"] });
+      row = raw.prepare(
+        "SELECT status, retry_count FROM inbox_messages WHERE id = ?",
+      ).get("inbox-retry-handler") as {
+        status: string;
+        retry_count: number;
+      };
+      expect(row).toEqual({ status: "failed", retry_count: 3 });
+    });
+
     it("orders processing by priority (critical first)", async () => {
       const ctx = createTestDb();
       raw = ctx.raw;
@@ -315,7 +490,7 @@ describe("orchestration/messaging", () => {
       expect(processed.map((entry) => entry.message.id)).toEqual(["early", "late"]);
     });
 
-    it("rejects malformed JSON", async () => {
+    it("leaves non-structured malformed content for the conversational inbox consumer", async () => {
       const ctx = createTestDb();
       raw = ctx.raw;
       const messaging = new ColonyMessaging({ deliver: vi.fn(), getRecipients: () => [] }, ctx.db);
@@ -323,10 +498,12 @@ describe("orchestration/messaging", () => {
       insertInbox(raw, { id: "bad-json", from: "0xfrom", content: "{not-json}" });
       const processed = await messaging.processInbox();
 
-      expect(processed).toHaveLength(1);
-      expect(processed[0].success).toBe(false);
-      expect(processed[0].handledBy).toBe("rejectMalformedMessage");
-      expect(processed[0].error).toContain("valid JSON");
+      expect(processed).toEqual([]);
+      const row = raw.prepare(
+        "SELECT status, processed_at FROM inbox_messages WHERE id = ?",
+      ).get("bad-json") as { status: string; processed_at: string | null };
+      expect(row.status).toBe("received");
+      expect(row.processed_at).toBeNull();
     });
 
     it("rejects invalid message shapes", async () => {
@@ -364,7 +541,7 @@ describe("orchestration/messaging", () => {
       expect(processed[0].error).toContain("expired");
     });
 
-    it("marks inbox rows processed even when malformed", async () => {
+    it("leaves malformed non-structured rows untouched for the conversational consumer", async () => {
       const ctx = createTestDb();
       raw = ctx.raw;
       const messaging = new ColonyMessaging({ deliver: vi.fn(), getRecipients: () => [] }, ctx.db);
@@ -372,14 +549,22 @@ describe("orchestration/messaging", () => {
       insertInbox(raw, { id: "m1", from: "0xfrom", content: "not-json" });
       await messaging.processInbox();
 
-      const row = raw.prepare("SELECT processed_at FROM inbox_messages WHERE id = 'm1'").get() as {
+      const row = raw.prepare(
+        "SELECT status, processed_at, retry_count FROM inbox_messages WHERE id = 'm1'",
+      ).get() as {
+        status: string;
         processed_at: string | null;
+        retry_count: number;
       };
 
-      expect(row.processed_at).not.toBeNull();
+      expect(row).toEqual({
+        status: "received",
+        processed_at: null,
+        retry_count: 0,
+      });
     });
 
-    it("records handler failure and continues", async () => {
+    it("records handler failure and leaves the structured row retryable", async () => {
       const ctx = createTestDb();
       raw = ctx.raw;
       const messaging = new ColonyMessaging({ deliver: vi.fn(), getRecipients: () => [] }, ctx.db);
@@ -396,10 +581,18 @@ describe("orchestration/messaging", () => {
       expect(processed[0].success).toBe(false);
       expect(processed[0].error).toContain("handler broke");
 
-      const row = raw.prepare("SELECT processed_at FROM inbox_messages WHERE id = 'm-alert'").get() as {
+      const row = raw.prepare(
+        "SELECT status, processed_at, retry_count FROM inbox_messages WHERE id = 'm-alert'",
+      ).get() as {
+        status: string;
         processed_at: string | null;
+        retry_count: number;
       };
-      expect(row.processed_at).not.toBeNull();
+      expect(row).toEqual({
+        status: "received",
+        processed_at: null,
+        retry_count: 1,
+      });
     });
   });
 

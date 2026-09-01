@@ -253,6 +253,7 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
           ...msg,
           from: sanitizedFrom.content,
           content: sanitizedContent.content,
+          rawContent: msg.content,
         };
         taskCtx.db.insertInboxMessage(sanitizedMsg);
         taskCtx.db.setKV(`inbox_seen_${msg.id}`, "1");

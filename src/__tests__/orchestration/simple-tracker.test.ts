@@ -154,6 +154,31 @@ describe("orchestration/simple-tracker", () => {
       expect(row?.status).toBe("healthy");
     });
 
+    it("does not overwrite a lifecycle-managed child's detailed state with legacy running/healthy tracker states", () => {
+      insertChild(db, "c-lifecycle", "Lifecycle", "0xlifecycle", "wallet_verified");
+      db.prepare(
+        `INSERT INTO child_lifecycle_events
+         (id, child_id, from_state, to_state, reason, metadata, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        "event-lifecycle",
+        "c-lifecycle",
+        "runtime_ready",
+        "wallet_verified",
+        "wallet verified",
+        "{}",
+        new Date().toISOString(),
+      );
+
+      tracker.updateStatus("0xlifecycle", "running");
+      tracker.updateStatus("0xlifecycle", "healthy");
+
+      const row = db.prepare(
+        "SELECT status FROM children WHERE id = ?",
+      ).get("c-lifecycle") as { status: string };
+      expect(row.status).toBe("wallet_verified");
+    });
+
     it("does nothing for an unknown address", () => {
       insertChild(db, "c1", "Agent", "0xagent", "running");
 
@@ -176,6 +201,40 @@ describe("orchestration/simple-tracker", () => {
       const children = mockDb.getChildren() as any[];
       expect(children).toHaveLength(1);
       expect(children[0].address).toBe("0xnew");
+    });
+
+    it("reuses an existing spawned child identity instead of inserting a duplicate row", () => {
+      insertChild(
+        db,
+        "c-existing",
+        "Existing",
+        "0xexisting",
+        "wallet_verified",
+        "",
+      );
+
+      tracker.register({
+        address: "0xexisting",
+        name: "Existing",
+        role: "researcher",
+        sandboxId: "sb-1",
+      });
+
+      const count = db.prepare(
+        "SELECT COUNT(*) AS count FROM children WHERE address = ? OR sandbox_id = ?",
+      ).get("0xexisting", "sb-1") as { count: number };
+      expect(count.count).toBe(1);
+
+      const row = db.prepare(
+        "SELECT id, status, role FROM children WHERE id = ?",
+      ).get("c-existing") as {
+        id: string;
+        status: string;
+        role: string | null;
+      };
+      expect(row.id).toBe("c-existing");
+      expect(row.status).toBe("wallet_verified");
+      expect(row.role).toBe("researcher");
     });
 
     it("stores the role in the genesis prompt", () => {

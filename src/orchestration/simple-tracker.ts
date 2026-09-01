@@ -60,10 +60,50 @@ export class SimpleAgentTracker implements AgentTracker {
       return;
     }
 
+    // Lifecycle-managed children use ChildLifecycle as the authority for
+    // requested -> ... -> healthy. TaskGraph.assigned_to already represents
+    // busy/idle state, so legacy tracker writes must not collapse that state
+    // machine back to "running"/"healthy".
+    const lifecycle = this.db.raw.prepare(
+      `SELECT to_state AS state
+       FROM child_lifecycle_events
+       WHERE child_id = ?
+       ORDER BY created_at DESC, rowid DESC
+       LIMIT 1`,
+    ).get(child.id) as { state: string } | undefined;
+
+    if (
+      lifecycle &&
+      (status === "running" || status === "healthy")
+    ) {
+      return;
+    }
+
     this.db.updateChildStatus(child.id, status as ChildStatus);
   }
 
   register(agent: { address: string; name: string; role: string; sandboxId: string }): void {
+    const existing = this.db.raw.prepare(
+      `SELECT id
+       FROM children
+       WHERE address = ? OR sandbox_id = ?
+       ORDER BY created_at ASC
+       LIMIT 1`,
+    ).get(agent.address, agent.sandboxId) as { id: string } | undefined;
+
+    if (existing) {
+      // Keep spawn/lifecycle identity canonical. Only enrich the planner role
+      // if that column exists; never insert a second child row.
+      try {
+        this.db.raw.prepare(
+          "UPDATE children SET role = COALESCE(NULLIF(role, ''), ?) WHERE id = ?",
+        ).run(agent.role, existing.id);
+      } catch {
+        // Older schemas may not yet expose role; identity reuse still holds.
+      }
+      return;
+    }
+
     this.db.insertChild({
       id: ulid(),
       name: agent.name,

@@ -343,7 +343,11 @@ async function run(): Promise<void> {
   // Create social client (chain-aware: pass ChainIdentity for Solana signing)
   let social: SocialClientInterface | undefined;
   if (config.socialRelayUrl) {
-    social = createSocialClient(config.socialRelayUrl, resolvedChainType === "solana" ? chainIdentity : account);
+    social = createSocialClient(
+      config.socialRelayUrl,
+      resolvedChainType === "solana" ? chainIdentity : account,
+      db.raw,
+    );
     logger.info(`[${new Date().toISOString()}] Social relay: ${config.socialRelayUrl}`);
   }
 

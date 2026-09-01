@@ -48,6 +48,18 @@ import {
   type TaskResult,
 } from "./task-graph.js";
 import { executeTaskWithHarness } from "./local-worker.js";
+import type { ExecutionContinuationContext } from "../environments/continuity.js";
+import {
+  parseTaskExecutionPayload,
+  type ParsedTaskExecutionPayload,
+} from "./task-execution-envelope.js";
+
+export interface StandaloneTaskExecutionOptions {
+  executionContinuation?: ExecutionContinuationContext;
+}
+
+export type ParsedStandaloneTaskExecutionPayload =
+  ParsedTaskExecutionPayload;
 
 export async function executeStandaloneTaskFile(
   filePath: string,
@@ -55,11 +67,15 @@ export async function executeStandaloneTaskFile(
   const payload = JSON.parse(
     await fs.readFile(filePath, "utf8"),
   ) as unknown;
-  return executeStandaloneTask(parseTask(payload));
+  const parsed = parseStandaloneTaskExecutionPayload(payload);
+  return executeStandaloneTask(parsed.task, {
+    executionContinuation: parsed.executionContinuation,
+  });
 }
 
 export async function executeStandaloneTask(
   incomingTask: TaskNode,
+  options: StandaloneTaskExecutionOptions = {},
 ): Promise<TaskResult> {
   const bootstrapped = await bootstrapFromGenesisIfPresent();
   const config = loadConfig() ?? bootstrapped;
@@ -249,6 +265,8 @@ export async function executeStandaloneTask(
       {
         workerId:
           `remote-${incomingTask.id}`,
+        executionContinuation:
+          options.executionContinuation,
       },
     );
 
@@ -360,111 +378,11 @@ function createLocalMirrorTask(
   };
 }
 
-function parseTask(value: unknown): TaskNode {
-  if (!value || typeof value !== "object") {
-    throw new Error(
-      "Standalone Task payload must be an object.",
-    );
-  }
-
-  const task = value as Partial<TaskNode>;
-  if (
-    typeof task.id !== "string" ||
-    !task.id.trim() ||
-    typeof task.goalId !== "string" ||
-    !task.goalId.trim() ||
-    typeof task.title !== "string" ||
-    !task.title.trim() ||
-    typeof task.description !== "string" ||
-    !task.description.trim() ||
-    !task.metadata ||
-    typeof task.metadata.timeoutMs !== "number"
-  ) {
-    throw new Error(
-      "Standalone Task payload is missing required id, goalId, title, description, or metadata.timeoutMs.",
-    );
-  }
-
-  return {
-    id: task.id,
-    parentId:
-      typeof task.parentId === "string"
-        ? task.parentId
-        : null,
-    goalId: task.goalId,
-    title: task.title,
-    description: task.description,
-    status: task.status ?? "pending",
-    assignedTo:
-      typeof task.assignedTo === "string"
-        ? task.assignedTo
-        : null,
-    agentRole:
-      typeof task.agentRole === "string"
-        ? task.agentRole
-        : "generalist",
-    priority:
-      typeof task.priority === "number"
-        ? Math.max(
-            0,
-            Math.min(
-              100,
-              Math.floor(task.priority),
-            ),
-          )
-        : 50,
-    dependencies: Array.isArray(task.dependencies)
-      ? task.dependencies.filter(
-          (entry): entry is string =>
-            typeof entry === "string",
-        )
-      : [],
-    result: null,
-    requiredCapabilities:
-      Array.isArray(task.requiredCapabilities)
-        ? task.requiredCapabilities.filter(
-            (entry): entry is string =>
-              typeof entry === "string",
-          )
-        : [],
-    preferredEnvironment:
-      typeof task.preferredEnvironment === "string"
-        ? task.preferredEnvironment
-        : null,
-    strategicPathId:
-      typeof task.strategicPathId === "string"
-        ? task.strategicPathId
-        : null,
-    metadata: {
-      estimatedCostCents:
-        typeof task.metadata.estimatedCostCents === "number"
-          ? task.metadata.estimatedCostCents
-          : 0,
-      actualCostCents:
-        typeof task.metadata.actualCostCents === "number"
-          ? task.metadata.actualCostCents
-          : 0,
-      maxRetries:
-        typeof task.metadata.maxRetries === "number"
-          ? task.metadata.maxRetries
-          : 0,
-      retryCount:
-        typeof task.metadata.retryCount === "number"
-          ? task.metadata.retryCount
-          : 0,
-      timeoutMs: task.metadata.timeoutMs,
-      createdAt:
-        typeof task.metadata.createdAt === "string"
-          ? task.metadata.createdAt
-          : new Date().toISOString(),
-      startedAt:
-        typeof task.metadata.startedAt === "string"
-          ? task.metadata.startedAt
-          : null,
-      completedAt:
-        typeof task.metadata.completedAt === "string"
-          ? task.metadata.completedAt
-          : null,
-    },
-  };
+export function parseStandaloneTaskExecutionPayload(
+  value: unknown,
+): ParsedStandaloneTaskExecutionPayload {
+  return parseTaskExecutionPayload(value, {
+    allowBareTask: true,
+    errorPrefix: "Standalone",
+  });
 }

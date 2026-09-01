@@ -28,6 +28,8 @@ import {
 import {
   EnvironmentMobilityCoordinator,
 } from "../environments/mobility.js";
+import type { ContinuityAssembler } from "../environments/continuity-assembler.js";
+import type { ExecutionContinuationContext } from "../environments/continuity.js";
 import type {
   EnvironmentProvider,
   EnvironmentSnapshot,
@@ -208,6 +210,54 @@ function selectionResult(
 }
 
 describe("Environment mobility", () => {
+  it("passes assembled continuation through the canonical spawn contract", async () => {
+    const db = createDb();
+    try {
+      seedTaskContext(db);
+      const registry = new EnvironmentRegistry();
+      registry.register(provider("env-a"));
+      const resources = new EnvironmentResourceStore(db);
+      const lifecycle = new EnvironmentLifecycleManager(registry, resources);
+      const selector = new EnvironmentSelector(registry);
+      const migrations = new EnvironmentMigrationStore(db);
+
+      let spawnOptions: EnvironmentTaskSpawnOptions | undefined;
+      const execution = {
+        spawn: vi.fn(async (_task: TaskNode, options?: EnvironmentTaskSpawnOptions) => {
+          spawnOptions = options;
+          return selectionResult("env-a");
+        }),
+      } as unknown as EnvironmentExecutionBridge;
+
+      const continuationContext = {
+        marker: "verified-continuation",
+      } as unknown as ExecutionContinuationContext;
+      const assemble = vi.fn(() => continuationContext);
+      const continuity = {
+        assemble,
+      } as unknown as ContinuityAssembler;
+
+      const mobility = new EnvironmentMobilityCoordinator(
+        registry,
+        selector,
+        lifecycle,
+        migrations,
+        execution,
+        continuity,
+      );
+
+      await mobility.spawn(task());
+
+      expect(assemble).toHaveBeenCalledWith(
+        "task-mobility-1",
+        { targetPathId: "path-mobility-1" },
+      );
+      expect(spawnOptions?.continuationContext).toBe(continuationContext);
+    } finally {
+      db.close();
+    }
+  });
+
   it("propagates mobility exclusions through the provider-neutral execution bridge", async () => {
     const registry = new EnvironmentRegistry();
     registry.register(provider("env-a"));

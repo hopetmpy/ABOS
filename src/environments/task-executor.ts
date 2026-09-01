@@ -1,5 +1,16 @@
 import type { TaskNode, TaskResult } from "../orchestration/task-graph.js";
 import type { EnvironmentLifecycleManager } from "./lifecycle.js";
+import type { ExecutionContinuationContext } from "./continuity.js";
+import {
+  ARTIFACT_MATERIALIZATION_PROTOCOL_VERSION,
+  applyArtifactMaterializationResult,
+  isOpaqueExternalArtifactReference,
+  prepareArtifactMaterialization,
+  remoteEnvironmentArtifactReference,
+  type ArtifactMaterializationRequest,
+  type ArtifactMaterializationResult,
+  type ArtifactTransferManifest,
+} from "./artifact-materialization.js";
 import type {
   EnvironmentSelectionCandidate,
   EnvironmentSelectionResult,
@@ -27,6 +38,15 @@ export interface EnvironmentTaskTarget {
   spawned: boolean;
 }
 
+export interface EnvironmentTaskDispatchOptions {
+  /**
+   * Fresh derived continuation view assembled immediately before delivery.
+   * Keeping this separate from target identity avoids provider-specific state.
+   */
+  continuationContext?: ExecutionContinuationContext;
+  metadata?: Record<string, unknown>;
+}
+
 export interface EnvironmentTaskDispatchResult {
   /** Optional immediate semantic result for synchronous transports (SSM, RPC, etc.). */
   result?: TaskResult;
@@ -46,9 +66,19 @@ export interface EnvironmentTaskExecutor {
     task: TaskNode,
     options?: EnvironmentTaskSpawnOptions,
   ): Promise<EnvironmentTaskSpawnResult>;
+  /**
+   * Optional target-specific artifact transfer. This belongs to the Task
+   * executor plane because the executor owns the concrete target transport.
+   */
+  materializeArtifacts?(
+    task: TaskNode,
+    target: EnvironmentTaskTarget,
+    request: ArtifactMaterializationRequest,
+  ): Promise<ArtifactMaterializationResult>;
   dispatch?(
     task: TaskNode,
     target: EnvironmentTaskTarget,
+    options?: EnvironmentTaskDispatchOptions,
   ): Promise<EnvironmentTaskDispatchResult>;
 }
 
@@ -60,6 +90,11 @@ export interface EnvironmentTaskSpawnOptions {
    * does not automatically make every resource from the same provider invalid.
    */
   excludedResourceIds?: string[];
+  /**
+   * Derived continuation view for the same canonical Task. Executors may
+   * consume it, but it does not become provider-owned state.
+   */
+  continuationContext?: ExecutionContinuationContext;
   metadata?: Record<string, unknown>;
 }
 
@@ -281,10 +316,153 @@ export class EnvironmentExecutionBridge {
     };
   }
 
+  /**
+   * Normalize artifacts reported by an asynchronous remote executor before the
+   * TaskResult becomes canonical parent state.
+   *
+   * The EnvironmentResource/lifecycle authorities remain canonical. This
+   * method only records executor-local artifact references on that resource,
+   * asks the registered provider collect() capability to materialize what it
+   * can, and returns parent-safe semantic references.
+   */
+  async collectRemoteResultArtifacts(
+    environmentId: string,
+    task: TaskNode,
+    targetAddress: string,
+    result: TaskResult,
+  ): Promise<TaskResult> {
+    const durableArtifacts = result.artifacts.filter(
+      isOpaqueExternalArtifactReference,
+    );
+    const executorLocalArtifacts = result.artifacts.filter(
+      (artifact) =>
+        !isOpaqueExternalArtifactReference(artifact),
+    );
+
+    if (executorLocalArtifacts.length === 0) {
+      return {
+        ...result,
+        artifacts: [...durableArtifacts],
+      };
+    }
+
+    const remoteReferences = () =>
+      executorLocalArtifacts.map((artifact) =>
+        remoteEnvironmentArtifactReference(
+          environmentId,
+          targetAddress,
+          artifact,
+        )
+      );
+
+    if (!this.lifecycle) {
+      return {
+        ...result,
+        artifacts: [
+          ...durableArtifacts,
+          ...remoteReferences(),
+        ],
+      };
+    }
+
+    const resource = this.lifecycle.resources
+      .list({ includeTerminated: true })
+      .find(
+        (entry) =>
+          entry.provider === environmentId &&
+          (
+            entry.metadata.executorAddress === targetAddress ||
+            entry.metadata.childAddress === targetAddress ||
+            entry.externalId === targetAddress
+          ) &&
+          (
+            entry.taskId === task.id ||
+            entry.metadata.lastDispatchedTaskId === task.id
+          ),
+      );
+
+    if (!resource) {
+      return {
+        ...result,
+        artifacts: [
+          ...durableArtifacts,
+          ...remoteReferences(),
+        ],
+      };
+    }
+
+    this.lifecycle.resources.applyMutation(
+      resource.id,
+      {
+        evidence: [
+          `Task ${task.id} reported ${executorLocalArtifacts.length} executor-local artifact(s); parent collection is required before those paths can be treated as local.`,
+        ],
+        metadata: {
+          remoteArtifacts: executorLocalArtifacts,
+          artifactCollectionState: "pending",
+          artifactHost: targetAddress,
+        },
+      },
+      "artifact_discovered",
+      "Remote Task artifacts require collection onto the parent host.",
+    );
+
+    try {
+      const collection =
+        await this.lifecycle.collect(resource.id);
+      const metadata = collection.metadata ?? {};
+      const remaining = stringArray(
+        metadata.remoteArtifacts,
+      );
+
+      return {
+        ...result,
+        artifacts: [
+          ...durableArtifacts,
+          ...collection.artifacts,
+          ...remaining.map((artifact) =>
+            remoteEnvironmentArtifactReference(
+              environmentId,
+              targetAddress,
+              artifact,
+            )
+          ),
+        ],
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : String(error);
+      this.lifecycle.resources.applyMutation(
+        resource.id,
+        {
+          evidence: [
+            `Automatic artifact collection failed: ${message}. Remote artifacts remain pending and are not represented as parent-local files.`,
+          ],
+          metadata: {
+            remoteArtifacts: executorLocalArtifacts,
+            artifactCollectionState: "pending",
+            artifactHost: targetAddress,
+          },
+        },
+        "artifact_collection_failed",
+        "Remote Task artifact collection remains pending.",
+      );
+
+      return {
+        ...result,
+        artifacts: [
+          ...durableArtifacts,
+          ...remoteReferences(),
+        ],
+      };
+    }
+  }
+
   async dispatch(
     environmentId: string,
     task: TaskNode,
     target: EnvironmentTaskTarget,
+    options: EnvironmentTaskDispatchOptions = {},
   ): Promise<EnvironmentTaskDispatchResult> {
     const executor = this.executors.get(environmentId);
     if (!executor) {
@@ -311,9 +489,103 @@ export class EnvironmentExecutionBridge {
       );
     }
 
+    let effectiveOptions = options;
+    let materializationManifest: ArtifactTransferManifest | null = null;
+
+    if (options.continuationContext) {
+      let prepared;
+      try {
+        prepared = prepareArtifactMaterialization(
+          task,
+          options.continuationContext,
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : String(error);
+        throw new EnvironmentTaskExecutionError(
+          environmentId,
+          `Artifact materialization preparation failed for "${environmentId}": ${message}`,
+          [`artifact materialization preparation failure: ${message}`],
+          "materialize",
+        );
+      }
+
+      if (prepared.request.sources.length > 0) {
+        let materialized: ArtifactMaterializationResult;
+        if (executor.materializeArtifacts) {
+          try {
+            materialized = await executor.materializeArtifacts(
+              task,
+              target,
+              prepared.request,
+            );
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            materialized = {
+              protocolVersion:
+                ARTIFACT_MATERIALIZATION_PROTOCOL_VERSION,
+              entries: prepared.request.sources.map((source) => ({
+                reference: source.reference,
+                state: "unavailable",
+                evidence: [
+                  `Target artifact materialization failed: ${message}`,
+                ],
+              })),
+              evidence: [
+                `Target artifact materializer for environment=${environmentId} failed without proving artifacts available: ${message}`,
+              ],
+            };
+          }
+        } else {
+          materialized = {
+            protocolVersion:
+              ARTIFACT_MATERIALIZATION_PROTOCOL_VERSION,
+            entries: prepared.request.sources.map((source) => ({
+              reference: source.reference,
+              state: "unavailable",
+              evidence: [
+                `Environment ${environmentId} has no target artifact materializer registered for this executor.`,
+              ],
+            })),
+            evidence: [
+              `Target artifact materialization is currently unavailable for environment=${environmentId}; this does not classify the artifact or objective as impossible.`,
+            ],
+          };
+        }
+
+        const applied = applyArtifactMaterializationResult(
+          prepared,
+          materialized,
+          {
+            environmentId,
+            address: target.address,
+          },
+        );
+        materializationManifest = applied.manifest;
+        effectiveOptions = {
+          ...options,
+          continuationContext: applied.continuationContext,
+          metadata: {
+            ...(options.metadata ?? {}),
+            artifactMaterialization: applied.manifest,
+          },
+        };
+      } else {
+        effectiveOptions = {
+          ...options,
+          continuationContext: prepared.continuationContext,
+        };
+      }
+    }
+
     let result: EnvironmentTaskDispatchResult;
     try {
-      result = await executor.dispatch(task, target);
+      result = await executor.dispatch(
+        task,
+        target,
+        effectiveOptions,
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new EnvironmentTaskExecutionError(
@@ -322,6 +594,16 @@ export class EnvironmentExecutionBridge {
         [`dispatch failure: ${message}`],
         "dispatch",
       );
+    }
+
+    if (materializationManifest) {
+      result = {
+        ...result,
+        metadata: {
+          ...(result.metadata ?? {}),
+          artifactMaterialization: materializationManifest,
+        },
+      };
     }
 
     if (this.lifecycle) {
@@ -359,6 +641,18 @@ export class EnvironmentExecutionBridge {
 
     return result;
   }
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value
+        .filter(
+          (entry): entry is string =>
+            typeof entry === "string",
+        )
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+    : [];
 }
 
 async function safeAssess(

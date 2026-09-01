@@ -106,6 +106,65 @@ describe("Heartbeat Tasks", () => {
       expect(unprocessed.length).toBe(2);
     });
 
+    it("preserves raw structured Social payload while keeping a sanitized conversational view", async () => {
+      const social = new MockSocialClient();
+      const rawEnvelope = JSON.stringify({
+        protocol: "colony_message_v1",
+        sentAt: "2026-09-01T00:00:00.000Z",
+        message: {
+          id: "assignment-1",
+          type: "task_assignment",
+          from: "0xparent",
+          to: "0xchild",
+          goalId: "goal-1",
+          taskId: "task-1",
+          content: JSON.stringify({ taskId: "task-1" }),
+          priority: "high",
+          requiresResponse: true,
+          expiresAt: null,
+          createdAt: "2026-09-01T00:00:00.000Z",
+        },
+      });
+      social.pollResponses.push({
+        messages: [
+          {
+            id: "relay-structured-1",
+            from: "0xparent",
+            to: "0xchild",
+            content: rawEnvelope,
+            signedAt: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      });
+
+      const tickCtx = createMockTickContext(db);
+      const taskCtx: HeartbeatLegacyContext = {
+        identity: createTestIdentity(),
+        config: createTestConfig(),
+        db,
+        conway,
+        social,
+      };
+
+      await BUILTIN_TASKS.check_social_inbox(tickCtx, taskCtx);
+
+      const row = db.raw.prepare(
+        "SELECT content, raw_content, to_address, status FROM inbox_messages WHERE id = ?",
+      ).get("relay-structured-1") as {
+        content: string;
+        raw_content: string | null;
+        to_address: string | null;
+        status: string;
+      };
+
+      expect(row.content).not.toBe(rawEnvelope);
+      expect(row.content).toContain("[Message from");
+      expect(row.raw_content).toBe(rawEnvelope);
+      expect(row.to_address).toBe("0xchild");
+      expect(row.status).toBe("received");
+    });
+
     it("deduplicates messages", async () => {
       const social = new MockSocialClient();
 

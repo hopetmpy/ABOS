@@ -184,7 +184,13 @@ export interface InboxMessage {
   id: string;
   from: string;
   to: string;
+  /** Sanitized/conversational view used when external content reaches a model. */
   content: string;
+  /**
+   * Optional original transport payload. Structured protocol consumers parse
+   * this field instead of the sanitized conversational view.
+   */
+  rawContent?: string;
   signedAt: string;
   createdAt: string;
   replyTo?: string;

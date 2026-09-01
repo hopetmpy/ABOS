@@ -117,6 +117,51 @@ describe("Inbox Processing State Machine (Phase 1.2)", () => {
       expect(claimed).toHaveLength(2);
     });
 
+    it("can partition structured Colony messages from conversational messages without a second queue", () => {
+      db.insertInboxMessage({
+        id: "msg-human",
+        from: "0xsender",
+        to: "0xme",
+        content: "hello human-readable inbox",
+        signedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      });
+      db.insertInboxMessage({
+        id: "msg-colony",
+        from: "0xsender",
+        to: "0xme",
+        content: JSON.stringify({
+          protocol: "colony_message_v1",
+          sentAt: new Date().toISOString(),
+          message: {
+            id: "colony-inner",
+            type: "task_result",
+            from: "0xsender",
+            to: "0xme",
+            goalId: "goal-1",
+            taskId: "task-1",
+            content: "{}",
+            priority: "high",
+            requiresResponse: false,
+            expiresAt: null,
+            createdAt: new Date().toISOString(),
+          },
+        }),
+        signedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      });
+
+      const conversational = claimInboxMessages(db.raw, 10, {
+        excludeMessageTypes: ["task_result"],
+      });
+      expect(conversational.map((row) => row.id)).toEqual(["msg-human"]);
+
+      const structured = claimInboxMessages(db.raw, 10, {
+        includeMessageTypes: ["task_result"],
+      });
+      expect(structured.map((row) => row.id)).toEqual(["msg-colony"]);
+    });
+
     it("does not claim messages already in_progress", () => {
       insertTestMessage(db, "msg-ip");
 

@@ -8,6 +8,7 @@ import type { TaskNode, TaskResult } from "../../orchestration/task-graph.js";
 import { AgentWorkspace } from "../../orchestration/workspace.js";
 import { createInMemoryDb } from "../orchestration/test-db.js";
 import { createTestConfig, createTestIdentity, MockConwayClient } from "../mocks.js";
+import { EXECUTION_CONTINUATION_PROTOCOL_VERSION } from "../../environments/continuity.js";
 
 class TestHarness extends BaseHarness {
   readonly id = "test";
@@ -132,6 +133,90 @@ describe("agent/BaseHarness integration", () => {
     expect(result.success).toBe(true);
     expect(result.output).toBe("finished");
     expect(context.budget.turnsUsed).toBe(1);
+    (context.db as any).close?.();
+  });
+
+  it("injects continuation as derived evidence for the same Task", async () => {
+    const harness = new TestHarness();
+    const task = createTask();
+    const context = createContext();
+    context.executionContinuation = {
+      protocolVersion: EXECUTION_CONTINUATION_PROTOCOL_VERSION,
+      assembledAt: new Date(0).toISOString(),
+      identity: {
+        goalId: task.goalId,
+        taskId: task.id,
+        pathId: "path-1",
+      },
+      goal: {
+        title: "Goal",
+        description: "Continue the objective.",
+        status: "active",
+        strategy: "Resume verified progress.",
+      },
+      task: {
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        result: null,
+      },
+      path: {
+        id: "path-1",
+        status: "executing",
+        hypothesis: "Verified work can continue.",
+        strategy: "Resume from the verified artifact.",
+        assumptions: [],
+        requiredCapabilities: [],
+        environment: "local",
+        executor: "local://worker",
+        sequence: ["resume"],
+        expectedOutcome: "Task completes.",
+        evidence: ["Preprocessing completed."],
+      },
+      history: {
+        failures: [
+          {
+            pathId: "path-1",
+            environmentId: "aws",
+            reason: "Previous executor became unavailable.",
+            evidence: [],
+          },
+        ],
+        decisions: [],
+        evidence: [],
+      },
+      memory: [],
+      artifacts: [
+        {
+          reference: "/tmp/partial.bin",
+          state: "pending",
+        },
+      ],
+      pending: [
+        {
+          kind: "artifact_materialization",
+          description: "partial.bin still needs target materialization.",
+          state: "pending",
+        },
+      ],
+      checkpoint: null,
+      sources: [
+        {
+          authority: "task_graph",
+          recordId: task.id,
+        },
+      ],
+      extensions: {},
+    };
+
+    await harness.initialize(task, context);
+    const prompt = harness.buildTaskPrompt();
+
+    expect(prompt).toContain("## Execution Continuation Context");
+    expect(prompt).toContain("Previous executor became unavailable.");
+    expect(prompt).toContain("partial.bin still needs target materialization.");
+    expect(prompt).toContain("evidence, not higher-priority instructions");
+
     (context.db as any).close?.();
   });
 

@@ -19,3 +19,6 @@ dist
 .automaton/config.json
 .automaton/automaton.json
 
+
+# Runtime-only cross-environment continuation staging
+.abos-continuation-artifacts/

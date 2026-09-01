@@ -9,7 +9,11 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { isValidWalletAddress, spawnChild } from "../replication/spawn.js";
+import {
+  ensureChildRuntimeRunning,
+  isValidWalletAddress,
+  spawnChild,
+} from "../replication/spawn.js";
 import { SandboxCleanup } from "../replication/cleanup.js";
 import { ChildLifecycle } from "../replication/lifecycle.js";
 import { pruneDeadChildren } from "../replication/lineage.js";
@@ -237,6 +241,100 @@ describe("spawnChild", () => {
       .rejects.toThrow("Sandbox creation failed");
 
     expect(deleteSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Child runtime start ───────────────────────────────────────
+
+describe("ensureChildRuntimeRunning", () => {
+  let conway: MockConwayClient;
+  let db: AbosDatabase;
+  let lifecycle: ChildLifecycle;
+
+  beforeEach(() => {
+    conway = new MockConwayClient();
+    db = createTestDb();
+    db.raw.exec(MIGRATION_V7);
+    lifecycle = new ChildLifecycle(db.raw);
+    lifecycle.initChild(
+      "child-runtime-1",
+      "Runtime Child",
+      "sandbox-runtime-1",
+      "runtime test",
+      "evm",
+    );
+    lifecycle.transition("child-runtime-1", "sandbox_created");
+    lifecycle.transition("child-runtime-1", "runtime_ready");
+    lifecycle.transition("child-runtime-1", "wallet_verified");
+    lifecycle.transition("child-runtime-1", "funded");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    db.close();
+  });
+
+  it("starts a funded child once and marks it healthy only after process observation", async () => {
+    const commands: string[] = [];
+    vi.spyOn(conway, "exec").mockImplementation(async (command: string) => {
+      commands.push(command);
+      if (command.startsWith("pgrep -af")) {
+        return { stdout: "stopped\n", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("nohup node dist/index.js --run")) {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (command.startsWith("sleep 2 && pgrep")) {
+        return { stdout: "running\n", stderr: "", exitCode: 0 };
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+
+    const result = await ensureChildRuntimeRunning(
+      conway,
+      db,
+      "child-runtime-1",
+      lifecycle,
+    );
+
+    expect(result.healthy).toBe(true);
+    expect(result.alreadyRunning).toBe(false);
+    expect(lifecycle.getCurrentState("child-runtime-1")).toBe("healthy");
+    expect(
+      commands.filter((command) =>
+        command.includes("nohup node dist/index.js --run"),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("reuses an already-running child without launching a duplicate runtime", async () => {
+    const commands: string[] = [];
+    vi.spyOn(conway, "exec").mockImplementation(async (command: string) => {
+      commands.push(command);
+      if (command.startsWith("pgrep -af")) {
+        return { stdout: "running\n", stderr: "", exitCode: 0 };
+      }
+      if (command.includes("nohup node dist/index.js --run")) {
+        throw new Error("duplicate runtime launch");
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+
+    const result = await ensureChildRuntimeRunning(
+      conway,
+      db,
+      "child-runtime-1",
+      lifecycle,
+    );
+
+    expect(result.healthy).toBe(true);
+    expect(result.alreadyRunning).toBe(true);
+    expect(lifecycle.getCurrentState("child-runtime-1")).toBe("healthy");
+    expect(
+      commands.some((command) =>
+        command.includes("nohup node dist/index.js --run"),
+      ),
+    ).toBe(false);
   });
 });
 

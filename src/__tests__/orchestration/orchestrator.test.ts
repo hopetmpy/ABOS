@@ -85,6 +85,11 @@ function makeOrchestrator(
       assignment: { agentAddress: string; agentName: string; spawned: boolean },
       task: any,
     ) => Promise<TaskResult | void>;
+    prepareTaskResultForPersistence?: (
+      sourceAddress: string,
+      task: any,
+      result: TaskResult,
+    ) => Promise<TaskResult>;
   } = {},
 ): Orchestrator {
   const { messaging } = makeMessaging(db);
@@ -99,6 +104,8 @@ function makeOrchestrator(
     resolveAgentEnvironment: overrides.resolveAgentEnvironment,
     isWorkerAlive: overrides.isWorkerAlive,
     dispatchAgentTask: overrides.dispatchAgentTask,
+    prepareTaskResultForPersistence:
+      overrides.prepareTaskResultForPersistence,
   });
 }
 
@@ -751,16 +758,22 @@ describe("orchestration/Orchestrator", () => {
   describe("collectResults", () => {
     function buildMessagingWithResults(
       raw: BetterSqlite3.Database,
-      messages: Array<{ type: string; content: string }>,
+      messages: Array<{
+        type: string;
+        content: string;
+        from?: string;
+        goalId?: string | null;
+        taskId?: string | null;
+      }>,
     ) {
       const processedMessages = messages.map((msg) => ({
         message: {
           id: ulid(),
           type: msg.type,
-          from: "0xagent",
+          from: msg.from ?? "0xagent",
           to: "0x1234",
-          goalId: null,
-          taskId: null,
+          goalId: msg.goalId ?? null,
+          taskId: msg.taskId ?? null,
           content: msg.content,
           priority: "normal" as const,
           requiresResponse: false,
@@ -782,7 +795,11 @@ describe("orchestration/Orchestrator", () => {
 
     it("processes task_result messages from inbox", async () => {
       const goalId = insertGoal(db);
-      const taskId = insertTask(db, { goalId });
+      const taskId = insertTask(db, {
+        goalId,
+        assignedTo: "0xagent",
+        status: "running",
+      });
       const content = JSON.stringify({ taskId, success: true, output: "done", artifacts: [], costCents: 5, duration: 100 });
       const messaging = buildMessagingWithResults(db, [{ type: "task_result", content }]);
       const orc = makeOrchestrator(db, { messaging });
@@ -790,6 +807,92 @@ describe("orchestration/Orchestrator", () => {
       expect(results).toHaveLength(1);
       expect(results[0].success).toBe(true);
       expect(results[0].output).toBe("done");
+    });
+
+    it("prepares an authenticated async result before exposing it for canonical persistence", async () => {
+      const goalId = insertGoal(db);
+      const taskId = insertTask(db, {
+        goalId,
+        assignedTo: "0xagent",
+        status: "running",
+      });
+      const content = JSON.stringify({
+        taskId,
+        success: true,
+        output: "remote done",
+        artifacts: ["outputs/remote.bin"],
+        costCents: 2,
+        duration: 50,
+      });
+      const messaging = buildMessagingWithResults(db, [{
+        type: "task_result",
+        content,
+        from: "0xagent",
+        goalId,
+        taskId,
+      }]);
+      const prepareTaskResultForPersistence = vi.fn(
+        async (
+          sourceAddress: string,
+          task: { id: string; goalId: string },
+          result: TaskResult,
+        ): Promise<TaskResult> => {
+          expect(sourceAddress).toBe("0xagent");
+          expect(task.id).toBe(taskId);
+          expect(task.goalId).toBe(goalId);
+          expect(result.artifacts).toEqual([
+            "outputs/remote.bin",
+          ]);
+          return {
+            ...result,
+            artifacts: ["/parent/verified.bin"],
+          };
+        },
+      );
+      const orc = makeOrchestrator(db, {
+        messaging,
+        prepareTaskResultForPersistence,
+      });
+
+      const results = await orc.collectResults();
+
+      expect(prepareTaskResultForPersistence).toHaveBeenCalledTimes(1);
+      expect(results).toEqual([
+        expect.objectContaining({
+          success: true,
+          output: "remote done",
+          artifacts: ["/parent/verified.bin"],
+        }),
+      ]);
+    });
+
+    it("ignores a task_result from an agent that is not the current assignee", async () => {
+      const goalId = insertGoal(db);
+      const taskId = insertTask(db, {
+        goalId,
+        assignedTo: "0xlegit",
+        status: "running",
+      });
+      const content = JSON.stringify({
+        taskId,
+        success: true,
+        output: "spoofed completion",
+        artifacts: [],
+        costCents: 0,
+        duration: 1,
+      });
+      const messaging = buildMessagingWithResults(db, [{
+        type: "task_result",
+        content,
+        from: "0xattacker",
+        goalId,
+        taskId,
+      }]);
+      const orc = makeOrchestrator(db, { messaging });
+
+      const results = await orc.collectResults();
+
+      expect(results).toEqual([]);
     });
 
     it("ignores non-task_result messages", async () => {
