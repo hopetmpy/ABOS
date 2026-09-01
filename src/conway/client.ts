@@ -28,6 +28,7 @@ import { keccak256, toHex } from "viem";
 import type { Address, PrivateKeyAccount } from "viem";
 import { randomUUID } from "crypto";
 import type { ChainType, ChainIdentity } from "../identity/chain.js";
+import { expandHomePath, getHomeDir } from "../platform/home.js";
 
 interface ConwayClientOptions {
   apiUrl: string;
@@ -114,7 +115,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
         timeout: timeout || 30_000,
         encoding: "utf-8",
         maxBuffer: 10 * 1024 * 1024,
-        cwd: process.env.HOME || "/root",
+        cwd: getHomeDir(),
       });
       return { stdout: stdout || "", stderr: "", exitCode: 0 };
     } catch (err: any) {
@@ -164,9 +165,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
   };
 
   const resolveLocalPath = (filePath: string): string =>
-    filePath.startsWith("~")
-      ? nodePath.join(process.env.HOME || "/root", filePath.slice(1))
-      : filePath;
+    expandHomePath(filePath);
 
   const writeFile = async (
     filePath: string,
