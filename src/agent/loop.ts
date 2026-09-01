@@ -68,8 +68,12 @@ import {
   LocalDBTransport,
   SocialRelayTransport,
 } from "../orchestration/messaging.js";
-import { LocalWorkerPool } from "../orchestration/local-worker.js";
+import {
+  LocalWorkerPool,
+  executeTaskWithHarness,
+} from "../orchestration/local-worker.js";
 import { createTaskExecutionEnvelope } from "../orchestration/task-execution-envelope.js";
+import { createColonyTaskAssignmentConsumer } from "../orchestration/colony-task-assignment.js";
 import { SimpleAgentTracker, SimpleFundingProtocol } from "../orchestration/simple-tracker.js";
 import { HarnessRegistry } from "./harness-registry.js";
 import { createWorkerInferenceBridge } from "./worker-inference-bridge.js";
@@ -398,9 +402,9 @@ export async function runAgentLoop(
       // harnesses can preserve tier + responseFormat contracts.
       const workerInference = createWorkerInferenceBridge(unifiedInference);
 
-      // Local worker pool: runs inference-driven agents in-process.
-      // Environment selection is handled separately by the execution bridge.
-      const initializedWorkerPool = new LocalWorkerPool({
+      // Canonical harness execution config is shared by local workers and by
+      // structured parent -> Conway child task_assignment consumption.
+      const workerExecutionConfig = {
         db: db.raw,
         inference: workerInference,
         conway,
@@ -412,8 +416,35 @@ export async function runAgentLoop(
         toolContext,
         policyEngine,
         spendTracker,
-      });
+      };
+
+      // Local worker pool: runs inference-driven agents in-process.
+      // Environment selection is handled separately by the execution bridge.
+      const initializedWorkerPool = new LocalWorkerPool(
+        workerExecutionConfig,
+      );
       workerPool = initializedWorkerPool;
+
+      if (config.parentAddress) {
+        messaging.setHandler(
+          "task_assignment",
+          createColonyTaskAssignmentConsumer({
+            identityAddress: identity.address,
+            parentAddress: config.parentAddress,
+            db,
+            messaging,
+            executeTask: async (task, executionContinuation) =>
+              executeTaskWithHarness(
+                workerExecutionConfig,
+                task,
+                {
+                  workerId: `colony-${task.id}`,
+                  executionContinuation,
+                },
+              ),
+          }),
+        );
+      }
 
       const taskExecutors = new EnvironmentTaskExecutorRegistry();
 
