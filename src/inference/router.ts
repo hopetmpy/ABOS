@@ -271,7 +271,11 @@ export class InferenceRouter {
    *
    * Specialized/background task types continue to use the routing matrix first.
    */
-  selectModel(tier: SurvivalTier, taskType: InferenceTaskType): ModelEntry | null {
+  selectModel(
+    tier: SurvivalTier,
+    taskType: InferenceTaskType,
+    connectionProvider?: string,
+  ): ModelEntry | null {
     const TIER_ORDER: Record<string, number> = {
       dead: 0, critical: 1, low_compute: 2, normal: 3, high: 4,
     };
@@ -283,7 +287,10 @@ export class InferenceRouter {
     // turn. Static routing remains the fallback and continues to govern
     // background/specialized task types.
     if (taskType === "agent_turn") {
-      const configured = this.selectConfiguredAgentModel(tier);
+      const configured = this.selectConfiguredAgentModel(
+        tier,
+        connectionProvider,
+      );
       if (configured) return configured;
     }
 
@@ -291,7 +298,11 @@ export class InferenceRouter {
     if (preference && preference.candidates.length > 0) {
       for (const candidateId of preference.candidates) {
         const entry = this.registry.get(candidateId);
-        if (entry && entry.enabled) {
+        if (
+          entry &&
+          entry.enabled &&
+          this.isConnectionCompatible(connectionProvider, entry)
+        ) {
           return entry;
         }
       }
@@ -311,7 +322,10 @@ export class InferenceRouter {
       if (!entry || !entry.enabled) continue;
       const isFree = entry.costPer1kInput === 0 && entry.costPer1kOutput === 0;
       const tierOk = tierRank >= (TIER_ORDER[entry.tierMinimum] ?? 0);
-      if (isFree || tierOk) {
+      if (
+        (isFree || tierOk) &&
+        this.isConnectionCompatible(connectionProvider, entry)
+      ) {
         return entry;
       }
     }
@@ -319,7 +333,10 @@ export class InferenceRouter {
     return null;
   }
 
-  private selectConfiguredAgentModel(tier: SurvivalTier): ModelEntry | null {
+  private selectConfiguredAgentModel(
+    tier: SurvivalTier,
+    connectionProvider?: string,
+  ): ModelEntry | null {
     const TIER_ORDER: Record<string, number> = {
       dead: 0, critical: 1, low_compute: 2, normal: 3, high: 4,
     };
@@ -334,7 +351,8 @@ export class InferenceRouter {
     if (
       active?.enabled &&
       active.costPer1kInput === 0 &&
-      active.costPer1kOutput === 0
+      active.costPer1kOutput === 0 &&
+      this.isConnectionCompatible(connectionProvider, active)
     ) {
       return active;
     }
@@ -356,10 +374,138 @@ export class InferenceRouter {
 
       const isExternallyFunded = entry.costPer1kInput === 0 && entry.costPer1kOutput === 0;
       const tierOk = tierRank >= (TIER_ORDER[entry.tierMinimum] ?? 0);
-      if (isExternallyFunded || tierOk) return entry;
+      if (
+        (isExternallyFunded || tierOk) &&
+        this.isConnectionCompatible(connectionProvider, entry)
+      ) {
+        return entry;
+      }
     }
 
     return null;
+  }
+
+  private collectCandidateModels(
+    tier: SurvivalTier,
+    taskType: InferenceTaskType,
+    connectionProvider: string | undefined,
+    requiresTools: boolean,
+    includeFallbacks: boolean,
+  ): ModelEntry[] {
+    const candidates: ModelEntry[] = [];
+    const seen = new Set<string>();
+
+    const add = (
+      entry: ModelEntry | undefined,
+      enforceTierEligibility: boolean,
+    ) => {
+      if (!entry || !entry.enabled || seen.has(entry.modelId)) return;
+      if (requiresTools && !entry.supportsTools) return;
+      if (!this.isConnectionCompatible(connectionProvider, entry)) return;
+      if (
+        enforceTierEligibility &&
+        !this.isTierEligible(tier, entry)
+      ) {
+        return;
+      }
+      seen.add(entry.modelId);
+      candidates.push(entry);
+    };
+
+    const primary = this.selectModel(
+      tier,
+      taskType,
+      connectionProvider,
+    );
+    add(primary || undefined, false);
+
+    if (!includeFallbacks) return candidates;
+
+    // Existing configured and routing preferences remain first-class hints.
+    // They establish order, but do not form a closed universe of possibilities.
+    const preference = this.getPreference(tier, taskType);
+    for (const modelId of preference?.candidates || []) {
+      add(this.registry.get(modelId), false);
+    }
+
+    const strategy = this.budget.config;
+    const configuredIds =
+      tier === "critical" || tier === "dead"
+        ? [
+            strategy.criticalModel,
+            strategy.lowComputeModel,
+            strategy.inferenceModel,
+          ]
+        : [
+            strategy.inferenceModel,
+            strategy.lowComputeModel,
+            strategy.criticalModel,
+          ];
+
+    for (const modelId of configuredIds) {
+      if (modelId) add(this.registry.get(modelId), true);
+    }
+
+    // Open discovery: append every enabled registry model that is actually
+    // executable for the current tier/capability/known connection contract.
+    // No hard-coded provider/model ceiling is introduced.
+    for (const model of this.registry.getAll()) {
+      add(model, true);
+    }
+
+    return candidates;
+  }
+
+  private isTierEligible(
+    tier: SurvivalTier,
+    model: ModelEntry,
+  ): boolean {
+    const TIER_ORDER: Record<string, number> = {
+      dead: 0,
+      critical: 1,
+      low_compute: 2,
+      normal: 3,
+      high: 4,
+    };
+    const externallyFunded =
+      model.costPer1kInput === 0 && model.costPer1kOutput === 0;
+    if (externallyFunded) return true;
+    return (
+      (TIER_ORDER[tier] ?? 0) >=
+      (TIER_ORDER[model.tierMinimum] ?? 0)
+    );
+  }
+
+  private isConnectionCompatible(
+    connectionProvider: string | undefined,
+    model: ModelEntry,
+  ): boolean {
+    if (!connectionProvider) return true;
+    const knownCompatibility =
+      this.options.supportsConnectionModel?.(
+        connectionProvider,
+        model,
+      );
+    // Open-world rule: only a known false excludes a model.
+    return knownCompatibility !== false;
+  }
+
+  private buildBudgetExceededResult(
+    model: ModelEntry,
+    connectionProvider: string | undefined,
+    content: string,
+  ): InferenceResult {
+    return {
+      content,
+      model: model.modelId,
+      provider: connectionProvider || model.provider,
+      inputTokens: 0,
+      outputTokens: 0,
+      costCents: 0,
+      latencyMs: 0,
+      finishReason: "budget_exceeded",
+      toolCalls: undefined,
+    };
   }
 
   /**
