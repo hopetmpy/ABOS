@@ -170,6 +170,7 @@ export function createInferenceClient(
         messages,
         tools,
         temperature: opts?.temperature,
+        signal: opts?.signal,
         anthropicApiKey: anthropicApiKey as string,
         httpClient,
       });
@@ -190,6 +191,7 @@ export function createInferenceClient(
       apiUrl: openAiLikeApiUrl,
       apiKey: openAiLikeApiKey,
       backend: backend as "conway" | "openai" | "ollama",
+      signal: opts?.signal,
       httpClient,
     });
   };
@@ -318,6 +320,7 @@ async function chatViaOpenAiCompatible(params: {
   apiUrl: string;
   apiKey: string;
   backend: "conway" | "openai" | "ollama";
+  signal?: AbortSignal;
   httpClient: ResilientHttpClient;
 }): Promise<InferenceResponse> {
   const resp = await params.httpClient.request(`${params.apiUrl}/v1/chat/completions`, {
@@ -331,6 +334,7 @@ async function chatViaOpenAiCompatible(params: {
     },
     body: JSON.stringify(params.body),
     timeout: INFERENCE_TIMEOUT_MS,
+    signal: params.signal,
   });
 
   if (!resp.ok) {
@@ -384,6 +388,7 @@ async function chatViaAnthropic(params: {
   messages: ChatMessage[];
   tools?: InferenceToolDefinition[];
   temperature?: number;
+  signal?: AbortSignal;
   anthropicApiKey: string;
   httpClient: ResilientHttpClient;
 }): Promise<InferenceResponse> {
@@ -423,6 +428,7 @@ async function chatViaAnthropic(params: {
     },
     body: JSON.stringify(body),
     timeout: INFERENCE_TIMEOUT_MS,
+    signal: params.signal,
   });
 
   if (!resp.ok) {

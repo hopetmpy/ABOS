@@ -123,6 +123,37 @@ describe("ResilientHttpClient", () => {
     });
   });
 
+  describe("caller cancellation", () => {
+    it("propagates an external abort and does not retry it", async () => {
+      const client = new ResilientHttpClient({
+        maxRetries: 3,
+        backoffBase: 1,
+      });
+      const controller = new AbortController();
+      let callCount = 0;
+
+      globalThis.fetch = vi.fn().mockImplementation(
+        (_url: string, init?: RequestInit) => {
+          callCount++;
+          return new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              reject(new DOMException("The operation was aborted.", "AbortError"));
+            });
+          });
+        },
+      );
+
+      const pending = client.request("https://api.example.com/test", {
+        signal: controller.signal,
+      });
+      controller.abort();
+
+      await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+      expect(callCount).toBe(1);
+      expect(client.getConsecutiveFailures()).toBe(0);
+    });
+  });
+
   describe("retry on 5xx/429", () => {
     it("retries on 500 and succeeds on second attempt", async () => {
       const client = new ResilientHttpClient({

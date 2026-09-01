@@ -101,7 +101,9 @@ export class CodexInferenceRuntime {
   ): Promise<InferenceResponse> {
     const transport = await this.ensureTransport();
     const model = stripCodexRegistryPrefix(registryModelId);
-    const threadResponse = await transport.request<ThreadStartResponse>("thread/start", {
+    throwIfAborted(options.signal);
+    const threadResponse = await raceWithAbort(
+      transport.request<ThreadStartResponse>("thread/start", {
       model,
       cwd: process.cwd(),
       approvalPolicy: "never",
@@ -109,11 +111,16 @@ export class CodexInferenceRuntime {
       ephemeral: true,
       baseInstructions: PROVIDER_BOUNDARY_INSTRUCTIONS,
       developerInstructions: buildDeveloperInstructions(options.tools || []),
-    });
+      }),
+      options.signal,
+    );
     const threadId = threadResponse?.thread?.id;
     if (!threadId) throw new Error("Codex thread/start returned no thread id");
 
     let turnId: string | undefined;
+    let removeAbortListener: (() => void) | undefined;
+    let abortRequested = false;
+    let interruptSent = false;
     let finalMessage = "";
     let boundaryViolation: string | null = null;
     let usage: TokenUsage = {
@@ -129,9 +136,7 @@ export class CodexInferenceRuntime {
       if (!type || !SIDE_EFFECT_ITEM_TYPES.has(type)) return;
 
       boundaryViolation = type;
-      if (turnId) {
-        void transport.request("turn/interrupt", { threadId, turnId }).catch(() => undefined);
-      }
+      interruptTurn();
     });
 
     const offCompleted = transport.onNotification("item/completed", (raw) => {
@@ -154,21 +159,64 @@ export class CodexInferenceRuntime {
       };
     });
 
+    const interruptTurn = () => {
+      if (!turnId || interruptSent) return;
+      interruptSent = true;
+      void transport.request("turn/interrupt", {
+        threadId,
+        turnId,
+      }).catch(() => undefined);
+    };
+
     try {
-      const turnResponse = await transport.request<TurnStartResponse>("turn/start", {
+      throwIfAborted(options.signal);
+
+      if (options.signal) {
+        const abortHandler = () => {
+          abortRequested = true;
+          interruptTurn();
+        };
+        options.signal.addEventListener("abort", abortHandler, { once: true });
+        removeAbortListener = () =>
+          options.signal?.removeEventListener("abort", abortHandler);
+        if (options.signal.aborted) {
+          abortHandler();
+          throw createAbortError();
+        }
+      }
+
+      const turnStartPromise = transport.request<TurnStartResponse>("turn/start", {
         threadId,
         input: [{ type: "text", text: buildConversationInput(messages) }],
         model,
         ...(this.getReasoningEffort?.() ? { effort: this.getReasoningEffort?.() } : {}),
         outputSchema: buildOutputSchema(options.tools || []),
+      }).then((response) => {
+        const startedTurnId = response?.turn?.id;
+        if (startedTurnId) {
+          turnId = startedTurnId;
+          if (abortRequested || options.signal?.aborted || boundaryViolation) {
+            interruptTurn();
+          }
+        }
+        return response;
       });
-      turnId = turnResponse?.turn?.id;
-      if (!turnId) throw new Error("Codex turn/start returned no turn id");
 
-      const completed = await transport.waitForNotification<TurnCompletedNotification>(
-        "turn/completed",
-        (params) => params?.threadId === threadId && params?.turn?.id === turnId,
-        180_000,
+      const turnResponse = await raceWithAbort(
+        turnStartPromise,
+        options.signal,
+      );
+      turnId = turnId || turnResponse?.turn?.id;
+      if (!turnId) throw new Error("Codex turn/start returned no turn id");
+      throwIfAborted(options.signal);
+
+      const completed = await raceWithAbort(
+        transport.waitForNotification<TurnCompletedNotification>(
+          "turn/completed",
+          (params) => params?.threadId === threadId && params?.turn?.id === turnId,
+          180_000,
+        ),
+        options.signal,
       );
 
       if (boundaryViolation) {
@@ -204,6 +252,7 @@ export class CodexInferenceRuntime {
           : String(completed?.turn?.status || "stop"),
       };
     } finally {
+      removeAbortListener?.();
       offStarted();
       offCompleted();
       offUsage();
@@ -241,6 +290,46 @@ export class CodexInferenceRuntime {
       if (this.transport) this.startPromise = null;
     }
   }
+}
+
+function createAbortError(): Error {
+  const error = new Error("Inference request aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw createAbortError();
+}
+
+function raceWithAbort<T>(
+  promise: Promise<T>,
+  signal: AbortSignal | undefined,
+): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(createAbortError());
+
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      cleanup();
+      reject(createAbortError());
+    };
+    const cleanup = () => {
+      signal.removeEventListener("abort", onAbort);
+    };
+
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        cleanup();
+        resolve(value);
+      },
+      (error) => {
+        cleanup();
+        reject(error);
+      },
+    );
+  });
 }
 
 export function codexRegistryModelId(model: string): string {
