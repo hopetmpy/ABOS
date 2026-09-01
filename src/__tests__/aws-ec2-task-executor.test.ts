@@ -113,7 +113,10 @@ function lifecycleStub(
         return current;
       },
     },
-    provision: async (input: { retentionPolicy: string }) => {
+    provision: async (
+      _providerId: string,
+      input: { retentionPolicy: EnvironmentResource["retentionPolicy"] },
+    ) => {
       provisionCalls += 1;
       provisionInputs.push(input);
       const created = resource({
