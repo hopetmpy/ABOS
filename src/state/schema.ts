@@ -718,6 +718,21 @@ export const MIGRATION_V12 = `
   CREATE INDEX IF NOT EXISTS idx_adaptive_paths_status
     ON adaptive_paths(goal_id, status);
 
+  CREATE TABLE IF NOT EXISTS adaptive_task_bindings (
+    task_id TEXT PRIMARY KEY,
+    goal_id TEXT NOT NULL REFERENCES goals(id),
+    path_id TEXT REFERENCES adaptive_paths(id),
+    required_capabilities TEXT NOT NULL DEFAULT '[]',
+    preferred_environment TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_adaptive_task_bindings_goal
+    ON adaptive_task_bindings(goal_id);
+  CREATE INDEX IF NOT EXISTS idx_adaptive_task_bindings_path
+    ON adaptive_task_bindings(path_id);
+
   CREATE TABLE IF NOT EXISTS adaptive_attempts (
     id TEXT PRIMARY KEY,
     path_id TEXT NOT NULL REFERENCES adaptive_paths(id),
