@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -23,7 +23,11 @@ describe("agent/GeneralHarness", () => {
     }
   });
 
-  async function createHarness(options?: { social?: MockSocialClient; toolCatalog?: AbosTool[] }) {
+  async function createHarness(options?: {
+    social?: MockSocialClient;
+    toolCatalog?: AbosTool[];
+    conway?: MockConwayClient;
+  }) {
     tempDir = mkdtempSync(path.join(os.tmpdir(), "general-harness-"));
     const dbPath = path.join(tempDir, "state.db");
     const appDb = createDatabase(dbPath);
@@ -34,6 +38,7 @@ describe("agent/GeneralHarness", () => {
       ...loadInstalledTools(appDb),
     ];
     const social = options?.social;
+    const conway = options?.conway ?? new MockConwayClient();
 
     const harness = new GeneralHarness();
     const context: HarnessContext = {
@@ -43,7 +48,7 @@ describe("agent/GeneralHarness", () => {
       identity,
       config: createTestConfig({ dbPath }),
       db: appDb.raw,
-      conway: new MockConwayClient(),
+      conway,
       inference: { chat: async () => ({ content: "done" }) },
       budget: {
         maxTurns: 5,
@@ -61,7 +66,7 @@ describe("agent/GeneralHarness", () => {
         identity,
         config: createTestConfig({ dbPath }),
         db: appDb,
-        conway: new MockConwayClient(),
+        conway,
         social,
         inference: {
           chat: async () => {
@@ -116,6 +121,62 @@ describe("agent/GeneralHarness", () => {
     expect(toolNames.has("check_social_inbox")).toBe(true);
     expect(toolNames.has("x402_fetch")).toBe(true);
     expect(toolNames.has("task_done")).toBe(true);
+    appDb.close();
+  });
+
+  it("fails closed when the selected exec executor throws instead of running the command locally", async () => {
+    const conway = new MockConwayClient();
+    conway.exec = async () => {
+      throw new Error("remote executor denied");
+    };
+
+    const { harness, appDb } = await createHarness({ conway });
+    const execTool = harness.getToolDefs().find((tool) => tool.name === "exec");
+    expect(execTool).toBeDefined();
+
+    const result = await execTool!.execute({
+      command: "node -e \"process.stdout.write('LOCAL_FALLBACK_RAN')\"",
+    });
+
+    expect(result).toContain("exec error: remote executor denied");
+    expect(result).not.toContain("LOCAL_FALLBACK_RAN");
+    appDb.close();
+  });
+
+  it("fails closed when the selected file writer throws instead of writing to the local filesystem", async () => {
+    const conway = new MockConwayClient();
+    conway.writeFile = async () => {
+      throw new Error("remote write denied");
+    };
+
+    const { harness, appDb } = await createHarness({ conway });
+    const writeTool = harness.getToolDefs().find((tool) => tool.name === "write_file");
+    expect(writeTool).toBeDefined();
+
+    const target = path.join(tempDir!, "must-not-be-created.txt");
+    const result = await writeTool!.execute({ path: target, content: "should not exist" });
+
+    expect(result).toContain("write error: remote write denied");
+    expect(existsSync(target)).toBe(false);
+    appDb.close();
+  });
+
+  it("fails closed when the selected file reader throws instead of reading a local file", async () => {
+    const conway = new MockConwayClient();
+    conway.readFile = async () => {
+      throw new Error("remote read denied");
+    };
+
+    const { harness, appDb } = await createHarness({ conway });
+    const readTool = harness.getToolDefs().find((tool) => tool.name === "read_file");
+    expect(readTool).toBeDefined();
+
+    const target = path.join(tempDir!, "local-only.txt");
+    writeFileSync(target, "LOCAL_FILE_MUST_NOT_LEAK", "utf8");
+    const result = await readTool!.execute({ path: target });
+
+    expect(result).toContain("read error: remote read denied");
+    expect(result).not.toContain("LOCAL_FILE_MUST_NOT_LEAK");
     appDb.close();
   });
 
