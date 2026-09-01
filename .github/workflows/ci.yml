@@ -90,12 +90,25 @@ jobs:
 
           if git grep -n -F 'process.cwd()' -- \
             src/agent/tools.ts \
+            src/agent/loop.ts \
+            src/agent/system-prompt.ts \
+            src/agent/policy-rules/path-protection.ts \
             src/self-mod/code.ts \
             src/self-mod/upstream.ts \
             src/replication/source.ts \
             src/setup/wizard.ts \
             src/orchestration/local-worker.ts; then
             echo "Critical runtime paths must not depend on caller cwd."
+            exit 1
+          fi
+
+          if git grep -n -F 'process.env.HOME || "/root"' -- packages src ':!src/__tests__/**'; then
+            echo "Host state path still falls back to /root instead of the platform home resolver."
+            exit 1
+          fi
+
+          if git grep -n -F 'execFileSync("which"' -- src/skills/loader.ts; then
+            echo "Skill requirement lookup is still POSIX-only."
             exit 1
           fi
 
