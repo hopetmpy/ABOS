@@ -72,6 +72,27 @@ export class InferenceBudgetTracker {
   }
 
   /**
+   * Check the canonical inference-cost ledger against an externally supplied
+   * daily ceiling. The ceiling remains owned by TreasuryPolicy; this tracker
+   * only owns cost history and arithmetic.
+   */
+  checkDailyBudget(
+    estimatedCostCents: number,
+    dailyBudgetCents: number,
+  ): { allowed: boolean; reason?: string } {
+    const dailyCost = this.getDailyCost();
+    if (dailyCost + estimatedCostCents > dailyBudgetCents) {
+      return {
+        allowed: false,
+        reason:
+          `Daily inference budget exhausted: ${dailyCost}c spent + ` +
+          `${estimatedCostCents}c estimated > ${dailyBudgetCents}c limit`,
+      };
+    }
+    return { allowed: true };
+  }
+
+  /**
    * Record a completed inference cost.
    */
   recordCost(cost: Omit<InferenceCostRow, "id" | "createdAt">): void {
