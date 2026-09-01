@@ -365,7 +365,11 @@ describe("AwsEnvironmentProvider lifecycle", () => {
         if (commandText.includes("ABOS_ARTIFACT_SIZE")) {
           commandOutputs.set(
             commandId,
-            `ABOS_ARTIFACT_SIZE=${compressed.length}\n`,
+            [
+              `ABOS_ARTIFACT_RAW_SIZE=${artifactBody.length}`,
+              `ABOS_ARTIFACT_SIZE=${compressed.length}`,
+              "",
+            ].join("\n"),
           );
         } else if (commandText.includes("dd if=")) {
           commandOutputs.set(
@@ -409,6 +413,7 @@ describe("AwsEnvironmentProvider lifecycle", () => {
       ssmReadyAttempts: 1,
       ssmReadyIntervalMs: 0,
       artifactOutputRoot: outputRoot,
+      artifactMaxBytes: 64 * 1024,
       artifactMaxCompressedBytes: 64 * 1024,
       artifactChunkBytes: 15_000,
     });
