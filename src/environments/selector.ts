@@ -400,11 +400,14 @@ function compareCandidates(preferredEnvironment: string | null) {
     if (a.executionEligible !== b.executionEligible) {
       return a.executionEligible ? -1 : 1;
     }
-    if (b.score !== a.score) return b.score - a.score;
+    // Planner path intent is strategic evidence, not a weak cosmetic score.
+    // Honor the preferred environment when it is executable; otherwise the
+    // preference cannot override capability, authorization, budget or policy blockers.
     if (preferredEnvironment) {
       if (a.environmentId === preferredEnvironment && b.environmentId !== preferredEnvironment) return -1;
       if (b.environmentId === preferredEnvironment && a.environmentId !== preferredEnvironment) return 1;
     }
+    if (b.score !== a.score) return b.score - a.score;
     const aCost = a.estimate.estimatedCostCents;
     const bCost = b.estimate.estimatedCostCents;
     if (aCost != null && bCost != null && aCost !== bCost) return aCost - bCost;
