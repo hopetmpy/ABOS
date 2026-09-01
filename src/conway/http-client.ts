@@ -77,6 +77,18 @@ export class ResilientHttpClient {
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       const controller = new AbortController();
+      const externalSignal = opts.signal ?? undefined;
+      const forwardExternalAbort = () =>
+        controller.abort(externalSignal?.reason);
+
+      if (externalSignal?.aborted) {
+        forwardExternalAbort();
+      } else {
+        externalSignal?.addEventListener("abort", forwardExternalAbort, {
+          once: true,
+        });
+      }
+
       const timer = setTimeout(() => controller.abort(), timeout);
 
       try {
@@ -90,7 +102,6 @@ export class ResilientHttpClient {
               : {}),
           },
         });
-        clearTimeout(timer);
 
         // Count retryable HTTP errors toward circuit breaker, regardless of
         // whether we will actually retry. A server consistently returning 502
@@ -111,7 +122,11 @@ export class ResilientHttpClient {
         this.consecutiveFailures = 0;
         return response;
       } catch (error) {
-        clearTimeout(timer);
+        // A caller-requested abort is authoritative and must not be retried.
+        if (externalSignal?.aborted) {
+          throw error;
+        }
+
         this.consecutiveFailures++;
         if (
           this.consecutiveFailures >= this.config.circuitBreakerThreshold
@@ -121,6 +136,9 @@ export class ResilientHttpClient {
         }
         if (attempt === maxRetries) throw error;
         await this.backoff(attempt);
+      } finally {
+        clearTimeout(timer);
+        externalSignal?.removeEventListener("abort", forwardExternalAbort);
       }
     }
 
