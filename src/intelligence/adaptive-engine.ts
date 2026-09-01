@@ -292,11 +292,16 @@ export class AdaptivePathEngine {
       this.completePath(
         path.id,
         input.evidence ?? input.observations ?? ["Path succeeded."],
+        false,
       );
     }
   }
 
-  completePath(pathId: string, evidence: string[] = ["Path completed."]): void {
+  completePath(
+    pathId: string,
+    evidence: string[] = ["Path completed."],
+    recordCompletionEvidence = true,
+  ): void {
     const path = this.store.getPath(pathId);
     if (!path) return;
 
@@ -312,15 +317,17 @@ export class AdaptivePathEngine {
       }
     }
 
-    for (const item of evidence) {
-      if (!item.trim()) continue;
-      this.store.recordEvidence({
-        goalId: path.goalId,
-        pathId: path.id,
-        kind: "observation",
-        content: item,
-        source: "path-completion",
-      });
+    if (recordCompletionEvidence) {
+      for (const item of evidence) {
+        if (!item.trim()) continue;
+        this.store.recordEvidence({
+          goalId: path.goalId,
+          pathId: path.id,
+          kind: "observation",
+          content: item,
+          source: "path-completion",
+        });
+      }
     }
   }
 
