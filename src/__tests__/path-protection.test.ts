@@ -12,6 +12,7 @@
 import { describe, it, expect } from "vitest";
 import path from "path";
 import { isProtectedFile } from "../self-mod/code.js";
+import { RUNTIME_ROOT } from "../runtime-root.js";
 import { createPathProtectionRules } from "../agent/policy-rules/path-protection.js";
 import type { PolicyRequest, AbosTool, ToolContext } from "../types.js";
 
@@ -252,9 +253,8 @@ describe("path protection policy rules", () => {
     });
 
     it("allows edit_own_file with absolute paths within cwd", () => {
-      const cwd = process.cwd();
       const request = makeMockRequest("edit_own_file", {
-        path: path.join(cwd, "src", "index.ts"),
+        path: path.join(RUNTIME_ROOT, "src", "index.ts"),
       });
       request.tool = makeMockTool("edit_own_file");
       const result = traversalRule.evaluate(request);
