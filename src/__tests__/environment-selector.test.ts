@@ -157,7 +157,9 @@ describe("EnvironmentSelector", () => {
     });
 
     expect(result.selected).toBeNull();
-    expect(result.candidates[0]?.blockers.join(" ")).toContain("cost is unknown");
+    expect(result.candidates[0]?.blockers.join(" ")).toContain(
+      "coverage=unknown",
+    );
   });
 
   it("fails closed on partial cost coverage under an explicit budget", async () => {
