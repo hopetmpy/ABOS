@@ -298,12 +298,14 @@ export class Orchestrator {
       return;
     }
 
+    const binding = this.adaptive.store.getTaskBinding(task.id);
     const decision = this.adaptive.recordFailure({
       candidate: taskToPathCandidate(
         task,
         goalRowToGoal(goalRow),
-        this.adaptive.store.getTaskBinding(task.id),
+        binding,
       ),
+      pathId: binding?.pathId ?? null,
       error,
       evidence: task.result?.output ? [task.result.output] : [],
       conditions: await this.currentConditions(task),
@@ -634,14 +636,19 @@ export class Orchestrator {
 
         const assignedRow = getTaskById(this.params.db, executionTask.id);
         if (assignedRow) {
-          this.adaptive.selectCandidate(
-            taskToPathCandidate(
-              taskRowToTaskNode(assignedRow),
-              goalRowToGoal(goal),
-              this.adaptive.store.getTaskBinding(assignedRow.id),
-            ),
-            await this.currentConditions(taskRowToTaskNode(assignedRow)),
-          );
+          const binding = this.adaptive.store.getTaskBinding(assignedRow.id);
+          if (binding?.pathId) {
+            this.adaptive.store.setPathStatus(binding.pathId, "executing");
+          } else {
+            this.adaptive.selectCandidate(
+              taskToPathCandidate(
+                taskRowToTaskNode(assignedRow),
+                goalRowToGoal(goal),
+                binding,
+              ),
+              await this.currentConditions(taskRowToTaskNode(assignedRow)),
+            );
+          }
         }
 
         const isLocalWorker = assignment.agentAddress.startsWith("local://");
@@ -712,12 +719,15 @@ export class Orchestrator {
 
       if (event.result.success) {
         try {
+          const binding = this.adaptive.store.getTaskBinding(taskRow.id);
           this.adaptive.recordSuccess({
             candidate: taskToPathCandidate(
               taskRowToTaskNode(taskRow),
               goalRowToGoal(goal),
-              this.adaptive.store.getTaskBinding(taskRow.id),
+              binding,
             ),
+            pathId: binding?.pathId ?? null,
+            markPathSucceeded: !binding?.pathId,
             observations: [event.result.output],
             evidence: event.result.artifacts,
             conditions: await this.currentConditions(taskRowToTaskNode(taskRow)),
@@ -752,6 +762,14 @@ export class Orchestrator {
     const progress = getGoalProgress(this.params.db, goal.id);
 
     if (progress.total > 0 && progress.completed === progress.total) {
+      const strategicPathId = this.adaptive.store.currentBoundPathId(goal.id);
+      if (strategicPathId) {
+        this.adaptive.completePath(
+          strategicPathId,
+          ["All non-superseded tasks for the strategic path completed successfully."],
+        );
+      }
+
       updateGoalStatus(this.params.db, goal.id, "completed");
       return {
         ...state,
