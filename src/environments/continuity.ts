@@ -190,6 +190,10 @@ export function scopeExecutionContinuationContext(
     samePath && context.checkpoint?.pathId === targetPathId
       ? cloneCheckpoint(context.checkpoint)
       : null;
+  const path =
+    samePath && context.path?.id === targetPathId
+      ? clonePath(context.path)
+      : null;
 
   return {
     ...context,
@@ -211,16 +215,7 @@ export function scopeExecutionContinuationContext(
         : null,
       metadata: cloneRecord(context.task.metadata),
     },
-    path: context.path
-      ? {
-          ...context.path,
-          assumptions: [...context.path.assumptions],
-          requiredCapabilities: [...context.path.requiredCapabilities],
-          sequence: [...context.path.sequence],
-          evidence: [...context.path.evidence],
-          metadata: cloneRecord(context.path.metadata),
-        }
-      : null,
+    path,
     history: {
       failures: context.history.failures.map(cloneFailure),
       decisions: context.history.decisions.map(cloneDecision),
@@ -235,6 +230,17 @@ export function scopeExecutionContinuationContext(
       metadata: cloneRecord(source.metadata),
     })),
     extensions: { ...context.extensions },
+  };
+}
+
+function clonePath(path: ContinuationPathView): ContinuationPathView {
+  return {
+    ...path,
+    assumptions: [...path.assumptions],
+    requiredCapabilities: [...path.requiredCapabilities],
+    sequence: [...path.sequence],
+    evidence: [...path.evidence],
+    metadata: cloneRecord(path.metadata),
   };
 }
 
