@@ -602,7 +602,7 @@ describe("orchestration/Orchestrator", () => {
       };
     }
 
-    it("transitions to replanning when task permanently fails and replanCount < maxReplans", async () => {
+    it("transitions to replanning when a strategic task path fails", async () => {
       const goalId = insertGoal(db, { status: "active" });
       // max_retries=0 so failTask marks it permanently failed (no retry budget)
       const taskId = insertTask(db, { goalId, status: "running" });
@@ -618,7 +618,7 @@ describe("orchestration/Orchestrator", () => {
       expect(state?.failedError).toBe("some error");
     });
 
-    it("transitions to failed when replanCount >= maxReplans", async () => {
+    it("does not treat replanCount as evidence that the objective failed", async () => {
       const goalId = insertGoal(db, { status: "active" });
       // max_retries=0 so failTask marks it permanently failed (no retry budget)
       const taskId = insertTask(db, { goalId, status: "running" });
@@ -629,10 +629,11 @@ describe("orchestration/Orchestrator", () => {
       await orc.handleFailure(makeTaskNode(goalId, taskId), "fatal");
 
       const state = getOrchestratorState(db);
-      expect(state?.phase).toBe("failed");
+      expect(state?.phase).toBe("replanning");
+      expect(state?.failedTaskId).toBe(taskId);
     });
 
-    it("retries task when retry budget allows (maxRetries > retryCount)", async () => {
+    it("uses a narrow technical retry for a transient failure", async () => {
       const goalId = insertGoal(db, { status: "active" });
       const taskId = insertTask(db, { goalId, status: "running" });
       // Insert with retries available
@@ -640,7 +641,7 @@ describe("orchestration/Orchestrator", () => {
       setOrchestratorState(db, { phase: "executing", goalId, replanCount: 0, failedTaskId: null, failedError: null });
 
       const orc = makeOrchestrator(db, { config: { maxReplans: 3 } });
-      await orc.handleFailure(makeTaskNode(goalId, taskId), "transient");
+      await orc.handleFailure(makeTaskNode(goalId, taskId), "ETIMEDOUT contacting provider");
 
       // Task should have been retried (status pending or blocked, not necessarily failed)
       const taskRow = db.prepare("SELECT status FROM task_graph WHERE id = ?").get(taskId) as
