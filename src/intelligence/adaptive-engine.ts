@@ -190,15 +190,19 @@ export class AdaptivePathEngine {
 
     this.store.setPathStatus(
       path.id,
-      diagnosis.classification === "prohibited"
-        ? "prohibited"
-        : diagnosis.classification === "impossible"
-          ? "impossible"
-          : diagnosis.classification === "environment_unavailable" ||
-              diagnosis.classification === "resource_unavailable" ||
-              diagnosis.classification === "authorization"
-            ? "unavailable"
-            : "failed",
+      diagnosis.classification === "transient"
+        ? "executing"
+        : diagnosis.classification === "capability_missing"
+          ? "blocked"
+          : diagnosis.classification === "prohibited"
+            ? "prohibited"
+            : diagnosis.classification === "impossible"
+              ? "impossible"
+              : diagnosis.classification === "environment_unavailable" ||
+                  diagnosis.classification === "resource_unavailable" ||
+                  diagnosis.classification === "authorization"
+                ? "unavailable"
+                : "failed",
     );
 
     const action = actionForDiagnosis(diagnosis.classification);
