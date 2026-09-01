@@ -151,6 +151,30 @@ describe("adaptive path persistence", () => {
     }
   });
 
+  it("treats the first real attempt as novel even when the path was already selected", () => {
+    const db = memoryDb();
+    try {
+      const engine = new AdaptivePathEngine(db);
+      const selected = engine.selectCandidate(
+        candidate(),
+        { network: "degraded" },
+      );
+
+      const decision = engine.recordFailure({
+        candidate: candidate(),
+        error: "ETIMEDOUT contacting provider",
+        conditions: { network: "degraded" },
+      });
+
+      expect(decision.path.id).toBe(selected.path.id);
+      expect(decision.novelty.novel).toBe(true);
+      expect(decision.attempt.retryEligible).toBe(true);
+      expect(engine.store.listPaths("goal-1")).toHaveLength(1);
+    } finally {
+      db.close();
+    }
+  });
+
   it("marks a capability-missing path blocked rather than impossible", () => {
     const db = memoryDb();
     try {
