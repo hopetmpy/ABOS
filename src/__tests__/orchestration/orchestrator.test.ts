@@ -751,16 +751,22 @@ describe("orchestration/Orchestrator", () => {
   describe("collectResults", () => {
     function buildMessagingWithResults(
       raw: BetterSqlite3.Database,
-      messages: Array<{ type: string; content: string }>,
+      messages: Array<{
+        type: string;
+        content: string;
+        from?: string;
+        goalId?: string | null;
+        taskId?: string | null;
+      }>,
     ) {
       const processedMessages = messages.map((msg) => ({
         message: {
           id: ulid(),
           type: msg.type,
-          from: "0xagent",
+          from: msg.from ?? "0xagent",
           to: "0x1234",
-          goalId: null,
-          taskId: null,
+          goalId: msg.goalId ?? null,
+          taskId: msg.taskId ?? null,
           content: msg.content,
           priority: "normal" as const,
           requiresResponse: false,
@@ -782,7 +788,11 @@ describe("orchestration/Orchestrator", () => {
 
     it("processes task_result messages from inbox", async () => {
       const goalId = insertGoal(db);
-      const taskId = insertTask(db, { goalId });
+      const taskId = insertTask(db, {
+        goalId,
+        assignedTo: "0xagent",
+        status: "running",
+      });
       const content = JSON.stringify({ taskId, success: true, output: "done", artifacts: [], costCents: 5, duration: 100 });
       const messaging = buildMessagingWithResults(db, [{ type: "task_result", content }]);
       const orc = makeOrchestrator(db, { messaging });
@@ -790,6 +800,35 @@ describe("orchestration/Orchestrator", () => {
       expect(results).toHaveLength(1);
       expect(results[0].success).toBe(true);
       expect(results[0].output).toBe("done");
+    });
+
+    it("ignores a task_result from an agent that is not the current assignee", async () => {
+      const goalId = insertGoal(db);
+      const taskId = insertTask(db, {
+        goalId,
+        assignedTo: "0xlegit",
+        status: "running",
+      });
+      const content = JSON.stringify({
+        taskId,
+        success: true,
+        output: "spoofed completion",
+        artifacts: [],
+        costCents: 0,
+        duration: 1,
+      });
+      const messaging = buildMessagingWithResults(db, [{
+        type: "task_result",
+        content,
+        from: "0xattacker",
+        goalId,
+        taskId,
+      }]);
+      const orc = makeOrchestrator(db, { messaging });
+
+      const results = await orc.collectResults();
+
+      expect(results).toEqual([]);
     });
 
     it("ignores non-task_result messages", async () => {
