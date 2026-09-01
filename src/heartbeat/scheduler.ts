@@ -22,6 +22,7 @@ import {
   updateHeartbeatSchedule,
   insertHeartbeatHistory,
   acquireTaskLease,
+  renewTaskLease,
   releaseTaskLease,
   clearExpiredLeases,
   pruneExpiredDedupKeys,
@@ -34,7 +35,15 @@ const logger = createLogger("heartbeat.scheduler");
 
 const DEFAULT_TASK_TIMEOUT_MS = 30_000;
 const LEASE_TTL_MS = 60_000;
+const LEASE_RENEW_INTERVAL_MS = Math.floor(LEASE_TTL_MS / 3);
 const HISTORY_ID_COUNTER = { value: 0 };
+
+class HeartbeatTaskTimeoutError extends Error {
+  constructor(readonly timeoutMs: number) {
+    super(`Task timed out after ${timeoutMs}ms`);
+    this.name = "HeartbeatTaskTimeoutError";
+  }
+}
 
 function generateId(): string {
   const timestamp = Date.now().toString(36);
@@ -43,10 +52,18 @@ function generateId(): string {
   return `${timestamp}-${random}-${HISTORY_ID_COUNTER.value.toString(36)}`;
 }
 
-function timeoutPromise(ms: number): { promise: Promise<never>; clear: () => void } {
+function timeoutPromise(
+  ms: number,
+  onTimeout: () => void,
+): { promise: Promise<never>; clear: () => void } {
   let timerId: ReturnType<typeof setTimeout>;
   const promise = new Promise<never>((_, reject) => {
-    timerId = setTimeout(() => reject(new Error(`Task timed out after ${ms}ms`)), ms);
+    timerId = setTimeout(() => {
+      // Settle the timeout branch first so Promise.race deterministically
+      // records a timeout even when abort listeners reject immediately.
+      reject(new HeartbeatTaskTimeoutError(ms));
+      onTimeout();
+    }, ms);
   });
   return { promise, clear: () => clearTimeout(timerId!) };
 }
@@ -185,11 +202,20 @@ export class DurableScheduler {
 
     const startedAt = new Date().toISOString();
     const startMs = Date.now();
-    const timeout = timeoutPromise(timeoutMs);
+    const abortController = new AbortController();
+    const taskContext: TickContext = {
+      ...ctx,
+      abortSignal: abortController.signal,
+    };
+    const executionPromise = Promise.resolve().then(() =>
+      taskFn(taskContext, this.legacyContext),
+    );
+    const timeout = timeoutPromise(timeoutMs, () => abortController.abort());
+    let timedOut = false;
 
     try {
       const result = await Promise.race([
-        taskFn(ctx, this.legacyContext),
+        executionPromise,
         timeout.promise,
       ]);
 
@@ -200,29 +226,37 @@ export class DurableScheduler {
       if (result.shouldWake && this.onWakeRequest) {
         const reason = result.message || `Heartbeat task '${taskName}' requested wake`;
         this.onWakeRequest(reason);
-        insertWakeEvent(this.db, 'heartbeat', reason, { taskName });
+        insertWakeEvent(this.db, "heartbeat", reason, { taskName });
       }
     } catch (err: any) {
       const durationMs = Date.now() - startMs;
-      const isTimeout = err.message?.includes("timed out");
+      timedOut = err instanceof HeartbeatTaskTimeoutError;
       this.recordFailure(
         taskName,
         err,
         durationMs,
         startedAt,
-        isTimeout ? "timeout" : "failure",
+        timedOut ? "timeout" : "failure",
       );
 
-      // Check if we should retry
+      // maxRetries means retries AFTER the initial attempt. Since history
+      // includes the current failure, <= preserves exactly that semantic.
       if (schedule && schedule.maxRetries > 0) {
         const history = this.getRecentFailures(taskName);
-        if (history < schedule.maxRetries) {
+        if (history <= schedule.maxRetries) {
           this.scheduleRetry(taskName);
         }
       }
     } finally {
       timeout.clear();
-      this.releaseLease(taskName);
+      if (timedOut) {
+        this.holdLeaseUntilTaskSettles(
+          taskName,
+          executionPromise,
+        );
+      } else {
+        this.releaseLease(taskName);
+      }
     }
   }
 
@@ -320,6 +354,64 @@ export class DurableScheduler {
   }
 
   // ─── Private helpers ──────────────────────────────────────────
+
+  private holdLeaseUntilTaskSettles(
+    taskName: string,
+    executionPromise: Promise<{ shouldWake: boolean; message?: string }>,
+  ): void {
+    // Refresh immediately, then periodically, so an attempt that ignored or
+    // cannot honor AbortSignal cannot overlap with another scheduler attempt.
+    const renew = () => {
+      try {
+        return renewTaskLease(
+          this.db,
+          taskName,
+          this.ownerId,
+          LEASE_TTL_MS,
+        );
+      } catch (error) {
+        logger.error(
+          `Failed to renew timed-out task lease for '${taskName}'`,
+          error instanceof Error ? error : undefined,
+        );
+        return false;
+      }
+    };
+
+    renew();
+    const renewalTimer = setInterval(() => {
+      if (!renew()) {
+        clearInterval(renewalTimer);
+      }
+    }, LEASE_RENEW_INTERVAL_MS);
+    (renewalTimer as unknown as { unref?: () => void }).unref?.();
+
+    const settle = (completedLate: boolean, error?: unknown) => {
+      clearInterval(renewalTimer);
+
+      if (completedLate) {
+        // The operation did finish, so a timeout retry would duplicate work.
+        updateHeartbeatSchedule(this.db, taskName, { nextRunAt: null });
+        logger.warn(
+          `Task '${taskName}' completed after its timeout; pending retry suppressed to avoid duplicate effects`,
+        );
+      } else {
+        logger.warn(
+          `Task '${taskName}' settled with an error after its timeout`,
+          {
+            error: error instanceof Error ? error.message : String(error),
+          },
+        );
+      }
+
+      this.releaseLease(taskName);
+    };
+
+    executionPromise.then(
+      () => settle(true),
+      (error) => settle(false, error),
+    );
+  }
 
   private getRunCount(taskName: string): number {
     const row = this.db.prepare(
