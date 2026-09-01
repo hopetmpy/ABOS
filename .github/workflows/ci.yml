@@ -218,3 +218,33 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Verify dependency audit is clean
         run: pnpm audit
+
+  public-distribution-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Anonymous clone, install, build, and smoke public ABOS
+        shell: bash
+        env:
+          GIT_TERMINAL_PROMPT: "0"
+        run: |
+          set -euo pipefail
+          unset GH_TOKEN GITHUB_TOKEN || true
+          rm -rf /tmp/abos-public-smoke
+          git -c credential.helper= clone --depth 1 --branch main --single-branch \
+            https://github.com/hopetmpy/ABOS.git /tmp/abos-public-smoke
+          cd /tmp/abos-public-smoke
+
+          test "$(git rev-parse --abbrev-ref HEAD)" = "main"
+          test "$(git config --get remote.origin.url)" = "https://github.com/hopetmpy/ABOS.git"
+
+          corepack enable pnpm
+          pnpm install --frozen-lockfile
+          pnpm run typecheck
+          pnpm run build
+          node dist/index.js --version
+          node dist/index.js --help
+
