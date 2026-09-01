@@ -16,6 +16,14 @@ import type { AbosConfig, ModelStrategyConfig, TreasuryPolicy, ModelEntry } from
 import { closePrompts } from "./prompts.js";
 import { createDatabase } from "../state/database.js";
 import { ModelRegistry } from "../inference/registry.js";
+import {
+  loadCodexCatalog,
+  refreshCodexCatalog,
+  syncCodexCatalogToRegistry,
+} from "../codex/catalog.js";
+import { CodexSessionManager } from "../codex/session-manager.js";
+import { connectCodex, disconnectCodex } from "../codex/commands.js";
+import { stripCodexRegistryPrefix } from "../codex/inference.js";
 
 // ─── Readline helpers ─────────────────────────────────────────────
 
@@ -103,6 +111,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   anthropic: "Anthropic",
   conway: "Conway",
   ollama: "Ollama",
+  codex: "Codex",
   other: "Other",
 };
 
@@ -112,6 +121,9 @@ function printModelTable(models: ModelEntry[], currentModelId: string): void {
     const m = models[i];
     const num = String(i + 1).padStart(numWidth);
     const provider = (PROVIDER_LABEL[m.provider] || m.provider).padEnd(9);
+    const displayModelId = m.provider === "codex"
+      ? stripCodexRegistryPrefix(m.modelId)
+      : m.modelId;
     const cost =
       m.costPer1kInput === 0
         ? chalk.green("free     ")
@@ -119,7 +131,7 @@ function printModelTable(models: ModelEntry[], currentModelId: string): void {
     const active = m.modelId === currentModelId ? chalk.green(" ◀ active") : "";
     const tools = m.supportsTools ? "" : chalk.dim(" (no tools)");
     console.log(
-      `  ${chalk.white(num + ".")} ${chalk.cyan(m.modelId.padEnd(36))} ${chalk.dim(provider)} ${cost}${tools}${active}`,
+      `  ${chalk.white(num + ".")} ${chalk.cyan(displayModelId.padEnd(36))} ${chalk.dim(provider)} ${cost}${tools}${active}`,
     );
   }
 }
@@ -174,6 +186,7 @@ function printMainMenu(config: AbosConfig): void {
     config.openaiApiKey ? "OpenAI" : null,
     config.anthropicApiKey ? "Anthropic" : null,
     config.ollamaBaseUrl ? "Ollama" : null,
+    config.codex?.enabled ? "Codex" : null,
     "Conway",
   ].filter(Boolean).join(", ");
 
@@ -207,6 +220,23 @@ async function configureProviders(config: AbosConfig): Promise<void> {
   config.anthropicApiKey = await askString("Anthropic API key  (sk-ant-...)", config.anthropicApiKey) || undefined;
   config.ollamaBaseUrl = await askString("Ollama base URL  (http://localhost:11434)", config.ollamaBaseUrl) || undefined;
 
+  const codexState = config.codex?.enabled ? chalk.green("connected") : chalk.dim("disconnected");
+  console.log(`\n  Codex / ChatGPT OAuth: ${codexState}`);
+  const codexAction = await ask(
+    `  ${chalk.white("→")} Codex action ${chalk.dim("[Enter=keep, c=connect, d=disconnect, r=refresh models]")}: `,
+  );
+  if (codexAction === "c" || codexAction === "connect") {
+    await connectCodex(config);
+  } else if (codexAction === "d" || codexAction === "disconnect") {
+    await disconnectCodex(config);
+  } else if ((codexAction === "r" || codexAction === "refresh") && config.codex?.enabled) {
+    const snapshot = await refreshCodexCatalog(
+      new CodexSessionManager(),
+      config.codex.includeHiddenModels ?? false,
+    );
+    console.log(chalk.green(`  ✓ Refreshed ${snapshot.models.length} Codex model(s).`));
+  }
+
   console.log("");
 }
 
@@ -228,6 +258,23 @@ async function configureModelStrategy(config: AbosConfig): Promise<void> {
     await discoverOllamaModels(ollamaBaseUrl, db.raw);
   }
 
+  let codexCatalog = loadCodexCatalog();
+  if (config.codex?.enabled) {
+    try {
+      codexCatalog = await refreshCodexCatalog(
+        new CodexSessionManager(),
+        config.codex.includeHiddenModels ?? false,
+      );
+    } catch (error) {
+      console.log(
+        chalk.yellow(
+          `  Codex model refresh unavailable; using cache if present: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+      );
+    }
+    if (codexCatalog) syncCodexCatalogToRegistry(registry, codexCatalog);
+  }
+
   const models = registry.getAll().filter((m) => m.enabled);
   db.close();
 
@@ -238,6 +285,29 @@ async function configureModelStrategy(config: AbosConfig): Promise<void> {
 
   config.inferenceModel = await pickFromList("Active model", config.inferenceModel, models);
   s.inferenceModel = config.inferenceModel;
+
+  const activeEntry = models.find((model) => model.modelId === config.inferenceModel);
+  if (activeEntry?.provider === "codex") {
+    const actualModel = stripCodexRegistryPrefix(activeEntry.modelId);
+    const descriptor = codexCatalog?.models.find((model) => model.model === actualModel);
+    const efforts = descriptor?.supportedReasoningEfforts || [];
+    const existingEffort = config.codex?.reasoningEffort;
+    const existingValid =
+      !!existingEffort && (
+        efforts.length === 0 ||
+        efforts.some((effort) => effort.reasoningEffort === existingEffort)
+      );
+    config.codex = {
+      enabled: true,
+      includeHiddenModels: config.codex?.includeHiddenModels ?? false,
+      ...config.codex,
+      selectedModel: actualModel,
+      reasoningEffort: existingValid
+        ? existingEffort
+        : descriptor?.defaultReasoningEffort || efforts[0]?.reasoningEffort,
+    };
+  }
+
   s.lowComputeModel = await pickFromList("Low-compute fallback", s.lowComputeModel, models);
   s.criticalModel = await pickFromList("Critical fallback", s.criticalModel, models);
 
@@ -355,5 +425,5 @@ export async function runConfigure(): Promise<void> {
 
   if (rl) { rl.close(); rl = null; }
   closePrompts();
-  console.log(chalk.dim("  Done. Restart the abos to apply changes.\n"));
+  console.log(chalk.dim("  Done. Model changes apply on the next inference turn; provider key/endpoint changes may require a restart.\n"));
 }

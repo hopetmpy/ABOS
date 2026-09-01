@@ -62,6 +62,8 @@ Usage:
   abos --setup        Re-run the interactive setup wizard
   abos --configure    Edit configuration (providers, model, treasury, general)
   abos --pick-model   Interactively pick the active inference model
+  abos --model <id>   Switch active model (hot on next inference turn)
+                     Add --reasoning <effort> for Codex models
   abos --codex-login  Connect ChatGPT/Codex with device-code OAuth
   abos --codex-status Show current Codex account connection
   abos --codex-models Refresh and list models available to the Codex account
@@ -153,6 +155,23 @@ Environment:
   if (args.includes("--setup")) {
     const { runSetupWizard } = await import("./setup/wizard.js");
     await runSetupWizard();
+    process.exit(0);
+  }
+
+  const modelArgIndex = args.indexOf("--model");
+  if (modelArgIndex >= 0) {
+    const requestedModel = args[modelArgIndex + 1] && !args[modelArgIndex + 1].startsWith("--")
+      ? args[modelArgIndex + 1]
+      : undefined;
+    const reasoningArgIndex = args.indexOf("--reasoning");
+    const requestedReasoning =
+      reasoningArgIndex >= 0 &&
+      args[reasoningArgIndex + 1] &&
+      !args[reasoningArgIndex + 1].startsWith("--")
+        ? args[reasoningArgIndex + 1]
+        : undefined;
+    const { runModelPicker } = await import("./setup/model-picker.js");
+    await runModelPicker(requestedModel, requestedReasoning);
     process.exit(0);
   }
 

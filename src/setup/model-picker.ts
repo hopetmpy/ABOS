@@ -19,7 +19,8 @@ import {
 } from "../codex/catalog.js";
 import { CodexSessionManager } from "../codex/session-manager.js";
 import { stripCodexRegistryPrefix } from "../codex/inference.js";
-import type { ModelEntry } from "../types.js";
+import { DEFAULT_MODEL_STRATEGY_CONFIG } from "../types.js";
+import type { AbosConfig, ModelEntry } from "../types.js";
 import { promptOptional, closePrompts } from "./prompts.js";
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -31,7 +32,10 @@ const PROVIDER_LABEL: Record<string, string> = {
   other: "Other",
 };
 
-export async function runModelPicker(): Promise<void> {
+export async function runModelPicker(
+  requestedModel?: string,
+  requestedReasoning?: string,
+): Promise<void> {
   const config = loadConfig();
   if (!config) {
     console.log(chalk.red("  ABOS is not configured. Run: abos --setup"));
@@ -78,6 +82,35 @@ export async function runModelPicker(): Promise<void> {
     return;
   }
 
+  if (requestedModel) {
+    let selected: ModelEntry;
+    try {
+      selected = resolveRequestedModel(models, requestedModel);
+    } catch (error) {
+      console.log(chalk.red(`  ${error instanceof Error ? error.message : String(error)}`));
+      db.close();
+      closePrompts();
+      return;
+    }
+    try {
+      await applyModelSelection(config, selected, codexCatalog, requestedReasoning, false);
+    } catch (error) {
+      console.log(chalk.red(`  ${error instanceof Error ? error.message : String(error)}`));
+      db.close();
+      closePrompts();
+      return;
+    }
+    saveConfig(config);
+    console.log(chalk.green(`\n  Active model set to: ${selected.modelId} (${selected.displayName})`));
+    if (selected.provider === "codex" && config.codex?.reasoningEffort) {
+      console.log(chalk.green(`  Reasoning: ${config.codex.reasoningEffort}`));
+    }
+    console.log(chalk.dim("  The running ABOS process will use this selection on its next inference turn.\n"));
+    db.close();
+    closePrompts();
+    return;
+  }
+
   console.log(chalk.cyan("\n  Available Models\n"));
   printModelTable(models, config.inferenceModel);
 
@@ -100,42 +133,7 @@ export async function runModelPicker(): Promise<void> {
   }
 
   const selected = models[idx];
-  config.inferenceModel = selected.modelId;
-  if (config.modelStrategy) {
-    config.modelStrategy.inferenceModel = selected.modelId;
-  }
-
-  if (selected.provider === "codex") {
-    const actualModel = stripCodexRegistryPrefix(selected.modelId);
-    const descriptor = codexCatalog?.models.find((model) => model.model === actualModel);
-    config.codex = {
-      enabled: true,
-      includeHiddenModels: config.codex?.includeHiddenModels ?? false,
-      ...config.codex,
-      selectedModel: actualModel,
-    };
-
-    const efforts = descriptor?.supportedReasoningEfforts || [];
-    if (efforts.length > 0) {
-      console.log(chalk.cyan("\n  Reasoning Effort\n"));
-      efforts.forEach((effort, i) => {
-        const active = effort.reasoningEffort === config.codex?.reasoningEffort
-          ? chalk.green(" ◀ active")
-          : "";
-        console.log(`  ${i + 1}. ${effort.reasoningEffort} - ${effort.description}${active}`);
-      });
-      const effortInput = await promptOptional(
-        `Enter reasoning number [default: ${descriptor?.defaultReasoningEffort || efforts[0].reasoningEffort}]`,
-      );
-      const effortIndex = effortInput ? parseInt(effortInput, 10) - 1 : -1;
-      const chosenEffort =
-        effortIndex >= 0 && effortIndex < efforts.length
-          ? efforts[effortIndex].reasoningEffort
-          : descriptor?.defaultReasoningEffort || config.codex.reasoningEffort || efforts[0].reasoningEffort;
-      config.codex.reasoningEffort = chosenEffort;
-    }
-  }
-
+  await applyModelSelection(config, selected, codexCatalog, requestedReasoning, true);
   saveConfig(config);
   closePrompts();
 
@@ -165,4 +163,98 @@ function printModelTable(models: ModelEntry[], currentModelId: string): void {
       `  ${chalk.white(num + ".")} ${chalk.cyan(displayModelId.padEnd(32))} ${chalk.dim(provider)} ${cost}${tools}${active}`,
     );
   }
+}
+
+
+export function resolveRequestedModel(models: ModelEntry[], requested: string): ModelEntry {
+  const normalized = requested.trim();
+  if (!normalized) throw new Error("Model id cannot be empty");
+
+  const matches = models.filter((model) => {
+    if (model.modelId === normalized) return true;
+    return model.provider === "codex" && stripCodexRegistryPrefix(model.modelId) === normalized;
+  });
+
+  if (matches.length === 0) {
+    throw new Error(
+      `Unknown model '${normalized}'. Run 'abos --pick-model' or 'abos --codex-models' to inspect available models.`,
+    );
+  }
+
+  if (matches.length > 1) {
+    const ids = matches.map((model) => model.modelId).join(", ");
+    throw new Error(
+      `Model '${normalized}' is ambiguous across providers (${ids}). Use the provider-qualified model id.`,
+    );
+  }
+
+  return matches[0];
+}
+
+async function applyModelSelection(
+  config: AbosConfig,
+  selected: ModelEntry,
+  codexCatalog: ReturnType<typeof loadCodexCatalog>,
+  requestedReasoning: string | undefined,
+  interactive: boolean,
+): Promise<void> {
+  config.inferenceModel = selected.modelId;
+  config.modelStrategy = {
+    ...DEFAULT_MODEL_STRATEGY_CONFIG,
+    ...(config.modelStrategy || {}),
+    inferenceModel: selected.modelId,
+  };
+
+  if (selected.provider !== "codex") return;
+
+  const actualModel = stripCodexRegistryPrefix(selected.modelId);
+  const descriptor = codexCatalog?.models.find((model) => model.model === actualModel);
+  config.codex = {
+    enabled: true,
+    includeHiddenModels: config.codex?.includeHiddenModels ?? false,
+    ...config.codex,
+    selectedModel: actualModel,
+  };
+
+  const efforts = descriptor?.supportedReasoningEfforts || [];
+  if (requestedReasoning) {
+    if (
+      efforts.length > 0 &&
+      !efforts.some((effort) => effort.reasoningEffort === requestedReasoning)
+    ) {
+      throw new Error(
+        `Reasoning effort '${requestedReasoning}' is not advertised for ${actualModel}. Available: ${efforts.map((effort) => effort.reasoningEffort).join(", ")}`,
+      );
+    }
+    config.codex.reasoningEffort = requestedReasoning;
+    return;
+  }
+
+  if (!interactive || efforts.length === 0) {
+    const existing = config.codex.reasoningEffort;
+    const existingIsValid = existing && (
+      efforts.length === 0 ||
+      efforts.some((effort) => effort.reasoningEffort === existing)
+    );
+    config.codex.reasoningEffort = existingIsValid
+      ? existing
+      : descriptor?.defaultReasoningEffort || efforts[0]?.reasoningEffort;
+    return;
+  }
+
+  console.log(chalk.cyan("\n  Reasoning Effort\n"));
+  efforts.forEach((effort, i) => {
+    const active = effort.reasoningEffort === config.codex?.reasoningEffort
+      ? chalk.green(" ◀ active")
+      : "";
+    console.log(`  ${i + 1}. ${effort.reasoningEffort} - ${effort.description}${active}`);
+  });
+  const effortInput = await promptOptional(
+    `Enter reasoning number [default: ${descriptor?.defaultReasoningEffort || efforts[0].reasoningEffort}]`,
+  );
+  const effortIndex = effortInput ? parseInt(effortInput, 10) - 1 : -1;
+  config.codex.reasoningEffort =
+    effortIndex >= 0 && effortIndex < efforts.length
+      ? efforts[effortIndex].reasoningEffort
+      : descriptor?.defaultReasoningEffort || config.codex.reasoningEffort || efforts[0].reasoningEffort;
 }

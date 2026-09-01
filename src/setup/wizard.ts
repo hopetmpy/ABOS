@@ -204,6 +204,22 @@ export async function runSetupWizard(): Promise<AbosConfig> {
   saveConfig(config);
   console.log(chalk.green("  abos.json written"));
 
+  const connectCodexNow = await promptOptional(
+    "Connect ChatGPT/Codex via device-code OAuth now? (y/N)",
+  );
+  if (/^(y|yes)$/i.test(connectCodexNow)) {
+    try {
+      const { connectCodex } = await import("../codex/commands.js");
+      await connectCodex(config);
+    } catch (error) {
+      console.log(
+        chalk.yellow(
+          `  Codex connection skipped: ${error instanceof Error ? error.message : String(error)}\n`,
+        ),
+      );
+    }
+  }
+
   writeDefaultHeartbeatConfig();
   console.log(chalk.green("  heartbeat.yml written"));
 

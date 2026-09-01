@@ -1,16 +1,11 @@
 import chalk from "chalk";
 import { loadConfig, saveConfig } from "../config.js";
 import { DEFAULT_CODEX_PROVIDER_CONFIG } from "../types.js";
+import type { AbosConfig } from "../types.js";
 import { refreshCodexCatalog } from "./catalog.js";
 import { CodexSessionManager } from "./session-manager.js";
 
-export async function runCodexLogin(): Promise<void> {
-  const config = loadConfig();
-  if (!config) {
-    console.log(chalk.red("  ABOS is not configured. Run: abos --setup"));
-    return;
-  }
-
+export async function connectCodex(config: AbosConfig): Promise<number> {
   const manager = new CodexSessionManager();
   const handle = await manager.beginDeviceCodeLogin();
 
@@ -35,13 +30,24 @@ export async function runCodexLogin(): Promise<void> {
   try {
     const snapshot = await refreshCodexCatalog(manager, config.codex.includeHiddenModels);
     console.log(chalk.green(`  ✓ Discovered ${snapshot.models.length} Codex model(s).\n`));
+    return snapshot.models.length;
   } catch (error) {
     console.log(
       chalk.yellow(
         `  Connected, but model catalog refresh failed: ${error instanceof Error ? error.message : String(error)}\n`,
       ),
     );
+    return 0;
   }
+}
+
+export async function runCodexLogin(): Promise<void> {
+  const config = loadConfig();
+  if (!config) {
+    console.log(chalk.red("  ABOS is not configured. Run: abos --setup"));
+    return;
+  }
+  await connectCodex(config);
 }
 
 export async function runCodexStatus(): Promise<void> {
@@ -59,20 +65,25 @@ export async function runCodexStatus(): Promise<void> {
   if (plan) console.log(`  Plan: ${plan}`);
 }
 
-export async function runCodexLogout(): Promise<void> {
+export async function disconnectCodex(config: AbosConfig): Promise<void> {
   const manager = new CodexSessionManager();
   await manager.logout();
-
-  const config = loadConfig();
-  if (config) {
-    config.codex = {
-      ...DEFAULT_CODEX_PROVIDER_CONFIG,
-      ...(config.codex || {}),
-      enabled: false,
-    };
-    saveConfig(config);
-  }
+  config.codex = {
+    ...DEFAULT_CODEX_PROVIDER_CONFIG,
+    ...(config.codex || {}),
+    enabled: false,
+  };
+  saveConfig(config);
   console.log(chalk.green("  ✓ Codex disconnected."));
+}
+
+export async function runCodexLogout(): Promise<void> {
+  const config = loadConfig();
+  if (!config) {
+    console.log(chalk.red("  ABOS is not configured. Run: abos --setup"));
+    return;
+  }
+  await disconnectCodex(config);
 }
 
 export async function runCodexModels(): Promise<void> {
