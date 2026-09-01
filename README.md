@@ -52,14 +52,26 @@ pnpm run build
 node dist/index.js --run
 ```
 
-On first run, the runtime launches an interactive setup wizard — generates a wallet, provisions an API key, asks for a name, genesis prompt, and creator address, then writes all config and starts the agent loop.
+On first run, the runtime launches an interactive setup wizard — generates a wallet, provisions Conway identity access, asks for a name, genesis prompt, and creator address, then opens **Connect AI** before starting the agent loop. Connect AI separates connection method, provider, and model. ABOS ships OAuth, API Key, and Local / Self-hosted as built-in connection-method conventions, while provider/method identifiers remain open for additional adapters.
 
 Runtime source and identity/state are deliberately separate. ABOS state lives in `~/.abos`. Do not place the runtime checkout inside that directory. The installer uses `/opt/abos` for root installs and `${XDG_DATA_HOME:-$HOME/.local/share}/abos/runtime` for non-root installs; override with `ABOS_RUNTIME_DIR` when needed.
 
 For automated sandbox provisioning:
-The canonical source is the private ABOS repository. Install from an authenticated checkout so code always comes from `hopetmpy/ABOS`.
+The canonical source is the public `hopetmpy/ABOS` repository. A normal clone or GitHub source download follows the default `main` branch.
 
 Note: Conway Cloud, Domains, and Inference has seen immense demand. We are working on scaling & perfomance.
+
+## AI Connections
+
+Use `abos --connect-ai` to configure inference through:
+
+- **OAuth** — ChatGPT / Codex is the currently shipped OAuth adapter and uses provider-managed device-code authentication.
+- **API Key** — OpenAI, Anthropic, and Conway adapters are currently shipped.
+- **Local / Self-hosted** — Ollama is currently shipped.
+
+These are not closed provider lists. Connection method and provider IDs are open, and additional adapters can be registered without expanding a central enum. Model discovery feeds the existing `ModelRegistry`; AI Connections does not create another model database.
+
+Codex keeps the ChatGPT OAuth session and tokens. ABOS stores only non-secret connection/model metadata and can hot-switch the active main-agent model/route with `abos --model <id>` (plus provider-native options such as `--reasoning` when supported).
 
 ## How It Works
 
