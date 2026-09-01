@@ -250,6 +250,46 @@ describe("orchestration/Orchestrator", () => {
       expect(result.phase).toBe("plan_review");
     });
 
+    it("planner inference failure preserves the objective instead of inventing a single-task route", async () => {
+      const goalId = insertGoal(db, {
+        title: "Complex Goal",
+        description: "Needs a real plan",
+      });
+      setOrchestratorState(db, {
+        phase: "planning",
+        goalId,
+        replanCount: 0,
+        failedTaskId: null,
+        failedError: null,
+      });
+
+      const inference = {
+        chat: vi.fn().mockRejectedValue(new Error("planner provider unavailable")),
+      };
+
+      const orc = makeOrchestrator(db, { inference: inference as any });
+      const result = await orc.tick();
+
+      expect(result.phase).toBe("planning");
+      expect(result.failedError).toContain("planner provider unavailable");
+
+      const taskCount = db.prepare(
+        "SELECT COUNT(*) AS count FROM task_graph WHERE goal_id = ?",
+      ).get(goalId) as { count: number };
+      expect(taskCount.count).toBe(0);
+
+      const evidence = db.prepare(
+        "SELECT kind, source, content FROM adaptive_evidence WHERE goal_id = ?",
+      ).all(goalId) as Array<{ kind: string; source: string; content: string }>;
+      expect(evidence).toEqual([
+        expect.objectContaining({
+          kind: "error",
+          source: "planner-inference",
+          content: "planner provider unavailable",
+        }),
+      ]);
+    });
+
     it("plan_review with plan in KV auto-approves (auto mode) and transitions to executing", async () => {
       const goalId = insertGoal(db);
       insertTask(db, { goalId, title: "task-one", description: "Do something" });
