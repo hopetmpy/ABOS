@@ -187,6 +187,37 @@ describe("EnvironmentSelector", () => {
     );
   });
 
+  it("uses provider-neutral reusable resource evidence as ranking evidence", async () => {
+    const registry = new EnvironmentRegistry();
+    registry.register(provider({
+      id: "no-reuse",
+      capabilities: ["compute"],
+      cost: 5,
+      reliability: 0.9,
+    }));
+    registry.register(provider({
+      id: "has-reuse",
+      capabilities: ["compute"],
+      cost: 5,
+      reliability: 0.9,
+    }));
+
+    const result = await new EnvironmentSelector(registry, {
+      reuseEvaluator: (environmentId) =>
+        environmentId === "has-reuse" ? 1 : 0,
+    }).select({
+      requiredCapabilities: ["compute"],
+      maxEstimatedCostCents: 10,
+    });
+
+    expect(result.selected?.environmentId).toBe("has-reuse");
+    expect(
+      result.candidates.find(
+        (candidate) => candidate.environmentId === "has-reuse",
+      )?.estimate.evidence?.join(" "),
+    ).toContain("reusable candidates=1");
+  });
+
   it("lets policy exclude a route without treating the objective as impossible", async () => {
     const registry = new EnvironmentRegistry();
     registry.register(provider({
