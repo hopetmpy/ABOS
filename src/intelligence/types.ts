@@ -158,3 +158,14 @@ export interface PossibilitySpaceSnapshot {
   exhaustedSignatures: string[];
   unknownCount: number;
 }
+
+
+export interface AdaptiveTaskBinding {
+  taskId: string;
+  goalId: string;
+  pathId?: string | null;
+  requiredCapabilities: string[];
+  preferredEnvironment?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
