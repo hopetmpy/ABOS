@@ -769,7 +769,7 @@ export class Orchestrator {
                 evidence: executionFailure.evidence,
                 conditions: {
                   executionEnvironment: executionFailure.environmentId,
-                  executionStage: "spawn",
+                  executionStage: executionFailure.operation,
                 },
               }
             : {},
