@@ -18,8 +18,9 @@ describe("ABOS installation and state separation", () => {
     expect(script).not.toContain('else\n  INSTALL_DIR="$HOME/.abos/runtime"');
     expect(script).toContain('LEGACY_ABOS_RUNTIME="$HOME/.abos/runtime"');
     expect(script).toContain("Refusing runtime install inside ~/.abos");
-    expect(script).toContain("SOURCE_ORIGIN");
-    expect(script).toContain('git@github.com:*) REPO="$SOURCE_ORIGIN"');
+    expect(script).toContain('REPO="https://github.com/hopetmpy/ABOS.git"');
+    expect(script).toContain('git clone "$REPO" "$INSTALL_DIR"');
+    expect(script).not.toContain("SOURCE_ORIGIN");
   });
 
   it("has valid POSIX shell syntax when a POSIX shell is available", () => {
