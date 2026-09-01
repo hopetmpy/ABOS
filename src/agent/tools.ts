@@ -1923,38 +1923,25 @@ Model: ${ctx.inference.getDefaultModel()}
         if (!child) return `Child ${args.child_id} not found.`;
 
         const { ChildLifecycle } = await import("../replication/lifecycle.js");
+        const { ensureChildRuntimeRunning } =
+          await import("../replication/spawn.js");
         const lifecycle = new ChildLifecycle(ctx.db.raw);
 
-        lifecycle.transition(child.id, "starting", "start requested by parent");
-
-        // Create a scoped client targeting the CHILD's sandbox
-        const childConway = ctx.conway.createScopedClient(child.sandboxId);
-
         try {
-          // Start the child process with nohup so it survives exec session end
-          await childConway.exec(
-            "cd /root/abos && nohup node dist/index.js --run > /root/.abos/agent.log 2>&1 &",
-            30_000,
+          const result = await ensureChildRuntimeRunning(
+            ctx.conway,
+            ctx.db,
+            child.id,
+            lifecycle,
           );
-
-          // Brief pause then verify the process is actually running
-          const check = await childConway.exec(
-            "sleep 2 && pgrep -f 'index.js --run' > /dev/null && echo running || echo stopped",
-            15_000,
-          );
-
-          if (check.stdout.trim() === "running") {
-            lifecycle.transition(child.id, "healthy", "started successfully");
-            return `Child ${child.name} started and healthy.`;
-          } else {
-            lifecycle.transition(child.id, "failed", "process did not start");
-            return `Child ${child.name} failed to start — process exited immediately. Check /root/.abos/agent.log`;
+          if (!result.healthy) {
+            return `Child ${child.name} failed to start — runtime was not observed healthy. Check /root/.abos/agent.log`;
           }
+          return result.alreadyRunning
+            ? `Child ${child.name} is already running and healthy.`
+            : `Child ${child.name} started and healthy.`;
         } catch (error) {
           const msg = error instanceof Error ? error.message : String(error);
-          try {
-            lifecycle.transition(child.id, "failed", `start failed: ${msg}`);
-          } catch { /* may already be in terminal state */ }
           return `Failed to start child ${child.name}: ${msg}`;
         }
       },
