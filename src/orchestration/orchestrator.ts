@@ -299,7 +299,11 @@ export class Orchestrator {
     }
 
     const decision = this.adaptive.recordFailure({
-      candidate: taskToPathCandidate(task, goalRowToGoal(goalRow)),
+      candidate: taskToPathCandidate(
+        task,
+        goalRowToGoal(goalRow),
+        this.adaptive.store.getTaskBinding(task.id),
+      ),
       error,
       evidence: task.result?.output ? [task.result.output] : [],
       conditions: await this.currentConditions(task),
@@ -516,9 +520,14 @@ export class Orchestrator {
       return { ...state, phase: "planning" };
     }
 
-    this.adaptive.selectCandidate(plannedPath, conditions);
+    const selectedPath = this.adaptive.selectCandidate(plannedPath, conditions);
     this.params.db.prepare("UPDATE goals SET strategy = ? WHERE id = ?").run(output.strategy, goal.id);
-    decomposeGoal(this.params.db, goal.id, plannerOutputToTasks(goal.id, output));
+    const persistedTaskIds = decomposeGoal(
+      this.params.db,
+      goal.id,
+      plannerOutputToTasks(goal.id, output),
+    );
+    this.bindPlannedTasks(goal.id, selectedPath.path.id, persistedTaskIds, output.tasks);
     await this.persistPlannerOutput(goal.id, output, "plan");
 
     return {
@@ -622,7 +631,11 @@ export class Orchestrator {
         const assignedRow = getTaskById(this.params.db, task.id);
         if (assignedRow) {
           this.adaptive.selectCandidate(
-            taskToPathCandidate(taskRowToTaskNode(assignedRow), goalRowToGoal(goal)),
+            taskToPathCandidate(
+              taskRowToTaskNode(assignedRow),
+              goalRowToGoal(goal),
+              this.adaptive.store.getTaskBinding(assignedRow.id),
+            ),
             await this.currentConditions(taskRowToTaskNode(assignedRow)),
           );
         }
@@ -693,7 +706,11 @@ export class Orchestrator {
       if (event.result.success) {
         try {
           this.adaptive.recordSuccess({
-            candidate: taskToPathCandidate(taskRowToTaskNode(taskRow), goalRowToGoal(goal)),
+            candidate: taskToPathCandidate(
+              taskRowToTaskNode(taskRow),
+              goalRowToGoal(goal),
+              this.adaptive.store.getTaskBinding(taskRow.id),
+            ),
             observations: [event.result.output],
             evidence: event.result.artifacts,
             conditions: await this.currentConditions(taskRowToTaskNode(taskRow)),
@@ -851,9 +868,14 @@ export class Orchestrator {
 
     updateGoalStatus(this.params.db, goal.id, "active");
     this.params.db.prepare("UPDATE goals SET strategy = ? WHERE id = ?").run(output.strategy, goal.id);
-    this.adaptive.selectCandidate(replannedPath, conditions);
+    const selectedPath = this.adaptive.selectCandidate(replannedPath, conditions);
 
-    decomposeGoal(this.params.db, goal.id, plannerOutputToTasks(goal.id, output));
+    const persistedTaskIds = decomposeGoal(
+      this.params.db,
+      goal.id,
+      plannerOutputToTasks(goal.id, output),
+    );
+    this.bindPlannedTasks(goal.id, selectedPath.path.id, persistedTaskIds, output.tasks);
     await this.persistPlannerOutput(goal.id, output, "replan");
 
     return {
@@ -1087,6 +1109,27 @@ export class Orchestrator {
     ).get() as { count: number } | undefined;
 
     return row?.count ?? 0;
+  }
+
+  private bindPlannedTasks(
+    goalId: string,
+    pathId: string,
+    taskIds: string[],
+    plannedTasks: PlannedTask[],
+  ): void {
+    for (let index = 0; index < taskIds.length; index += 1) {
+      const taskId = taskIds[index];
+      const planned = plannedTasks[index];
+      if (!taskId || !planned) continue;
+
+      this.adaptive.store.bindTask({
+        taskId,
+        goalId,
+        pathId,
+        requiredCapabilities: planned.requiredCapabilities ?? [],
+        preferredEnvironment: planned.preferredEnvironment ?? null,
+      });
+    }
   }
 
   private async buildAdaptivePlannerContext(goalId: string): Promise<PlannerContext> {
