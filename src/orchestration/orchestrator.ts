@@ -323,6 +323,31 @@ export class Orchestrator {
         continue;
       }
 
+      const taskRow = getTaskById(this.params.db, parsed.taskId);
+      if (!taskRow || !taskRow.assignedTo) {
+        logger.warn("Ignored asynchronous Task result without an active assigned Task", {
+          taskId: parsed.taskId,
+          from: entry.message.from,
+        });
+        continue;
+      }
+
+      if (
+        !sameAgentAddress(entry.message.from, taskRow.assignedTo) ||
+        (entry.message.goalId != null && entry.message.goalId !== taskRow.goalId) ||
+        (entry.message.taskId != null && entry.message.taskId !== taskRow.id)
+      ) {
+        logger.warn("Ignored asynchronous Task result from non-authoritative assignment", {
+          taskId: taskRow.id,
+          expectedAgent: taskRow.assignedTo,
+          actualAgent: entry.message.from,
+          expectedGoalId: taskRow.goalId,
+          messageGoalId: entry.message.goalId,
+          messageTaskId: entry.message.taskId,
+        });
+        continue;
+      }
+
       this.pendingTaskResults.push(parsed);
     }
 
@@ -1395,6 +1420,13 @@ function taskRowToTaskNode(task: TaskGraphRow): TaskNode {
       completedAt: task.completedAt,
     },
   };
+}
+
+function sameAgentAddress(left: string, right: string): boolean {
+  if (left.startsWith("0x") && right.startsWith("0x")) {
+    return left.toLowerCase() === right.toLowerCase();
+  }
+  return left === right;
 }
 
 function parseTaskResultMessage(message: AgentMessage): TaskResultEnvelope | null {
