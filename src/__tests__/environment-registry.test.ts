@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AwsEnvironmentProvider } from "../environments/aws.js";
+import { ConwayEnvironmentProvider } from "../environments/conway.js";
 import { EnvironmentRegistry } from "../environments/registry.js";
 import { LocalEnvironmentProvider } from "../environments/local.js";
 import type { EnvironmentCommandRunner } from "../environments/types.js";
@@ -74,7 +75,7 @@ describe("environment registry", () => {
 describe("lifecycle operation discovery", () => {
   it("exposes only Conway lifecycle operations backed by the current client", () => {
     const registry = new EnvironmentRegistry();
-    registry.register(new (requireConwayProvider())({
+    registry.register(new ConwayEnvironmentProvider({
       getCreditsBalance: async () => 1000,
       createSandbox: async () => ({
         id: "sandbox-1",
@@ -116,8 +117,3 @@ describe("lifecycle operation discovery", () => {
   });
 });
 
-function requireConwayProvider() {
-  // Kept as a helper so this test validates the same exported class while
-  // avoiding a second top-level import solely for lifecycle-specific cases.
-  return class extends (ConwayEnvironmentProvider as typeof ConwayEnvironmentProvider) {};
-}
