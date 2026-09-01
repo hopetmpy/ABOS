@@ -49,6 +49,8 @@ export interface PlannedTask {
   estimatedCostCents: number;
   priority: number;
   timeoutMs: number;
+  requiredCapabilities?: string[];
+  preferredEnvironment?: string | null;
 }
 
 export interface PlannerContext {
@@ -470,7 +472,9 @@ Respond with a JSON object matching the PlannerOutput schema:
       "dependencies": [0, 1],
       "estimatedCostCents": 15000,
       "priority": 1,
-      "timeoutMs": 3600000
+      "timeoutMs": 3600000,
+      "requiredCapabilities": ["capability needed by this task"],
+      "preferredEnvironment": "local | conway | aws | another registered environment | null"
     }
   ],
   "risks": ["Risk 1: description + mitigation", "Risk 2: ..."],
@@ -494,10 +498,10 @@ NEVER:
 - Estimate costs at exactly the budget limit (always leave 20% reserve)
 - Create a plan with a single point of failure (one agent doing everything)
 - Define custom roles when a predefined role can do the job (complexity cost)
-- Create more than 3 custom roles per plan (diminishing returns)
-- Write task descriptions shorter than 3 sentences (too ambiguous)
-- Assign revenue-critical tasks to untested custom roles
-- Create plans that take longer than 8 hours without checkpoints
+- Create custom roles when capability composition or an existing role is sufficient
+- Write task descriptions too ambiguous for independent execution
+- Assign revenue-critical tasks to unvalidated custom roles
+- Create long-running plans without evidence, checkpoints, and recovery points
 - Ignore prior failed attempts at the same goal (learn from history)
 </anti_patterns>
 
@@ -707,7 +711,7 @@ function validatePlannedTask(value: unknown, path: string): PlannedTask {
     throw new Error(`${path}.dependencies contains duplicate entries`);
   }
 
-  return {
+  const task: PlannedTask = {
     title: requiredString(record.title, `${path}.title`),
     description: requiredString(record.description, `${path}.description`),
     agentRole: requiredString(record.agentRole, `${path}.agentRole`),
@@ -716,6 +720,22 @@ function validatePlannedTask(value: unknown, path: string): PlannedTask {
     priority: requiredNonNegativeInteger(record.priority, `${path}.priority`),
     timeoutMs: requiredPositiveInteger(record.timeoutMs, `${path}.timeoutMs`),
   };
+
+  if (record.requiredCapabilities !== undefined) {
+    task.requiredCapabilities = requiredStringArray(
+      record.requiredCapabilities,
+      `${path}.requiredCapabilities`,
+    );
+  }
+
+  if (record.preferredEnvironment !== undefined) {
+    task.preferredEnvironment =
+      record.preferredEnvironment === null
+        ? null
+        : requiredString(record.preferredEnvironment, `${path}.preferredEnvironment`);
+  }
+
+  return task;
 }
 
 function validateTaskDependencies(tasks: PlannedTask[]): void {
