@@ -145,6 +145,58 @@ describe("EnvironmentRetentionCoordinator", () => {
     }
   });
 
+  it("releases a failed ephemeral resource even while its Task is still pending", async () => {
+    const db = createDb();
+    try {
+      insertGoal(db, "goal-pending", "active");
+      insertTask(db, "task-pending", "goal-pending", "pending");
+
+      const registry = new EnvironmentRegistry();
+      let destroys = 0;
+      registry.register(provider({
+        destroy: async () => {
+          destroys += 1;
+          return {
+            status: "terminated",
+            providerState: "terminated",
+            evidence: ["failed candidate cleaned up"],
+          };
+        },
+      }));
+
+      const lifecycle = new EnvironmentLifecycleManager(
+        registry,
+        new EnvironmentResourceStore(db),
+      );
+      lifecycle.adopt({
+        provider: "cloud",
+        externalId: "vm-failed-candidate",
+        type: "compute",
+        goalId: "goal-pending",
+        taskId: "task-pending",
+        status: "failed",
+        retentionPolicy: "ephemeral",
+      });
+
+      const retention = new EnvironmentRetentionCoordinator(
+        db,
+        registry,
+        lifecycle,
+      );
+      const sweep = await retention.sweep();
+
+      expect(sweep.releaseEligible).toBe(1);
+      expect(sweep.destroyAttempts).toBe(1);
+      expect(sweep.released).toBe(1);
+      expect(destroys).toBe(1);
+      expect(
+        lifecycle.resources.list({ includeTerminated: true })[0]?.status,
+      ).toBe("terminated");
+    } finally {
+      db.close();
+    }
+  });
+
   it("retires the legacy child row when a provider-neutral executor is released", async () => {
     const db = createDb();
     try {
