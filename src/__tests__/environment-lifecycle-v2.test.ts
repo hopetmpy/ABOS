@@ -43,7 +43,7 @@ describe("Environment Execution & Lifecycle v2", () => {
           observedAt: new Date().toISOString(),
         }),
         provision: async (request) => ({
-          externalId: \`ext-\${request.resourceId}\`,
+          externalId: `ext-${request.resourceId}`,
           type: request.resourceType,
           status: "ready",
           region: request.region,
