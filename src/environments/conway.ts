@@ -15,7 +15,7 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
       return {
         id: this.id,
         label: "Conway Cloud",
-        availability: "available",
+        availability: creditsCents > 0 ? "available" : "degraded",
         evidence: [`creditsCents=${creditsCents}`],
         costModel: "credit-metered",
         constraints: creditsCents <= 0 ? ["No Conway credits available."] : [],
