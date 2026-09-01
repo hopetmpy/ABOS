@@ -260,6 +260,194 @@ export async function spawnChild(
   }
 }
 
+export interface ChildRuntimeStartResult {
+  childId: string;
+  sandboxId: string;
+  alreadyRunning: boolean;
+  healthy: boolean;
+  evidence: string[];
+}
+
+/**
+ * Ensure a lifecycle-managed child ABOS runtime is actually executing.
+ *
+ * This is the shared implementation behind manual start_child and automatic
+ * Conway Task dispatch. It is idempotent: an already-running process is
+ * observed and reused rather than launching a duplicate runtime.
+ */
+export async function ensureChildRuntimeRunning(
+  conway: ConwayClient,
+  db: AbosDatabase,
+  childId: string,
+  lifecycle: ChildLifecycle,
+): Promise<ChildRuntimeStartResult> {
+  const child = db.getChildById(childId);
+  if (!child) {
+    throw new Error(`Child ${childId} not found.`);
+  }
+  if (!child.sandboxId) {
+    throw new Error(`Child ${childId} has no sandbox id.`);
+  }
+
+  let state = lifecycle.getCurrentState(child.id);
+  const startable = new Set([
+    "funded",
+    "starting",
+    "healthy",
+    "unhealthy",
+  ]);
+  if (!startable.has(state)) {
+    throw new Error(
+      `Child ${child.id} cannot start from lifecycle state "${state}". Funding must complete before execution.`,
+    );
+  }
+
+  const childConway = conway.createScopedClient(child.sandboxId);
+  const evidence: string[] = [];
+  const probe = async (): Promise<boolean> => {
+    const result = await childConway.exec(
+      "pgrep -af 'node .*dist/index\\.js --run' >/dev/null 2>&1 && echo running || echo stopped",
+      15_000,
+    );
+    if (result.exitCode !== 0) {
+      evidence.push(
+        `Child runtime probe returned exit=${result.exitCode}: ${result.stderr || result.stdout || "no output"}`,
+      );
+      return false;
+    }
+    return result.stdout.trim().split(/\\s+/).includes("running");
+  };
+
+  const markHealthyFromCurrentState = () => {
+    state = lifecycle.getCurrentState(child.id);
+    if (state === "healthy") return;
+    if (state === "funded") {
+      lifecycle.transition(
+        child.id,
+        "starting",
+        "runtime process already present; reconciling lifecycle before healthy",
+      );
+      state = "starting";
+    }
+    if (state === "starting" || state === "unhealthy") {
+      lifecycle.transition(
+        child.id,
+        "healthy",
+        "runtime process observed running",
+      );
+      state = "healthy";
+    }
+  };
+
+  if (await probe()) {
+    markHealthyFromCurrentState();
+    evidence.push(
+      `Child ${child.id} runtime already running in sandbox ${child.sandboxId}; duplicate launch avoided.`,
+    );
+    return {
+      childId: child.id,
+      sandboxId: child.sandboxId,
+      alreadyRunning: true,
+      healthy: lifecycle.getCurrentState(child.id) === "healthy",
+      evidence,
+    };
+  }
+
+  if (state === "healthy") {
+    lifecycle.transition(
+      child.id,
+      "unhealthy",
+      "lifecycle said healthy but runtime process was not observed",
+    );
+    state = "unhealthy";
+  } else if (state === "funded") {
+    lifecycle.transition(
+      child.id,
+      "starting",
+      "runtime start requested",
+    );
+    state = "starting";
+  }
+
+  try {
+    const start = await childConway.exec(
+      "cd /root/abos && mkdir -p /root/.abos && nohup node dist/index.js --run > /root/.abos/agent.log 2>&1 < /dev/null &",
+      30_000,
+    );
+    if (start.exitCode !== 0) {
+      throw new Error(
+        `runtime launch command failed: ${start.stderr || start.stdout || `exit ${start.exitCode}`}`,
+      );
+    }
+
+    const check = await childConway.exec(
+      "sleep 2 && pgrep -af 'node .*dist/index\\.js --run' >/dev/null 2>&1 && echo running || echo stopped",
+      15_000,
+    );
+    const running =
+      check.exitCode === 0 &&
+      check.stdout.trim().split(/\\s+/).includes("running");
+
+    if (!running) {
+      lifecycle.transition(
+        child.id,
+        "failed",
+        "runtime process did not remain running after start",
+        {
+          stdout: check.stdout,
+          stderr: check.stderr,
+          exitCode: check.exitCode,
+        },
+      );
+      return {
+        childId: child.id,
+        sandboxId: child.sandboxId,
+        alreadyRunning: false,
+        healthy: false,
+        evidence: [
+          ...evidence,
+          `Child runtime failed post-start observation: ${check.stderr || check.stdout || `exit ${check.exitCode}`}`,
+        ],
+      };
+    }
+
+    if (lifecycle.getCurrentState(child.id) === "starting" ||
+        lifecycle.getCurrentState(child.id) === "unhealthy") {
+      lifecycle.transition(
+        child.id,
+        "healthy",
+        "runtime started and process observation succeeded",
+      );
+    }
+
+    evidence.push(
+      `Child ${child.id} runtime started and observed in sandbox ${child.sandboxId}.`,
+    );
+    return {
+      childId: child.id,
+      sandboxId: child.sandboxId,
+      alreadyRunning: false,
+      healthy: true,
+      evidence,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    try {
+      const current = lifecycle.getCurrentState(child.id);
+      if (current === "starting" || current === "unhealthy") {
+        lifecycle.transition(
+          child.id,
+          "failed",
+          `runtime start failed: ${message}`,
+        );
+      }
+    } catch {
+      // Preserve the original execution error.
+    }
+    throw error;
+  }
+}
+
 /**
  * Legacy spawn path for backward compatibility when no lifecycle is provided.
  */
