@@ -14,6 +14,8 @@ import type {
   TrackedAssumption,
   AssumptionStatus,
   AdaptiveTaskBinding,
+  AdaptiveEvidence,
+  EvidenceKind,
 } from "./types.js";
 
 const stringify = (value: unknown): string => JSON.stringify(value ?? []);
@@ -205,6 +207,92 @@ export class AdaptiveStore {
        ON latest.path_id = a.path_id AND latest.max_created = a.created_at`,
     ).all(goalId) as Array<{ path_id: string; condition_fingerprint: string }>;
     return new Map(rows.map((row) => [row.path_id, row.condition_fingerprint]));
+  }
+
+  recordEvidence(input: {
+    goalId: string;
+    pathId?: string | null;
+    attemptId?: string | null;
+    kind: EvidenceKind;
+    content: string;
+    source: string;
+    confidence?: number;
+  }): AdaptiveEvidence {
+    const content = input.content.trim();
+    if (!content) {
+      throw new Error("Adaptive evidence content cannot be empty");
+    }
+
+    const id = ulid();
+    const createdAt = new Date().toISOString();
+    const confidence = Math.max(0, Math.min(1, input.confidence ?? 1));
+
+    this.db.prepare(
+      `INSERT INTO adaptive_evidence
+       (id, goal_id, path_id, attempt_id, kind, content, source, confidence, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      id,
+      input.goalId,
+      input.pathId ?? null,
+      input.attemptId ?? null,
+      input.kind,
+      content,
+      input.source,
+      confidence,
+      createdAt,
+    );
+
+    return {
+      id,
+      goalId: input.goalId,
+      pathId: input.pathId ?? null,
+      attemptId: input.attemptId ?? null,
+      kind: input.kind,
+      content,
+      source: input.source,
+      confidence,
+      createdAt,
+    };
+  }
+
+  listEvidence(
+    goalId: string,
+    options: { pathId?: string; attemptId?: string; limit?: number } = {},
+  ): AdaptiveEvidence[] {
+    const conditions = ["goal_id = ?"];
+    const params: unknown[] = [goalId];
+
+    if (options.pathId) {
+      conditions.push("path_id = ?");
+      params.push(options.pathId);
+    }
+    if (options.attemptId) {
+      conditions.push("attempt_id = ?");
+      params.push(options.attemptId);
+    }
+
+    const limit = Math.max(1, Math.min(500, options.limit ?? 100));
+    params.push(limit);
+
+    const rows = this.db.prepare(
+      `SELECT * FROM adaptive_evidence
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY created_at DESC
+       LIMIT ?`,
+    ).all(...params) as any[];
+
+    return rows.map((row) => ({
+      id: row.id,
+      goalId: row.goal_id,
+      pathId: row.path_id ?? null,
+      attemptId: row.attempt_id ?? null,
+      kind: row.kind,
+      content: row.content,
+      source: row.source,
+      confidence: row.confidence,
+      createdAt: row.created_at,
+    }));
   }
 
   bindTask(input: {
