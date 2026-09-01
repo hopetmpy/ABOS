@@ -141,6 +141,9 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
       selectionEvidence: estimate.evidence,
       metadata: {
         ...(this.options.resourceMetadata ?? {}),
+        ...(typeof estimate.metadata?.hourlyCostCents === "number"
+          ? { hourlyCostCents: estimate.metadata.hourlyCostCents }
+          : {}),
         service: "ec2",
         name,
         executorKind: "aws-ec2-ssm",
