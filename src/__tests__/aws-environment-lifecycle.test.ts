@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import {
   AwsEnvironmentProvider,
@@ -316,6 +320,130 @@ describe("AwsEnvironmentProvider lifecycle", () => {
     expect(estimate.reusableResourceCount).toBe(1);
     expect(estimate.estimatedCostCents).toBe(2);
     expect(estimate.metadata?.hourlyCostCents).toBeCloseTo(1.04, 6);
+  });
+
+  it("materializes pending runtime artifacts through chunked SSM collection", async () => {
+    const artifactBody = Buffer.from(
+      "remote artifact content\nsecond line\n",
+      "utf8",
+    );
+    const compressed = gzipSync(artifactBody);
+    const outputRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "abos-aws-artifacts-"),
+    );
+    const commandOutputs = new Map<string, string>();
+    let commandCounter = 0;
+
+    const runner: EnvironmentCommandRunner = async (_command, args) => {
+      if (args[0] === "ec2" && args[1] === "describe-instances") {
+        return ok(JSON.stringify({
+          InstanceId: "i-1234567890",
+          State: { Name: "running" },
+          PrivateIpAddress: "10.0.0.4",
+        }));
+      }
+
+      if (
+        args[0] === "ssm" &&
+        args[1] === "describe-instance-information"
+      ) {
+        return ok(JSON.stringify({
+          PingStatus: "Online",
+          PlatformType: "Linux",
+          AgentVersion: "3.3.0",
+        }));
+      }
+
+      if (args[0] === "ssm" && args[1] === "send-command") {
+        const parametersIndex = args.indexOf("--parameters");
+        const parameters = JSON.parse(
+          args[parametersIndex + 1] ?? "{}",
+        ) as { commands?: string[] };
+        const commandText = parameters.commands?.join("\n") ?? "";
+        const commandId = `cmd-artifact-${++commandCounter}`;
+
+        if (commandText.includes("ABOS_ARTIFACT_SIZE")) {
+          commandOutputs.set(
+            commandId,
+            `ABOS_ARTIFACT_SIZE=${compressed.length}\n`,
+          );
+        } else if (commandText.includes("dd if=")) {
+          commandOutputs.set(
+            commandId,
+            compressed.toString("base64"),
+          );
+        } else {
+          commandOutputs.set(commandId, "");
+        }
+
+        return ok(JSON.stringify({
+          Command: { CommandId: commandId },
+        }));
+      }
+
+      if (
+        args[0] === "ssm" &&
+        args[1] === "wait" &&
+        args[2] === "command-executed"
+      ) {
+        return ok();
+      }
+
+      if (args[0] === "ssm" && args[1] === "get-command-invocation") {
+        const commandId = args[args.indexOf("--command-id") + 1]!;
+        return ok(JSON.stringify({
+          CommandId: commandId,
+          Status: "Success",
+          ResponseCode: 0,
+          StandardOutputContent: commandOutputs.get(commandId) ?? "",
+          StandardErrorContent: "",
+        }));
+      }
+
+      throw new Error(`unexpected aws call: ${args.join(" ")}`);
+    };
+
+    const provider = new AwsEnvironmentProvider({
+      runner,
+      defaultRegion: "us-east-1",
+      ssmReadyAttempts: 1,
+      ssmReadyIntervalMs: 0,
+      artifactOutputRoot: outputRoot,
+      artifactMaxCompressedBytes: 64 * 1024,
+      artifactChunkBytes: 15_000,
+    });
+
+    try {
+      const collected = await provider.collect(resource({
+        metadata: {
+          instanceId: "i-1234567890",
+          executorKind: "aws-ec2-ssm",
+          installRoot: "/opt/abos",
+          artifactCollectionState: "pending",
+          remoteArtifacts: ["result.txt"],
+        },
+      }));
+
+      expect(collected.metadata?.artifactCollectionState).toBe(
+        "collected",
+      );
+      expect(collected.metadata?.remoteArtifacts).toEqual([]);
+      expect(collected.artifacts).toHaveLength(1);
+      expect(fs.readFileSync(collected.artifacts[0]!, "utf8")).toBe(
+        artifactBody.toString("utf8"),
+      );
+      expect(
+        (collected.metadata?.collectedArtifacts as Array<{
+          remotePath: string;
+          localPath: string;
+        }>)[0],
+      ).toMatchObject({
+        remotePath: "result.txt",
+        localPath: collected.artifacts[0],
+      });
+    } finally {
+      fs.rmSync(outputRoot, { recursive: true, force: true });
+    }
   });
 
   it("reports SSM-aware health for executor resources", async () => {
