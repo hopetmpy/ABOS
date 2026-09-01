@@ -188,7 +188,7 @@ export function scopeExecutionContinuationContext(
     artifacts: context.artifacts.map(cloneArtifact),
     pending: context.pending.map(clonePending),
     checkpoint,
-    sources: context.sources.map(cloneSource),
+    sources: context.sources.map((source) => ({\n      ...source,\n      metadata: cloneRecord(source.metadata),\n    })),
     extensions: { ...context.extensions },
   };
 }
