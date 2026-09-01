@@ -655,7 +655,9 @@ export class Orchestrator {
 
     for (const event of this.pendingTaskResults) {
       const taskRow = getTaskById(this.params.db, event.taskId);
-      if (!taskRow) {
+      if (!taskRow || taskRow.status === "cancelled") {
+        // A late result from a superseded path is evidence from an obsolete
+        // execution branch. It must not resurrect or fail the current plan.
         continue;
       }
 
@@ -815,7 +817,7 @@ export class Orchestrator {
            assigned_to = NULL,
            completed_at = COALESCE(completed_at, ?)
        WHERE goal_id = ?
-         AND status IN ('failed', 'blocked')`,
+         AND status IN ('pending', 'assigned', 'running', 'failed', 'blocked')`,
     ).run(new Date().toISOString(), goal.id);
 
     updateGoalStatus(this.params.db, goal.id, "active");
