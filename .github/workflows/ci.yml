@@ -36,21 +36,23 @@ jobs:
           if [ $RC -eq 124 ]; then echo "::error::security test run timed out or left active handles"; fi
           exit $RC
 
-  isolate-remaining-hang:
+  isolate-context-hardening:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     strategy:
       fail-fast: false
       matrix:
         include:
-          - case: context-hardening
-            file: src/__tests__/context-hardening.test.ts
-          - case: genesis-bootstrap
-            file: src/__tests__/genesis-bootstrap.test.ts
-          - case: inbox-processing
-            file: src/__tests__/inbox-processing.test.ts
-          - case: provider-registry
-            file: src/__tests__/inference/provider-registry.test.ts
+          - case: baseline
+            pattern: returns Math.ceil(length / 4)
+          - case: summarize-50k
+            pattern: summarizes old turns when budget is exceeded
+          - case: preserve-50k
+            pattern: preserves most recent turns when summarizing
+          - case: custom-5k
+            pattern: respects custom budget parameter
+          - case: single-500k
+            pattern: does not summarize when only one turn exists
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -59,14 +61,14 @@ jobs:
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
-      - name: Run isolation case ${{ matrix.case }}
+      - name: Run context hardening case ${{ matrix.case }}
         shell: bash
         run: |
           set +e
-          timeout 45 pnpm exec vitest run ${{ matrix.file }} --reporter=verbose
+          timeout 45 pnpm exec vitest run src/__tests__/context-hardening.test.ts -t "${{ matrix.pattern }}" --reporter=verbose
           RC=$?
           set -e
-          if [ $RC -eq 124 ]; then echo "::error::Isolation case ${{ matrix.case }} timed out"; fi
+          if [ $RC -eq 124 ]; then echo "::error::Context hardening case ${{ matrix.case }} timed out"; fi
           exit $RC
 
 
