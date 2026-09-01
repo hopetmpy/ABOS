@@ -334,6 +334,108 @@ export function applyArtifactMaterializationResult(
   };
 }
 
+export function materializeArtifactsToFilesystemRoot(
+  request: ArtifactMaterializationRequest,
+  targetRoot: string,
+): ArtifactMaterializationResult {
+  const root = path.resolve(targetRoot);
+  const entries: ArtifactMaterializationEntryResult[] = [];
+  const evidence: string[] = [];
+
+  for (const source of request.sources) {
+    const relative = artifactTargetRelativePath(request, source);
+    const targetPath = path.resolve(root, relative);
+    if (!isWithinRoot(targetPath, root)) {
+      entries.push({
+        reference: source.reference,
+        state: "unavailable",
+        evidence: [
+          "Computed artifact target path escaped the configured filesystem root.",
+        ],
+      });
+      continue;
+    }
+
+    try {
+      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+      const sourcePath = fs.realpathSync(source.localPath);
+      let observedTarget = targetPath;
+
+      if (path.resolve(sourcePath) !== path.resolve(targetPath)) {
+        const temporary =
+          `${targetPath}.tmp-${process.pid}-${Date.now()}`;
+        try {
+          fs.copyFileSync(sourcePath, temporary);
+          fs.chmodSync(temporary, 0o600);
+          fs.renameSync(temporary, targetPath);
+        } finally {
+          if (fs.existsSync(temporary)) {
+            fs.rmSync(temporary, { force: true });
+          }
+        }
+      } else {
+        observedTarget = sourcePath;
+      }
+
+      const integrity = sha256File(observedTarget);
+      const stat = fs.statSync(observedTarget);
+      const state: ContinuationEpistemicState =
+        stat.size === source.bytes &&
+        sameIntegrity(source.integrity, integrity)
+          ? "available"
+          : "unknown";
+
+      const entryEvidence = [
+        `Filesystem materialization observed target bytes=${stat.size} sha256=${integrity.digest}.`,
+      ];
+      if (stat.size !== source.bytes) {
+        entryEvidence.push(
+          `Target byte length mismatch: source=${source.bytes} target=${stat.size}.`,
+        );
+      }
+
+      entries.push({
+        reference: source.reference,
+        state,
+        targetPath:
+          state === "available" ? observedTarget : null,
+        integrity,
+        evidence: entryEvidence,
+        metadata: {
+          targetRoot: root,
+          bytes: stat.size,
+        },
+      });
+      evidence.push(
+        `Materialized "${source.reference}" to "${observedTarget}" state=${state}.`,
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : String(error);
+      entries.push({
+        reference: source.reference,
+        state: "unavailable",
+        evidence: [
+          `Filesystem materialization failed: ${message}`,
+        ],
+      });
+      evidence.push(
+        `Artifact "${source.reference}" could not be materialized to filesystem root "${root}": ${message}`,
+      );
+    }
+  }
+
+  return {
+    protocolVersion: ARTIFACT_MATERIALIZATION_PROTOCOL_VERSION,
+    entries,
+    evidence,
+    metadata: {
+      transport: "filesystem",
+      targetRoot: root,
+    },
+  };
+}
+
 export function artifactTargetRelativePath(
   request: Pick<
     ArtifactMaterializationRequest,
