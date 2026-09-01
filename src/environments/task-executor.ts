@@ -28,6 +28,15 @@ export interface EnvironmentTaskTarget {
   spawned: boolean;
 }
 
+export interface EnvironmentTaskDispatchOptions {
+  /**
+   * Fresh derived continuation view assembled immediately before delivery.
+   * Keeping this separate from target identity avoids provider-specific state.
+   */
+  continuationContext?: ExecutionContinuationContext;
+  metadata?: Record<string, unknown>;
+}
+
 export interface EnvironmentTaskDispatchResult {
   /** Optional immediate semantic result for synchronous transports (SSM, RPC, etc.). */
   result?: TaskResult;
@@ -50,6 +59,7 @@ export interface EnvironmentTaskExecutor {
   dispatch?(
     task: TaskNode,
     target: EnvironmentTaskTarget,
+    options?: EnvironmentTaskDispatchOptions,
   ): Promise<EnvironmentTaskDispatchResult>;
 }
 
@@ -291,6 +301,7 @@ export class EnvironmentExecutionBridge {
     environmentId: string,
     task: TaskNode,
     target: EnvironmentTaskTarget,
+    options: EnvironmentTaskDispatchOptions = {},
   ): Promise<EnvironmentTaskDispatchResult> {
     const executor = this.executors.get(environmentId);
     if (!executor) {
@@ -319,7 +330,7 @@ export class EnvironmentExecutionBridge {
 
     let result: EnvironmentTaskDispatchResult;
     try {
-      result = await executor.dispatch(task, target);
+      result = await executor.dispatch(task, target, options);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new EnvironmentTaskExecutionError(
