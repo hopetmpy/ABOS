@@ -23,7 +23,6 @@ import {
   ARTIFACT_MATERIALIZATION_PROTOCOL_VERSION,
   artifactTargetRelativePath,
   isDurableExternalArtifactReference,
-  remoteEnvironmentArtifactReference,
   type ArtifactMaterializationRequest,
   type ArtifactMaterializationResult,
 } from "./artifact-materialization.js";
@@ -645,11 +644,7 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
           ...durableArtifacts,
           ...collection.artifacts,
           ...remoteArtifacts.map((artifact) =>
-            remoteEnvironmentArtifactReference(
-              "aws",
-              executorAddress(instanceId),
-              artifact,
-            )
+            remoteArtifactReference(instanceId, artifact)
           ),
         ];
         collectionEvidence.push(...(collection.evidence ?? []));
@@ -657,11 +652,7 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
         semanticArtifacts = [
           ...durableArtifacts,
           ...localRemoteArtifacts.map((artifact) =>
-            remoteEnvironmentArtifactReference(
-              "aws",
-              executorAddress(instanceId),
-              artifact,
-            )
+            remoteArtifactReference(instanceId, artifact)
           ),
         ];
         collectionEvidence.push(
@@ -796,6 +787,13 @@ function safeTaskFileName(taskId: string): string {
     .replace(/[^a-zA-Z0-9._-]+/g, "-")
     .slice(0, 100);
   return normalized || "task";
+}
+
+function remoteArtifactReference(
+  instanceId: string,
+  remotePath: string,
+): string {
+  return `aws://ec2/${encodeURIComponent(instanceId)}/artifact/${encodeURIComponent(remotePath)}`;
 }
 
 function stringArray(value: unknown): string[] {
