@@ -103,8 +103,26 @@ export interface EnvironmentSatisfaction {
   metadata?: Record<string, unknown>;
 }
 
+export const CORE_ENVIRONMENT_COST_COVERAGE = [
+  "complete",
+  "partial",
+  "unknown",
+] as const;
+
+export type CoreEnvironmentCostCoverage =
+  (typeof CORE_ENVIRONMENT_COST_COVERAGE)[number];
+
+/** Open by design so providers can describe richer future estimate coverage. */
+export type EnvironmentCostEstimateCoverage = string;
+
 export interface EnvironmentEstimate {
   estimatedCostCents?: number | null;
+  /**
+   * Whether estimatedCostCents covers the cost authority relevant to an
+   * explicit budget. "partial" evidence remains useful for ranking/telemetry
+   * but must not be treated as a proven total cost ceiling.
+   */
+  costCoverage?: EnvironmentCostEstimateCoverage;
   startupLatencyMs?: number | null;
   expectedExecutionMs?: number | null;
   reliability?: number | null;
