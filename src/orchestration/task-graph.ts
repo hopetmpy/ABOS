@@ -43,6 +43,10 @@ export interface TaskNode {
   priority: number;
   dependencies: string[];
   result: TaskResult | null;
+  /** Planner execution intent; persisted in adaptive_task_bindings. */
+  requiredCapabilities?: string[];
+  preferredEnvironment?: string | null;
+  strategicPathId?: string | null;
   metadata: {
     estimatedCostCents: number;
     actualCostCents: number;
