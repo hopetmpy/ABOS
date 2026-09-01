@@ -68,16 +68,33 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
     }
 
     const reusable = this.findReusableResources();
+    const instanceProfile =
+      this.options.provider.getConfiguredIamInstanceProfile(
+        this.options.resourceMetadata,
+      );
+
+    if (reusable.length === 0 && !instanceProfile) {
+      return {
+        executable: false,
+        evidence: [
+          ...snapshot.evidence,
+          "No reusable AWS EC2 executor is currently owned by ABOS.",
+          "A new EC2 SSM executor requires an IAM instance profile before provisioning. Configure ABOS_AWS_EC2_INSTANCE_PROFILE or resourceMetadata.iamInstanceProfile.",
+          "Missing SSM instance authorization is currently unavailable/requires authorization, not proof that the objective is impossible.",
+        ],
+      };
+    }
+
     return {
-      // SSM reachability for a newly provisioned instance is intentionally
-      // discovered during the real bootstrap attempt. UNKNOWN remains eligible.
+      // A configured instance profile is authorization evidence for a new
+      // executor, but SSM reachability is still verified after provisioning.
       executable: reusable.length > 0 ? true : null,
       evidence: [
         ...snapshot.evidence,
         `AWS managed reusable EC2 executor candidates=${reusable.length}.`,
         reusable.length > 0
           ? "A previously owned AWS EC2 executor can be health-checked for reuse."
-          : "No reusable executor is known. EC2 + SSM execution remains eligible for a real provisioning/bootstrap attempt.",
+          : `New EC2 executor provisioning is authorized with IAM instance profile=${instanceProfile}.`,
       ],
     };
   }
@@ -100,6 +117,16 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
           region: reusable.region,
         },
       };
+    }
+
+    const instanceProfile =
+      this.options.provider.getConfiguredIamInstanceProfile(
+        this.options.resourceMetadata,
+      );
+    if (!instanceProfile) {
+      throw new Error(
+        "AWS EC2 Task executor requires an IAM instance profile for SSM before provisioning. No instance was created. Configure ABOS_AWS_EC2_INSTANCE_PROFILE or resourceMetadata.iamInstanceProfile.",
+      );
     }
 
     const name = workerName(task);
@@ -141,6 +168,7 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
       selectionEvidence: estimate.evidence,
       metadata: {
         ...(this.options.resourceMetadata ?? {}),
+        iamInstanceProfile: instanceProfile,
         ...(typeof estimate.metadata?.hourlyCostCents === "number"
           ? { hourlyCostCents: estimate.metadata.hourlyCostCents }
           : {}),
