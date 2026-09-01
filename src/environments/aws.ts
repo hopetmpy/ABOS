@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import type {
   CommandResult,
   EnvironmentCollectionResult,
@@ -359,6 +360,8 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       "1",
       "--max-count",
       "1",
+      "--client-token",
+      ec2ClientToken(request.resourceId),
       "--tag-specifications",
       JSON.stringify([
         {
@@ -801,8 +804,70 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
   }
 
   async reconcile(resource: EnvironmentResource): Promise<EnvironmentReconcileResult> {
-    const instanceId = requireInstanceId(resource);
     const region = resource.region ?? await this.resolveRegion();
+    let instanceId = resource.externalId ??
+      (typeof resource.metadata.instanceId === "string"
+        ? resource.metadata.instanceId
+        : null);
+
+    if (!instanceId) {
+      const discovered = await this.findInstancesByResourceId(resource.id, region);
+      if (discovered.length === 1 && discovered[0].InstanceId) {
+        instanceId = discovered[0].InstanceId;
+        const state = discovered[0].State?.Name ?? "unknown";
+        return {
+          resource: {
+            ...resource,
+            externalId: instanceId,
+            status: mapEc2State(state),
+            providerState: state,
+            region: region ?? resource.region,
+            metadata: {
+              ...resource.metadata,
+              ...observationMetadata(discovered[0]),
+              reconciledByResourceTag: true,
+            },
+            updatedAt: new Date().toISOString(),
+          },
+          actualExists: true,
+          action: "adopt_by_resource_tag",
+          evidence: [
+            `Recovered AWS EC2 instance ${instanceId} from ownership tag abos:resource-id=${resource.id} after external id was not persisted.`,
+          ],
+        };
+      }
+
+      if (discovered.length > 1) {
+        return {
+          resource: {
+            ...resource,
+            status: "unknown",
+            providerState: "ambiguous_resource_tag",
+            updatedAt: new Date().toISOString(),
+          },
+          actualExists: null,
+          action: "mark_unknown_ambiguous_ownership",
+          evidence: [
+            `Multiple AWS EC2 instances claim ownership tag abos:resource-id=${resource.id}: ${discovered.map((entry) => entry.InstanceId ?? "unknown").join(", ")}. ABOS will not guess which resource is authoritative.`,
+          ],
+        };
+      }
+
+      return {
+        resource: {
+          ...resource,
+          status: "unknown",
+          providerState: "not_observed_by_resource_tag",
+          updatedAt: new Date().toISOString(),
+        },
+        actualExists: false,
+        action: "mark_unknown_unresolved_provision",
+        evidence: [
+          `No AWS EC2 instance was found for ownership tag abos:resource-id=${resource.id}. ABOS will not blindly recreate it during reconciliation.`,
+        ],
+      };
+    }
+
     const observed = await this.describeInstance(instanceId, region);
 
     if (!observed.instance) {
@@ -1051,6 +1116,35 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     return Math.ceil(usd * 100);
   }
 
+  private async findInstancesByResourceId(
+    resourceId: string,
+    region: string | null,
+  ): Promise<AwsEc2Observation[]> {
+    const result = await this.runAws([
+      "ec2",
+      "describe-instances",
+      "--filters",
+      `Name=tag:abos:resource-id,Values=${resourceId}`,
+      "Name=instance-state-name,Values=pending,running,stopping,stopped,shutting-down",
+      "--query",
+      "Reservations[].Instances[]",
+      "--output",
+      "json",
+      ...regionArgs(region),
+    ]);
+    requireAwsSuccess(
+      result,
+      `EC2 describe-instances ownership tag ${resourceId}`,
+    );
+    const parsed = parseJson<unknown>(result.stdout);
+    return Array.isArray(parsed)
+      ? parsed.filter(
+          (entry): entry is AwsEc2Observation =>
+            !!entry && typeof entry === "object",
+        )
+      : [];
+  }
+
   private async describeInstance(
     instanceId: string,
     region: string | null,
@@ -1272,6 +1366,14 @@ function isEc2ResourceRequest(request: EnvironmentProvisionRequest): boolean {
     ["ec2", "ec2-instance", "aws-ec2", "aws-ec2-instance"].includes(
       normalizedType,
     );
+}
+
+function ec2ClientToken(resourceId: string): string {
+  const digest = createHash("sha256")
+    .update(resourceId, "utf8")
+    .digest("hex")
+    .slice(0, 48);
+  return `abos-${digest}`;
 }
 
 function buildTags(
