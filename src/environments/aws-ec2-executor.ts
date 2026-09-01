@@ -349,20 +349,97 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
       );
     }
 
+    const durableArtifacts = result.artifacts.filter(
+      isDurableExternalArtifact,
+    );
+    const localRemoteArtifacts = result.artifacts.filter(
+      (artifact) => !isDurableExternalArtifact(artifact),
+    );
+    let semanticArtifacts = [...result.artifacts];
+    let artifactCollectionState =
+      localRemoteArtifacts.length > 0 ? "pending" : "none";
+    let remoteArtifacts = [...localRemoteArtifacts];
+    let collectedArtifacts: unknown[] = [];
+    const collectionEvidence: string[] = [];
+
+    if (resource && localRemoteArtifacts.length > 0) {
+      this.options.lifecycle.resources.applyMutation(
+        resource.id,
+        {
+          evidence: [
+            `Task ${task.id} reported ${localRemoteArtifacts.length} executor-local artifact(s); collection started before retention can release the resource.`,
+          ],
+          metadata: {
+            remoteArtifacts: localRemoteArtifacts,
+            artifactCollectionState: "pending",
+            artifactHost: executorAddress(instanceId),
+          },
+        },
+        "artifact_discovered",
+        "Remote Task artifacts require materialization on the parent host.",
+      );
+
+      try {
+        const collection = await this.options.lifecycle.collect(resource.id);
+        const collectionMetadata = collection.metadata ?? {};
+        remoteArtifacts = stringArray(
+          collectionMetadata.remoteArtifacts,
+        );
+        artifactCollectionState =
+          typeof collectionMetadata.artifactCollectionState === "string"
+            ? collectionMetadata.artifactCollectionState
+            : remoteArtifacts.length === 0
+              ? "collected"
+              : "pending";
+        collectedArtifacts = Array.isArray(
+          collectionMetadata.collectedArtifacts,
+        )
+          ? collectionMetadata.collectedArtifacts
+          : [];
+
+        semanticArtifacts = [
+          ...durableArtifacts,
+          ...collection.artifacts,
+          ...remoteArtifacts.map((artifact) =>
+            remoteArtifactReference(instanceId, artifact)
+          ),
+        ];
+        collectionEvidence.push(...(collection.evidence ?? []));
+      } catch (error) {
+        semanticArtifacts = [
+          ...durableArtifacts,
+          ...localRemoteArtifacts.map((artifact) =>
+            remoteArtifactReference(instanceId, artifact)
+          ),
+        ];
+        collectionEvidence.push(
+          `Automatic AWS artifact collection failed: ${error instanceof Error ? error.message : String(error)}. Remote artifacts remain preserved/pending rather than being reported as local.`,
+        );
+      }
+    } else if (localRemoteArtifacts.length === 0) {
+      semanticArtifacts = durableArtifacts;
+    }
+
+    const semanticResult: TaskResult = {
+      ...result,
+      artifacts: semanticArtifacts,
+    };
+
     return {
-      result,
+      result: semanticResult,
       evidence: [
         `Task ${task.id} executed through AWS SSM on EC2 ${instanceId}.`,
         `Remote semantic result success=${result.success} durationMs=${result.duration}.`,
+        ...collectionEvidence,
       ],
       metadata: {
         delivery: "aws_ssm",
         commandId: invocation.CommandId ?? null,
         instanceId,
         responseCode: invocation.ResponseCode ?? null,
-        remoteArtifacts: result.artifacts,
-        artifactCollectionState:
-          result.artifacts.length > 0 ? "pending" : "none",
+        remoteArtifacts,
+        collectedArtifacts,
+        artifactCollectionState,
         artifactHost: executorAddress(instanceId),
       },
     };
@@ -439,6 +516,26 @@ function safeTaskFileName(taskId: string): string {
     .replace(/[^a-zA-Z0-9._-]+/g, "-")
     .slice(0, 100);
   return normalized || "task";
+}
+
+function isDurableExternalArtifact(value: string): boolean {
+  return /^(?:https?|s3|gs|ipfs|ar):\/\//i.test(value.trim());
+}
+
+function remoteArtifactReference(
+  instanceId: string,
+  remotePath: string,
+): string {
+  return `aws://ec2/${encodeURIComponent(instanceId)}/artifact/${encodeURIComponent(remotePath)}`;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value
+        .filter((entry): entry is string => typeof entry === "string")
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+    : [];
 }
 
 function parseTaskResult(stdout: string): TaskResult | null {
