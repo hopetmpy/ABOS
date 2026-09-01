@@ -118,13 +118,13 @@ export function decomposeGoal(
   db: Database,
   goalId: string,
   tasks: Omit<TaskNode, "id" | "metadata">[],
-): void {
+): string[] {
   if (!getGoalById(db, goalId)) {
     throw new Error(`Goal not found: ${goalId}`);
   }
 
   if (tasks.length === 0) {
-    return;
+    return [];
   }
 
   const titleCounts = new Map<string, number>();
@@ -166,6 +166,8 @@ export function decomposeGoal(
     throw new Error("Task graph contains a cycle; decomposition must be a DAG");
   }
 
+  const persistedIds: string[] = [];
+
   withTransaction(db, () => {
     const localToPersisted = new Map<string, string>();
     const deferredUpdates: {
@@ -195,6 +197,7 @@ export function decomposeGoal(
       });
 
       localToPersisted.set(planned.localId, taskId);
+      persistedIds.push(taskId);
       deferredUpdates.push({
         taskId,
         requestedStatus: planned.task.status,
@@ -230,6 +233,8 @@ export function decomposeGoal(
     unblockReadyBlockedTasks(db);
     refreshGoalStatus(db, goalId);
   });
+
+  return persistedIds;
 }
 
 export function getReadyTasks(db: Database): TaskNode[] {
