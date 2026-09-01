@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import Database from "better-sqlite3";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -237,6 +240,57 @@ describe("Environment mobility", () => {
     }
   });
 
+  it("survives a real SQLite close and reopen with migration evidence intact", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "abos-mobility-restart-"));
+    const dbPath = path.join(dir, "state.db");
+    const db = new Database(dbPath);
+    try {
+      db.pragma("foreign_keys = ON");
+      db.exec(CREATE_TABLES);
+      db.exec(MIGRATION_V9);
+      db.exec(MIGRATION_V10);
+      db.exec(MIGRATION_V12);
+      db.exec(MIGRATION_V13);
+      db.exec(MIGRATION_V14);
+      const store = new EnvironmentMigrationStore(db);
+      const migration = store.create({
+        status: "target_failed",
+        reason: "persist across restart",
+        evidence: ["before restart"],
+      });
+      store.recordAttempt(migration.id, {
+        environmentId: "provider-restart",
+        conditionFingerprint: "restart-fingerprint",
+        stage: "spawn",
+        evidence: ["attempt persisted"],
+      });
+      db.close();
+
+      const reopened = new Database(dbPath);
+      try {
+        reopened.pragma("foreign_keys = ON");
+        const restored = new EnvironmentMigrationStore(reopened).get(
+          migration.id,
+        );
+        expect(restored).not.toBeNull();
+        expect(restored?.attemptedEnvironments).toEqual([
+          "provider-restart",
+        ]);
+        expect(
+          restored?.conditionFingerprints["provider-restart"],
+        ).toBe("restart-fingerprint");
+        expect(restored?.evidence).toEqual(
+          expect.arrayContaining(["before restart", "attempt persisted"]),
+        );
+      } finally {
+        reopened.close();
+      }
+    } finally {
+      if (db.open) db.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("contextually excludes a failed environment while keeping it visible as evidence", async () => {
     const registry = new EnvironmentRegistry();
     registry.register(provider("env-a"));
@@ -321,6 +375,89 @@ describe("Environment mobility", () => {
       expect(second.environmentId).toBe("env-b");
       expect(second.mobilityExcludedEnvironmentIds).toContain("env-a");
       expect(calls).toHaveLength(2);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("excludes a failed resource without blacklisting its entire provider", async () => {
+    const db = createDb();
+    try {
+      seedTaskContext(db);
+      const registry = new EnvironmentRegistry();
+      registry.register(provider("env-a"));
+      const resources = new EnvironmentResourceStore(db);
+      const lifecycle = new EnvironmentLifecycleManager(
+        registry,
+        resources,
+      );
+      const failed = lifecycle.adopt({
+        provider: "env-a",
+        externalId: "executor-failed",
+        type: "executor",
+        goalId: "goal-mobility-1",
+        pathId: "path-mobility-1",
+        taskId: "task-mobility-1",
+        status: "running",
+        capabilities: ["compute"],
+        retentionPolicy: "manual_retention",
+        metadata: {
+          executorAddress: "env-a://executor-failed",
+        },
+      });
+      const spawnOptions: EnvironmentTaskSpawnOptions[] = [];
+      const execution = {
+        dispatch: vi.fn(async () => {
+          throw new EnvironmentTaskExecutionError(
+            "env-a",
+            "resource dispatch failed",
+            ["executor-specific transport failure"],
+            "dispatch",
+          );
+        }),
+        spawn: vi.fn(async (
+          _task: TaskNode,
+          options: EnvironmentTaskSpawnOptions = {},
+        ) => {
+          spawnOptions.push(options);
+          return selectionResult("env-a");
+        }),
+      } as unknown as EnvironmentExecutionBridge;
+      const migrations = new EnvironmentMigrationStore(db);
+      const mobility = new EnvironmentMobilityCoordinator(
+        registry,
+        new EnvironmentSelector(registry),
+        lifecycle,
+        migrations,
+        execution,
+      );
+
+      await expect(
+        mobility.dispatch("env-a", task(), {
+          address: "env-a://executor-failed",
+          name: "failed-executor",
+          spawned: false,
+        }),
+      ).rejects.toThrow("resource dispatch failed");
+
+      const active = migrations.findActiveForTask(
+        "task-mobility-1",
+        "path-mobility-1",
+      )!;
+      expect(active.metadata.failedResourceIds).toEqual([failed.id]);
+      expect(active.metadata.providerFailureEnvironments).toEqual([]);
+      expect(
+        await mobility.unchangedFailedEnvironmentExclusions(
+          active,
+          task(),
+        ),
+      ).toEqual([]);
+
+      const next = await mobility.spawn(task());
+      expect(next.environmentId).toBe("env-a");
+      expect(next.mobilityExcludedEnvironmentIds).toEqual([]);
+      expect(next.mobilityExcludedResourceIds).toEqual([failed.id]);
+      expect(spawnOptions[0]?.excludedResourceIds).toEqual([failed.id]);
     } finally {
       db.close();
     }
@@ -428,13 +565,15 @@ describe("Environment mobility", () => {
         source.id,
         {
           requiredCapabilities: ["compute"],
+          preferredEnvironment: "target",
           maxEstimatedCostCents: 10,
         },
         "source is degraded",
       );
 
       expect(plan.selection.selected?.environmentId).toBe("target");
-      expect(plan.excludedEnvironmentIds).toContain("source");
+      expect(plan.excludedEnvironmentIds).not.toContain("source");
+      expect(plan.excludedResourceIds).toEqual([source.id]);
       expect(plan.migration.sourceResourceId).toBe(source.id);
       expect(plan.migration.targetProvider).toBe("target");
       expect(providerMutations).toBe(0);
