@@ -16,8 +16,9 @@ import { EnvironmentSelector } from "../environments/selector.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
 import {
+  EnvironmentExecutionBridge,
   EnvironmentTaskExecutionError,
-  type EnvironmentExecutionBridge,
+  EnvironmentTaskExecutorRegistry,
   type EnvironmentTaskExecutionResult,
   type EnvironmentTaskSpawnOptions,
 } from "../environments/task-executor.js";
@@ -207,6 +208,59 @@ function selectionResult(
 }
 
 describe("Environment mobility", () => {
+  it("propagates mobility exclusions through the provider-neutral execution bridge", async () => {
+    const registry = new EnvironmentRegistry();
+    registry.register(provider("env-a"));
+    const executors = new EnvironmentTaskExecutorRegistry();
+    const assess = vi.fn(async (
+      _task: TaskNode,
+      options: EnvironmentTaskSpawnOptions = {},
+    ) => ({
+      executable: true,
+      evidence: [
+        `excluded resources=${(options.excludedResourceIds ?? []).join(",")}`,
+      ],
+    }));
+    const spawn = vi.fn(async (
+      _task: TaskNode,
+      options: EnvironmentTaskSpawnOptions = {},
+    ) => ({
+      address: "env-a://worker-2",
+      name: "worker-2",
+      sandboxId: "worker-2",
+      resourceExternalId: "worker-2",
+      resourceType: "executor",
+      evidence: [
+        `spawn exclusions=${(options.excludedResourceIds ?? []).join(",")}`,
+      ],
+    }));
+    executors.register({
+      environmentId: "env-a",
+      assess,
+      spawn,
+    });
+
+    const bridge = new EnvironmentExecutionBridge(
+      new EnvironmentSelector(registry),
+      executors,
+    );
+    const result = await bridge.spawn(task(), {
+      excludedResourceIds: ["resource-bad"],
+      excludedEnvironmentIds: [],
+      metadata: { mobilityTest: true },
+    });
+
+    expect(result.environmentId).toBe("env-a");
+    expect(assess).toHaveBeenCalledTimes(1);
+    expect(spawn).toHaveBeenCalledTimes(1);
+    expect(assess.mock.calls[0]?.[1]?.excludedResourceIds).toEqual([
+      "resource-bad",
+    ]);
+    expect(spawn.mock.calls[0]?.[1]?.excludedResourceIds).toEqual([
+      "resource-bad",
+    ]);
+  });
+
   it("persists migration attempts, condition fingerprints, and events", () => {
     const db = createDb();
     try {
