@@ -96,4 +96,26 @@ describe("ABOS installation and state separation", () => {
       ),
     ).toBe(true);
   });
+
+  it("preserves Automaton Conway wire protocol literals", () => {
+    const root = process.cwd();
+    const provisionSource = fs.readFileSync(
+      path.join(root, "src", "identity", "provision.ts"),
+      "utf-8",
+    );
+    const conwayClientSource = fs.readFileSync(
+      path.join(root, "src", "conway", "client.ts"),
+      "utf-8",
+    );
+
+    expect(provisionSource).toContain(
+      "Sign in to Conway as an Automaton to provision an API key.",
+    );
+    expect(provisionSource).toContain('name: "conway-automaton"');
+    expect(conwayClientSource).toContain('"/v1/automatons/register"');
+    expect(conwayClientSource).toContain("automaton_id");
+    expect(conwayClientSource).toContain("automaton_address");
+    expect(conwayClientSource).not.toContain('"/v1/abos/register"');
+  });
+
 });
