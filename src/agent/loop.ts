@@ -633,7 +633,8 @@ export async function runAgentLoop(
           recovery.recovered > 0 ||
           recovery.unchangedSkipped > 0 ||
           recovery.unknown > 0 ||
-          recovery.migrationsReconciled > 0
+          recovery.migrationsReconciled > 0 ||
+          recovery.retentionOwnedSkipped > 0
         ) {
           logger.info("Environment mobility startup recovery sweep", {
             recovery,
