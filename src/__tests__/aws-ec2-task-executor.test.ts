@@ -69,7 +69,10 @@ function resource(
   };
 }
 
-function lifecycleStub(existing: EnvironmentResource[] = []) {
+function lifecycleStub(
+  existing: EnvironmentResource[] = [],
+  options: { bootstrapStatus?: EnvironmentResource["status"] } = {},
+) {
   const resources = [...existing];
   const mutations: Array<{
     id: string;
@@ -77,6 +80,7 @@ function lifecycleStub(existing: EnvironmentResource[] = []) {
     metadata?: Record<string, unknown>;
   }> = [];
   let provisionCalls = 0;
+  const provisionInputs: unknown[] = [];
 
   const lifecycle = {
     resources: {
@@ -84,6 +88,7 @@ function lifecycleStub(existing: EnvironmentResource[] = []) {
       applyMutation: (
         id: string,
         mutation: {
+          status?: EnvironmentResource["status"];
           metadata?: Record<string, unknown>;
           evidence?: string[];
         },
@@ -96,6 +101,7 @@ function lifecycleStub(existing: EnvironmentResource[] = []) {
         });
         const current = resources.find((entry) => entry.id === id);
         if (!current) throw new Error("resource not found");
+        if (mutation.status) current.status = mutation.status;
         current.metadata = {
           ...current.metadata,
           ...(mutation.metadata ?? {}),
@@ -107,16 +113,19 @@ function lifecycleStub(existing: EnvironmentResource[] = []) {
         return current;
       },
     },
-    provision: async () => {
+    provision: async (input: { retentionPolicy: string }) => {
       provisionCalls += 1;
-      const created = resource();
+      provisionInputs.push(input);
+      const created = resource({
+        retentionPolicy: input.retentionPolicy,
+      });
       resources.push(created);
       return created;
     },
     bootstrap: async (id: string) => {
       const current = resources.find((entry) => entry.id === id);
       if (!current) throw new Error("resource not found");
-      current.status = "running";
+      current.status = options.bootstrapStatus ?? "running";
       return current;
     },
     health: async (id: string) => {
@@ -133,6 +142,7 @@ function lifecycleStub(existing: EnvironmentResource[] = []) {
     get provisionCalls() {
       return provisionCalls;
     },
+    provisionInputs,
   };
 }
 
@@ -205,6 +215,58 @@ describe("AwsEc2TaskExecutor", () => {
     expect(spawned.resourceType).toBe("aws-ec2-instance");
     expect(
       mutations.some((entry) => entry.operation === "executor_ready"),
+    ).toBe(true);
+  });
+
+  it("keeps an unproven EC2 candidate ephemeral and marks failed bootstrap for cleanup", async () => {
+    const runner: EnvironmentCommandRunner = async (_command, args) => {
+      if (args[0] === "ec2" && args[1] === "describe-instances") {
+        return { stdout: "[]", stderr: "", exitCode: 0 };
+      }
+      if (args[0] === "pricing" && args[1] === "get-products") {
+        return {
+          stdout: JSON.stringify({ PriceList: [] }),
+          stderr: "",
+          exitCode: 0,
+        };
+      }
+      throw new Error(`unexpected AWS call: ${args.join(" ")}`);
+    };
+
+    const provider = new AwsEnvironmentProvider({
+      runner,
+      defaultRegion: "us-east-1",
+      defaultIamInstanceProfile: "ABOS-SSM",
+    });
+    const stub = lifecycleStub([], { bootstrapStatus: "degraded" });
+    const executor = new AwsEc2TaskExecutor({
+      provider,
+      lifecycle: stub.lifecycle,
+      identity: {
+        name: "parent",
+        address: "0x0000000000000000000000000000000000000001",
+      } as any,
+      config: {
+        name: "parent",
+        genesisPrompt: "Broad parent mission.",
+        chainType: "evm",
+      } as any,
+      repositoryRef: "main",
+    });
+
+    await expect(executor.spawn(task())).rejects.toThrow(
+      "did not produce a runnable executor",
+    );
+
+    expect(stub.provisionCalls).toBe(1);
+    expect(
+      (stub.provisionInputs[0] as { retentionPolicy: string }).retentionPolicy,
+    ).toBe("ephemeral");
+    expect(stub.resources[0]?.status).toBe("failed");
+    expect(
+      stub.mutations.some(
+        (entry) => entry.operation === "executor_bootstrap_failed",
+      ),
     ).toBe(true);
   });
 
