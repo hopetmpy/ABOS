@@ -22,8 +22,9 @@ jobs:
           timeout 300 pnpm test
           RC=$?
           set -e
-          # Exit code 124 means timeout killed the process (vitest hung after tests completed)
-          if [ $RC -eq 124 ]; then echo "::warning::vitest process hung after tests, killed by timeout"; exit 0; fi
+          # A timeout is a CI failure. Tests must terminate cleanly; otherwise
+          # we would be converting an unknown/hung suite into a false PASS.
+          if [ $RC -eq 124 ]; then echo "::error::vitest timed out or left active handles"; fi
           exit $RC
       - name: Run security tests
         timeout-minutes: 10
@@ -32,7 +33,7 @@ jobs:
           timeout 180 pnpm test -- --grep "security|injection|policy|financial"
           RC=$?
           set -e
-          if [ $RC -eq 124 ]; then echo "::warning::vitest process hung after tests, killed by timeout"; exit 0; fi
+          if [ $RC -eq 124 ]; then echo "::error::security test run timed out or left active handles"; fi
           exit $RC
 
   rebrand-integrity:
@@ -137,6 +138,7 @@ jobs:
           src/__tests__/command-injection.test.ts
           src/__tests__/legacy-state-migration.test.ts
           src/__tests__/genesis-bootstrap.test.ts
+          src/__tests__/heartbeat-scheduler.test.ts
           src/__tests__/orchestration/local-worker-harness.test.ts
 
   security-audit:
