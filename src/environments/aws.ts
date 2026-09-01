@@ -64,6 +64,8 @@ export interface AwsEnvironmentProviderOptions {
   ssmReadyIntervalMs?: number;
   artifactMaxCompressedBytes?: number;
   artifactChunkBytes?: number;
+  /** Primarily useful for tests/embedders; defaults to ~/.abos/workspace. */
+  artifactOutputRoot?: string;
 }
 
 interface AwsEc2Observation {
@@ -918,9 +920,8 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         input.resource.id,
       );
       const artifactDir = path.join(
-        getHomeDir(),
-        ".abos",
-        "workspace",
+        this.options.artifactOutputRoot ??
+          path.join(getHomeDir(), ".abos", "workspace"),
         goalSegment,
         "remote-artifacts",
         resourceSegment,
