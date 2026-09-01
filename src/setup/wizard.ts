@@ -5,7 +5,7 @@ import type { AbosConfig, TreasuryPolicy } from "../types.js";
 import { DEFAULT_TREASURY_POLICY } from "../types.js";
 import { getWallet, getAbosDir } from "../identity/wallet.js";
 import { provision } from "../identity/provision.js";
-import { createConfig, saveConfig } from "../config.js";
+import { createConfig, loadConfig, saveConfig } from "../config.js";
 import { writeDefaultHeartbeatConfig } from "../heartbeat/config.js";
 import { showBanner } from "./banner.js";
 import {
@@ -186,7 +186,7 @@ export async function runSetupWizard(): Promise<AbosConfig> {
   // ─── 5. Write config + heartbeat + SOUL.md + skills ───────────
   console.log(chalk.cyan("  [5/6] Writing configuration..."));
 
-  const config = createConfig({
+  let config = createConfig({
     name,
     genesisPrompt,
     creatorAddress,
@@ -210,7 +210,12 @@ export async function runSetupWizard(): Promise<AbosConfig> {
   if (/^(y|yes)$/i.test(connectCodexNow)) {
     try {
       const { connectCodex } = await import("../codex/commands.js");
-      await connectCodex(config);
+      const discovered = await connectCodex(config);
+      if (discovered > 0) {
+        const { runModelPicker } = await import("./model-picker.js");
+        await runModelPicker();
+        config = loadConfig() ?? config;
+      }
     } catch (error) {
       console.log(
         chalk.yellow(

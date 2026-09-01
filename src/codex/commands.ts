@@ -47,7 +47,11 @@ export async function runCodexLogin(): Promise<void> {
     console.log(chalk.red("  ABOS is not configured. Run: abos --setup"));
     return;
   }
-  await connectCodex(config);
+  const discovered = await connectCodex(config);
+  if (discovered > 0) {
+    const { runModelPicker } = await import("../setup/model-picker.js");
+    await runModelPicker();
+  }
 }
 
 export async function runCodexStatus(): Promise<void> {
