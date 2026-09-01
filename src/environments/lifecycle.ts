@@ -65,8 +65,11 @@ export class EnvironmentLifecycleManager {
       region: input.region ?? null,
       capabilities: input.requiredCapabilities,
       retentionPolicy: input.retentionPolicy,
-      estimatedCostCents: null,
-      evidence: ["Ownership registered before provider provisioning began."],
+      estimatedCostCents: input.selectionEstimateCents ?? null,
+      evidence: [
+        "Ownership registered before provider provisioning began.",
+        ...(input.selectionEvidence ?? []),
+      ],
       metadata: input.metadata ?? {},
     });
 
