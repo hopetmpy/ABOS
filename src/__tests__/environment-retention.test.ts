@@ -145,6 +145,75 @@ describe("EnvironmentRetentionCoordinator", () => {
     }
   });
 
+  it("suspends instead of destroying a terminal resource with uncollected remote artifacts", async () => {
+    const db = createDb();
+    try {
+      insertGoal(db, "goal-artifacts", "completed");
+      const registry = new EnvironmentRegistry();
+      let suspends = 0;
+      let destroys = 0;
+      registry.register(provider({
+        suspend: async () => {
+          suspends += 1;
+          return {
+            status: "suspended",
+            providerState: "stopped",
+            evidence: ["compute suspended"],
+          };
+        },
+        destroy: async () => {
+          destroys += 1;
+          return {
+            status: "terminated",
+            providerState: "terminated",
+          };
+        },
+      }));
+
+      const lifecycle = new EnvironmentLifecycleManager(
+        registry,
+        new EnvironmentResourceStore(db),
+      );
+      const owned = lifecycle.adopt({
+        provider: "cloud",
+        externalId: "vm-artifacts",
+        type: "compute",
+        goalId: "goal-artifacts",
+        status: "running",
+        retentionPolicy: "until_goal_complete",
+        metadata: {
+          remoteArtifacts: ["/opt/abos/output.txt", "file:///tmp/also-local.txt"],
+          artifactCollectionState: "pending",
+          executorAddress: "cloud://vm-artifacts",
+        },
+      });
+
+      const retention = new EnvironmentRetentionCoordinator(
+        db,
+        registry,
+        lifecycle,
+      );
+
+      const first = await retention.sweep();
+      expect(first.releaseEligible).toBe(1);
+      expect(first.artifactHolds).toBe(1);
+      expect(first.released).toBe(0);
+      expect(suspends).toBe(1);
+      expect(destroys).toBe(0);
+
+      const held = lifecycle.resources.get(owned.id);
+      expect(held?.status).toBe("suspended");
+      expect(held?.metadata.retentionReleaseState).toBe("artifact_hold");
+
+      const second = await retention.sweep();
+      expect(second.artifactHolds).toBe(1);
+      expect(suspends).toBe(1);
+      expect(destroys).toBe(0);
+    } finally {
+      db.close();
+    }
+  });
+
   it("releases a failed ephemeral resource even while its Task is still pending", async () => {
     const db = createDb();
     try {
