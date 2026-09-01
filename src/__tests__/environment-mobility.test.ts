@@ -517,6 +517,88 @@ describe("Environment mobility", () => {
     }
   });
 
+  it("clears a stale provider-scope block after later resource-scoped progress", async () => {
+    const db = createDb();
+    try {
+      seedTaskContext(db);
+      const registry = new EnvironmentRegistry();
+      registry.register(provider("env-a"));
+      const resources = new EnvironmentResourceStore(db);
+      const lifecycle = new EnvironmentLifecycleManager(
+        registry,
+        resources,
+      );
+      const current = lifecycle.adopt({
+        provider: "env-a",
+        externalId: "executor-current",
+        type: "executor",
+        goalId: "goal-mobility-1",
+        pathId: "path-mobility-1",
+        taskId: "task-mobility-1",
+        status: "running",
+        capabilities: ["compute"],
+        retentionPolicy: "manual_retention",
+        metadata: {
+          executorAddress: "env-a://executor-current",
+        },
+      });
+      const migrations = new EnvironmentMigrationStore(db);
+      const migration = migrations.create({
+        goalId: "goal-mobility-1",
+        pathId: "path-mobility-1",
+        taskId: "task-mobility-1",
+        sourceProvider: "env-a",
+        status: "target_failed",
+        reason: "older provider-level failure",
+        attemptedEnvironments: ["env-a"],
+        conditionFingerprints: {
+          "env-a": "older-condition",
+        },
+        metadata: {
+          providerFailureEnvironments: ["env-a"],
+          failedResourceIds: [],
+        },
+      });
+      const execution = {
+        dispatch: vi.fn(async () => {
+          throw new EnvironmentTaskExecutionError(
+            "env-a",
+            "later resource-specific failure",
+            ["provider was reachable; executor transport failed"],
+            "dispatch",
+          );
+        }),
+      } as unknown as EnvironmentExecutionBridge;
+      const mobility = new EnvironmentMobilityCoordinator(
+        registry,
+        new EnvironmentSelector(registry),
+        lifecycle,
+        migrations,
+        execution,
+      );
+
+      await expect(
+        mobility.dispatch("env-a", task(), {
+          address: "env-a://executor-current",
+          name: "current",
+          spawned: false,
+        }),
+      ).rejects.toThrow("later resource-specific failure");
+
+      const updated = migrations.get(migration.id)!;
+      expect(updated.metadata.providerFailureEnvironments).toEqual([]);
+      expect(updated.metadata.failedResourceIds).toEqual([current.id]);
+      expect(
+        await mobility.unchangedFailedEnvironmentExclusions(
+          updated,
+          task(),
+        ),
+      ).toEqual([]);
+    } finally {
+      db.close();
+    }
+  });
+
   it("reopens an environment after material provider conditions change", async () => {
     const db = createDb();
     try {
