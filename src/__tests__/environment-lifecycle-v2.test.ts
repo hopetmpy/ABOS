@@ -167,6 +167,33 @@ describe("Environment Execution & Lifecycle v2", () => {
         status: "running",
         capabilities: ["linux"],
       });
+      const now = new Date().toISOString();
+      db.prepare(
+        "INSERT INTO goals (id, title, description, status, created_at) VALUES (?, ?, ?, ?, ?)",
+      ).run("goal-2", "Goal 2", "Ownership fixture", "active", now);
+      db.prepare(
+        "INSERT INTO task_graph (id, goal_id, title, description, status, priority, dependencies, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      ).run("task-2", "goal-2", "Task 2", "Ownership fixture task", "pending", 50, "[]", now);
+      db.prepare(
+        "INSERT INTO adaptive_paths (id, goal_id, task_id, signature, hypothesis, strategy, assumptions, required_capabilities, sequence, expected_outcome, expected_cost_cents, evidence, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      ).run(
+        "path-2",
+        "goal-2",
+        "task-2",
+        "fixture-signature",
+        "Fixture hypothesis",
+        "Fixture strategy",
+        "[]",
+        "[]",
+        "[]",
+        "Fixture outcome",
+        0,
+        "[]",
+        "selected",
+        now,
+        now,
+      );
+
       const second = lifecycle.adopt({
         provider: "future-provider",
         externalId: "external-123",
