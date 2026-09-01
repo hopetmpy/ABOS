@@ -57,12 +57,12 @@ export class EnvironmentResourceStore {
     const status = input.status ?? "requested";
 
     this.db.prepare(
-      \`INSERT INTO environment_resources (
+      `INSERT INTO environment_resources (
         id, provider, external_id, type, goal_id, path_id, task_id, status,
         region, capabilities, estimated_cost_cents, actual_cost_cents,
         credentials_reference, retention_policy, provider_state, evidence,
         metadata, created_at, updated_at, last_health_check
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)\`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
     ).run(
       id,
       input.provider,
@@ -101,7 +101,7 @@ export class EnvironmentResourceStore {
 
   upsert(resource: EnvironmentResource): EnvironmentResource {
     this.db.prepare(
-      \`INSERT INTO environment_resources (
+      `INSERT INTO environment_resources (
         id, provider, external_id, type, goal_id, path_id, task_id, status,
         region, capabilities, estimated_cost_cents, actual_cost_cents,
         credentials_reference, retention_policy, provider_state, evidence,
@@ -125,7 +125,7 @@ export class EnvironmentResourceStore {
         evidence = excluded.evidence,
         metadata = excluded.metadata,
         updated_at = excluded.updated_at,
-        last_health_check = excluded.last_health_check\`,
+        last_health_check = excluded.last_health_check`,
     ).run(
       resource.id,
       resource.provider,
@@ -197,9 +197,9 @@ export class EnvironmentResourceStore {
       clauses.push("status != 'terminated'");
     }
 
-    const where = clauses.length ? \`WHERE \${clauses.join(" AND ")}\` : "";
+    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     const rows = this.db.prepare(
-      \`SELECT * FROM environment_resources \${where} ORDER BY created_at ASC\`,
+      `SELECT * FROM environment_resources ${where} ORDER BY created_at ASC`,
     ).all(...params) as ResourceRow[];
 
     return rows.map(deserializeResource);
@@ -217,17 +217,17 @@ export class EnvironmentResourceStore {
     } = {},
   ): EnvironmentResource {
     const current = this.get(id);
-    if (!current) throw new Error(\`Environment resource not found: \${id}\`);
+    if (!current) throw new Error(`Environment resource not found: ${id}`);
 
     const now = new Date().toISOString();
     const evidence = mergeUnique(current.evidence, options.evidence ?? []);
     const metadata = { ...current.metadata, ...(options.metadata ?? {}) };
 
     this.db.prepare(
-      \`UPDATE environment_resources
+      `UPDATE environment_resources
        SET status = ?, provider_state = COALESCE(?, provider_state),
            evidence = ?, metadata = ?, updated_at = ?
-       WHERE id = ?\`,
+       WHERE id = ?`,
     ).run(
       toStatus,
       options.providerState ?? null,
@@ -272,7 +272,7 @@ export class EnvironmentResourceStore {
     reason?: string,
   ): EnvironmentResource {
     const current = this.get(id);
-    if (!current) throw new Error(\`Environment resource not found: \${id}\`);
+    if (!current) throw new Error(`Environment resource not found: ${id}`);
 
     const nextStatus = patch.status ?? current.status;
     const next: EnvironmentResource = {
@@ -342,9 +342,9 @@ export class EnvironmentResourceStore {
 
   listEvents(resourceId: string): EnvironmentResourceEvent[] {
     const rows = this.db.prepare(
-      \`SELECT * FROM environment_resource_events
+      `SELECT * FROM environment_resource_events
        WHERE resource_id = ?
-       ORDER BY created_at ASC, id ASC\`,
+       ORDER BY created_at ASC, id ASC`,
     ).all(resourceId) as EventRow[];
 
     return rows.map((row) => ({
@@ -372,10 +372,10 @@ export class EnvironmentResourceStore {
     metadata: Record<string, unknown>;
   }): void {
     this.db.prepare(
-      \`INSERT INTO environment_resource_events (
+      `INSERT INTO environment_resource_events (
         id, resource_id, provider, operation, from_status, to_status,
         reason, evidence, metadata, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       ulid(),
       input.resourceId,
