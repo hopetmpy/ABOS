@@ -99,6 +99,9 @@ import {
   materializeArtifactsToFilesystemRoot,
   prepareArtifactMaterialization,
 } from "../environments/artifact-materialization.js";
+import {
+  materializeArtifactsToConwaySandbox,
+} from "../environments/conway-artifact-materializer.js";
 import { EnvironmentSelector } from "../environments/selector.js";
 import {
   EnvironmentExecutionBridge,
@@ -556,6 +559,30 @@ export async function runAgentLoop(
         },
       });
 
+      const resolveConwayChildForTarget = (
+        targetAddress: string,
+      ) => {
+        const resource = environmentResources
+          .list({
+            provider: "conway",
+            includeTerminated: true,
+          })
+          .find(
+            (entry) =>
+              entry.metadata.childAddress === targetAddress ||
+              entry.metadata.executorAddress === targetAddress,
+          );
+        const childId =
+          typeof resource?.metadata.childId === "string"
+            ? resource.metadata.childId
+            : null;
+        return childId
+          ? db.getChildById(childId)
+          : db.getChildren().find(
+              (entry) => entry.address === targetAddress,
+            );
+      };
+
       taskExecutors.register({
         environmentId: "conway",
         assess: async () =>
@@ -674,6 +701,24 @@ export async function runAgentLoop(
             }
           }
         },
+        materializeArtifacts: async (
+          _task,
+          target,
+          request,
+        ) => {
+          const child =
+            resolveConwayChildForTarget(target.address);
+          if (!child) {
+            throw new Error(
+              `Conway executor child identity not found for ${target.address}.`,
+            );
+          }
+          return materializeArtifactsToConwaySandbox(
+            conway,
+            child.sandboxId,
+            request,
+          );
+        },
         dispatch: async (task, target, options) => {
           if (!social) {
             throw new Error(
@@ -681,22 +726,8 @@ export async function runAgentLoop(
             );
           }
 
-          const resource = environmentResources
-            .list({ provider: "conway", includeTerminated: true })
-            .find(
-              (entry) =>
-                entry.metadata.childAddress === target.address ||
-                entry.metadata.executorAddress === target.address,
-            );
-          const childId =
-            typeof resource?.metadata.childId === "string"
-              ? resource.metadata.childId
-              : null;
-          const child = childId
-            ? db.getChildById(childId)
-            : db.getChildren().find(
-                (entry) => entry.address === target.address,
-              );
+          const child =
+            resolveConwayChildForTarget(target.address);
           if (!child) {
             throw new Error(
               `Conway executor child identity not found for ${target.address}.`,
