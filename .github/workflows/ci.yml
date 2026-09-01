@@ -99,6 +99,33 @@ jobs:
             exit 1
           fi
 
+
+  windows-regression:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm run build
+      - name: Run Windows portability regressions
+        shell: pwsh
+        run: >
+          pnpm exec vitest run
+          src/__tests__/platform-home.test.ts
+          src/__tests__/rebrand-installation.test.ts
+          src/__tests__/path-protection.test.ts
+          src/__tests__/tools-security.test.ts
+          src/__tests__/skills-hardening.test.ts
+          src/__tests__/command-injection.test.ts
+          src/__tests__/legacy-state-migration.test.ts
+          src/__tests__/genesis-bootstrap.test.ts
+          src/__tests__/orchestration/local-worker-harness.test.ts
+
   security-audit:
     runs-on: ubuntu-latest
     steps:
