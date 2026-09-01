@@ -363,6 +363,17 @@ export class Orchestrator {
       return;
     }
 
+    if (decision.action === "technical_retry" && latest?.status === "failed") {
+      this.adaptive.store.setPathStatus(decision.path.id, "failed");
+      this.adaptive.store.addOpportunity({
+        goalId: task.goalId,
+        sourcePathId: decision.path.id,
+        description:
+          "Transient recovery could not continue under the task's current technical retry budget. Re-evaluate the path, executor, or environment instead of blindly repeating.",
+        evidence: [error],
+      });
+    }
+
     updateGoalStatus(this.params.db, task.goalId, "active");
     const state = this.loadState();
     this.saveState({
