@@ -62,7 +62,11 @@ import {
 } from "../orchestration/orchestrator.js";
 import { PlanModeController } from "../orchestration/plan-mode.js";
 import { generateTodoMd, injectTodoContext } from "../orchestration/attention.js";
-import { ColonyMessaging, LocalDBTransport } from "../orchestration/messaging.js";
+import {
+  COLONY_MESSAGE_TYPES,
+  ColonyMessaging,
+  LocalDBTransport,
+} from "../orchestration/messaging.js";
 import { LocalWorkerPool } from "../orchestration/local-worker.js";
 import { SimpleAgentTracker, SimpleFundingProtocol } from "../orchestration/simple-tracker.js";
 import { HarnessRegistry } from "./harness-registry.js";
@@ -878,7 +882,9 @@ export async function runAgentLoop(
       // Check for unprocessed inbox messages using the state machine:
       // received → in_progress (claim) → processed (on success) or received/failed (on failure)
       if (!pendingInput) {
-        claimedMessages = claimInboxMessages(db.raw, 10);
+        claimedMessages = claimInboxMessages(db.raw, 10, {
+          excludeMessageTypes: [...COLONY_MESSAGE_TYPES],
+        });
         if (claimedMessages.length > 0) {
           const formatted = claimedMessages
             .map((m) => {
