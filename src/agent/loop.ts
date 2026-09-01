@@ -544,7 +544,7 @@ export async function runAgentLoop(
           repositoryUrl:
             process.env.ABOS_AWS_EXECUTOR_REPOSITORY || undefined,
           repositoryRef:
-            process.env.ABOS_AWS_EXECUTOR_REF || "main",
+            process.env.ABOS_AWS_EXECUTOR_REF || undefined,
           installRoot:
             process.env.ABOS_AWS_EXECUTOR_INSTALL_ROOT || undefined,
         }),
