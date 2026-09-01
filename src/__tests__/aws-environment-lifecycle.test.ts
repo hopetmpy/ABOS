@@ -137,6 +137,16 @@ describe("AwsEnvironmentProvider lifecycle", () => {
     const runner: EnvironmentCommandRunner = async (_command, args) => {
       calls.push(args);
 
+      if (
+        args[0] === "ssm" &&
+        args[1] === "describe-instance-information"
+      ) {
+        return ok(JSON.stringify({
+          PingStatus: "Online",
+          PlatformType: "Linux",
+          AgentVersion: "3.3.0",
+        }));
+      }
       if (args[0] === "ssm" && args[1] === "send-command") {
         return ok(JSON.stringify({
           Command: { CommandId: "cmd-1" },
