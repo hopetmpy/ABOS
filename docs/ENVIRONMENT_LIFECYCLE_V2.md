@@ -70,9 +70,11 @@ reference to an authorized credential source.
 - reusable resources when reported;
 - optional external policy evaluation.
 
-An explicit budget fails closed when cost is unknown. A candidate that is unavailable,
-unauthorized, over budget, or missing required operations remains visible as evidence but
-is not selected for immediate execution.
+An explicit budget fails closed unless the provider estimate declares complete cost coverage.
+A partial or unknown estimate remains useful evidence for ranking/telemetry, but it is not
+treated as proof that execution fits inside a hard budget. A candidate that is unavailable,
+unauthorized, over budget, incompletely costed, or missing required operations remains visible
+as evidence but is not selected for immediate execution.
 
 No candidate being executable is not proof of objective impossibility. It becomes discovery,
 authorization, acquisition, composition, construction, or alternate-path work.
@@ -136,6 +138,10 @@ The AWS provider now implements real EC2 lifecycle control through the AWS CLI:
 - runtime checkout pinned to the current ABOS git revision by default;
 - one-shot Task execution through SSM using the canonical ABOS harness layer;
 - semantic `TaskResult` returned to the parent Orchestrator;
+- executor-local artifact paths are not reported as if they existed on the parent host;
+- automatic artifact collection can materialize bounded runtime files through chunked SSM transfer;
+- remote collection validates resolved paths against the runtime root, bounds raw/compressed sizes,
+  writes parent-side materializations with restrictive permissions, and preserves pending state on uncertainty;
 - health, collect, resize, suspend, resume, recover, destroy, and reconcile;
 - restart recovery by `abos:resource-id` tag if provisioning succeeded before the InstanceId was persisted;
 - compute-only price estimates kept explicitly separate from actual AWS billing;
@@ -145,7 +151,9 @@ The EC2 Task executor currently requires SSM reachability. In practice the insta
 instance profile that authorizes Systems Manager (for example a profile containing the AWS managed
 `AmazonSSMManagedInstanceCore` policy). ABOS can accept that profile through
 `ABOS_AWS_EC2_INSTANCE_PROFILE` or provider metadata. Missing authorization is classified as
-currently unavailable/requires authorization, not as objective impossibility.
+currently unavailable/requires authorization, not as objective impossibility. New EC2 Task
+executors are blocked before provisioning when this authorization evidence is missing so ABOS
+does not knowingly create a billable instance that it cannot bootstrap.
 
 The current one-shot remote worker intentionally does not claim the `orchestrator` harness because
 that harness requires a live delegated-worker scheduler. Other roles use the same harness registry
@@ -156,7 +164,8 @@ closed capability boundary.
 
 `EnvironmentRetentionCoordinator` evaluates persisted ownership and declared retention policy:
 
-- `ephemeral`: release after the owning Task reaches completed/failed/cancelled;
+- `ephemeral`: release after the owning Task reaches completed/failed/cancelled; a failed
+  ephemeral resource is immediately eligible for release even if the Task itself will pursue a new path;
 - `until_goal_complete`: release after the owning Goal reaches completed/failed;
 - `persistent` and `manual_retention`: never auto-destroy;
 - unknown/custom policies: no destructive semantics are invented.
@@ -165,6 +174,13 @@ A destroy that cannot be verified becomes `pending_observation`. ABOS reconciles
 before another destructive attempt. If the observed condition is unchanged, it does not blindly
 repeat the same destroy route. Provider-verified absence satisfies the retention boundary without
 fabricating a billing/destruction event.
+
+If an executor reports local artifacts that have not yet been materialized outside the provider,
+retention enters `artifact_hold` instead of destroying the resource. When the provider supports
+suspend, compute is suspended while preserving the artifact state. Collection evidence is persisted
+through the generic lifecycle. Only after collection state is no longer pending can automatic
+retention proceed to destruction. Oversized or unverifiable artifacts remain explicit pending
+evidence rather than being silently dropped.
 
 ## Integration sequence
 
@@ -175,4 +191,7 @@ fabricating a billing/destruction event.
 5. **Implemented:** AWS lifecycle foundation and EC2 + SSM one-shot Task execution.
 6. **Implemented:** EC2 health/reconciliation, compute-only cost evidence, and provider-neutral retention.
 7. **Implemented:** restart recovery for owned AWS instances and observation-gated destructive retry.
-8. **Next:** remote multi-worker/orchestrator harness support, richer AWS authorization acquisition, cross-environment migration/reuse policy, and final phase freeze.
+8. **Implemented:** pre-spend SSM authorization gating, failed-candidate ephemeral cleanup, remote
+   artifact preservation/collection, artifact-hold retention, and explicit parent/remote artifact identity.
+9. **Next:** remote multi-worker/orchestrator harness support, richer AWS authorization acquisition,
+   cross-environment migration/reuse policy, and final phase freeze.
