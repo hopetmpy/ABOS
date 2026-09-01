@@ -67,6 +67,11 @@ import { createWorkerInferenceBridge } from "./worker-inference-bridge.js";
 import { ProviderRegistry } from "../inference/provider-registry.js";
 import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import { isIdleOnlyTool } from "./idle-only-tools.js";
+import { CapabilityRegistry } from "../capabilities/registry.js";
+import { EnvironmentRegistry } from "../environments/registry.js";
+import { LocalEnvironmentProvider } from "../environments/local.js";
+import { ConwayEnvironmentProvider } from "../environments/conway.js";
+import { AwsEnvironmentProvider } from "../environments/aws.js";
 
 const logger = createLogger("loop");
 const MAX_TOOL_CALLS_PER_TURN = 10;
@@ -101,6 +106,25 @@ export async function runAgentLoop(
   const builtinTools = createBuiltinTools(identity.sandboxId);
   const installedTools = loadInstalledTools(db);
   const tools = [...builtinTools, ...installedTools];
+
+  // Unified capability/environment view. Existing tool and skill systems remain
+  // authoritative implementations; this registry lets planning reason across
+  // them and across execution environments without provider-specific branches.
+  const capabilityRegistry = new CapabilityRegistry();
+  capabilityRegistry.ingestTools(tools);
+  capabilityRegistry.ingestSkills(skills ?? []);
+
+  const environmentRegistry = new EnvironmentRegistry();
+  environmentRegistry.register(new LocalEnvironmentProvider());
+  environmentRegistry.register(new ConwayEnvironmentProvider(conway));
+  environmentRegistry.register(new AwsEnvironmentProvider());
+
+  // Prime capability discovery once. Inspection failures are represented as
+  // environment state (unavailable/unknown), never as a fatal agent-loop error.
+  for (const snapshot of await environmentRegistry.inspectAll()) {
+    capabilityRegistry.registerMany(snapshot.capabilities);
+  }
+
   const toolContext: ToolContext = {
     identity,
     config,
@@ -220,6 +244,8 @@ export async function runAgentLoop(
           if (!child) return false;
           return !["failed", "dead", "cleaned_up"].includes(child.status);
         },
+        environmentRegistry,
+        capabilityRegistry,
         config: {
           ...config,
           spawnAgent: async (task: any) => {
