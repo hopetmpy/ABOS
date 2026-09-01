@@ -1,4 +1,9 @@
+import fs from "node:fs";
+import path from "node:path";
+import { createHash } from "node:crypto";
+import { getHomeDir } from "../platform/home.js";
 import type {
+  EnvironmentCollectionResult,
   EnvironmentEstimate,
   EnvironmentHealthResult,
   EnvironmentPreparationResult,
@@ -28,6 +33,17 @@ export interface ConwayPricingProbeTier {
   monthlyCents: number;
 }
 
+export interface ConwaySandboxExecutionProbe {
+  exec(
+    command: string,
+    timeout?: number,
+  ): Promise<{
+    stdout: string;
+    stderr: string;
+    exitCode: number;
+  }>;
+}
+
 export interface ConwayProbe {
   getCreditsBalance(): Promise<number>;
   getCreditsPricing?(): Promise<ConwayPricingProbeTier[]>;
@@ -39,12 +55,16 @@ export interface ConwayProbe {
     region?: string;
   }): Promise<ConwaySandboxProbeInfo>;
   listSandboxes?(): Promise<ConwaySandboxProbeInfo[]>;
+  createScopedClient?(
+    targetSandboxId: string,
+  ): ConwaySandboxExecutionProbe;
 }
 
 export class ConwayEnvironmentProvider implements EnvironmentProvider {
   readonly id = "conway";
   readonly provision?: NonNullable<EnvironmentProvider["provision"]>;
   readonly health?: NonNullable<EnvironmentProvider["health"]>;
+  readonly collect?: NonNullable<EnvironmentProvider["collect"]>;
   readonly reconcile?: NonNullable<EnvironmentProvider["reconcile"]>;
 
   constructor(private readonly conway: ConwayProbe) {
@@ -55,6 +75,11 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
     if (conway.listSandboxes) {
       this.health = async (resource) => this.healthSandbox(resource.externalId);
       this.reconcile = async (resource) => this.reconcileSandbox(resource);
+    }
+
+    if (conway.createScopedClient) {
+      this.collect = async (resource) =>
+        this.collectSandboxArtifacts(resource);
     }
   }
 
@@ -266,6 +291,222 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
     };
   }
 
+  private async collectSandboxArtifacts(
+    resource: Parameters<
+      NonNullable<EnvironmentProvider["collect"]>
+    >[0],
+  ): Promise<EnvironmentCollectionResult> {
+    const pending = stringArray(
+      resource.metadata.remoteArtifacts,
+    );
+    const previous = Array.isArray(
+      resource.metadata.collectedArtifacts,
+    )
+      ? resource.metadata.collectedArtifacts
+      : [];
+
+    if (pending.length === 0) {
+      return {
+        artifacts: [],
+        evidence: [
+          "Conway resource has no pending remote artifacts to collect.",
+        ],
+        metadata: {
+          artifactCollectionState:
+            resource.metadata.artifactCollectionState ?? "none",
+          remoteArtifacts: [],
+          collectedArtifacts: previous,
+        },
+      };
+    }
+
+    if (
+      !resource.externalId ||
+      !this.conway.createScopedClient
+    ) {
+      return {
+        artifacts: [],
+        evidence: [
+          "Conway sandbox identity or scoped execution capability is unavailable; remote artifacts remain pending.",
+        ],
+        metadata: {
+          artifactCollectionState: "pending",
+          remoteArtifacts: pending,
+          collectedArtifacts: previous,
+        },
+      };
+    }
+
+    const scoped = this.conway.createScopedClient(
+      resource.externalId,
+    );
+    const runtimeRoot =
+      typeof resource.metadata.installRoot === "string" &&
+      resource.metadata.installRoot.trim()
+        ? resource.metadata.installRoot.trim()
+        : "/root/abos";
+    const collected: Array<{
+      remotePath: string;
+      localPath: string;
+      bytes: number;
+      sha256: string;
+    }> = [];
+    const remaining: string[] = [];
+    const evidence: string[] = [];
+    const chunkBytes = 8_000;
+
+    for (const original of pending) {
+      try {
+        const observed = await scoped.exec(
+          [
+            "set -euo pipefail",
+            `ROOT=${shellQuote(path.posix.resolve(runtimeRoot))}`,
+            `CANDIDATE=${shellQuote(original)}`,
+            'case "$CANDIDATE" in /*) ;; *) CANDIDATE="$ROOT/$CANDIDATE" ;; esac',
+            'REAL="$(readlink -f -- "$CANDIDATE")"',
+            'case "$REAL" in "$ROOT"|"$ROOT"/*) ;; *) echo "artifact path escapes runtime root" >&2; exit 73 ;; esac',
+            'test -f "$REAL"',
+            'SIZE="$(stat -c %s "$REAL")"',
+            'SHA="$(sha256sum "$REAL" | awk \'{print $1}\')"',
+            `printf 'ABOS_ARTIFACT_BYTES=%s\\nABOS_ARTIFACT_SHA256=%s\\n' "$SIZE" "$SHA"`,
+          ].join("\n"),
+          30_000,
+        );
+        if (observed.exitCode !== 0) {
+          throw new Error(
+            `remote observation failed: ${observed.stderr || observed.stdout}`,
+          );
+        }
+
+        const observation =
+          parseConwayArtifactObservation(
+            observed.stdout,
+          );
+        if (!observation) {
+          throw new Error(
+            "remote observation returned no valid size/hash markers",
+          );
+        }
+
+        const chunks: Buffer[] = [];
+        for (
+          let offset = 0;
+          offset < observation.bytes;
+          offset += chunkBytes
+        ) {
+          const count = Math.min(
+            chunkBytes,
+            observation.bytes - offset,
+          );
+          const fetched = await scoped.exec(
+            [
+              "set -euo pipefail",
+              `ROOT=${shellQuote(path.posix.resolve(runtimeRoot))}`,
+              `CANDIDATE=${shellQuote(original)}`,
+              'case "$CANDIDATE" in /*) ;; *) CANDIDATE="$ROOT/$CANDIDATE" ;; esac',
+              'REAL="$(readlink -f -- "$CANDIDATE")"',
+              'case "$REAL" in "$ROOT"|"$ROOT"/*) ;; *) exit 73 ;; esac',
+              `dd if="$REAL" bs=1 skip=${offset} count=${count} status=none | base64 -w0`,
+            ].join("\n"),
+            30_000,
+          );
+          if (fetched.exitCode !== 0) {
+            throw new Error(
+              `remote chunk fetch failed at offset=${offset}: ${fetched.stderr || fetched.stdout}`,
+            );
+          }
+
+          const encoded =
+            fetched.stdout.replace(/\s+/g, "");
+          if (
+            !encoded ||
+            !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)
+          ) {
+            throw new Error(
+              `remote chunk at offset=${offset} returned invalid base64`,
+            );
+          }
+          chunks.push(Buffer.from(encoded, "base64"));
+        }
+
+        const body = Buffer.concat(chunks);
+        const sha256 = createHash("sha256")
+          .update(body)
+          .digest("hex");
+        if (
+          body.length !== observation.bytes ||
+          sha256.toLowerCase() !==
+            observation.sha256.toLowerCase()
+        ) {
+          throw new Error(
+            `collected artifact integrity mismatch: expected bytes=${observation.bytes} sha256=${observation.sha256}, received bytes=${body.length} sha256=${sha256}`,
+          );
+        }
+
+        const goalSegment = safeFilesystemSegment(
+          resource.goalId ?? "unbound-goal",
+        );
+        const resourceSegment =
+          safeFilesystemSegment(resource.id);
+        const artifactDir = path.join(
+          getHomeDir(),
+          ".abos",
+          "workspace",
+          goalSegment,
+          "remote-artifacts",
+          resourceSegment,
+        );
+        fs.mkdirSync(artifactDir, {
+          recursive: true,
+        });
+        const basename =
+          safeArtifactBasename(original);
+        const localPath = path.join(
+          artifactDir,
+          `${sha256.slice(0, 12)}-${basename}`,
+        );
+        fs.writeFileSync(localPath, body, {
+          mode: 0o600,
+        });
+
+        collected.push({
+          remotePath: original,
+          localPath,
+          bytes: body.length,
+          sha256,
+        });
+        evidence.push(
+          `Collected Conway artifact "${original}" to "${localPath}" bytes=${body.length} sha256=${sha256}.`,
+        );
+      } catch (error) {
+        remaining.push(original);
+        evidence.push(
+          `Conway artifact "${original}" remains pending: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    return {
+      artifacts: collected.map(
+        (entry) => entry.localPath,
+      ),
+      evidence,
+      metadata: {
+        artifactCollectionState:
+          remaining.length === 0
+            ? "collected"
+            : "pending",
+        remoteArtifacts: remaining,
+        collectedArtifacts: [
+          ...previous,
+          ...collected,
+        ],
+        artifactCollectionObservedAt:
+          new Date().toISOString(),
+      },
+    };
+  }
+
   private async healthSandbox(
     externalId: string | null,
   ): Promise<EnvironmentHealthResult> {
@@ -359,6 +600,67 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
       ],
     };
   }
+}
+
+function parseConwayArtifactObservation(
+  output: string,
+): { bytes: number; sha256: string } | null {
+  const bytesMatch =
+    /(?:^|\n)ABOS_ARTIFACT_BYTES=(\d+)(?:\n|$)/.exec(
+      output,
+    );
+  const hashMatch =
+    /(?:^|\n)ABOS_ARTIFACT_SHA256=([0-9a-fA-F]{64})(?:\n|$)/.exec(
+      output,
+    );
+  if (!bytesMatch || !hashMatch) {
+    return null;
+  }
+
+  const bytes = Number(bytesMatch[1]);
+  if (!Number.isSafeInteger(bytes) || bytes < 0) {
+    return null;
+  }
+  return {
+    bytes,
+    sha256: hashMatch[1].toLowerCase(),
+  };
+}
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(
+      (entry): entry is string =>
+        typeof entry === "string",
+    )
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function safeFilesystemSegment(
+  value: string,
+): string {
+  const normalized = value
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96);
+  return normalized || "unbound";
+}
+
+function safeArtifactBasename(
+  value: string,
+): string {
+  const basename = path.posix.basename(value);
+  const normalized = basename
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120);
+  return normalized || "artifact";
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
 function requestedShape(
