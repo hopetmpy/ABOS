@@ -17,6 +17,34 @@ export const ARTIFACT_MATERIALIZATION_PROTOCOL_VERSION = 1 as const;
 export const DEFAULT_CONTINUATION_ARTIFACT_DIR =
   ".abos-continuation-artifacts";
 
+export function isDurableExternalArtifactReference(
+  value: string,
+): boolean {
+  return /^(?:https?|s3|gs|ipfs|ar):\/\//i.test(
+    value.trim(),
+  );
+}
+
+/**
+ * Opaque provider-neutral reference to an artifact that is still physically
+ * owned by a remote execution resource. The provider/resource authorities
+ * remain in environment_resources; this URI is transport evidence only.
+ */
+export function remoteEnvironmentArtifactReference(
+  environmentId: string,
+  targetAddress: string,
+  remoteReference: string,
+): string {
+  return [
+    "abos-remote-artifact:///",
+    encodeURIComponent(environmentId),
+    "/",
+    encodeURIComponent(targetAddress),
+    "/",
+    encodeURIComponent(remoteReference),
+  ].join("");
+}
+
 export interface ArtifactMaterializationSource {
   reference: string;
   localPath: string;
