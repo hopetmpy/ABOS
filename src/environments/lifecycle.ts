@@ -18,7 +18,7 @@ export class EnvironmentOperationUnavailableError extends Error {
     readonly operation: EnvironmentOperation,
   ) {
     super(
-      \`Environment "\${environmentId}" does not currently expose operation "\${operation}". \` +
+      `Environment "${environmentId}" does not currently expose operation "${operation}". ` +
       "This is unavailable capability evidence, not proof that the objective is impossible.",
     );
     this.name = "EnvironmentOperationUnavailableError";
@@ -236,7 +236,7 @@ export class EnvironmentLifecycleManager {
       return this.resources.recordHealth(resourceId, {
         status: "unknown",
         evidence: [
-          \`health operation failed: \${error instanceof Error ? error.message : String(error)}\`,
+          `health operation failed: ${error instanceof Error ? error.message : String(error)}`,
         ],
       });
     }
@@ -277,7 +277,7 @@ export class EnvironmentLifecycleManager {
           },
         },
         "reconcile",
-        \`Provider reconciliation action: \${result.action}\`,
+        `Provider reconciliation action: ${result.action}`,
       );
     } catch (error) {
       return this.resources.applyMutation(
@@ -285,7 +285,7 @@ export class EnvironmentLifecycleManager {
         {
           status: "unknown",
           evidence: [
-            \`reconcile operation failed: \${error instanceof Error ? error.message : String(error)}\`,
+            `reconcile operation failed: ${error instanceof Error ? error.message : String(error)}`,
           ],
         },
         "reconcile",
@@ -316,7 +316,7 @@ export class EnvironmentLifecycleManager {
     if (enteringStatus) {
       resource = this.resources.transition(resourceId, enteringStatus, {
         operation,
-        reason: \`\${operation} started.\`,
+        reason: `${operation} started.`,
       });
     }
 
@@ -332,7 +332,7 @@ export class EnvironmentLifecycleManager {
           metadata: result.metadata,
         },
         operation,
-        \`\${operation} completed.\`,
+        `${operation} completed.`,
       );
     } catch (error) {
       return this.resources.applyMutation(
@@ -340,11 +340,11 @@ export class EnvironmentLifecycleManager {
         {
           status: operation === "destroy" ? "unknown" : "degraded",
           evidence: [
-            \`\${operation} failed: \${error instanceof Error ? error.message : String(error)}\`,
+            `${operation} failed: ${error instanceof Error ? error.message : String(error)}`,
           ],
         },
         operation,
-        \`\${operation} failed; resource state requires observation/recovery.\`,
+        `${operation} failed; resource state requires observation/recovery.`,
       );
     }
   }
@@ -352,7 +352,7 @@ export class EnvironmentLifecycleManager {
   private requireResource(resourceId: string): EnvironmentResource {
     const resource = this.resources.get(resourceId);
     if (!resource) {
-      throw new Error(\`Environment resource not found: \${resourceId}\`);
+      throw new Error(`Environment resource not found: ${resourceId}`);
     }
     return resource;
   }
