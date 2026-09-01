@@ -496,14 +496,6 @@ export class EnvironmentMobilityCoordinator {
       const target = this.lifecycle.resources.get(
         migration.targetResourceId,
       );
-      if (isRetentionOwnedForRelease(target)) {
-        result.retentionOwnedSkipped += 1;
-        result.evidence.push(
-          `Mobility left migration target resource=${target.id} to the retention authority because retentionReleaseState=${String(target.metadata.retentionReleaseState)}.`,
-        );
-        continue;
-      }
-
       if (!target) {
         this.store.transition(
           migration.id,
@@ -516,6 +508,14 @@ export class EnvironmentMobilityCoordinator {
           "reconcile",
         );
         result.migrationsReconciled += 1;
+        continue;
+      }
+
+      if (isRetentionOwnedForRelease(target)) {
+        result.retentionOwnedSkipped += 1;
+        result.evidence.push(
+          `Mobility left migration target resource=${target.id} to the retention authority because retentionReleaseState=${String(target.metadata.retentionReleaseState)}.`,
+        );
         continue;
       }
 
