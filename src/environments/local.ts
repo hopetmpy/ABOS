@@ -119,7 +119,20 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
     };
   }
 
-  async health(): Promise<EnvironmentHealthResult> {
+  async health(
+    resource: Parameters<NonNullable<EnvironmentProvider["health"]>>[0],
+  ): Promise<EnvironmentHealthResult> {
+    if (resource.type !== "local-host") {
+      return {
+        healthy: null,
+        status: "unknown",
+        providerState: "runtime_owned_executor",
+        evidence: [
+          "Local host health does not prove an in-process Task executor is still alive; worker liveness remains a runtime observation.",
+        ],
+      };
+    }
+
     return {
       healthy: true,
       status: "running",
@@ -137,6 +150,22 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
   }
 
   async reconcile(resource: Parameters<NonNullable<EnvironmentProvider["reconcile"]>>[0]): Promise<EnvironmentReconcileResult> {
+    if (resource.type !== "local-host") {
+      return {
+        resource: {
+          ...resource,
+          status: "unknown",
+          providerState: "runtime_restarted_or_unobserved",
+          updatedAt: new Date().toISOString(),
+        },
+        actualExists: null,
+        action: "mark_unknown",
+        evidence: [
+          "A persisted local Task executor cannot be inferred alive from host presence after restart; task-level recovery must observe it explicitly.",
+        ],
+      };
+    }
+
     const nextStatus = resource.status === "unknown"
       ? "ready"
       : resource.status;

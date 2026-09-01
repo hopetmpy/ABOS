@@ -171,9 +171,20 @@ describe("Environment Execution & Lifecycle v2", () => {
         provider: "future-provider",
         externalId: "external-123",
         type: "compute",
+        goalId: "goal-2",
+        pathId: "path-2",
+        taskId: "task-2",
+        status: "running",
+        capabilities: ["browser"],
+        evidence: ["reused for a new execution"],
       });
 
       expect(second.id).toBe(first.id);
+      expect(second.goalId).toBe("goal-2");
+      expect(second.pathId).toBe("path-2");
+      expect(second.taskId).toBe("task-2");
+      expect(second.capabilities).toEqual(expect.arrayContaining(["linux", "browser"]));
+      expect(lifecycle.resources.listEvents(second.id).map((event) => event.operation)).toContain("adopt");
       expect(lifecycle.resources.list({ includeTerminated: true })).toHaveLength(1);
     } finally {
       db.close();

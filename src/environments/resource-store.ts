@@ -256,6 +256,9 @@ export class EnvironmentResourceStore {
     patch: {
       externalId?: string | null;
       type?: string;
+      goalId?: string | null;
+      pathId?: string | null;
+      taskId?: string | null;
       status?: EnvironmentResourceStatus;
       region?: string | null;
       capabilities?: string[];
@@ -279,6 +282,9 @@ export class EnvironmentResourceStore {
       ...current,
       externalId: patch.externalId !== undefined ? patch.externalId : current.externalId,
       type: patch.type ?? current.type,
+      goalId: patch.goalId !== undefined ? patch.goalId : current.goalId,
+      pathId: patch.pathId !== undefined ? patch.pathId : current.pathId,
+      taskId: patch.taskId !== undefined ? patch.taskId : current.taskId,
       status: nextStatus,
       region: patch.region !== undefined ? patch.region : current.region,
       capabilities: patch.capabilities ?? current.capabilities,

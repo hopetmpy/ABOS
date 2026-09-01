@@ -138,7 +138,44 @@ export class EnvironmentLifecycleManager {
       input.provider,
       input.externalId,
     );
-    if (existing) return existing;
+    if (existing) {
+      return this.resources.applyMutation(
+        existing.id,
+        {
+          type: input.type,
+          goalId: input.goalId !== undefined ? input.goalId : existing.goalId,
+          pathId: input.pathId !== undefined ? input.pathId : existing.pathId,
+          taskId: input.taskId !== undefined ? input.taskId : existing.taskId,
+          status: input.status ?? existing.status,
+          region: input.region !== undefined ? input.region : existing.region,
+          capabilities: mergeUnique(existing.capabilities, input.capabilities ?? []),
+          estimatedCostCents:
+            input.estimatedCostCents !== undefined
+              ? input.estimatedCostCents
+              : existing.estimatedCostCents,
+          actualCostCents:
+            input.actualCostCents !== undefined
+              ? input.actualCostCents
+              : existing.actualCostCents,
+          credentialsReference:
+            input.credentialsReference !== undefined
+              ? input.credentialsReference
+              : existing.credentialsReference,
+          retentionPolicy: input.retentionPolicy ?? existing.retentionPolicy,
+          providerState:
+            input.providerState !== undefined
+              ? input.providerState
+              : existing.providerState,
+          evidence: [
+            ...(input.evidence ?? []),
+            "Existing provider resource ownership refreshed in ABOS inventory.",
+          ],
+          metadata: input.metadata ?? {},
+        },
+        "adopt",
+        "Existing provider resource re-bound to current ABOS execution ownership.",
+      );
+    }
 
     return this.resources.create({
       ...input,
