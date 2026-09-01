@@ -48,22 +48,18 @@ import {
   type TaskResult,
 } from "./task-graph.js";
 import { executeTaskWithHarness } from "./local-worker.js";
+import type { ExecutionContinuationContext } from "../environments/continuity.js";
 import {
-  EXECUTION_CONTINUATION_PROTOCOL_VERSION,
-  type ExecutionContinuationContext,
-} from "../environments/continuity.js";
-import {
-  isTaskExecutionEnvelope,
+  parseTaskExecutionPayload,
+  type ParsedTaskExecutionPayload,
 } from "./task-execution-envelope.js";
 
 export interface StandaloneTaskExecutionOptions {
   executionContinuation?: ExecutionContinuationContext;
 }
 
-export interface ParsedStandaloneTaskExecutionPayload {
-  task: TaskNode;
-  executionContinuation?: ExecutionContinuationContext;
-}
+export type ParsedStandaloneTaskExecutionPayload =
+  ParsedTaskExecutionPayload;
 
 export async function executeStandaloneTaskFile(
   filePath: string,
@@ -385,176 +381,8 @@ function createLocalMirrorTask(
 export function parseStandaloneTaskExecutionPayload(
   value: unknown,
 ): ParsedStandaloneTaskExecutionPayload {
-  if (isTaskExecutionEnvelope(value)) {
-    const envelope = value;
-    const task = parseTask(envelope.task);
-    const executionContinuation = parseContinuationContext(
-      envelope.continuationContext,
-      task,
-    );
-    return {
-      task,
-      ...(executionContinuation
-        ? { executionContinuation }
-        : {}),
-    };
-  }
-
-  // Backward compatibility: old callers may still send a bare TaskNode.
-  return { task: parseTask(value) };
-}
-
-function parseContinuationContext(
-  value: unknown,
-  task: TaskNode,
-): ExecutionContinuationContext | undefined {
-  if (value == null) return undefined;
-  if (!value || typeof value !== "object") {
-    throw new Error(
-      "Standalone continuationContext must be an object when provided.",
-    );
-  }
-
-  const context = value as Partial<ExecutionContinuationContext>;
-  if (
-    context.protocolVersion !== EXECUTION_CONTINUATION_PROTOCOL_VERSION ||
-    !context.identity ||
-    typeof context.identity.goalId !== "string" ||
-    typeof context.identity.taskId !== "string" ||
-    !(
-      typeof context.identity.pathId === "string" ||
-      context.identity.pathId === null
-    )
-  ) {
-    throw new Error(
-      "Standalone continuationContext has an unsupported protocol or invalid canonical identity.",
-    );
-  }
-
-  if (
-    context.identity.goalId !== task.goalId ||
-    context.identity.taskId !== task.id
-  ) {
-    throw new Error(
-      `Standalone continuation identity mismatch: expected goal=${task.goalId} task=${task.id}, received goal=${context.identity.goalId} task=${context.identity.taskId}.`,
-    );
-  }
-
-  const taskPathId = task.strategicPathId ?? null;
-  if (context.identity.pathId !== taskPathId) {
-    throw new Error(
-      `Standalone continuation Path mismatch: expected ${taskPathId ?? "unbound"}, received ${context.identity.pathId ?? "unbound"}.`,
-    );
-  }
-
-  return context as ExecutionContinuationContext;
-}
-
-function parseTask(value: unknown): TaskNode {
-  if (!value || typeof value !== "object") {
-    throw new Error(
-      "Standalone Task payload must be an object.",
-    );
-  }
-
-  const task = value as Partial<TaskNode>;
-  if (
-    typeof task.id !== "string" ||
-    !task.id.trim() ||
-    typeof task.goalId !== "string" ||
-    !task.goalId.trim() ||
-    typeof task.title !== "string" ||
-    !task.title.trim() ||
-    typeof task.description !== "string" ||
-    !task.description.trim() ||
-    !task.metadata ||
-    typeof task.metadata.timeoutMs !== "number"
-  ) {
-    throw new Error(
-      "Standalone Task payload is missing required id, goalId, title, description, or metadata.timeoutMs.",
-    );
-  }
-
-  return {
-    id: task.id,
-    parentId:
-      typeof task.parentId === "string"
-        ? task.parentId
-        : null,
-    goalId: task.goalId,
-    title: task.title,
-    description: task.description,
-    status: task.status ?? "pending",
-    assignedTo:
-      typeof task.assignedTo === "string"
-        ? task.assignedTo
-        : null,
-    agentRole:
-      typeof task.agentRole === "string"
-        ? task.agentRole
-        : "generalist",
-    priority:
-      typeof task.priority === "number"
-        ? Math.max(
-            0,
-            Math.min(
-              100,
-              Math.floor(task.priority),
-            ),
-          )
-        : 50,
-    dependencies: Array.isArray(task.dependencies)
-      ? task.dependencies.filter(
-          (entry): entry is string =>
-            typeof entry === "string",
-        )
-      : [],
-    result: null,
-    requiredCapabilities:
-      Array.isArray(task.requiredCapabilities)
-        ? task.requiredCapabilities.filter(
-            (entry): entry is string =>
-              typeof entry === "string",
-          )
-        : [],
-    preferredEnvironment:
-      typeof task.preferredEnvironment === "string"
-        ? task.preferredEnvironment
-        : null,
-    strategicPathId:
-      typeof task.strategicPathId === "string"
-        ? task.strategicPathId
-        : null,
-    metadata: {
-      estimatedCostCents:
-        typeof task.metadata.estimatedCostCents === "number"
-          ? task.metadata.estimatedCostCents
-          : 0,
-      actualCostCents:
-        typeof task.metadata.actualCostCents === "number"
-          ? task.metadata.actualCostCents
-          : 0,
-      maxRetries:
-        typeof task.metadata.maxRetries === "number"
-          ? task.metadata.maxRetries
-          : 0,
-      retryCount:
-        typeof task.metadata.retryCount === "number"
-          ? task.metadata.retryCount
-          : 0,
-      timeoutMs: task.metadata.timeoutMs,
-      createdAt:
-        typeof task.metadata.createdAt === "string"
-          ? task.metadata.createdAt
-          : new Date().toISOString(),
-      startedAt:
-        typeof task.metadata.startedAt === "string"
-          ? task.metadata.startedAt
-          : null,
-      completedAt:
-        typeof task.metadata.completedAt === "string"
-          ? task.metadata.completedAt
-          : null,
-    },
-  };
+  return parseTaskExecutionPayload(value, {
+    allowBareTask: true,
+    errorPrefix: "Standalone",
+  });
 }
