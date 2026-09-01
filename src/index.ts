@@ -64,6 +64,7 @@ Usage:
   abos --init         Initialize wallet and config directory
   abos --provision    Provision Conway API key via SIWE
   abos --status       Show current abos status
+  abos --execute-task-file <path>  Execute one Task envelope and emit TaskResult
   abos --version      Show version
   abos --help         Show this help
 
@@ -72,6 +73,24 @@ Environment:
   CONWAY_API_KEY           Conway API key (overrides config)
   OLLAMA_BASE_URL          Ollama base URL (overrides config, e.g. http://localhost:11434)
 `);
+    process.exit(0);
+  }
+
+  const executeTaskFileIndex = args.indexOf("--execute-task-file");
+  if (executeTaskFileIndex >= 0) {
+    const taskFile = args[executeTaskFileIndex + 1];
+    if (!taskFile) {
+      throw new Error("--execute-task-file requires a Task JSON file path.");
+    }
+
+    const { executeStandaloneTaskFile } = await import(
+      "./orchestration/standalone-worker.js"
+    );
+    const result = await executeStandaloneTaskFile(taskFile);
+    const encoded = Buffer.from(JSON.stringify(result), "utf8").toString("base64");
+    // Stable transport marker for provider adapters. A semantic Task failure is
+    // still a successfully transported TaskResult and therefore exits normally.
+    process.stdout.write(`ABOS_TASK_RESULT_BASE64=${encoded}\\n`);
     process.exit(0);
   }
 
