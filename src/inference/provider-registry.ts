@@ -20,7 +20,15 @@ export interface ModelConfig {
   tier: ModelTier;
   contextWindow: number;
   maxOutputTokens: number;
+  /**
+   * USD per 1,000,000 input tokens.
+   * Legacy field name retained for config compatibility.
+   */
   costPerInputToken: number;
+  /**
+   * USD per 1,000,000 output tokens.
+   * Legacy field name retained for config compatibility.
+   */
   costPerOutputToken: number;
   supportsTools: boolean;
   supportsVision: boolean;
