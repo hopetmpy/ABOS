@@ -1,5 +1,6 @@
 import type { Database } from "better-sqlite3";
 import { ulid } from "ulid";
+import { MIGRATION_V12 } from "../state/schema.js";
 import { pathSignature } from "./path-signature.js";
 import type {
   Opportunity,
@@ -26,7 +27,13 @@ const parseArray = (value: unknown): string[] => {
 };
 
 export class AdaptiveStore {
-  constructor(private readonly db: Database) {}
+  constructor(private readonly db: Database) {
+    // Orchestrator is also used in tests/embeddings that provide a raw DB
+    // rather than createDatabase(). Keep the adaptive sidecar schema
+    // idempotently available without requiring callers to know migration v12.
+    // Production still records migration version through createDatabase().
+    db.exec(MIGRATION_V12);
+  }
 
   getOrCreatePath(candidate: PathCandidate): PersistedPath {
     const signature = pathSignature(candidate);
