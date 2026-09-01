@@ -79,6 +79,12 @@ export interface EnvironmentRequirements {
   requiredCapabilities: string[];
   requiredOperations?: EnvironmentOperation[];
   preferredEnvironment?: string | null;
+  /**
+   * Contextual exclusions for this specific path/attempt. This is not a global
+   * provider denylist; mobility uses it to avoid repeating an equivalent failed
+   * environment until material conditions change.
+   */
+  excludedEnvironmentIds?: string[];
   requiredPermissions?: string[];
   maxEstimatedCostCents?: number | null;
   expectedDurationMs?: number | null;
