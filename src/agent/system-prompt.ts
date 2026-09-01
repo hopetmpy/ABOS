@@ -554,6 +554,24 @@ export function getOrchestratorStatus(db: Database.Database): string {
 /**
  * Build the complete system prompt for a turn.
  */
+function getOperationalContext(config: AbosConfig): string {
+  if (config.sandboxId) return OPERATIONAL_CONTEXT;
+
+  if (process.platform === "win32") {
+    return OPERATIONAL_CONTEXT.replace(
+      "You operate inside a Linux VM (Conway sandbox) with full root access. Your runtime\nenvironment includes:\n- Shell access (exec): full Linux commands, package installation, process management",
+      "You are running ABOS locally on Windows, not inside a Conway sandbox.\n" +
+        "Local shell commands execute through Git Bash for POSIX compatibility and file tools are confined to the Windows user home.\n" +
+        "Your runtime environment includes:\n- Shell access (exec): Git Bash/POSIX-compatible commands on the local Windows host",
+    );
+  }
+
+  return OPERATIONAL_CONTEXT.replace(
+    "You operate inside a Linux VM (Conway sandbox) with full root access. Your runtime\nenvironment includes:",
+    `You are running ABOS locally on ${process.platform}, not inside a Conway sandbox. Your runtime\nenvironment includes:`,
+  );
+}
+
 export function buildSystemPrompt(params: {
   identity: AbosIdentity;
   config: AbosConfig;
@@ -665,7 +683,7 @@ Your chain type is ${chainType}.`,
   }
 
   // Layer 6: Operational Context
-  sections.push(OPERATIONAL_CONTEXT);
+  sections.push(getOperationalContext(config));
 
   // Layer 7: Dynamic Context
   const turnCount = db.getTurnCount();
