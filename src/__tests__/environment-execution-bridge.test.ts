@@ -8,6 +8,7 @@ import { EnvironmentRegistry } from "../environments/registry.js";
 import { EnvironmentSelector } from "../environments/selector.js";
 import type { EnvironmentProvider } from "../environments/types.js";
 import type { TaskNode } from "../orchestration/task-graph.js";
+import type { ExecutionContinuationContext } from "../environments/continuity.js";
 
 function provider(id: string, cost = 0): EnvironmentProvider {
   return {
@@ -130,6 +131,10 @@ describe("EnvironmentExecutionBridge", () => {
 
     const executors = new EnvironmentTaskExecutorRegistry();
     const deliveries: string[] = [];
+    const continuationContext = {
+      marker: "continuation",
+    } as unknown as ExecutionContinuationContext;
+    let deliveredContinuation: ExecutionContinuationContext | undefined;
     executors.register({
       environmentId: "alpha",
       spawn: async () => ({
@@ -137,8 +142,9 @@ describe("EnvironmentExecutionBridge", () => {
         name: "alpha",
         sandboxId: "a-1",
       }),
-      dispatch: async (input, target) => {
+      dispatch: async (input, target, options) => {
         deliveries.push(`alpha:${input.id}:${target.address}`);
+        deliveredContinuation = options?.continuationContext;
         return { evidence: ["alpha delivery"] };
       },
     });
@@ -164,9 +170,12 @@ describe("EnvironmentExecutionBridge", () => {
       address: "alpha://existing",
       name: "alpha-existing",
       spawned: false,
+    }, {
+      continuationContext,
     });
 
     expect(result.evidence).toContain("alpha delivery");
+    expect(deliveredContinuation).toBe(continuationContext);
     expect(deliveries).toEqual(["alpha:task-1:alpha://existing"]);
   });
 
