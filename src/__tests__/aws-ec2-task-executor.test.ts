@@ -7,6 +7,10 @@ import type {
   EnvironmentResource,
 } from "../environments/types.js";
 import type { TaskNode, TaskResult } from "../orchestration/task-graph.js";
+import {
+  EXECUTION_CONTINUATION_PROTOCOL_VERSION,
+  type ExecutionContinuationContext,
+} from "../environments/continuity.js";
 
 function task(role = "generalist"): TaskNode {
   return {
@@ -33,6 +37,71 @@ function task(role = "generalist"): TaskNode {
       createdAt: new Date(0).toISOString(),
       startedAt: null,
       completedAt: null,
+    },
+  };
+}
+
+function continuation(): ExecutionContinuationContext {
+  const input = task();
+  return {
+    protocolVersion: EXECUTION_CONTINUATION_PROTOCOL_VERSION,
+    assembledAt: new Date(0).toISOString(),
+    identity: {
+      goalId: input.goalId,
+      taskId: input.id,
+      pathId: input.strategicPathId ?? null,
+    },
+    goal: {
+      title: "AWS continuation goal",
+      description: "Continue verified work on a remote executor.",
+      status: "active",
+      strategy: "Reuse verified progress.",
+    },
+    task: {
+      title: input.title,
+      description: input.description,
+      status: input.status,
+      result: null,
+    },
+    path: {
+      id: "path-1",
+      status: "executing",
+      hypothesis: "Remote execution can resume verified work.",
+      strategy: "Continue from durable evidence.",
+      assumptions: [],
+      requiredCapabilities: ["shell"],
+      environment: "aws",
+      executor: "aws://ec2/i-new",
+      sequence: ["resume"],
+      expectedOutcome: "Task completes without restarting verified work.",
+      evidence: ["Prior progress was verified."],
+    },
+    history: {
+      failures: [{
+        pathId: "path-1",
+        environmentId: "local",
+        reason: "Previous executor became unavailable.",
+        evidence: [],
+      }],
+      decisions: [],
+      evidence: [],
+    },
+    memory: [],
+    artifacts: [{
+      reference: "/tmp/verified-input.txt",
+      state: "available",
+      materializedPath: "/tmp/verified-input.txt",
+    }],
+    pending: [],
+    checkpoint: null,
+    sources: [{
+      authority: "task_graph",
+      recordId: input.id,
+    }],
+    extensions: {
+      "future-provider": {
+        opaque: true,
+      },
     },
   };
 }
@@ -535,6 +604,109 @@ describe("AwsEc2TaskExecutor", () => {
     );
     expect(send).toBeTruthy();
     expect(JSON.stringify(send)).toContain("--execute-task-file");
+  });
+
+  it("transports the canonical Task execution envelope with continuation over the existing SSM command", async () => {
+    const expected: TaskResult = {
+      success: true,
+      output: "continued remotely",
+      artifacts: [],
+      costCents: 1,
+      duration: 10,
+    };
+
+    let transportedEnvelope: Record<string, unknown> | null = null;
+    const runner: EnvironmentCommandRunner = async (_command, args) => {
+      if (args[0] === "ssm" && args[1] === "send-command") {
+        const parametersIndex = args.indexOf("--parameters");
+        expect(parametersIndex).toBeGreaterThan(-1);
+        const parameters = JSON.parse(args[parametersIndex + 1] ?? "{}") as {
+          commands?: string[];
+        };
+        const script = parameters.commands?.[0] ?? "";
+        const match = /printf %s '([A-Za-z0-9+/=]+)' \| base64 -d/.exec(script);
+        expect(match?.[1]).toBeTruthy();
+        transportedEnvelope = JSON.parse(
+          Buffer.from(match![1], "base64").toString("utf8"),
+        ) as Record<string, unknown>;
+
+        return {
+          stdout: JSON.stringify({
+            Command: { CommandId: "cmd-continuation" },
+          }),
+          stderr: "",
+          exitCode: 0,
+        };
+      }
+      if (args[0] === "ssm" && args[1] === "wait") {
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      if (args[0] === "ssm" && args[1] === "get-command-invocation") {
+        return {
+          stdout: JSON.stringify({
+            CommandId: "cmd-continuation",
+            Status: "Success",
+            ResponseCode: 0,
+            StandardOutputContent:
+              `ABOS_TASK_RESULT_BASE64=${encodedResult(expected)}\n`,
+            StandardErrorContent: "",
+          }),
+          stderr: "",
+          exitCode: 0,
+        };
+      }
+      throw new Error(`unexpected AWS call: ${args.join(" ")}`);
+    };
+
+    const provider = new AwsEnvironmentProvider({
+      runner,
+      defaultRegion: "us-east-1",
+    });
+    const { lifecycle } = lifecycleStub([resource()]);
+    const executor = new AwsEc2TaskExecutor({
+      provider,
+      lifecycle,
+      identity: {} as any,
+      config: {} as any,
+    });
+    const context = continuation();
+
+    const dispatched = await executor.dispatch(
+      task(),
+      {
+        address: "aws://ec2/i-new",
+        name: "aws-worker",
+        spawned: false,
+      },
+      {
+        continuationContext: context,
+      },
+    );
+
+    expect(transportedEnvelope).toMatchObject({
+      protocol: "abos_task_execution_v1",
+      task: {
+        id: "task-aws-1",
+        goalId: "goal-1",
+        strategicPathId: "path-1",
+      },
+      continuationContext: {
+        protocolVersion: EXECUTION_CONTINUATION_PROTOCOL_VERSION,
+        identity: {
+          goalId: "goal-1",
+          taskId: "task-aws-1",
+          pathId: "path-1",
+        },
+      },
+    });
+    expect(
+      (transportedEnvelope?.continuationContext as ExecutionContinuationContext)
+        .extensions["future-provider"],
+    ).toEqual({ opaque: true });
+    expect(dispatched.metadata?.continuationDelivered).toBe(true);
+    expect(dispatched.metadata?.continuationProtocolVersion).toBe(
+      EXECUTION_CONTINUATION_PROTOCOL_VERSION,
+    );
   });
 
   it("does not turn semantic Task failure into a transport failure", async () => {
