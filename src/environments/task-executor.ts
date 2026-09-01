@@ -21,6 +21,17 @@ export interface EnvironmentTaskSpawnResult {
   metadata?: Record<string, unknown>;
 }
 
+export interface EnvironmentTaskTarget {
+  address: string;
+  name: string;
+  spawned: boolean;
+}
+
+export interface EnvironmentTaskDispatchResult {
+  evidence?: string[];
+  metadata?: Record<string, unknown>;
+}
+
 export interface EnvironmentTaskExecutor {
   readonly environmentId: string;
   assess?(
@@ -29,6 +40,10 @@ export interface EnvironmentTaskExecutor {
     | EnvironmentTaskExecutionAssessment
     | Promise<EnvironmentTaskExecutionAssessment>;
   spawn(task: TaskNode): Promise<EnvironmentTaskSpawnResult>;
+  dispatch?(
+    task: TaskNode,
+    target: EnvironmentTaskTarget,
+  ): Promise<EnvironmentTaskDispatchResult>;
 }
 
 export interface EnvironmentTaskExecutionResult
@@ -236,6 +251,82 @@ export class EnvironmentExecutionBridge {
       selectionCandidate: chosen.candidate,
       evidence: combinedEvidence,
     };
+  }
+
+  async dispatch(
+    environmentId: string,
+    task: TaskNode,
+    target: EnvironmentTaskTarget,
+  ): Promise<EnvironmentTaskDispatchResult> {
+    const executor = this.executors.get(environmentId);
+    if (!executor) {
+      throw new EnvironmentTaskExecutionError(
+        environmentId,
+        `Environment "${environmentId}" has no registered Task executor adapter for dispatch.`,
+        [
+          `No Task executor adapter is registered for environment=${environmentId}.`,
+          "This is currently unavailable/undiscovered execution capability, not proof that the objective is impossible.",
+        ],
+      );
+    }
+
+    if (!executor.dispatch) {
+      throw new EnvironmentTaskExecutionError(
+        environmentId,
+        `Environment "${environmentId}" does not currently expose Task dispatch.`,
+        [
+          `Task dispatch is unavailable for environment=${environmentId}.`,
+          "Missing dispatch capability is not proof that the objective is impossible.",
+        ],
+      );
+    }
+
+    let result: EnvironmentTaskDispatchResult;
+    try {
+      result = await executor.dispatch(task, target);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new EnvironmentTaskExecutionError(
+        environmentId,
+        `Environment Task dispatch failed in "${environmentId}": ${message}`,
+        [`dispatch failure: ${message}`],
+      );
+    }
+
+    if (this.lifecycle) {
+      const resource = this.lifecycle.resources
+        .list({ includeTerminated: true })
+        .find(
+          (entry) =>
+            entry.provider === environmentId &&
+            (
+              entry.metadata.executorAddress === target.address ||
+              entry.metadata.childAddress === target.address ||
+              entry.externalId === target.address
+            ),
+        );
+
+      if (resource) {
+        this.lifecycle.resources.applyMutation(
+          resource.id,
+          {
+            goalId: task.goalId,
+            pathId: task.strategicPathId ?? null,
+            taskId: task.id,
+            evidence: result.evidence,
+            metadata: {
+              ...(result.metadata ?? {}),
+              executorAddress: target.address,
+              lastDispatchedTaskId: task.id,
+            },
+          },
+          "task_dispatch",
+          `Task ${task.id} dispatched through environment executor.`,
+        );
+      }
+    }
+
+    return result;
   }
 }
 
