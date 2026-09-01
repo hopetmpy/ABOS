@@ -9,6 +9,7 @@
 import path from "path";
 import type { PolicyRule, PolicyRequest, PolicyRuleResult } from "../../types.js";
 import { isProtectedFile } from "../../self-mod/code.js";
+import { RUNTIME_ROOT } from "../../runtime-root.js";
 
 /** Sensitive files that must not be read by the agent */
 const SENSITIVE_READ_PATTERNS: string[] = [
@@ -143,8 +144,8 @@ function createTraversalDetectionRule(): PolicyRule {
       // Always verify the resolved path stays within the working directory,
       // regardless of whether ".." is present — absolute paths like
       // "/etc/passwd" can escape without using traversal sequences.
-      const cwd = process.cwd();
-      if (!resolved.startsWith(cwd + path.sep) && resolved !== cwd) {
+      const runtimeRoot = RUNTIME_ROOT;
+      if (!resolved.startsWith(runtimeRoot + path.sep) && resolved !== runtimeRoot) {
         return deny(
           "path.traversal_detection",
           "PATH_TRAVERSAL",
