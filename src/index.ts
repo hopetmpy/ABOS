@@ -61,6 +61,10 @@ Usage:
   abos --setup        Re-run the interactive setup wizard
   abos --configure    Edit configuration (providers, model, treasury, general)
   abos --pick-model   Interactively pick the active inference model
+  abos --codex-login  Connect ChatGPT/Codex with device-code OAuth
+  abos --codex-status Show current Codex account connection
+  abos --codex-models Refresh and list models available to the Codex account
+  abos --codex-logout Disconnect the Codex/ChatGPT session
   abos --init         Initialize wallet and config directory
   abos --provision    Provision Conway API key via SIWE
   abos --status       Show current abos status
@@ -118,6 +122,30 @@ Environment:
 
   if (args.includes("--status")) {
     await showStatus();
+    process.exit(0);
+  }
+
+  if (args.includes("--codex-login")) {
+    const { runCodexLogin } = await import("./codex/commands.js");
+    await runCodexLogin();
+    process.exit(0);
+  }
+
+  if (args.includes("--codex-status")) {
+    const { runCodexStatus } = await import("./codex/commands.js");
+    await runCodexStatus();
+    process.exit(0);
+  }
+
+  if (args.includes("--codex-models")) {
+    const { runCodexModels } = await import("./codex/commands.js");
+    await runCodexModels();
+    process.exit(0);
+  }
+
+  if (args.includes("--codex-logout")) {
+    const { runCodexLogout } = await import("./codex/commands.js");
+    await runCodexLogout();
     process.exit(0);
   }
 

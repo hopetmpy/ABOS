@@ -40,6 +40,22 @@ export interface ProvisionResult {
 
 // ─── Configuration ───────────────────────────────────────────────
 
+export interface CodexProviderConfig {
+  /** Whether ABOS should treat the existing Codex/ChatGPT session as available. */
+  enabled: boolean;
+  /** Last Codex model chosen by the user. Stored without provider namespace. */
+  selectedModel?: string;
+  /** Provider-native reasoning effort. Kept open-ended for future Codex values. */
+  reasoningEffort?: string;
+  /** Hidden models stay excluded by default but can be explicitly discovered. */
+  includeHiddenModels?: boolean;
+}
+
+export const DEFAULT_CODEX_PROVIDER_CONFIG: CodexProviderConfig = {
+  enabled: false,
+  includeHiddenModels: false,
+};
+
 export interface AbosConfig {
   name: string;
   genesisPrompt: string;
@@ -52,6 +68,8 @@ export interface AbosConfig {
   openaiApiKey?: string;
   anthropicApiKey?: string;
   ollamaBaseUrl?: string;
+  /** Codex OAuth integration metadata only. OAuth credentials remain owned by Codex. */
+  codex?: CodexProviderConfig;
   inferenceModel: string;
   maxTokensPerTurn: number;
   heartbeatConfigPath: string;
@@ -90,6 +108,7 @@ export const DEFAULT_CONFIG: Partial<AbosConfig> = {
   maxTurnsPerCycle: 25,
   childSandboxMemoryMb: 1024,
   socialRelayUrl: "https://social.conway.tech",
+  codex: DEFAULT_CODEX_PROVIDER_CONFIG,
 };
 
 // ─── Agent State ─────────────────────────────────────────────────
