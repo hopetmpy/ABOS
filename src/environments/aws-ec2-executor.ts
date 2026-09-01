@@ -22,7 +22,7 @@ import { AwsEnvironmentProvider } from "./aws.js";
 import {
   ARTIFACT_MATERIALIZATION_PROTOCOL_VERSION,
   artifactTargetRelativePath,
-  isDurableExternalArtifactReference,
+  isOpaqueExternalArtifactReference,
   type ArtifactMaterializationRequest,
   type ArtifactMaterializationResult,
 } from "./artifact-materialization.js";
@@ -592,11 +592,11 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
     }
 
     const durableArtifacts = result.artifacts.filter(
-      isDurableExternalArtifactReference,
+      isOpaqueExternalArtifactReference,
     );
     const localRemoteArtifacts = result.artifacts.filter(
       (artifact) =>
-        !isDurableExternalArtifactReference(artifact),
+        !isOpaqueExternalArtifactReference(artifact),
     );
     let semanticArtifacts = [...result.artifacts];
     let artifactCollectionState =
