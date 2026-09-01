@@ -68,6 +68,7 @@ import {
   LocalDBTransport,
 } from "../orchestration/messaging.js";
 import { LocalWorkerPool } from "../orchestration/local-worker.js";
+import { createTaskExecutionEnvelope } from "../orchestration/task-execution-envelope.js";
 import { SimpleAgentTracker, SimpleFundingProtocol } from "../orchestration/simple-tracker.js";
 import { HarnessRegistry } from "./harness-registry.js";
 import { createWorkerInferenceBridge } from "./worker-inference-bridge.js";
@@ -577,18 +578,12 @@ export async function runAgentLoop(
             taskId: task.id,
             priority: "high",
             requiresResponse: true,
-            content: JSON.stringify({
-              taskId: task.id,
-              title: task.title,
-              description: task.description,
-              agentRole: task.agentRole,
-              dependencies: task.dependencies,
-              timeoutMs: task.metadata.timeoutMs,
-              requiredCapabilities: task.requiredCapabilities ?? [],
-              preferredEnvironment: task.preferredEnvironment ?? null,
-              strategicPathId: task.strategicPathId ?? null,
-              continuationContext: options?.continuationContext ?? null,
-            }),
+            content: JSON.stringify(
+              createTaskExecutionEnvelope(
+                task,
+                options?.continuationContext,
+              ),
+            ),
           });
           await messaging.send(message);
 
