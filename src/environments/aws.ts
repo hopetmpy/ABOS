@@ -261,6 +261,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
 
     if (hourlyCostCents != null) {
       metadata.hourlyCostCents = hourlyCostCents;
+      metadata.pricingScope = "EC2 Linux On-Demand compute only; excludes storage, network, public IPv4, taxes, discounts, credits, and other AWS charges.";
     }
 
     let estimatedCostCents: number | null = null;
@@ -273,7 +274,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         hourlyCostCents * (requirements.expectedDurationMs / 3_600_000),
       );
       evidence.push(
-        `AWS EC2 estimated task cost=${estimatedCostCents} cents for expectedDurationMs=${requirements.expectedDurationMs}.`,
+        `AWS EC2 compute-only estimated task cost=${estimatedCostCents} cents for expectedDurationMs=${requirements.expectedDurationMs}; full AWS invoice cost remains unknown until billing evidence is available.`,
       );
     } else {
       evidence.push(
@@ -487,6 +488,10 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         availabilityZone: instance.Placement?.AvailabilityZone ?? null,
         iamInstanceProfile,
         executorKind: request.metadata?.executorKind ?? null,
+        hourlyCostCents: positiveNumber(request.metadata?.hourlyCostCents),
+        accruedComputeEstimateCents: 0,
+        billingStartedAt: instance.LaunchTime ?? new Date().toISOString(),
+        costEstimateScope: "EC2 compute only; actual AWS billed cost is not claimed.",
       },
     };
   }
@@ -611,6 +616,9 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
           ? null
           : false;
 
+    const cost = observeComputeEstimate(resource, state, new Date());
+    if (cost.evidence) evidence.push(cost.evidence);
+
     return {
       healthy,
       status:
@@ -621,6 +629,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       evidence,
       metadata: {
         ...observationMetadata(observed.instance),
+        ...cost.metadata,
         ssmPingStatus: ssm?.PingStatus ?? null,
         ssmAgentVersion: ssm?.AgentVersion ?? null,
         ssmPlatformType: ssm?.PlatformType ?? null,
@@ -694,15 +703,19 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       await this.startInstance(instanceId, region);
     }
 
+    const cost = observeComputeEstimate(resource, "stopped", new Date());
     return {
       status: wasRunning ? "running" : "suspended",
       providerState: wasRunning ? "running" : "stopped",
       evidence: [
         `AWS EC2 instance ${instanceId} resized to instanceType=${instanceType}.`,
         `Previous running state preserved=${wasRunning}.`,
+        ...(cost.evidence ? [cost.evidence] : []),
       ],
       metadata: {
         instanceType,
+        ...cost.metadata,
+        billingStartedAt: wasRunning ? new Date().toISOString() : null,
       },
     };
   }
@@ -711,10 +724,18 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     const instanceId = requireInstanceId(resource);
     const region = resource.region ?? await this.resolveRegion();
     await this.stopInstance(instanceId, region);
+    const cost = observeComputeEstimate(resource, "stopped", new Date());
     return {
       status: "suspended",
       providerState: "stopped",
-      evidence: [`AWS EC2 instance ${instanceId} stopped.`],
+      evidence: [
+        `AWS EC2 instance ${instanceId} stopped.`,
+        ...(cost.evidence ? [cost.evidence] : []),
+      ],
+      metadata: {
+        ...cost.metadata,
+        billingStartedAt: null,
+      },
     };
   }
 
@@ -725,7 +746,10 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     return {
       status: "running",
       providerState: "running",
-      evidence: [`AWS EC2 instance ${instanceId} started.`],
+      evidence: [`AWS EC2 instance ${instanceId} started; compute-cost estimation clock resumed.`],
+      metadata: {
+        billingStartedAt: new Date().toISOString(),
+      },
     };
   }
 
@@ -754,10 +778,18 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     ], this.commandTimeoutMs());
     requireAwsSuccess(waited, `EC2 wait instance-terminated ${instanceId}`);
 
+    const cost = observeComputeEstimate(resource, "terminated", new Date());
     return {
       status: "terminated",
       providerState: "terminated",
-      evidence: [`AWS EC2 instance ${instanceId} terminated and waiter confirmed termination.`],
+      evidence: [
+        `AWS EC2 instance ${instanceId} terminated and waiter confirmed termination.`,
+        ...(cost.evidence ? [cost.evidence] : []),
+      ],
+      metadata: {
+        ...cost.metadata,
+        billingStartedAt: null,
+      },
     };
   }
 
@@ -1113,7 +1145,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     if (usd == null) {
       return null;
     }
-    return Math.ceil(usd * 100);
+    return Number((usd * 100).toFixed(6));
   }
 
   private async findInstancesByResourceId(
@@ -1449,6 +1481,51 @@ function buildDefaultAbosBootstrapCommands(
   ].join("\n");
 
   return [script];
+}
+
+function observeComputeEstimate(
+  resource: EnvironmentResource,
+  providerState: string,
+  observedAt: Date,
+): {
+  metadata: Record<string, unknown>;
+  evidence?: string;
+} {
+  const hourlyCostCents = positiveNumber(resource.metadata.hourlyCostCents);
+  const accumulated = positiveNumber(
+    resource.metadata.accruedComputeEstimateCents,
+  ) ?? 0;
+  const startedAt = typeof resource.metadata.billingStartedAt === "string"
+    ? Date.parse(resource.metadata.billingStartedAt)
+    : Number.NaN;
+
+  if (hourlyCostCents == null || !Number.isFinite(startedAt)) {
+    return {
+      metadata: {
+        costEstimateObservedAt: observedAt.toISOString(),
+        costEstimateScope: "EC2 compute only; rate or billing start is unknown, so no billed cost is fabricated.",
+      },
+    };
+  }
+
+  const elapsedMs = Math.max(0, observedAt.getTime() - startedAt);
+  const additional = normalize(providerState) === "running" ||
+    resource.metadata.billingStartedAt
+    ? hourlyCostCents * (elapsedMs / 3_600_000)
+    : 0;
+  const total = Number((accumulated + additional).toFixed(6));
+  const running = normalize(providerState) === "running";
+
+  return {
+    metadata: {
+      hourlyCostCents,
+      accruedComputeEstimateCents: total,
+      billingStartedAt: running ? observedAt.toISOString() : null,
+      costEstimateObservedAt: observedAt.toISOString(),
+      costEstimateScope: "EC2 compute only; actual AWS billed cost is not claimed.",
+    },
+    evidence: `AWS EC2 compute-only accrued estimate=${total.toFixed(4)} cents at observed provider state=${providerState}; full billed cost remains UNKNOWN without billing evidence.`,
+  };
 }
 
 function observationMetadata(
