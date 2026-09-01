@@ -19,7 +19,7 @@ jobs:
         timeout-minutes: 10
         run: |
           set +e
-          timeout 300 pnpm test
+          timeout 300 pnpm run test:diagnose
           RC=$?
           set -e
           # A timeout is a CI failure. Tests must terminate cleanly; otherwise
