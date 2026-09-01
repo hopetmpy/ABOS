@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ulid } from "ulid";
 import {
@@ -24,6 +28,15 @@ import {
   EXECUTION_CONTINUATION_PROTOCOL_VERSION,
   type ExecutionContinuationContext,
 } from "../../environments/continuity.js";
+import { EnvironmentRegistry } from "../../environments/registry.js";
+import { EnvironmentSelector } from "../../environments/selector.js";
+import {
+  EnvironmentExecutionBridge,
+  EnvironmentTaskExecutorRegistry,
+} from "../../environments/task-executor.js";
+import { EnvironmentResourceStore } from "../../environments/resource-store.js";
+import { EnvironmentLifecycleManager } from "../../environments/lifecycle.js";
+import { ConwayEnvironmentProvider } from "../../environments/conway.js";
 
 class InMemoryColonyRelay implements MessageTransport {
   constructor(
@@ -323,5 +336,226 @@ describe("cross-environment logical continuity E2E", () => {
       "0xchild",
       "healthy",
     );
+  });
+
+  it("collects a child-local artifact onto the parent with verified bytes before persisting the canonical TaskResult", async () => {
+    const previousHome = process.env.HOME;
+    const tempHome = fs.mkdtempSync(
+      path.join(os.tmpdir(), "abos-colony-artifact-e2e-"),
+    );
+    process.env.HOME = tempHome;
+
+    try {
+      const parentDb = createDatabase(":memory:");
+      const childDb = createDatabase(":memory:");
+      databases.push(parentDb, childDb);
+
+      parentDb.setIdentity("address", "0xparent");
+      childDb.setIdentity("address", "0xchild");
+      seedParent(parentDb);
+
+      const recipients = new Map<string, AbosDatabase>([
+        ["0xparent", parentDb],
+        ["0xchild", childDb],
+      ]);
+      const parentMessaging = new ColonyMessaging(
+        new InMemoryColonyRelay("0xparent", recipients),
+        parentDb,
+      );
+      const childMessaging = new ColonyMessaging(
+        new InMemoryColonyRelay("0xchild", recipients),
+        childDb,
+      );
+
+      const artifactBody = Buffer.from([
+        0, 7, 14, 21, 128, 255,
+      ]);
+      const artifactDigest = createHash("sha256")
+        .update(artifactBody)
+        .digest("hex");
+
+      const conwayProvider = new ConwayEnvironmentProvider({
+        getCreditsBalance: async () => 100,
+        createScopedClient: () => ({
+          exec: async (command: string) => {
+            if (command.includes("ABOS_ARTIFACT_BYTES")) {
+              return {
+                stdout:
+                  `ABOS_ARTIFACT_BYTES=${artifactBody.length}\nABOS_ARTIFACT_SHA256=${artifactDigest}\n`,
+                stderr: "",
+                exitCode: 0,
+              };
+            }
+            if (command.includes("dd if=")) {
+              return {
+                stdout: artifactBody.toString("base64"),
+                stderr: "",
+                exitCode: 0,
+              };
+            }
+            throw new Error(
+              `unexpected Conway collect command: ${command}`,
+            );
+          },
+        }),
+      });
+
+      const environmentRegistry = new EnvironmentRegistry();
+      environmentRegistry.register(conwayProvider);
+      const resources = new EnvironmentResourceStore(parentDb.raw);
+      resources.create({
+        id: "resource-conway-e2e",
+        provider: "conway",
+        externalId: "sandbox-child",
+        type: "conway-sandbox",
+        goalId: "goal-e2e-1",
+        pathId: null,
+        taskId: "task-e2e-1",
+        status: "running",
+        retentionPolicy: "until_goal_complete",
+        metadata: {
+          childAddress: "0xchild",
+          executorAddress: "0xchild",
+          lastDispatchedTaskId: "task-e2e-1",
+          installRoot: "/root/abos",
+        },
+      });
+      const lifecycle = new EnvironmentLifecycleManager(
+        environmentRegistry,
+        resources,
+      );
+      const bridge = new EnvironmentExecutionBridge(
+        new EnvironmentSelector(environmentRegistry),
+        new EnvironmentTaskExecutorRegistry(),
+        lifecycle,
+      );
+
+      childMessaging.setHandler(
+        "task_assignment",
+        createColonyTaskAssignmentConsumer({
+          identityAddress: "0xchild",
+          parentAddress: "0xparent",
+          db: childDb,
+          messaging: childMessaging,
+          executeTask: async (): Promise<TaskResult> => ({
+            success: true,
+            output: "child produced a binary artifact",
+            artifacts: ["outputs/result.bin"],
+            costCents: 3,
+            duration: 30,
+          }),
+        }),
+      );
+
+      const assignment = parentMessaging.createMessage({
+        type: "task_assignment",
+        to: "0xchild",
+        goalId: "goal-e2e-1",
+        taskId: "task-e2e-1",
+        priority: "high",
+        requiresResponse: true,
+        content: JSON.stringify(
+          createTaskExecutionEnvelope(
+            task(),
+            continuation(),
+          ),
+        ),
+      });
+      await parentMessaging.send(assignment);
+      await childMessaging.processInbox({
+        types: ["task_assignment"],
+      });
+
+      const tracker = {
+        getIdle: vi.fn().mockReturnValue([]),
+        getBestForTask: vi.fn().mockReturnValue(null),
+        updateStatus: vi.fn(),
+        register: vi.fn(),
+      };
+      const orchestrator = new Orchestrator({
+        db: parentDb.raw,
+        agentTracker: tracker,
+        funding: {
+          fundChild: vi.fn().mockResolvedValue({
+            success: true,
+          }),
+          recallCredits: vi.fn().mockResolvedValue({
+            success: true,
+            amountCents: 0,
+          }),
+          getBalance: vi.fn().mockResolvedValue(0),
+        },
+        messaging: parentMessaging,
+        inference: {
+          chat: vi.fn().mockRejectedValue(
+            new Error(
+              "inference should not be needed for result collection",
+            ),
+          ),
+        } as any,
+        identity: identity("0xparent", "parent"),
+        config: {},
+        isWorkerAlive: () => true,
+        prepareTaskResultForPersistence: async (
+          sourceAddress,
+          incomingTask,
+          result,
+        ) =>
+          bridge.collectRemoteResultArtifacts(
+            "conway",
+            incomingTask,
+            sourceAddress,
+            result,
+          ),
+      });
+
+      await orchestrator.tick();
+
+      const completed = getTaskById(
+        parentDb.raw,
+        "task-e2e-1",
+      );
+      expect(completed?.status).toBe("completed");
+      expect(completed?.result?.artifacts).toHaveLength(1);
+      const parentArtifact =
+        completed!.result!.artifacts[0]!;
+      expect(parentArtifact).toContain(
+        path.join(
+          ".abos",
+          "workspace",
+          "goal-e2e-1",
+          "remote-artifacts",
+          "resource-conway-e2e",
+        ),
+      );
+      expect(fs.readFileSync(parentArtifact)).toEqual(
+        artifactBody,
+      );
+
+      const resource = resources.get(
+        "resource-conway-e2e",
+      );
+      expect(
+        resource?.metadata.artifactCollectionState,
+      ).toBe("collected");
+      expect(resource?.metadata.remoteArtifacts).toEqual(
+        [],
+      );
+      expect(
+        JSON.stringify(
+          resource?.metadata.collectedArtifacts,
+        ),
+      ).toContain(artifactDigest);
+    } finally {
+      if (previousHome === undefined) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = previousHome;
+      }
+      fs.rmSync(tempHome, {
+        recursive: true,
+        force: true,
+      });
+    }
   });
 });
