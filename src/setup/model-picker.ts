@@ -11,7 +11,7 @@ import { loadConfig, saveConfig, resolvePath } from "../config.js";
 import { createDatabase } from "../state/database.js";
 import { ModelRegistry } from "../inference/registry.js";
 import { discoverOllamaModels } from "../ollama/discover.js";
-import type { ModelEntry } from "../types.js";
+import type { ModelEntry, ModelStrategyConfig } from "../types.js";
 import type { AiConnectionAdapter } from "../ai-connections/registry.js";
 import { promptOptional, closePrompts } from "./prompts.js";
 import { createBuiltinAiConnectionAdapterRegistry } from "./ai-connection-adapters.js";
@@ -139,15 +139,12 @@ export async function runModelPicker(
       // otherwise collapse that slot to the explicitly selected model. The
       // compatibility decision belongs to the adapter, not a core provider
       // allowlist.
-      if (adapter?.supportsModel) {
-        for (const key of ["lowComputeModel", "criticalModel"] as const) {
-          const fallbackId = config.modelStrategy[key];
-          const fallback = fallbackId ? modelRegistry.get(fallbackId) : undefined;
-          if (!fallback || !adapter.supportsModel(fallback)) {
-            config.modelStrategy[key] = selected.modelId;
-          }
-        }
-      }
+      reconcileAdapterFallbackModels(
+        config.modelStrategy,
+        selected,
+        adapter,
+        (modelId) => modelRegistry.get(modelId),
+      );
     }
 
     if (adapter) {
@@ -192,6 +189,23 @@ export async function runModelPicker(
   } finally {
     db.close();
     closePrompts();
+  }
+}
+
+export function reconcileAdapterFallbackModels(
+  strategy: ModelStrategyConfig,
+  selected: ModelEntry,
+  adapter: Pick<AiConnectionAdapter, "supportsModel"> | undefined,
+  getModel: (modelId: string) => ModelEntry | undefined,
+): void {
+  if (!adapter?.supportsModel) return;
+
+  for (const key of ["lowComputeModel", "criticalModel"] as const) {
+    const fallbackId = strategy[key];
+    const fallback = fallbackId ? getModel(fallbackId) : undefined;
+    if (!fallback || !adapter.supportsModel(fallback)) {
+      strategy[key] = selected.modelId;
+    }
   }
 }
 
