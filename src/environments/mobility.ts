@@ -44,6 +44,7 @@ export interface EnvironmentRecoverySweepResult {
   unchangedSkipped: number;
   unknown: number;
   migrationsReconciled: number;
+  retentionOwnedSkipped: number;
   evidence: string[];
 }
 
@@ -486,6 +487,7 @@ export class EnvironmentMobilityCoordinator {
       unchangedSkipped: 0,
       unknown: 0,
       migrationsReconciled: 0,
+      retentionOwnedSkipped: 0,
       evidence: [],
     };
 
@@ -494,6 +496,14 @@ export class EnvironmentMobilityCoordinator {
       const target = this.lifecycle.resources.get(
         migration.targetResourceId,
       );
+      if (isRetentionOwnedForRelease(target)) {
+        result.retentionOwnedSkipped += 1;
+        result.evidence.push(
+          `Mobility left migration target resource=${target.id} to the retention authority because retentionReleaseState=${String(target.metadata.retentionReleaseState)}.`,
+        );
+        continue;
+      }
+
       if (!target) {
         this.store.transition(
           migration.id,
@@ -537,6 +547,14 @@ export class EnvironmentMobilityCoordinator {
       }
       result.evaluated += 1;
       let resource = original;
+
+      if (isRetentionOwnedForRelease(resource)) {
+        result.retentionOwnedSkipped += 1;
+        result.evidence.push(
+          `Mobility skipped resource=${resource.id}; retention authority owns release state=${String(resource.metadata.retentionReleaseState)}.`,
+        );
+        continue;
+      }
 
       if (this.registry.supportsOperation(resource.provider, "reconcile")) {
         resource = await this.lifecycle.reconcile(resource.id);
@@ -841,6 +859,22 @@ function stableStringify(value: unknown): string {
         `${JSON.stringify(key)}:${stableStringify(entry)}`,
     )
     .join(",")}}`;
+}
+
+function isRetentionOwnedForRelease(
+  resource: EnvironmentResource,
+): boolean {
+  const state =
+    typeof resource.metadata.retentionReleaseState === "string"
+      ? resource.metadata.retentionReleaseState
+      : "";
+  return new Set([
+    "artifact_hold",
+    "destroy_requested",
+    "pending_observation",
+    "destroy_unavailable",
+    "released",
+  ]).has(state);
 }
 
 function failedResourceIds(
