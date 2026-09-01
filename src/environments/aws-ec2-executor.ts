@@ -360,6 +360,10 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
         commandId: invocation.CommandId ?? null,
         instanceId,
         responseCode: invocation.ResponseCode ?? null,
+        remoteArtifacts: result.artifacts,
+        artifactCollectionState:
+          result.artifacts.length > 0 ? "pending" : "none",
+        artifactHost: executorAddress(instanceId),
       },
     };
   }
