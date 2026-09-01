@@ -80,7 +80,7 @@ export async function runModelPicker(): Promise<void> {
   saveConfig(config);
 
   console.log(chalk.green(`\n  Active model set to: ${selected.modelId} (${selected.displayName})`));
-  console.log(chalk.dim("  Restart the abos for the change to take effect.\n"));
+  console.log(chalk.dim("  The running ABOS process will use this selection on its next inference turn.\n"));
 
   db.close();
 }

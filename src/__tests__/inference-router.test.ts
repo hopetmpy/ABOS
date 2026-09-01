@@ -230,6 +230,30 @@ describe("InferenceRouter", () => {
       expect(model!.modelId).toBe("gpt-5.2");
     });
 
+    it("honors an explicit active model for the next agent turn", () => {
+      budget.updateConfig({
+        ...DEFAULT_MODEL_STRATEGY_CONFIG,
+        inferenceModel: "gpt-5.3",
+      });
+      const model = router.selectModel("normal", "agent_turn");
+      expect(model).not.toBeNull();
+      expect(model!.modelId).toBe("gpt-5.3");
+    });
+
+    it("hot-switches after the live strategy changes", () => {
+      budget.updateConfig({
+        ...DEFAULT_MODEL_STRATEGY_CONFIG,
+        inferenceModel: "gpt-5.3",
+      });
+      expect(router.selectModel("normal", "agent_turn")!.modelId).toBe("gpt-5.3");
+
+      budget.updateConfig({
+        ...DEFAULT_MODEL_STRATEGY_CONFIG,
+        inferenceModel: "gpt-4.1",
+      });
+      expect(router.selectModel("normal", "agent_turn")!.modelId).toBe("gpt-4.1");
+    });
+
     it("returns cheaper model for low_compute tier", () => {
       const model = router.selectModel("low_compute", "agent_turn");
       expect(model).not.toBeNull();

@@ -197,6 +197,14 @@ export class InferenceRouter {
     const tierRank = TIER_ORDER[tier] ?? 0;
 
     // 1. Try routing-matrix candidates
+    // An explicitly selected active model is authoritative for the main agent
+    // turn. Static routing remains the fallback and continues to govern
+    // background/specialized task types.
+    if (taskType === "agent_turn") {
+      const configured = this.selectConfiguredAgentModel(tier);
+      if (configured) return configured;
+    }
+
     const preference = this.getPreference(tier, taskType);
     if (preference && preference.candidates.length > 0) {
       for (const candidateId of preference.candidates) {
@@ -224,6 +232,36 @@ export class InferenceRouter {
       if (isFree || tierOk) {
         return entry;
       }
+    }
+
+    return null;
+  }
+
+  private selectConfiguredAgentModel(tier: SurvivalTier): ModelEntry | null {
+    const TIER_ORDER: Record<string, number> = {
+      dead: 0, critical: 1, low_compute: 2, normal: 3, high: 4,
+    };
+    const tierRank = TIER_ORDER[tier] ?? 0;
+    const strategy = this.budget.config;
+
+    const candidateIds =
+      tier === "high" || tier === "normal"
+        ? [strategy.inferenceModel]
+        : tier === "low_compute"
+          ? [strategy.lowComputeModel, strategy.inferenceModel]
+          : [strategy.criticalModel, strategy.lowComputeModel, strategy.inferenceModel];
+
+    const seen = new Set<string>();
+    for (const modelId of candidateIds) {
+      if (!modelId || seen.has(modelId)) continue;
+      seen.add(modelId);
+
+      const entry = this.registry.get(modelId);
+      if (!entry || !entry.enabled) continue;
+
+      const isExternallyFunded = entry.costPer1kInput === 0 && entry.costPer1kOutput === 0;
+      const tierOk = tierRank >= (TIER_ORDER[entry.tierMinimum] ?? 0);
+      if (isExternallyFunded || tierOk) return entry;
     }
 
     return null;

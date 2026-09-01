@@ -51,6 +51,7 @@ import { ulid } from "ulid";
 import { ModelRegistry } from "../inference/registry.js";
 import { InferenceBudgetTracker } from "../inference/budget.js";
 import { InferenceRouter } from "../inference/router.js";
+import { RuntimeModelBinding } from "../inference/runtime-binding.js";
 import { MemoryRetriever } from "../memory/retrieval.js";
 import { MemoryIngestionPipeline } from "../memory/ingestion.js";
 import { DEFAULT_MEMORY_BUDGET } from "../types.js";
@@ -125,6 +126,7 @@ export async function runAgentLoop(
   }
   const budgetTracker = new InferenceBudgetTracker(db.raw, modelStrategyConfig);
   const inferenceRouter = new InferenceRouter(db.raw, modelRegistry, budgetTracker);
+  const runtimeModelBinding = new RuntimeModelBinding(modelStrategyConfig);
 
   // Optional orchestration bootstrap (requires V9 goals/task tables)
   let planModeController: PlanModeController | undefined;
@@ -598,8 +600,13 @@ export async function runAgentLoop(
       pendingInput = undefined;
 
       // ── Inference Call (via router when available) ──
+      // Refresh only when abos.json changed. A model selection made from
+      // another CLI process becomes authoritative on the next turn.
+      budgetTracker.updateConfig(runtimeModelBinding.refresh());
+
       const survivalTier = getSurvivalTier(financial.creditsCents);
-      log(config, `[THINK] Routing inference (tier: ${survivalTier}, model: ${inference.getDefaultModel()})...`);
+      const selectedModel = inferenceRouter.selectModel(survivalTier, "agent_turn")?.modelId || "none";
+      log(config, `[THINK] Routing inference (tier: ${survivalTier}, model: ${selectedModel})...`);
 
       const inferenceTools = toolsToInferenceFormat(tools);
       const routerResult = await inferenceRouter.route(
