@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   ARTIFACT_MATERIALIZATION_PROTOCOL_VERSION,
   applyArtifactMaterializationResult,
+  isOpaqueExternalArtifactReference,
   materializeArtifactsToFilesystemRoot,
   prepareArtifactMaterialization,
 } from "../environments/artifact-materialization.js";
@@ -105,6 +106,24 @@ function digest(content: string): string {
 }
 
 describe("parent -> target artifact materialization contract", () => {
+  it("keeps future artifact URI schemes opaque without a central allowlist", () => {
+    expect(
+      isOpaqueExternalArtifactReference(
+        "future-provider+blob://resource/object/42",
+      ),
+    ).toBe(true);
+    expect(
+      isOpaqueExternalArtifactReference(
+        "file:///remote/runtime/output.bin",
+      ),
+    ).toBe(true);
+    expect(
+      isOpaqueExternalArtifactReference(
+        "outputs/local-path.bin",
+      ),
+    ).toBe(false);
+  });
+
   const dirs: string[] = [];
 
   afterEach(() => {
