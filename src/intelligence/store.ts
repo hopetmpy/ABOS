@@ -180,6 +180,42 @@ export class AdaptiveStore {
     };
   }
 
+  latestAttempt(
+    pathId: string,
+    taskId?: string | null,
+  ): PathAttempt | undefined {
+    const row = taskId
+      ? this.db.prepare(
+          `SELECT * FROM adaptive_attempts
+           WHERE path_id = ? AND task_id = ?
+           ORDER BY created_at DESC
+           LIMIT 1`,
+        ).get(pathId, taskId) as any | undefined
+      : this.db.prepare(
+          `SELECT * FROM adaptive_attempts
+           WHERE path_id = ?
+           ORDER BY created_at DESC
+           LIMIT 1`,
+        ).get(pathId) as any | undefined;
+
+    return row ? deserializeAttempt(row) : undefined;
+  }
+
+  currentBoundPathId(goalId: string): string | undefined {
+    const row = this.db.prepare(
+      `SELECT b.path_id
+       FROM adaptive_task_bindings b
+       JOIN task_graph t ON t.id = b.task_id
+       WHERE b.goal_id = ?
+         AND b.path_id IS NOT NULL
+         AND t.status != 'cancelled'
+       ORDER BY b.updated_at DESC
+       LIMIT 1`,
+    ).get(goalId) as { path_id: string | null } | undefined;
+
+    return row?.path_id ?? undefined;
+  }
+
   listAttempts(goalId: string, limit = 100): PathAttempt[] {
     const rows = this.db.prepare(
       "SELECT * FROM adaptive_attempts WHERE goal_id = ? ORDER BY created_at DESC LIMIT ?",
