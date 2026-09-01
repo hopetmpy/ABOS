@@ -90,6 +90,7 @@ interface TaskResultEnvelope {
   taskId: string;
   goalId: string | null;
   result: TaskResult;
+  sourceAddress?: string | null;
   error?: string;
 }
 
@@ -137,6 +138,16 @@ export class Orchestrator {
       assignment: AgentAssignment,
       task: TaskNode,
     ) => Promise<TaskResult | void>;
+    /**
+     * Provider-neutral pre-persistence normalization for asynchronous remote
+     * Task results. The Orchestrator owns Task state, not environment artifact
+     * transport, so the runtime supplies this hook when needed.
+     */
+    prepareTaskResultForPersistence?: (
+      sourceAddress: string,
+      task: TaskNode,
+      result: TaskResult,
+    ) => Promise<TaskResult>;
   }) {
     this.adaptive = new AdaptivePathEngine(params.db);
   }
@@ -348,7 +359,21 @@ export class Orchestrator {
         continue;
       }
 
-      this.pendingTaskResults.push(parsed);
+      let result = parsed.result;
+      if (this.params.prepareTaskResultForPersistence) {
+        result =
+          await this.params.prepareTaskResultForPersistence(
+            entry.message.from,
+            taskRowToTaskNode(taskRow),
+            result,
+          );
+      }
+
+      this.pendingTaskResults.push({
+        ...parsed,
+        result,
+        sourceAddress: entry.message.from,
+      });
     }
 
     return this.pendingTaskResults.map((entry) => entry.result);
