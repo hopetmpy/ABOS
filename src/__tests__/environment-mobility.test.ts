@@ -42,6 +42,54 @@ function createDb() {
   return db;
 }
 
+function seedTaskContext(db: Database.Database) {
+  const now = new Date(0).toISOString();
+  db.prepare(
+    `INSERT INTO goals (
+      id, title, description, status, strategy,
+      expected_revenue_cents, actual_revenue_cents, created_at
+    ) VALUES (?, ?, ?, 'active', NULL, 0, 0, ?)`,
+  ).run(
+    "goal-mobility-1",
+    "Mobility goal",
+    "Fixture goal for environment mobility.",
+    now,
+  );
+  db.prepare(
+    `INSERT INTO task_graph (
+      id, parent_id, goal_id, title, description, status,
+      assigned_to, agent_role, priority, dependencies, result,
+      estimated_cost_cents, actual_cost_cents, max_retries,
+      retry_count, timeout_ms, created_at
+    ) VALUES (?, NULL, ?, ?, ?, 'pending', NULL, ?, 50, '[]', NULL, 0, 0, 1, 0, 60000, ?)`,
+  ).run(
+    "task-mobility-1",
+    "goal-mobility-1",
+    "Continue objective",
+    "Fixture Task for environment mobility.",
+    "generalist",
+    now,
+  );
+  db.prepare(
+    `INSERT INTO adaptive_paths (
+      id, goal_id, task_id, signature, hypothesis, strategy,
+      assumptions, required_capabilities, environment, executor,
+      sequence, expected_outcome, expected_cost_cents, evidence,
+      status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, '[]', '["compute"]', NULL, NULL, '[]', ?, 0, '[]', 'selected', ?, ?)`,
+  ).run(
+    "path-mobility-1",
+    "goal-mobility-1",
+    "task-mobility-1",
+    "fixture-signature",
+    "A different environment can continue the objective.",
+    "mobility fixture",
+    "Task continues through an executable environment.",
+    now,
+    now,
+  );
+}
+
 function provider(
   id: string,
   snapshot: () => Partial<EnvironmentSnapshot> = () => ({}),
@@ -215,6 +263,7 @@ describe("Environment mobility", () => {
   it("uses a materially different environment after an unchanged environment failure", async () => {
     const db = createDb();
     try {
+      seedTaskContext(db);
       const registry = new EnvironmentRegistry();
       registry.register(provider("env-a"));
       registry.register(provider("env-b"));
@@ -280,6 +329,7 @@ describe("Environment mobility", () => {
   it("reopens an environment after material provider conditions change", async () => {
     const db = createDb();
     try {
+      seedTaskContext(db);
       let availability: EnvironmentSnapshot["availability"] = "available";
       const registry = new EnvironmentRegistry();
       registry.register(provider("env-a", () => ({ availability })));
