@@ -5,7 +5,7 @@
  * The database IS the abos's memory.
  */
 
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -678,4 +678,109 @@ export const MIGRATION_V10 = `
 
   CREATE INDEX idx_knowledge_category ON knowledge_store(category);
   CREATE INDEX idx_knowledge_key ON knowledge_store(key);
+`;
+
+
+// === Adaptive Path Intelligence ===
+
+export const MIGRATION_V12 = `
+  -- Schema version: 12
+  -- Adaptive path intelligence: paths, attempts, world facts, opportunities.
+
+  CREATE TABLE IF NOT EXISTS adaptive_paths (
+    id TEXT PRIMARY KEY,
+    goal_id TEXT NOT NULL REFERENCES goals(id),
+    task_id TEXT,
+    signature TEXT NOT NULL,
+    hypothesis TEXT NOT NULL,
+    strategy TEXT NOT NULL,
+    assumptions TEXT NOT NULL DEFAULT '[]',
+    required_capabilities TEXT NOT NULL DEFAULT '[]',
+    environment TEXT,
+    executor TEXT,
+    sequence TEXT NOT NULL DEFAULT '[]',
+    expected_outcome TEXT NOT NULL,
+    expected_cost_cents INTEGER NOT NULL DEFAULT 0,
+    evidence TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'candidate'
+      CHECK(status IN (
+        'candidate','selected','executing','succeeded','partial','failed',
+        'blocked','unavailable','prohibited','impossible','unknown'
+      )),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_adaptive_paths_goal
+    ON adaptive_paths(goal_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_adaptive_paths_signature
+    ON adaptive_paths(goal_id, signature);
+  CREATE INDEX IF NOT EXISTS idx_adaptive_paths_status
+    ON adaptive_paths(goal_id, status);
+
+  CREATE TABLE IF NOT EXISTS adaptive_attempts (
+    id TEXT PRIMARY KEY,
+    path_id TEXT NOT NULL REFERENCES adaptive_paths(id),
+    goal_id TEXT NOT NULL REFERENCES goals(id),
+    task_id TEXT,
+    outcome TEXT NOT NULL
+      CHECK(outcome IN (
+        'success','partial_success','failed','blocked',
+        'unavailable','unknown','inconclusive'
+      )),
+    failure_class TEXT
+      CHECK(failure_class IN (
+        'transient','environment_unavailable','capability_missing',
+        'authorization','assumption_invalid','strategic_failure',
+        'resource_unavailable','prohibited','impossible','unknown'
+      ) OR failure_class IS NULL),
+    failure_reason TEXT,
+    observations TEXT NOT NULL DEFAULT '[]',
+    evidence TEXT NOT NULL DEFAULT '[]',
+    condition_fingerprint TEXT NOT NULL,
+    novelty_score REAL NOT NULL DEFAULT 0,
+    learned_facts TEXT NOT NULL DEFAULT '[]',
+    retry_eligible INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_adaptive_attempts_goal
+    ON adaptive_attempts(goal_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_adaptive_attempts_path
+    ON adaptive_attempts(path_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_adaptive_attempts_failure
+    ON adaptive_attempts(goal_id, failure_class);
+
+  CREATE TABLE IF NOT EXISTS adaptive_world_facts (
+    id TEXT PRIMARY KEY,
+    goal_id TEXT NOT NULL REFERENCES goals(id),
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    confidence REAL NOT NULL DEFAULT 1.0,
+    epistemic_status TEXT NOT NULL DEFAULT 'fact'
+      CHECK(epistemic_status IN ('fact','hypothesis')),
+    source TEXT NOT NULL,
+    last_verified_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(goal_id, key)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_adaptive_facts_goal
+    ON adaptive_world_facts(goal_id, confidence DESC);
+
+  CREATE TABLE IF NOT EXISTS adaptive_opportunities (
+    id TEXT PRIMARY KEY,
+    goal_id TEXT NOT NULL REFERENCES goals(id),
+    source_path_id TEXT REFERENCES adaptive_paths(id),
+    description TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open'
+      CHECK(status IN ('open','selected','dismissed','resolved')),
+    evidence TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_adaptive_opportunities_goal
+    ON adaptive_opportunities(goal_id, status, created_at);
 `;
