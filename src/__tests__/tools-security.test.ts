@@ -157,18 +157,9 @@ describe("write_file / edit_own_file protection parity", () => {
     tools = createBuiltinTools("test-sandbox-id");
     db = createTestDb();
     conway = new MockConwayClient();
-    const config = createTestConfig();
-    config.treasuryPolicy = {
-      ...DEFAULT_TREASURY_POLICY,
-      maxSingleTransferCents: 10_000,
-      maxHourlyTransferCents: 20_000,
-      maxDailyTransferCents: 50_000,
-      minimumReserveCents: 1_000,
-      requireConfirmationAboveCents: 10_000,
-    };
     ctx = {
       identity: createTestIdentity(),
-      config,
+      config: createTestConfig(),
       db,
       conway,
       inference: new MockInferenceClient(),
@@ -563,9 +554,18 @@ describe("transfer_credits self-preservation", () => {
     db = createTestDb();
     conway = new MockConwayClient();
     conway.creditsCents = 10_000; // $100
+    const config = createTestConfig();
+    config.treasuryPolicy = {
+      ...DEFAULT_TREASURY_POLICY,
+      maxSingleTransferCents: 10_000,
+      maxHourlyTransferCents: 20_000,
+      maxDailyTransferCents: 50_000,
+      minimumReserveCents: 1_000,
+      requireConfirmationAboveCents: 10_000,
+    };
     ctx = {
       identity: createTestIdentity(),
-      config: createTestConfig(),
+      config,
       db,
       conway,
       inference: new MockInferenceClient(),
