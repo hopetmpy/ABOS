@@ -569,45 +569,14 @@ describe("Financial Phase 1 Rules", () => {
     db.close();
   });
 
-  describe("financial.inference_daily_cap", () => {
-    it("allows inference when under daily cap", () => {
-      const rules = createFinancialRules(DEFAULT_TREASURY_POLICY);
-      const engine = new PolicyEngine(db, rules);
+  it("does not claim main-agent inference authority at the tool-policy layer", () => {
+    const rules = createFinancialRules(DEFAULT_TREASURY_POLICY);
+    const ruleIds = rules.map((rule) => rule.id);
 
-      const tool = createMockTool({
-        name: "chat",
-        riskLevel: "safe",
-        category: "conway",
-      });
-      const spendTracker = createMockSpendTracker({
-        getDailySpend: (category: SpendCategory) =>
-          category === "inference" ? 1000 : 0,
-      });
-      const request = createRequest(tool, {}, "agent", undefined, spendTracker);
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("allow");
-    });
-
-    it("denies inference when daily cap exceeded", () => {
-      const rules = createFinancialRules(DEFAULT_TREASURY_POLICY);
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "chat",
-        riskLevel: "safe",
-        category: "conway",
-      });
-      const spendTracker = createMockSpendTracker({
-        getDailySpend: (category: SpendCategory) =>
-          category === "inference" ? 60000 : 0, // Over the 50000 default cap
-      });
-      const request = createRequest(tool, {}, "agent", undefined, spendTracker);
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("deny");
-      expect(decision.reasonCode).toBe("INFERENCE_BUDGET_EXCEEDED");
-    });
+    // Main-agent inference is enforced by InferenceRouter against the
+    // inference_costs ledger. A fake chat/inference tool rule would be a
+    // second, disconnected authority.
+    expect(ruleIds).not.toContain("financial.inference_daily_cap");
   });
 
   describe("financial.require_confirmation", () => {
@@ -706,7 +675,7 @@ describe("createDefaultRules", () => {
     expect(ruleIds).toContain("rate.genesis_prompt_daily");
     expect(ruleIds).toContain("rate.self_mod_hourly");
     expect(ruleIds).toContain("rate.spawn_daily");
-    expect(ruleIds).toContain("financial.inference_daily_cap");
+    expect(ruleIds).not.toContain("financial.inference_daily_cap");
     expect(ruleIds).toContain("financial.require_confirmation");
   });
 

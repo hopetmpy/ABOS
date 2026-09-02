@@ -670,6 +670,84 @@ describe("InferenceRouter", () => {
       expect(result.finishReason).toBe("budget_exceeded");
     });
 
+    it("enforces the TreasuryPolicy daily ceiling against the canonical inference ledger", async () => {
+      budget.recordCost({
+        sessionId: "prior-session",
+        turnId: null,
+        model: "gpt-5-mini",
+        provider: "openai",
+        inputTokens: 1,
+        outputTokens: 1,
+        costCents: 5,
+        latencyMs: 1,
+        tier: "normal",
+        taskType: "agent_turn",
+        cacheHit: false,
+      });
+
+      let calls = 0;
+      const result = await router.route(
+        {
+          messages: [{ role: "user", content: "daily budget exhausted" }],
+          taskType: "agent_turn",
+          tier: "normal",
+          sessionId: "new-session",
+          dailyBudgetCents: 5,
+        },
+        async () => {
+          calls++;
+          return {
+            message: { content: "should not run" },
+            usage: { promptTokens: 1, completionTokens: 1 },
+            finishReason: "stop",
+          };
+        },
+      );
+
+      expect(calls).toBe(0);
+      expect(result.finishReason).toBe("budget_exceeded");
+      expect(result.content).toContain("Daily inference budget exhausted");
+    });
+
+    it("can use a cheaper fallback model when the primary would exceed the daily ceiling", async () => {
+      budget.recordCost({
+        sessionId: "prior-session",
+        turnId: null,
+        model: "gpt-5-mini",
+        provider: "openai",
+        inputTokens: 1,
+        outputTokens: 1,
+        costCents: 4,
+        latencyMs: 1,
+        tier: "normal",
+        taskType: "agent_turn",
+        cacheHit: false,
+      });
+
+      const attempted: string[] = [];
+      const result = await router.route(
+        {
+          messages: [{ role: "user", content: "fit within one remaining cent" }],
+          taskType: "agent_turn",
+          tier: "normal",
+          sessionId: "daily-fallback-session",
+          dailyBudgetCents: 5,
+        },
+        async (_messages, options) => {
+          attempted.push(options.model);
+          return {
+            message: { content: "affordable fallback" },
+            usage: { promptTokens: 1, completionTokens: 1 },
+            finishReason: "stop",
+          };
+        },
+      );
+
+      expect(attempted).toEqual(["gpt-5-mini"]);
+      expect(result.model).toBe("gpt-5-mini");
+      expect(result.finishReason).toBe("stop");
+    });
+
     it("enforces session budget when configured", async () => {
       const sessionBudget = new InferenceBudgetTracker(db, {
         ...DEFAULT_MODEL_STRATEGY_CONFIG,

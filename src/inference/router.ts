@@ -71,6 +71,7 @@ export class InferenceRouter {
       turnId,
       tools,
       connectionProvider,
+      dailyBudgetCents,
     } = request;
 
     const fallbackEnabled = this.budget.config.enableModelFallback;
@@ -129,6 +130,25 @@ export class InferenceRouter {
           connectionProvider,
           `Budget exceeded: ${lastBudgetFailure.reason}`,
         );
+      }
+
+      if (dailyBudgetCents !== undefined) {
+        const dailyCheck = this.budget.checkDailyBudget(
+          estimatedCostCents,
+          dailyBudgetCents,
+        );
+        if (!dailyCheck.allowed) {
+          lastBudgetFailure = {
+            model,
+            reason: dailyCheck.reason || "daily inference budget exceeded",
+          };
+          if (fallbackEnabled) continue;
+          return this.buildBudgetExceededResult(
+            model,
+            connectionProvider,
+            lastBudgetFailure.reason,
+          );
+        }
       }
 
       if (sessionId && this.budget.config.sessionBudgetCents > 0) {

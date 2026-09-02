@@ -1256,6 +1256,8 @@ export interface InferenceRequest {
   turnId?: string;
   maxTokens?: number; // override
   tools?: unknown[];
+  /** TreasuryPolicy-derived daily inference ceiling for this request. */
+  dailyBudgetCents?: number;
 }
 
 export interface InferenceResult {
