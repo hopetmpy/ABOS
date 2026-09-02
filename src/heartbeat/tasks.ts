@@ -23,6 +23,7 @@ import { getMetrics } from "../observability/metrics.js";
 import { AlertEngine, createDefaultAlertRules } from "../observability/alerts.js";
 import { metricsInsertSnapshot, metricsPruneOld } from "../state/database.js";
 import { ulid } from "ulid";
+import { getChildEconomicSnapshot } from "../economics/child-economics.js";
 
 const logger = createLogger("heartbeat.tasks");
 
@@ -515,10 +516,22 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
       const transactions = taskCtx.db.getRecentTransactions(5000);
       let revenueCents = 0;
       let expenseCents = 0;
+      let capitalAllocatedCents = 0;
+      let capitalReturnedCents = 0;
 
       for (const tx of transactions) {
         const amount = Math.max(0, Math.floor(tx.amountCents ?? 0));
         if (amount === 0) continue;
+
+        if (tx.type === "capital_allocation") {
+          capitalAllocatedCents += amount;
+          continue;
+        }
+
+        if (tx.type === "capital_return") {
+          capitalReturnedCents += amount;
+          continue;
+        }
 
         if (tx.type === "transfer_in" || tx.type === "credit_purchase") {
           revenueCents += amount;
@@ -547,13 +560,22 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
         )
         .get() as { total: number };
 
+      const childEconomics = taskCtx.db.getChildren().map((child) =>
+        getChildEconomicSnapshot(taskCtx.db, child.address),
+      );
+
       const report = {
         timestamp: new Date().toISOString(),
         revenueCents,
         expenseCents,
         netCents: revenueCents - expenseCents,
+        capitalAllocatedCents,
+        capitalReturnedCents,
+        netInternalCapitalFlowCents:
+          capitalReturnedCents - capitalAllocatedCents,
         fundedToChildrenCents: childFunding.total,
         taskExecutionCostCents: taskCosts.total,
+        childEconomics,
         activeAgents: taskCtx.db.getChildren().filter(
           (child) => child.status !== "dead" && child.status !== "cleaned_up",
         ).length,
