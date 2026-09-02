@@ -1842,11 +1842,11 @@ Model: ${ctx.inference.getDefaultModel()}
         const { ulid } = await import("ulid");
         ctx.db.insertTransaction({
           id: ulid(),
-          type: "transfer_out",
+          type: "capital_allocation",
           amountCents: amount,
           balanceAfterCents:
             transfer.balanceAfterCents ?? Math.max(balance - amount, 0),
-          description: `Fund child ${child.name} (${child.id})`,
+          description: `Allocate working capital to child ${child.name} (${child.id})`,
           timestamp: new Date().toISOString(),
         });
 

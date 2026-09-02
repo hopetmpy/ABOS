@@ -47,6 +47,58 @@ describe("Heartbeat Tasks", () => {
     db.close();
   });
 
+  describe("colony_financial_report", () => {
+    it("keeps internal child capital allocation out of colony P&L", async () => {
+      const now = new Date().toISOString();
+      db.insertTransaction({
+        id: "tx-revenue",
+        type: "transfer_in",
+        amountCents: 1_000,
+        description: "external revenue",
+        timestamp: now,
+      });
+      db.insertTransaction({
+        id: "tx-capital",
+        type: "capital_allocation",
+        amountCents: 400,
+        description: "working capital to child",
+        timestamp: now,
+      });
+      db.insertTransaction({
+        id: "tx-external",
+        type: "transfer_out",
+        amountCents: 100,
+        description: "external expense",
+        timestamp: now,
+      });
+
+      const tickCtx = createMockTickContext(db);
+      const taskCtx: HeartbeatLegacyContext = {
+        identity: createTestIdentity(),
+        config: createTestConfig(),
+        db,
+        conway,
+      };
+
+      const result = await BUILTIN_TASKS.colony_financial_report(
+        tickCtx,
+        taskCtx,
+      );
+
+      expect(result.shouldWake).toBe(false);
+      const raw = db.getKV("last_colony_financial_report");
+      expect(raw).toBeTruthy();
+      const report = JSON.parse(raw!);
+
+      expect(report.revenueCents).toBe(1_000);
+      expect(report.expenseCents).toBe(100);
+      expect(report.netCents).toBe(900);
+      expect(report.capitalAllocatedCents).toBe(400);
+      expect(report.capitalReturnedCents).toBe(0);
+      expect(report.netInternalCapitalFlowCents).toBe(-400);
+    });
+  });
+
   describe("check_social_inbox", () => {
     it("returns shouldWake false when no social client", async () => {
       const tickCtx = createMockTickContext(db);
