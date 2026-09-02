@@ -15,6 +15,7 @@ import type {
   HeartbeatTaskFn,
   SurvivalTier,
 } from "../types.js";
+import { DEFAULT_TREASURY_POLICY } from "../types.js";
 import type { HealthMonitor as ColonyHealthMonitor } from "../orchestration/health-monitor.js";
 import { sanitizeInput } from "../agent/injection-defense.js";
 import { getSurvivalTier } from "../conway/credits.js";
@@ -744,7 +745,15 @@ async function createHealthMonitor(taskCtx: HeartbeatLegacyContext): Promise<Col
   const { HealthMonitor } = await import("../orchestration/health-monitor.js");
 
   const tracker = new SimpleAgentTracker(taskCtx.db);
-  const funding = new SimpleFundingProtocol(taskCtx.conway, taskCtx.identity, taskCtx.db);
+  const funding = new SimpleFundingProtocol(
+    taskCtx.conway,
+    taskCtx.identity,
+    taskCtx.db,
+    {
+      ...DEFAULT_TREASURY_POLICY,
+      ...(taskCtx.config.treasuryPolicy ?? {}),
+    },
+  );
   const transport = new LocalDBTransport(taskCtx.db);
   const messaging = new ColonyMessaging(transport, taskCtx.db);
 
