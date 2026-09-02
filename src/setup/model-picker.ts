@@ -84,9 +84,7 @@ export async function runModelPicker(
     }
 
     const allModels = modelRegistry.getAll().filter((model) => model.enabled);
-    const models = adapter?.supportsModel
-      ? allModels.filter((model) => adapter?.supportsModel?.(model))
-      : allModels;
+    const models = scopeModelsForAdapter(allModels, adapter);
 
     if (models.length === 0) {
       console.log(
@@ -190,6 +188,18 @@ export async function runModelPicker(
     db.close();
     closePrompts();
   }
+}
+
+export function scopeModelsForAdapter(
+  models: ModelEntry[],
+  adapter: Pick<AiConnectionAdapter, "supportsModel"> | undefined,
+): ModelEntry[] {
+  // Open-world compatibility: only an adapter that explicitly exposes a
+  // supportsModel contract narrows the visible set. Unknown compatibility does
+  // not become an artificial impossibility.
+  return adapter?.supportsModel
+    ? models.filter((model) => adapter.supportsModel?.(model) !== false)
+    : models;
 }
 
 export function reconcileAdapterFallbackModels(
