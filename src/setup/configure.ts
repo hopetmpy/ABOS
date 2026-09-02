@@ -283,13 +283,15 @@ async function configureModelStrategy(config: AbosConfig): Promise<void> {
   s.lowComputeModel = await pickFromList("Low-compute fallback", s.lowComputeModel, models);
   s.criticalModel = await pickFromList("Critical fallback", s.criticalModel, models);
 
-  const selected = registry.get(config.inferenceModel);
+  const selected = allModels.find(
+    (model) => model.modelId === config.inferenceModel,
+  );
   if (selected) {
     reconcileAdapterFallbackModels(
       s,
       selected,
       activeAdapter,
-      (modelId) => registry.get(modelId),
+      (modelId) => allModels.find((model) => model.modelId === modelId),
     );
   }
 
