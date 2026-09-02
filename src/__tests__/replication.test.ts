@@ -15,6 +15,7 @@ import {
   spawnChild,
 } from "../replication/spawn.js";
 import { SandboxCleanup } from "../replication/cleanup.js";
+import { ChildHealthMonitor } from "../replication/health.js";
 import { ChildLifecycle } from "../replication/lifecycle.js";
 import { pruneDeadChildren } from "../replication/lineage.js";
 import {
@@ -389,6 +390,94 @@ describe("ensureChildRuntimeRunning", () => {
         command.includes("nohup node dist/index.js --run"),
       ),
     ).toBe(false);
+  });
+});
+
+// ─── Child observation truth ─────────────────────────────────
+
+describe("ChildHealthMonitor", () => {
+  let parentConway: MockConwayClient;
+  let childConway: MockConwayClient;
+  let db: AbosDatabase;
+  let lifecycle: ChildLifecycle;
+
+  beforeEach(() => {
+    parentConway = new MockConwayClient();
+    childConway = new MockConwayClient();
+    db = createTestDb();
+    db.raw.exec(MIGRATION_V7);
+    lifecycle = new ChildLifecycle(db.raw);
+
+    lifecycle.initChild(
+      "child-health-1",
+      "Health Child",
+      "sandbox-health-1",
+      "health test",
+      "evm",
+    );
+    lifecycle.transition("child-health-1", "sandbox_created");
+    lifecycle.transition("child-health-1", "runtime_ready");
+    lifecycle.transition("child-health-1", "wallet_verified");
+    lifecycle.transition("child-health-1", "funded");
+    lifecycle.transition("child-health-1", "starting");
+    lifecycle.transition("child-health-1", "healthy");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    db.close();
+  });
+
+  it("observes the runtime through the child's scoped sandbox, not the parent executor", async () => {
+    const parentExec = vi.spyOn(parentConway, "exec").mockRejectedValue(
+      new Error("parent executor must not be used for child health"),
+    );
+    const childExec = vi.spyOn(childConway, "exec").mockResolvedValue({
+      stdout: "running\n",
+      stderr: "",
+      exitCode: 0,
+    });
+    const scoped = vi
+      .spyOn(parentConway, "createScopedClient")
+      .mockReturnValue(childConway);
+
+    const monitor = new ChildHealthMonitor(
+      db.raw,
+      parentConway,
+      lifecycle,
+    );
+    const result = await monitor.checkHealth("child-health-1");
+
+    expect(scoped).toHaveBeenCalledWith("sandbox-health-1");
+    expect(parentExec).not.toHaveBeenCalled();
+    expect(childExec).toHaveBeenCalledWith(
+      expect.stringContaining("pgrep -af"),
+      10_000,
+    );
+    expect(result.healthy).toBe(true);
+    expect(result.lastSeen).not.toBeNull();
+    expect(result.creditBalance).toBeNull();
+    expect(result.issues).toEqual([]);
+  });
+
+  it("reports a stopped process without inventing a zero child balance", async () => {
+    vi.spyOn(parentConway, "createScopedClient").mockReturnValue(childConway);
+    vi.spyOn(childConway, "exec").mockResolvedValue({
+      stdout: "stopped\n",
+      stderr: "",
+      exitCode: 0,
+    });
+
+    const monitor = new ChildHealthMonitor(
+      db.raw,
+      parentConway,
+      lifecycle,
+    );
+    const result = await monitor.checkHealth("child-health-1");
+
+    expect(result.healthy).toBe(false);
+    expect(result.issues).toContain("runtime process not running");
+    expect(result.creditBalance).toBeNull();
   });
 });
 

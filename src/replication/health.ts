@@ -36,36 +36,48 @@ export class ChildHealthMonitor {
     let creditBalance: number | null = null;
 
     try {
-      // Look up child sandbox
+      // Look up child sandbox. Health must be observed inside the child's
+      // execution boundary; the parent executor is not evidence of child state.
       const childRow = this.db
         .prepare("SELECT sandbox_id FROM children WHERE id = ?")
         .get(childId) as { sandbox_id: string } | undefined;
 
       if (!childRow) {
-        return { childId, healthy: false, lastSeen: null, uptime: null, creditBalance: null, issues: ["child not found"] };
+        return {
+          childId,
+          healthy: false,
+          lastSeen: null,
+          uptime: null,
+          creditBalance: null,
+          issues: ["child not found"],
+        };
       }
 
-      // Execute status check in sandbox
-      const result = await this.conway.exec(
-        `curl -sf http://localhost:3000/health 2>/dev/null || echo '{"status":"offline"}'`,
+      const childConway = this.conway.createScopedClient(childRow.sandbox_id);
+      const result = await childConway.exec(
+        "pgrep -af 'node .*dist/index\\.js --run' >/dev/null 2>&1 && echo running || echo stopped",
         10_000,
       );
 
-      // Parse JSON status output (not string matching)
-      try {
-        const status = JSON.parse(result.stdout.trim());
-        if (status.status === "healthy" || status.status === "running") {
+      if (result.exitCode !== 0) {
+        issues.push(
+          `runtime probe failed: ${result.stderr || result.stdout || `exit ${result.exitCode}`}`,
+        );
+      } else {
+        const observed = result.stdout.trim().split(/\\s+/);
+        if (observed.includes("running")) {
           healthy = true;
           lastSeen = new Date().toISOString();
-          uptime = status.uptime ?? null;
-          creditBalance = status.creditBalance ?? null;
         } else {
-          issues.push(`status: ${status.status}`);
-          if (status.error) issues.push(`error: ${status.error}`);
+          issues.push("runtime process not running");
         }
-      } catch {
-        issues.push("failed to parse health check response");
       }
+
+      // There is currently no provider API in this runtime that lets the
+      // parent query a child's Conway credit balance by address. Do not
+      // substitute cumulative funding or parent balance for child balance.
+      // Unknown remains null until direct child evidence is available.
+      creditBalance = null;
     } catch (error) {
       issues.push(`health check error: ${error instanceof Error ? error.message : String(error)}`);
     }
