@@ -5,7 +5,7 @@
  * The database IS the abos's memory.
  */
 
-export const SCHEMA_VERSION = 14;
+export const SCHEMA_VERSION = 15;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -957,4 +957,33 @@ export const MIGRATION_V14 = `
 
   CREATE INDEX IF NOT EXISTS idx_environment_migration_events_migration
     ON environment_migration_events(migration_id, created_at);
+`;
+
+
+// === Treasury Outflow Authority v1 ===
+
+export const MIGRATION_V15 = `
+  -- Schema version: 15
+  -- Persistent coordination + audit for Conway credit outflows.
+  -- Status remains open-ended at the DB layer so future provider states do not
+  -- require a schema change merely to be represented.
+  CREATE TABLE IF NOT EXISTS treasury_outflows (
+    id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    recipient TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL CHECK(amount_cents > 0),
+    status TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    balance_snapshot_cents INTEGER NOT NULL DEFAULT 0,
+    provider_transfer_id TEXT,
+    provider_status TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    settled_at TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_treasury_outflows_status
+    ON treasury_outflows(status, updated_at);
+  CREATE INDEX IF NOT EXISTS idx_treasury_outflows_created
+    ON treasury_outflows(created_at);
 `;
