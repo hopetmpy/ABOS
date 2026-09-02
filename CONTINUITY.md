@@ -93,3 +93,94 @@ Ninguno para esta intervención.
 ### Estado final
 
 HECHO
+
+
+## 2026-09-02 — Integración del sistema AGENTS + CONTINUITY + PLAN
+
+Estado: EN_EJECUCIÓN
+
+### Objetivo
+
+Formalizar el sistema operativo de tres documentos canónicos del proyecto:
+- `AGENTS.md`: cómo debe pensar y trabajar cualquier agente.
+- `CONTINUITY.md`: dónde quedó realmente la ejecución.
+- `PLAN.md`: qué trabajo está planificado, en qué orden, con qué dependencias y criterios de terminado.
+
+### Motivo
+
+La Constitución existente define correctamente el método de trabajo y `CONTINUITY.md` registra ejecución, pero todavía no existe una fuente canónica separada para el plan maestro detallado. También falta formalizar en `AGENTS.md` el orden de entrada, la puerta de interrogación profesional y el ciclo repetible por unidad significativa.
+
+### Contexto conocido
+
+- `AGENTS.md` existe y contiene los 39 puntos canónicos.
+- `CONTINUITY.md` existe y es el único documento de continuidad.
+- `PLAN.md` no existe todavía.
+- Esta intervención no pretende modificar código ni runtime del proyecto.
+
+### Semántica que debe preservarse
+
+- Los 39 puntos de la Constitución deben conservarse íntegros.
+- `CONTINUITY.md` sigue siendo la única fuente de verdad del estado operativo vivo.
+- `PLAN.md` no sustituye a continuidad ni a documentación técnica.
+- Git/código/runtime continúan siendo la evidencia técnica superior cuando contradicen una intención planificada.
+
+### Alcance previsto
+
+- Ampliar `AGENTS.md` sin eliminar los 39 puntos.
+- Crear un único `PLAN.md` canónico.
+- Adaptar `CONTINUITY.md` para enlazar trabajo futuro mediante identificadores `P-xxx`.
+- Verificar lectura, estructura y coherencia de los tres documentos.
+
+### Auditoría previa requerida
+
+- Confirmar que `PLAN.md` no existe.
+- Revisar documentación, historial y código relevante antes de poblar trabajo planificado.
+- Evitar inventar como HECHO o PLANIFICADO aquello que no pueda sostenerse con evidencia.
+
+### Riesgos conocidos
+
+- Convertir `PLAN.md` en un segundo documento de continuidad.
+- Duplicar documentación técnica dentro del plan.
+- Introducir un plan genérico que no refleje la realidad del proyecto.
+- Cambiar accidentalmente los 39 puntos canónicos.
+
+### Dependencias
+
+- Acceso de escritura a `main`.
+- Evidencia disponible en repositorio, documentación e historial.
+
+### Plan de ejecución
+
+1. Registrar esta intervención como `EN_EJECUCIÓN`.
+2. Auditar material existente útil para reconstruir el plan.
+3. Ampliar `AGENTS.md` con protocolo de activación, interrogación profesional, ciclo por unidad y jerarquía de fuentes.
+4. Crear `PLAN.md` como única fuente canónica de planificación.
+5. Releer y validar los tres documentos desde GitHub.
+6. Cerrar esta intervención únicamente si la estructura queda coherente y verificable.
+
+### Evidencia durante la ejecución
+
+- Pendiente de completar durante esta intervención.
+
+### Cambios realizados
+
+- Esta entrada fue añadida antes de modificar `AGENTS.md` o crear `PLAN.md`.
+
+### Validaciones realizadas
+
+- Pendientes.
+
+### Resultado
+
+Intervención iniciada.
+
+### Pendientes
+
+- Auditoría de planificación existente.
+- Actualización de `AGENTS.md`.
+- Creación de `PLAN.md`.
+- Verificación y cierre.
+
+### Estado final
+
+EN_EJECUCIÓN
