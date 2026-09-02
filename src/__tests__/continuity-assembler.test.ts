@@ -301,7 +301,7 @@ describe("ContinuityAssembler", () => {
         )
         .all();
       expect(tables).toEqual([]);
-      expect(SCHEMA_VERSION).toBe(14);
+      expect(SCHEMA_VERSION).toBe(15);
     } finally {
       db.close();
     }
