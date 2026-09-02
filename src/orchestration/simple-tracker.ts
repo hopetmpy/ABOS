@@ -4,7 +4,10 @@ import type {
   AbosIdentity,
   ChildStatus,
   ConwayClient,
+  TreasuryPolicy,
 } from "../types.js";
+import { DEFAULT_TREASURY_POLICY } from "../types.js";
+import { TreasuryOutflowAuthority } from "../treasury/outflow.js";
 import type { AgentTracker, FundingProtocol } from "./types.js";
 
 const IDLE_STATUSES = new Set<ChildStatus>(["running", "healthy"]);
@@ -123,6 +126,7 @@ export class SimpleFundingProtocol implements FundingProtocol {
     private readonly conway: ConwayClient,
     private readonly identity: AbosIdentity,
     private readonly db: AbosDatabase,
+    private readonly treasuryPolicy: TreasuryPolicy = DEFAULT_TREASURY_POLICY,
   ) {}
 
   async fundChild(childAddress: string, amountCents: number): Promise<{ success: boolean }> {
@@ -131,24 +135,25 @@ export class SimpleFundingProtocol implements FundingProtocol {
       return { success: true };
     }
 
-    try {
-      const result = await this.conway.transferCredits(
-        childAddress,
-        transferAmount,
-        "Task funding from orchestrator",
-      );
+    const treasury = new TreasuryOutflowAuthority(
+      this.conway,
+      this.db,
+      this.treasuryPolicy,
+    );
+    const outflow = await treasury.execute({
+      source: "orchestrator_fund_child",
+      recipient: childAddress,
+      amountCents: transferAmount,
+      note: "Task funding from orchestrator",
+    });
 
-      const success = isTransferSuccessful(result.status);
-      if (success) {
-        this.db.raw.prepare(
-          "UPDATE children SET funded_amount_cents = funded_amount_cents + ? WHERE address = ?",
-        ).run(transferAmount, childAddress);
-      }
-
-      return { success };
-    } catch {
-      return { success: false };
+    if (outflow.success) {
+      this.db.raw.prepare(
+        "UPDATE children SET funded_amount_cents = funded_amount_cents + ? WHERE address = ?",
+      ).run(transferAmount, childAddress);
     }
+
+    return { success: outflow.success };
   }
 
   async recallCredits(childAddress: string): Promise<{
@@ -196,10 +201,3 @@ export class SimpleFundingProtocol implements FundingProtocol {
   }
 }
 
-function isTransferSuccessful(status: string): boolean {
-  const normalized = status.trim().toLowerCase();
-  return normalized.length > 0
-    && !normalized.includes("fail")
-    && !normalized.includes("error")
-    && !normalized.includes("reject");
-}
