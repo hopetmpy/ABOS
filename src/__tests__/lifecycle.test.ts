@@ -340,9 +340,9 @@ describe("ChildHealthMonitor", () => {
   it("checkHealth returns healthy for running child", async () => {
     makeHealthyChild("child-1");
 
-    // Mock exec to return healthy JSON
+    // The canonical child health signal is the observed runtime process.
     vi.spyOn(conway, "exec").mockResolvedValue({
-      stdout: '{"status":"healthy","uptime":3600}',
+      stdout: "running\n",
       stderr: "",
       exitCode: 0,
     });
@@ -357,7 +357,7 @@ describe("ChildHealthMonitor", () => {
     makeHealthyChild("child-1");
 
     vi.spyOn(conway, "exec").mockResolvedValue({
-      stdout: '{"status":"offline"}',
+      stdout: "stopped\n",
       stderr: "",
       exitCode: 0,
     });
