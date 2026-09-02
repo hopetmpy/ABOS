@@ -17,6 +17,7 @@ import {
   createTestConfig,
 } from "./mocks.js";
 import type { AbosDatabase, ToolContext, AbosTool, RiskLevel } from "../types.js";
+import { DEFAULT_TREASURY_POLICY } from "../types.js";
 
 // Mock erc8004.js to avoid ABI parse error
 vi.mock("../registry/erc8004.js", () => ({
@@ -156,9 +157,18 @@ describe("write_file / edit_own_file protection parity", () => {
     tools = createBuiltinTools("test-sandbox-id");
     db = createTestDb();
     conway = new MockConwayClient();
+    const config = createTestConfig();
+    config.treasuryPolicy = {
+      ...DEFAULT_TREASURY_POLICY,
+      maxSingleTransferCents: 9_000,
+      maxHourlyTransferCents: 20_000,
+      maxDailyTransferCents: 50_000,
+      minimumReserveCents: 1_000,
+      requireConfirmationAboveCents: 10_000,
+    };
     ctx = {
       identity: createTestIdentity(),
-      config: createTestConfig(),
+      config,
       db,
       conway,
       inference: new MockInferenceClient(),
@@ -566,17 +576,27 @@ describe("transfer_credits self-preservation", () => {
     db.close();
   });
 
-  it("blocks transfer of more than half balance", async () => {
+  it("allows transfer above half balance when configured policy and reserve allow it", async () => {
     const transferTool = tools.find((t) => t.name === "transfer_credits")!;
     const result = await transferTool.execute(
       { to_address: "0xrecipient", amount_cents: 6000 },
       ctx,
     );
-    expect(result).toContain("Blocked");
-    expect(result).toContain("Self-preservation");
+    expect(result).toContain("transfer submitted");
+    expect(result).not.toContain("Self-preservation");
   });
 
-  it("allows transfer of less than half balance", async () => {
+  it("blocks a transfer that would violate the configured reserve", async () => {
+    const transferTool = tools.find((t) => t.name === "transfer_credits")!;
+    const result = await transferTool.execute(
+      { to_address: "0xrecipient", amount_cents: 9500 },
+      ctx,
+    );
+    expect(result).toContain("Blocked");
+    expect(result).toContain("Minimum reserve");
+  });
+
+  it("allows transfer below half balance", async () => {
     const transferTool = tools.find((t) => t.name === "transfer_credits")!;
     const result = await transferTool.execute(
       { to_address: "0xrecipient", amount_cents: 4000 },
