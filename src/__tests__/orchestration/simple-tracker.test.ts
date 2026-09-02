@@ -269,13 +269,29 @@ describe("orchestration/SimpleFundingProtocol", () => {
   });
 
   function makeMockDb(raw: BetterSqlite3.Database) {
-    return { raw } as any;
+    return {
+      raw,
+      insertTransaction: (txn: any) => {
+        raw.prepare(
+          `INSERT INTO transactions (
+             id, type, amount_cents, balance_after_cents, description, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?)`,
+        ).run(
+          txn.id,
+          txn.type,
+          txn.amountCents ?? null,
+          txn.balanceAfterCents ?? null,
+          txn.description,
+          txn.timestamp,
+        );
+      },
+    } as any;
   }
 
   it("fundChild calls transferCredits with the correct amount", async () => {
     const mockConway = {
       transferCredits: vi.fn().mockResolvedValue({ status: "ok", amountCents: 100 }),
-      getCreditsBalance: vi.fn().mockResolvedValue(500),
+      getCreditsBalance: vi.fn().mockResolvedValue(5_000),
     } as any;
 
     const identity = { address: "0xparent" } as any;
@@ -288,12 +304,14 @@ describe("orchestration/SimpleFundingProtocol", () => {
       "0xchild",
       100,
       "Task funding from orchestrator",
+      { idempotencyKey: expect.any(String) },
     );
   });
 
   it("fundChild updates funded_amount_cents in the children table on success", async () => {
     const mockConway = {
       transferCredits: vi.fn().mockResolvedValue({ status: "ok" }),
+      getCreditsBalance: vi.fn().mockResolvedValue(5_000),
     } as any;
 
     const identity = { address: "0xparent" } as any;
@@ -323,7 +341,7 @@ describe("orchestration/SimpleFundingProtocol", () => {
   it("fundChild returns success:false when transferCredits throws", async () => {
     const mockConway = {
       transferCredits: vi.fn().mockRejectedValue(new Error("network failure")),
-      getCreditsBalance: vi.fn().mockResolvedValue(200),
+      getCreditsBalance: vi.fn().mockResolvedValue(5_000),
     } as any;
 
     const identity = { address: "0xparent" } as any;
