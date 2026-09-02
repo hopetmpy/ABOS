@@ -413,7 +413,15 @@ export async function runAgentLoop(
 
       const unifiedInference = new UnifiedInferenceClient(registry);
       const agentTracker = new SimpleAgentTracker(db);
-      const funding = new SimpleFundingProtocol(conway, identity, db);
+      const funding = new SimpleFundingProtocol(
+        conway,
+        identity,
+        db,
+        {
+          ...DEFAULT_TREASURY_POLICY,
+          ...(config.treasuryPolicy ?? {}),
+        },
+      );
       const messaging = new ColonyMessaging(
         social
           ? new SocialRelayTransport(social, db)
