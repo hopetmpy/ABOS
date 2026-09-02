@@ -2,6 +2,11 @@
 
 Este es el único documento canónico de continuidad operativa del proyecto ABOS. Debe reflejar el estado real del trabajo y reconciliarse con el repositorio antes, durante y después de cada intervención.
 
+## REGLA DE ENLACE CON PLAN.md
+
+Toda intervención importante debe indicar `Plan relacionado: P-xxx` cuando corresponda. Si una intervención no deriva de un elemento planificado, debe indicar `Plan relacionado: NO APLICA` y explicar el motivo. `CONTINUITY.md` registra ejecución real; `PLAN.md` conserva intención y trabajo futuro. Ninguno sustituye al otro.
+
+
 ## 2026-09-02 — Instalación de la Constitución Operativa Universal
 
 Estado: EN_EJECUCIÓN
@@ -160,27 +165,42 @@ La Constitución existente define correctamente el método de trabajo y `CONTINU
 
 ### Evidencia durante la ejecución
 
-- Pendiente de completar durante esta intervención.
+- Los 39 puntos originales permanecen presentes en `AGENTS.md`.
+- `AGENTS.md` contiene el flujo obligatorio `AGENTS.md → CONTINUITY.md → PLAN.md`.
+- Se añadió la Puerta Obligatoria de Interrogación Profesional.
+- Se añadió el ciclo obligatorio por unidad significativa.
+- Se creó un único `PLAN.md` canónico en la raíz.
+- `PLAN.md` contiene contexto verificable del proyecto y P-001 para la reconstrucción detallada posterior.
+- No se importó automáticamente documentación histórica o superseded como autoridad vigente.
 
 ### Cambios realizados
 
 - Esta entrada fue añadida antes de modificar `AGENTS.md` o crear `PLAN.md`.
+- `AGENTS.md` fue ampliado sin eliminar ninguno de los 39 puntos canónicos.
+- `PLAN.md` fue creado como único plan maestro canónico.
+- `CONTINUITY.md` fue enlazado explícitamente con IDs `P-xxx`.
+- Commit AGENTS: `ffec93dace80337487e739140e0a7d903dc20cc0`.
+- Commit PLAN: `999128ed9a92f2354b618e4433eb62f230dfa1ca`.
 
 ### Validaciones realizadas
 
-- Pendientes.
+- Relectura de `AGENTS.md`, `PLAN.md` y `CONTINUITY.md` desde `main`.
+- Confirmación automática de presencia de las 39 secciones numeradas.
+- Confirmación del protocolo de activación.
+- Confirmación de la puerta de interrogación profesional.
+- Confirmación del ciclo por unidad significativa.
+- Confirmación de existencia y unicidad de `PLAN.md`.
+- Confirmación de P-001 y de la plantilla detallada para futuros `P-xxx`.
+- No se modificó código ni runtime.
 
 ### Resultado
 
-Intervención iniciada.
+El sistema operativo documental quedó integrado: `AGENTS.md` gobierna cómo trabajar y pensar; `CONTINUITY.md` gobierna dónde quedó la ejecución; `PLAN.md` gobierna qué trabajo está planificado.
 
 ### Pendientes
 
-- Auditoría de planificación existente.
-- Actualización de `AGENTS.md`.
-- Creación de `PLAN.md`.
-- Verificación y cierre.
+- P-001 permanece PLANIFICADO: poblar el plan maestro específico y exhaustivo del proyecto mediante una auditoría dedicada. Esto es trabajo futuro explícito del plan y no invalida el cierre de esta intervención de infraestructura documental.
 
 ### Estado final
 
-EN_EJECUCIÓN
+HECHO
