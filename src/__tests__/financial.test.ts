@@ -1,15 +1,13 @@
 /**
  * Financial Policy Rules Tests
  *
- * Tests for all financial limit rules:
- * - x402_max_single denies payments > 100 cents
- * - x402_domain_allowlist denies non-conway.tech domains
- * - transfer_max_single denies transfers > 5000 cents
- * - transfer_hourly_cap denies when hourly total > 10000
- * - transfer_daily_cap denies when daily total > 25000
- * - minimum_reserve denies when balance would drop below 1000
- * - turn_transfer_limit denies > 2 transfers per turn
- * - Iterative drain scenario: 10 successive transfers blocked by hourly cap
+ * Tests for tool-policy financial rules that genuinely belong to PolicyEngine:
+ * - x402 domain policy
+ * - per-turn Conway-credit outflow count
+ *
+ * Monetary transfer caps, reserve and confirmation are covered by
+ * treasury-outflow.test.ts because TreasuryOutflowAuthority is their single
+ * execution authority across tools and orchestration.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -223,140 +221,6 @@ describe("Financial Policy Rules", () => {
     });
   });
 
-  describe("financial.transfer_max_single", () => {
-    it("allows transfers within limit and below confirmation threshold", () => {
-      const request = createRequest(
-        mockTransferTool(),
-        { amount_cents: 500, to_address: "0x1234567890abcdef1234567890abcdef12345678" },
-        createMockSpendTracker(),
-      );
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("allow");
-    });
-
-    it("quarantines transfers above confirmation threshold but within single limit", () => {
-      const request = createRequest(
-        mockTransferTool(),
-        { amount_cents: 4000, to_address: "0x1234567890abcdef1234567890abcdef12345678" },
-        createMockSpendTracker(),
-      );
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("quarantine");
-      expect(decision.reasonCode).toBe("CONFIRMATION_REQUIRED");
-    });
-
-    it("denies transfers above 5000 cents", () => {
-      const request = createRequest(
-        mockTransferTool(),
-        { amount_cents: 6000, to_address: "0x1234567890abcdef1234567890abcdef12345678" },
-        createMockSpendTracker(),
-      );
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("deny");
-      expect(decision.reasonCode).toBe("SPEND_LIMIT_EXCEEDED");
-    });
-
-    it("denies transfers exactly at boundary + 1", () => {
-      const request = createRequest(
-        mockTransferTool(),
-        { amount_cents: 5001, to_address: "0x1234567890abcdef1234567890abcdef12345678" },
-        createMockSpendTracker(),
-      );
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("deny");
-    });
-
-    it("quarantines transfers exactly at single limit (above confirmation threshold)", () => {
-      const request = createRequest(
-        mockTransferTool(),
-        { amount_cents: 5000, to_address: "0x1234567890abcdef1234567890abcdef12345678" },
-        createMockSpendTracker(),
-      );
-
-      const decision = engine.evaluate(request);
-      // 5000 > requireConfirmationAboveCents (1000) so quarantine
-      expect(decision.action).toBe("quarantine");
-      expect(decision.reasonCode).toBe("CONFIRMATION_REQUIRED");
-    });
-  });
-
-  describe("financial.transfer_hourly_cap", () => {
-    it("allows transfers within hourly cap (below confirmation threshold)", () => {
-      spendTracker.recordSpend({
-        toolName: "transfer_credits",
-        amountCents: 5000,
-        category: "transfer",
-      });
-
-      const request = createRequest(
-        mockTransferTool(),
-        { amount_cents: 500, to_address: "0x1234567890abcdef1234567890abcdef12345678" },
-        spendTracker,
-      );
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("allow");
-    });
-
-    it("denies when hourly total would exceed 10000", () => {
-      // Record 9500 already spent this hour
-      spendTracker.recordSpend({
-        toolName: "transfer_credits",
-        amountCents: 5000,
-        category: "transfer",
-      });
-      spendTracker.recordSpend({
-        toolName: "transfer_credits",
-        amountCents: 4500,
-        category: "transfer",
-      });
-
-      const request = createRequest(
-        mockTransferTool(),
-        { amount_cents: 1000, to_address: "0x1234567890abcdef1234567890abcdef12345678" },
-        spendTracker,
-      );
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("deny");
-      expect(decision.reasonCode).toBe("SPEND_LIMIT_EXCEEDED");
-    });
-  });
-
-  describe("financial.transfer_daily_cap", () => {
-    it("denies when daily total would exceed 25000", () => {
-      // Use custom policy with high hourly cap
-      const policy: TreasuryPolicy = {
-        ...DEFAULT_TREASURY_POLICY,
-        maxHourlyTransferCents: 100_000,
-        maxDailyTransferCents: 25000,
-      };
-      const dailyRules = createFinancialRules(policy);
-      const dailyEngine = new PolicyEngine(db, dailyRules);
-
-      // Record 24000 already spent today
-      spendTracker.recordSpend({
-        toolName: "transfer_credits",
-        amountCents: 24000,
-        category: "transfer",
-      });
-
-      const request = createRequest(
-        mockTransferTool(),
-        { amount_cents: 2000, to_address: "0x1234567890abcdef1234567890abcdef12345678" },
-        spendTracker,
-      );
-
-      const decision = dailyEngine.evaluate(request);
-      expect(decision.action).toBe("deny");
-      expect(decision.reasonCode).toBe("SPEND_LIMIT_EXCEEDED");
-    });
-  });
-
   describe("financial.turn_transfer_limit", () => {
     it("allows first transfer in a turn", () => {
       const request = createRequest(
@@ -388,6 +252,19 @@ describe("Financial Policy Rules", () => {
         { amount_cents: 100, to_address: "0x1234567890abcdef1234567890abcdef12345678" },
         createMockSpendTracker(),
         2, // third call (0-indexed: 0, 1, 2)
+      );
+
+      const decision = engine.evaluate(request);
+      expect(decision.action).toBe("deny");
+      expect(decision.reasonCode).toBe("TURN_TRANSFER_LIMIT");
+    });
+
+    it("counts fund_child against the same per-turn outflow limit", () => {
+      const request = createRequest(
+        mockFundChildTool(),
+        { amount_cents: 100, child_id: "child-1" },
+        createMockSpendTracker(),
+        2,
       );
 
       const decision = engine.evaluate(request);
@@ -459,55 +336,11 @@ describe("Financial Policy Rules", () => {
       expect(allowedCount).toBeLessThanOrEqual(2);
     });
 
-    it("hourly cap blocks without turn limit (high confirmation threshold)", () => {
-      // Use policy with no turn limit and high confirmation threshold
-      const policy: TreasuryPolicy = {
-        ...DEFAULT_TREASURY_POLICY,
-        maxTransfersPerTurn: 100, // effectively no turn limit
-        requireConfirmationAboveCents: 100000, // high enough to not trigger
-      };
-      const noTurnLimitRules = createFinancialRules(policy);
-      const noTurnLimitEngine = new PolicyEngine(db, noTurnLimitRules);
 
-      const results: string[] = [];
-
-      for (let i = 0; i < 10; i++) {
-        const request = createRequest(
-          mockTransferTool(),
-          { amount_cents: 2000, to_address: "0x1234567890abcdef1234567890abcdef12345678" },
-          spendTracker,
-          i,
-        );
-
-        const decision = noTurnLimitEngine.evaluate(request);
-        results.push(decision.action);
-
-        if (decision.action === "allow") {
-          spendTracker.recordSpend({
-            toolName: "transfer_credits",
-            amountCents: 2000,
-            category: "transfer",
-          });
-        }
-      }
-
-      // First 5 should be allowed (5 * 2000 = 10000 = hourly cap)
-      expect(results[0]).toBe("allow");
-      expect(results[1]).toBe("allow");
-      expect(results[2]).toBe("allow");
-      expect(results[3]).toBe("allow");
-      expect(results[4]).toBe("allow");
-      // 6th should be denied (10000 + 2000 > 10000)
-      expect(results[5]).toBe("deny");
-
-      const allowedCount = results.filter((r) => r === "allow").length;
-      expect(allowedCount).toBe(5);
-    });
-  });
 
   describe("Rules are registered", () => {
-    it("creates 8 tool-level financial rules", () => {
-      expect(rules.length).toBe(8);
+    it("creates 3 tool-level financial rules", () => {
+      expect(rules.length).toBe(3);
     });
 
     it("all rules have priority 500", () => {
