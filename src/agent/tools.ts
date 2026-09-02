@@ -20,6 +20,8 @@ import type {
   SpendTrackerInterface,
 } from "../types.js";
 import type { PolicyEngine } from "./policy-engine.js";
+import { DEFAULT_TREASURY_POLICY } from "../types.js";
+import { TreasuryOutflowAuthority } from "../treasury/outflow.js";
 import { sanitizeToolResult, sanitizeInput } from "./injection-defense.js";
 import { createLogger } from "../observability/logger.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
@@ -1087,30 +1089,30 @@ Model: ${ctx.inference.getDefaultModel()}
           return `Blocked: amount_cents must be a positive number, got ${amount}.`;
         }
 
-        // Guard: don't transfer more than half your balance
-        const balance = await ctx.conway.getCreditsBalance();
-        if (amount > balance / 2) {
-          return `Blocked: Cannot transfer more than half your balance ($${(balance / 100).toFixed(2)}). Self-preservation.`;
-        }
-
-        const transfer = await ctx.conway.transferCredits(
-          args.to_address as string,
-          amount,
-          args.reason as string | undefined,
+        const treasury = new TreasuryOutflowAuthority(
+          ctx.conway,
+          ctx.db,
+          {
+            ...DEFAULT_TREASURY_POLICY,
+            ...(ctx.config.treasuryPolicy ?? {}),
+          },
         );
-
-        const { ulid } = await import("ulid");
-        ctx.db.insertTransaction({
-          id: ulid(),
-          type: "transfer_out",
+        const outflow = await treasury.execute({
+          source: "transfer_credits",
+          recipient: args.to_address as string,
           amountCents: amount,
-          balanceAfterCents:
-            transfer.balanceAfterCents ?? Math.max(balance - amount, 0),
-          description: `Transfer to ${args.to_address}: ${args.reason || ""}`,
-          timestamp: new Date().toISOString(),
+          note: args.reason as string | undefined,
         });
 
-        return `Credit transfer submitted: $${(amount / 100).toFixed(2)} to ${transfer.toAddress} (status: ${transfer.status}, id: ${transfer.transferId || "n/a"})`;
+        if (!outflow.success) {
+          if (outflow.status === "confirmation_required") {
+            return `Confirmation required: ${outflow.reason} (outflow: ${outflow.id})`;
+          }
+          return `Blocked: Treasury outflow ${outflow.status}: ${outflow.reason || "not submitted"} (outflow: ${outflow.id})`;
+        }
+
+        const transfer = outflow.transfer!;
+        return `Credit transfer submitted: ${(outflow.amountCents / 100).toFixed(2)} to ${transfer.toAddress} (status: ${transfer.status}, id: ${transfer.transferId || "n/a"}, outflow: ${outflow.id})`;
       },
     },
 
@@ -1828,27 +1830,29 @@ Model: ${ctx.inference.getDefaultModel()}
           return `Blocked: amount_cents must be a positive number, got ${amount}.`;
         }
 
-        const balance = await ctx.conway.getCreditsBalance();
-        if (amount > balance / 2) {
-          return `Blocked: Cannot transfer more than half your balance. Self-preservation.`;
+        const treasury = new TreasuryOutflowAuthority(
+          ctx.conway,
+          ctx.db,
+          {
+            ...DEFAULT_TREASURY_POLICY,
+            ...(ctx.config.treasuryPolicy ?? {}),
+          },
+        );
+        const outflow = await treasury.execute({
+          source: "fund_child",
+          recipient: child.address,
+          amountCents: amount,
+          note: `fund child ${child.id}`,
+        });
+
+        if (!outflow.success) {
+          if (outflow.status === "confirmation_required") {
+            return `Confirmation required: ${outflow.reason} (outflow: ${outflow.id})`;
+          }
+          return `Blocked: Treasury outflow ${outflow.status}: ${outflow.reason || "not submitted"} (outflow: ${outflow.id})`;
         }
 
-        const transfer = await ctx.conway.transferCredits(
-          child.address,
-          amount,
-          `fund child ${child.id}`,
-        );
-
-        const { ulid } = await import("ulid");
-        ctx.db.insertTransaction({
-          id: ulid(),
-          type: "transfer_out",
-          amountCents: amount,
-          balanceAfterCents:
-            transfer.balanceAfterCents ?? Math.max(balance - amount, 0),
-          description: `Fund child ${child.name} (${child.id})`,
-          timestamp: new Date().toISOString(),
-        });
+        const transfer = outflow.transfer!;
 
         // Update funded amount
         ctx.db.raw
@@ -3408,26 +3412,10 @@ export async function executeTool(
       result = sanitizeToolResult(result);
     }
 
-    // Record spend for financial operations
+    // Conway credit outflows are recorded atomically by TreasuryOutflowAuthority.
+    // x402 remains a separate payment channel and keeps its own accounting path.
     if (turnContext && !result.startsWith("Blocked:")) {
-      if (toolName === "transfer_credits") {
-        const amount = args.amount_cents as number | undefined;
-        if (amount && amount > 0) {
-          try {
-            turnContext.sessionSpend.recordSpend({
-              toolName: "transfer_credits",
-              amountCents: amount,
-              recipient: args.to_address as string | undefined,
-              category: "transfer",
-            });
-          } catch (error) {
-            logger.error(
-              "Spend tracking failed for transfer_credits",
-              error instanceof Error ? error : undefined,
-            );
-          }
-        }
-      } else if (toolName === "x402_fetch") {
+      if (toolName === "x402_fetch") {
         // x402 payment amounts are determined by the server response,
         // but we record a nominal entry for tracking purposes
         try {
