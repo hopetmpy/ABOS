@@ -1,8 +1,10 @@
 /**
  * Financial Policy Rules
  *
- * Enforces spend limits, domain allowlists, and transfer caps
- * to prevent iterative credit drain and unauthorized payments.
+ * Tool-context financial rules only.
+ *
+ * Conway-credit amount/cap/reserve/confirmation policy is owned by
+ * TreasuryOutflowAuthority so tools and orchestration share one authority.
  */
 
 import type {
