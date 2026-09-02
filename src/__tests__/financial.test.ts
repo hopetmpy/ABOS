@@ -335,8 +335,7 @@ describe("Financial Policy Rules", () => {
       const allowedCount = results.filter((r) => r === "allow").length;
       expect(allowedCount).toBeLessThanOrEqual(2);
     });
-
-
+  });
 
   describe("Rules are registered", () => {
     it("creates 3 tool-level financial rules", () => {
