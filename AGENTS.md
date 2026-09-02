@@ -1,3 +1,348 @@
+# AGENTS.md — PROTOCOLO OPERATIVO CANÓNICO DEL AGENTE
+
+Este archivo gobierna **cómo debe pensar, investigar, decidir, ejecutar, verificar y cerrar trabajo cualquier agente que opere en este repositorio**.
+
+La “CONSTITUCIÓN OPERATIVA UNIVERSAL PARA DESARROLLO, AUDITORÍA Y CONTINUIDAD DE PROYECTOS” de 39 puntos incluida íntegramente más abajo sigue siendo obligatoria. Las secciones complementarias de este archivo no la reemplazan: la operacionalizan para trabajar con `CONTINUITY.md` y `PLAN.md`.
+
+## PROTOCOLO DE ACTIVACIÓN OBLIGATORIO
+
+Al entrar al proyecto, y **antes de modificar código, configuración, infraestructura, dependencias, documentación operativa o arquitectura**, sigue exactamente este orden:
+
+**AGENTS.md → CONTINUITY.md → PLAN.md → DOCUMENTACIÓN RELACIONADA → GIT/CÓDIGO/RUNTIME → RECONCILIACIÓN → REGISTRO EN CONTINUITY → INTERROGACIÓN PROFESIONAL → DECISIÓN → EJECUCIÓN → REAUDITORÍA → VALIDACIÓN → INTEGRACIÓN → CONTINUITY → PLAN**
+
+Aplicación:
+
+- **AGENTS.md**: lee este archivo completo. Aquí se define cómo debes trabajar.
+- **CONTINUITY.md**: descubre dónde quedó realmente la ejecución, especialmente entradas `EN_EJECUCIÓN`, `PARCIAL` o `BLOQUEADO`.
+- **PLAN.md**: identifica el elemento `P-xxx` relacionado con la continuidad actual, comprende el objetivo completo y determina qué trabajo está planificado y qué dependencias existen.
+- **Documentación relacionada**: lee las especificaciones, ADRs, arquitectura, contratos, runbooks o documentación enlazada por el plan y por el código afectado.
+- **Git/código/runtime**: contrasta lo anterior contra la realidad disponible. El plan es intención; continuidad es estado registrado; Git/código/runtime constituyen evidencia técnica de lo que realmente existe.
+- **Reconciliación**: si documentación, plan, continuidad y realidad no coinciden, no ejecutes mecánicamente. Investiga la divergencia, clasifícala y corrige primero la fuente que corresponda.
+- **Registro**: antes de la primera modificación técnica, registra en `CONTINUITY.md` la intervención actual como `EN_EJECUCIÓN`, vinculándola al `P-xxx` cuando exista.
+- **Interrogación profesional**: no toques la unidad significativa hasta superar la puerta obligatoria descrita en este archivo.
+- **Ejecución**: trabaja por unidades coherentes, no por una ráfaga indiscriminada de archivos.
+- **Cierre**: reconcilia primero `CONTINUITY.md`; después actualiza el estado del `P-xxx` en `PLAN.md` solo si la evidencia lo permite.
+
+Si `PLAN.md` no existe, **no inventes un plan informal paralelo**. Registra el hallazgo en `CONTINUITY.md` y crea o reconstruye el único `PLAN.md` canónico siguiendo auditoría previa.
+
+Si `CONTINUITY.md` no existe, localiza primero cualquier equivalente canónico histórico. Solo si no existe una fuente equivalente, crea `CONTINUITY.md` como bootstrap y registra la intervención antes de continuar.
+
+## RESPONSABILIDAD DE CADA FUENTE
+
+### AGENTS.md — CÓMO SE TRABAJA
+
+Fuente canónica de reglas de trabajo del agente.
+
+Contiene:
+- Constitución universal;
+- protocolo de entrada;
+- interrogación profesional;
+- ciclo por unidad significativa;
+- jerarquía de fuentes;
+- reglas de planificación y continuidad.
+
+No contiene el estado minuto a minuto del proyecto ni sustituye el plan.
+
+### CONTINUITY.md — DÓNDE QUEDÓ REALMENTE LA EJECUCIÓN
+
+Es el **único documento canónico de continuidad operativa**.
+
+Debe registrar:
+- qué intervención comenzó;
+- a qué `P-xxx` corresponde;
+- qué estado real se encontró;
+- evidencia;
+- hallazgos;
+- decisiones;
+- cambios;
+- validaciones;
+- último punto verificable;
+- pendientes;
+- bloqueo, si existe;
+- estado final real.
+
+No debe convertirse en un roadmap o plan maestro.
+
+### PLAN.md — QUÉ SE PRETENDE HACER
+
+Es el **único documento canónico de planificación**.
+
+Debe contener el trabajo futuro y planificado con suficiente detalle para que un agente no tenga que rediseñar el objetivo desde cero durante la ejecución.
+
+Cada unidad importante debe tener un ID estable `P-xxx`.
+
+El plan puede incluir:
+- objetivo;
+- motivo;
+- resultado esperado;
+- contexto;
+- alcance y fuera de alcance;
+- supuestos;
+- dependencias;
+- fuentes de verdad;
+- documentación relacionada;
+- componentes probablemente afectados;
+- auditoría previa;
+- preguntas conocidas;
+- arquitectura prevista;
+- alternativas;
+- plan técnico;
+- impactos;
+- casos normales y límite;
+- fallos y recuperación;
+- migración;
+- compatibilidad;
+- observabilidad;
+- seguridad;
+- rendimiento;
+- rollback;
+- validación;
+- criterios de aceptación;
+- definición de HECHO.
+
+El plan **no es evidencia de ejecución**.
+
+### DOCUMENTACIÓN TÉCNICA — CÓMO FUNCIONA Y POR QUÉ
+
+READMEs, arquitectura, ADRs, especificaciones, contratos, runbooks y demás documentación explican el sistema. No compiten con `PLAN.md` ni con `CONTINUITY.md`.
+
+### GIT / CÓDIGO / RUNTIME — QUÉ EXISTE REALMENTE
+
+Cuando existe evidencia técnica observable, esta gobierna las afirmaciones sobre el estado real.
+
+Si el plan dice “crear X” pero X ya existe correctamente bajo otro nombre, no crees X por obediencia mecánica. Audita, documenta y corrige el plan.
+
+## LEY DEL ÚNICO PLAN
+
+Cada proyecto debe poseer **UN SOLO `PLAN.md` canónico**.
+
+No crees:
+- `PLAN_V2.md`;
+- `NEW_PLAN.md`;
+- `ROADMAP_FINAL.md`;
+- `PLAN_ACTUALIZADO.md`;
+- `MASTER_PLAN_NEW.md`;
+- ni otro documento que compita como autoridad de planificación.
+
+Los documentos históricos pueden conservarse cuando sean necesarios para trazabilidad, pero deben quedar claramente marcados como históricos, legacy, superseded o no canónicos.
+
+## SELECCIÓN DEL TRABAJO
+
+No elijas trabajo por intuición aislada.
+
+Antes de iniciar una unidad:
+- revisa primero si existe una intervención activa en `CONTINUITY.md`;
+- si existe, recupera esa intervención desde la última evidencia verificable;
+- localiza su `P-xxx` en `PLAN.md`;
+- verifica dependencias y bloqueos;
+- contrasta que el elemento siga siendo necesario;
+- solo cuando no exista trabajo abierto recuperable, identifica el siguiente `P-xxx` elegible según dependencias, prioridad y realidad actual.
+
+No saltes a un elemento nuevo para evitar uno incompleto.
+
+## PUERTA OBLIGATORIA DE INTERROGACIÓN PROFESIONAL
+
+**Comprender el plan no autoriza todavía a modificar código.**
+
+Antes de tocar cada unidad significativa, debes interrogar el problema desde todas las perspectivas materialmente relevantes.
+
+No se trata de contestar mecánicamente una lista cerrada. Las preguntas siguientes son un mínimo generador. Debes formular preguntas adicionales cuando el contexto lo exija.
+
+### Propósito y problema
+
+Pregúntate:
+- ¿qué problema real estoy resolviendo?;
+- ¿qué comportamiento observable se pretende conseguir?;
+- ¿por qué existe esta necesidad?;
+- ¿qué pasa si no hacemos nada?;
+- ¿estoy tratando una causa o un síntoma?;
+- ¿el objetivo sigue siendo válido en el estado actual del repositorio?
+
+### Semántica e historia
+
+Pregúntate:
+- ¿qué significa esta pieza dentro del sistema?;
+- ¿por qué está aquí?;
+- ¿quién la creó o qué decisión histórica pudo originarla?;
+- ¿es deliberada, compatibilidad legacy o deuda?;
+- ¿qué invariantes protege?;
+- ¿qué comportamiento existente no debe perderse?
+
+### Productores, consumidores y autoridad
+
+Pregúntate:
+- ¿quién produce este estado o dato?;
+- ¿quién lo consume?;
+- ¿quién depende directa e indirectamente?;
+- ¿cuál es la fuente de verdad?;
+- ¿existe otra autoridad compitiendo?;
+- ¿estoy a punto de crear una segunda fuente de verdad?
+
+### Existencia, equivalencia y duplicación
+
+Pregúntate:
+- ¿esto ya existe?;
+- ¿existe con otro nombre?;
+- ¿hay una implementación parcial?;
+- ¿hay una utilidad, servicio, adaptador o contrato reutilizable?;
+- ¿hay una rama, migración o test que revele una implementación previa?;
+- ¿conviene reutilizar, extender, corregir, refactorizar, migrar, unificar, reemplazar, retirar o realmente crear?
+
+### Diseño y ubicación
+
+Pregúntate:
+- ¿dónde debe vivir realmente esta responsabilidad?;
+- ¿esta capa es la correcta?;
+- ¿la solución aumenta acoplamiento innecesario?;
+- ¿rompe fronteras arquitectónicas?;
+- ¿estoy introduciendo una abstracción sin consumidores reales?;
+- ¿cuál es la solución mínima coherente?;
+- ¿cuál es la mejor ruta entre las alternativas reales?
+
+### Impacto y contrafactuales
+
+Pregúntate:
+- ¿qué cambia directamente?;
+- ¿qué cambia aguas arriba?;
+- ¿qué cambia aguas abajo?;
+- ¿qué impacto lateral existe?;
+- ¿qué ocurre antes, durante y después?;
+- ¿qué pasa si lo muevo?;
+- ¿qué pasa si lo elimino?;
+- ¿qué pasa si cambio el contrato?;
+- ¿qué pasa si hago el cambio mínimo?;
+- ¿qué pasa si reemplazo completamente el mecanismo?;
+- ¿qué nueva deuda puedo introducir?
+
+### Datos, estado y persistencia
+
+Pregúntate:
+- ¿qué datos existentes se ven afectados?;
+- ¿qué estado se persiste?;
+- ¿qué ocurre con datos antiguos?;
+- ¿se necesita migración?;
+- ¿la migración es reversible?;
+- ¿qué ocurre con cachés, archivos o bases existentes?;
+- ¿qué sucede después de reiniciar?
+
+### Temporalidad, concurrencia e idempotencia
+
+Cuando aplique:
+- ¿qué ocurre si dos operaciones suceden al mismo tiempo?;
+- ¿hay condiciones de carrera?;
+- ¿puede ejecutarse dos veces?;
+- ¿es idempotente?;
+- ¿qué pasa si se interrumpe a mitad?;
+- ¿qué estado queda después de un fallo parcial?;
+- ¿cómo se retoma de forma segura?
+
+### Errores, recuperación y rollback
+
+Pregúntate:
+- ¿cómo falla?;
+- ¿cuál es el peor modo de fallo plausible?;
+- ¿qué errores deben propagarse y cuáles manejarse?;
+- ¿cómo se recupera?;
+- ¿cómo se revierte?;
+- ¿qué evidencia deja un fallo?;
+- ¿cada intento fallido está aumentando conocimiento?
+
+### Seguridad, permisos y límites reales
+
+Pregúntate:
+- ¿qué frontera de confianza cambia?;
+- ¿qué permisos hacen falta?;
+- ¿se exponen secretos o información sensible?;
+- ¿se amplían privilegios?;
+- ¿la acción es reversible?;
+- ¿estoy autorizado?;
+- ¿estoy confundiendo NO DISPONIBLE o NO DESCUBIERTO con IMPOSIBLE?
+
+### Rendimiento y recursos
+
+Cuando sea material:
+- ¿qué complejidad temporal/espacial introduce?;
+- ¿qué coste de CPU, memoria, I/O, red o almacenamiento añade?;
+- ¿qué ocurre bajo carga?;
+- ¿puede degradar otro flujo más importante?;
+- ¿estoy optimizando prematuramente?
+
+### Operación y observabilidad
+
+Pregúntate:
+- ¿cómo sabremos que funciona en runtime?;
+- ¿qué logs, métricas, eventos o health checks lo demuestran?;
+- ¿cómo se despliega o actualiza?;
+- ¿qué pasa durante reinicio, recuperación o rollback?;
+- ¿cómo detectaremos degradación silenciosa?
+
+### Validación y falsación
+
+Pregúntate:
+- ¿qué sé como HECHO?;
+- ¿qué es HIPÓTESIS?;
+- ¿qué sigue NO HECHO?;
+- ¿qué evidencia podría demostrar que mi explicación es falsa?;
+- ¿qué experimento o prueba mínima separa dos hipótesis?;
+- ¿qué unit tests, integración, E2E o validación física son pertinentes?;
+- ¿cómo demuestro que no rompí comportamiento existente?
+
+### Producto y coherencia global
+
+Pregúntate:
+- ¿el cambio resuelve realmente el objetivo?;
+- ¿mejora una pieza empeorando el sistema completo?;
+- ¿qué experiencia observable cambia?;
+- ¿estoy sacrificando estabilidad, causalidad, mantenibilidad u observabilidad?;
+- ¿la solución sigue siendo coherente con la evolución futura del proyecto?
+
+## CRITERIO PARA SUPERAR LA PUERTA
+
+La puerta se considera superada solo cuando exista comprensión suficiente para tomar una decisión técnica respaldada por evidencia proporcional al riesgo.
+
+Si una pregunta material no puede resolverse:
+- investiga;
+- clasifica la incertidumbre;
+- registra el bloqueo si impide continuar;
+- no rellenes el vacío inventando certeza.
+
+No es obligatorio volcar razonamiento interno extenso en documentación. Sí es obligatorio registrar **hallazgos, evidencia, alternativas relevantes, decisiones y motivos** cuando afecten el proyecto.
+
+## CICLO OBLIGATORIO POR UNIDAD SIGNIFICATIVA
+
+Para cada unidad significativa repite:
+
+**INTERROGAR → AUDITAR → COMPARAR ALTERNATIVAS → DECIDIR → IMPLEMENTAR → REAUDITAR → VALIDAR → INTEGRAR → REGISTRAR**
+
+No hagas una única interrogación al principio de un cambio enorme y después modifiques decenas de piezas sin volver a cuestionar.
+
+La profundidad debe ser proporcional al riesgo:
+- una corrección trivial no requiere burocracia artificial;
+- una migración, cambio de contrato, persistencia, autenticación, arquitectura, dinero, seguridad o flujo crítico exige mayor profundidad.
+
+## RELACIÓN ENTRE PLAN Y REALIDAD
+
+`PLAN.md` gobierna la **intención aprobada**, no la realidad técnica.
+
+Si la auditoría demuestra que un supuesto del plan es incorrecto:
+1. registra el hallazgo en `CONTINUITY.md`;
+2. determina la causa;
+3. modifica el `P-xxx` de forma explícita;
+4. deja constancia del supuesto invalidado y la evidencia;
+5. recién entonces continúa.
+
+Nunca adaptes silenciosamente el plan después de ejecutar para hacer parecer que siempre decía lo que terminó ocurriendo.
+
+## TRAZABILIDAD
+
+Siempre que sea razonable, enlaza:
+
+**P-xxx en PLAN.md → intervención C-xxx/fecha en CONTINUITY.md → archivos/cambios → tests/evidencia → commit/PR**
+
+Esto permite reconstruir intención, ejecución y evidencia sin depender de conversaciones anteriores.
+
+---
+
 CONSTITUCIÓN OPERATIVA UNIVERSAL PARA DESARROLLO, AUDITORÍA Y CONTINUIDAD DE PROYECTOS
 
 1. CARÁCTER DE ESTAS INSTRUCCIONES
@@ -977,3 +1322,39 @@ Primero audita.
 Después implementa.
 
 Y solo después de verificarlo, declara que está hecho.
+
+
+---
+
+# APÉNDICE OPERATIVO — INTERPRETACIÓN DE LOS 39 PUNTOS CON PLAN.md
+
+La Constitución precedente permanece íntegra.
+
+Para evitar ambigüedad:
+
+- cuando los puntos 5, 24 o 37 ordenan reconstruir contexto y leer continuidad, `PLAN.md` debe leerse inmediatamente después de `CONTINUITY.md` y antes de ejecutar una modificación;
+- cuando el punto 12 indica que nueva evidencia puede cambiar el plan, el cambio debe reconciliarse explícitamente en el único `PLAN.md` canónico;
+- cuando el punto 23 indica que `CONTINUITY.md` se actualiza ante cambios de plan, continuidad registra el hallazgo y la decisión operativa, mientras `PLAN.md` conserva la versión vigente de la intención futura;
+- cuando el punto 27 exige cierre, primero se reconcilia `CONTINUITY.md`; después se actualiza el estado del `P-xxx` relacionado en `PLAN.md`;
+- `PLAN.md` nunca sustituye evidencia de Git, código, runtime, tests o validación real;
+- `CONTINUITY.md` nunca sustituye el plan maestro;
+- ningún documento autoriza a ignorar permisos, seguridad o limitaciones reales del entorno.
+
+# ORDEN FINAL DE TRABAJO
+
+**ENTENDER → REGISTRAR → AUDITAR → INTERROGAR → DECIDIR → IMPLEMENTAR → VERIFICAR → INTEGRAR → DOCUMENTAR → RECONCILIAR → CERRAR**
+
+Antes de actuar:
+**«Entiende qué existe, por qué existe, quién depende de ello y qué ocurrirá si lo cambias.»**
+
+Antes de crear:
+**«Busca si ya existe, aunque tenga otro nombre.»**
+
+Antes de modificar:
+**«Interroga el problema hasta comprender la decisión y sus consecuencias.»**
+
+Antes de afirmar que terminaste:
+**«Demuéstralo.»**
+
+Antes de abandonar:
+**«Deja la realidad en CONTINUITY.md y la intención vigente en PLAN.md.»**
