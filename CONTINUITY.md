@@ -71,23 +71,25 @@ Establecer un protocolo operativo persistente y recuperable dentro del propio re
 ### Cambios realizados
 
 - `CONTINUITY.md`: creado como bootstrap canónico.
-- `AGENTS.md`: pendiente.
+- `AGENTS.md`: creado en la raíz con los 39 puntos completos y sin resumen.
 
 ### Validaciones realizadas
 
 - Auditoría previa de archivos: completada.
-- Verificación posterior: pendiente.
+- Verificación posterior: completada leyendo `AGENTS.md` y `CONTINUITY.md` nuevamente desde `main`.
+- Las 39 secciones numeradas de `AGENTS.md` fueron comprobadas como presentes.
+- El archivo comienza y termina con el texto esperado de la Constitución.
+- El blob SHA de `AGENTS.md` es `826a8b51e34888b48cb8cbc63541e89d9d3a813d`, idéntico en los cuatro repositorios auditados.
+- Cambio funcional/runtime: no aplica; la intervención es exclusivamente documental y operativa.
 
 ### Resultado
 
-Intervención iniciada correctamente. La instalación de `AGENTS.md` todavía no se ha ejecutado.
+Intervención completada. `AGENTS.md` quedó instalado y verificado en `main`. Commit de creación de `AGENTS.md`: `07358b035bc2d2554b9773100ad4054c23a6e2b8`.
 
 ### Pendientes
 
-- Crear `AGENTS.md`.
-- Verificar contenido y presencia.
-- Reconciliar este documento con el resultado real.
+Ninguno para esta intervención.
 
 ### Estado final
 
-EN_EJECUCIÓN
+HECHO
