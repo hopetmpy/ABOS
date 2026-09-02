@@ -92,123 +92,6 @@ function createX402DomainAllowlistRule(policy: TreasuryPolicy): PolicyRule {
 }
 
 /**
- * Deny single transfers above the configured max.
- */
-function createTransferMaxSingleRule(policy: TreasuryPolicy): PolicyRule {
-  return {
-    id: "financial.transfer_max_single",
-    description: `Deny transfers above ${policy.maxSingleTransferCents} cents`,
-    priority: 500,
-    appliesTo: { by: "name", names: ["transfer_credits"] },
-    evaluate(request: PolicyRequest): PolicyRuleResult | null {
-      const amount = request.args.amount_cents as number | undefined;
-      if (amount === undefined) return null;
-
-      if (amount > policy.maxSingleTransferCents) {
-        return deny(
-          "financial.transfer_max_single",
-          "SPEND_LIMIT_EXCEEDED",
-          `Transfer of ${amount} cents exceeds single transfer max of ${policy.maxSingleTransferCents} cents ($${(policy.maxSingleTransferCents / 100).toFixed(2)})`,
-        );
-      }
-
-      return null;
-    },
-  };
-}
-
-/**
- * Deny if hourly transfer total would exceed cap.
- */
-function createTransferHourlyCapRule(policy: TreasuryPolicy): PolicyRule {
-  return {
-    id: "financial.transfer_hourly_cap",
-    description: `Deny if hourly transfers exceed ${policy.maxHourlyTransferCents} cents`,
-    priority: 500,
-    appliesTo: { by: "name", names: ["transfer_credits"] },
-    evaluate(request: PolicyRequest): PolicyRuleResult | null {
-      const amount = request.args.amount_cents as number | undefined;
-      if (amount === undefined) return null;
-
-      const spendTracker = request.turnContext.sessionSpend;
-      const check = spendTracker.checkLimit(amount, "transfer", policy);
-
-      if (!check.allowed && check.reason?.includes("Hourly")) {
-        return deny(
-          "financial.transfer_hourly_cap",
-          "SPEND_LIMIT_EXCEEDED",
-          `Transfer would exceed hourly cap: current ${check.currentHourlySpend} + ${amount} > ${check.limitHourly} cents ($${(check.limitHourly / 100).toFixed(2)}/hr)`,
-        );
-      }
-
-      return null;
-    },
-  };
-}
-
-/**
- * Deny if daily transfer total would exceed cap.
- */
-function createTransferDailyCapRule(policy: TreasuryPolicy): PolicyRule {
-  return {
-    id: "financial.transfer_daily_cap",
-    description: `Deny if daily transfers exceed ${policy.maxDailyTransferCents} cents`,
-    priority: 500,
-    appliesTo: { by: "name", names: ["transfer_credits"] },
-    evaluate(request: PolicyRequest): PolicyRuleResult | null {
-      const amount = request.args.amount_cents as number | undefined;
-      if (amount === undefined) return null;
-
-      const spendTracker = request.turnContext.sessionSpend;
-      const check = spendTracker.checkLimit(amount, "transfer", policy);
-
-      if (!check.allowed && check.reason?.includes("Daily")) {
-        return deny(
-          "financial.transfer_daily_cap",
-          "SPEND_LIMIT_EXCEEDED",
-          `Transfer would exceed daily cap: current ${check.currentDailySpend} + ${amount} > ${check.limitDaily} cents ($${(check.limitDaily / 100).toFixed(2)}/day)`,
-        );
-      }
-
-      return null;
-    },
-  };
-}
-
-/**
- * Deny any financial operation that would bring balance below minimum reserve.
- */
-function createMinimumReserveRule(policy: TreasuryPolicy): PolicyRule {
-  return {
-    id: "financial.minimum_reserve",
-    description: `Deny if balance would drop below ${policy.minimumReserveCents} cents reserve`,
-    priority: 500,
-    appliesTo: {
-      by: "name",
-      names: ["transfer_credits", "x402_fetch", "fund_child"],
-    },
-    evaluate(request: PolicyRequest): PolicyRuleResult | null {
-      // For transfer_credits and fund_child, we can check from args
-      const amount = request.args.amount_cents as number | undefined;
-      if (amount === undefined) return null;
-
-      // We need the current balance from context
-      // The balance check is done inside the tool execute function,
-      // but we can check spend tracker totals as an additional guard
-      const spendTracker = request.turnContext.sessionSpend;
-      const hourlySpend = spendTracker.getHourlySpend("transfer");
-      const dailySpend = spendTracker.getDailySpend("transfer");
-
-      // This rule is a declaration — actual balance checking
-      // requires the async getCreditsBalance call which happens
-      // inside the tool execution. The tool itself has a guard
-      // (cannot transfer more than half balance).
-      return null;
-    },
-  };
-}
-
-/**
  * Deny if too many transfer operations in a single turn.
  * Prevents iterative credit drain within one turn.
  */
@@ -217,7 +100,7 @@ function createTurnTransferLimitRule(policy: TreasuryPolicy): PolicyRule {
     id: "financial.turn_transfer_limit",
     description: `Deny more than ${policy.maxTransfersPerTurn} transfers per turn`,
     priority: 500,
-    appliesTo: { by: "name", names: ["transfer_credits"] },
+    appliesTo: { by: "name", names: ["transfer_credits", "fund_child"] },
     evaluate(request: PolicyRequest): PolicyRuleResult | null {
       const count = request.turnContext.turnToolCallCount;
 
@@ -235,34 +118,6 @@ function createTurnTransferLimitRule(policy: TreasuryPolicy): PolicyRule {
 }
 
 /**
- * Return 'quarantine' (not deny) for transfer amounts above
- * requireConfirmationAboveCents. This is a soft limit requiring confirmation.
- */
-function createRequireConfirmationRule(policy: TreasuryPolicy): PolicyRule {
-  return {
-    id: "financial.require_confirmation",
-    description: `Quarantine transfers above ${policy.requireConfirmationAboveCents} cents for confirmation`,
-    priority: 500,
-    appliesTo: { by: "name", names: ["transfer_credits"] },
-    evaluate(request: PolicyRequest): PolicyRuleResult | null {
-      const amount = request.args.amount_cents as number | undefined;
-      if (amount === undefined) return null;
-
-      if (amount > policy.requireConfirmationAboveCents) {
-        return {
-          rule: "financial.require_confirmation",
-          action: "quarantine",
-          reasonCode: "CONFIRMATION_REQUIRED",
-          humanMessage: `Transfer of ${amount} cents ($${(amount / 100).toFixed(2)}) exceeds confirmation threshold of ${policy.requireConfirmationAboveCents} cents ($${(policy.requireConfirmationAboveCents / 100).toFixed(2)})`,
-        };
-      }
-
-      return null;
-    },
-  };
-}
-
-/**
  * Create all financial policy rules.
  */
 export function createFinancialRules(
@@ -271,11 +126,8 @@ export function createFinancialRules(
   return [
     createX402MaxSingleRule(treasuryPolicy),
     createX402DomainAllowlistRule(treasuryPolicy),
-    createTransferMaxSingleRule(treasuryPolicy),
-    createTransferHourlyCapRule(treasuryPolicy),
-    createTransferDailyCapRule(treasuryPolicy),
-    createMinimumReserveRule(treasuryPolicy),
+    // Monetary caps/reserve/confirmation are enforced by
+    // TreasuryOutflowAuthority across every Conway-credit outflow path.
     createTurnTransferLimitRule(treasuryPolicy),
-    createRequireConfirmationRule(treasuryPolicy),
   ];
 }
