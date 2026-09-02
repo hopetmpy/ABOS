@@ -160,7 +160,7 @@ describe("write_file / edit_own_file protection parity", () => {
     const config = createTestConfig();
     config.treasuryPolicy = {
       ...DEFAULT_TREASURY_POLICY,
-      maxSingleTransferCents: 9_000,
+      maxSingleTransferCents: 10_000,
       maxHourlyTransferCents: 20_000,
       maxDailyTransferCents: 50_000,
       minimumReserveCents: 1_000,
