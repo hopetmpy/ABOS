@@ -354,42 +354,69 @@ describe("orchestration/SimpleFundingProtocol", () => {
     expect(balance).toBe(0);
   });
 
-  it("recallCredits calls transferCredits back to the parent address", async () => {
-    // Fund the child first so there's a balance to recall
-    fundingDb.prepare("UPDATE children SET funded_amount_cents = 500 WHERE address = ?").run("0xchild");
+  it("recallCredits does not fake a child debit through the parent Conway client", async () => {
+    fundingDb.prepare(
+      "UPDATE children SET funded_amount_cents = 500 WHERE address = ?",
+    ).run("0xchild");
 
     const mockConway = {
-      transferCredits: vi.fn().mockResolvedValue({ status: "ok", amountCents: 500 }),
-      getCreditsBalance: vi.fn().mockResolvedValue(500),
+      transferCredits: vi.fn(),
     } as any;
 
     const identity = { address: "0xparent" } as any;
-    const funding = new SimpleFundingProtocol(mockConway, identity, makeMockDb(fundingDb));
+    const funding = new SimpleFundingProtocol(
+      mockConway,
+      identity,
+      makeMockDb(fundingDb),
+    );
 
     const result = await funding.recallCredits("0xchild");
 
-    expect(result.success).toBe(true);
-    expect(result.amountCents).toBe(500);
-    expect(mockConway.transferCredits).toHaveBeenCalledWith(
-      "0xparent",
-      500,
-      "Recall credits from 0xchild",
-    );
+    expect(result.success).toBe(false);
+    expect(result.amountCents).toBe(0);
+    expect(result.reason).toContain("parent runtime cannot authorize a debit");
+    expect(mockConway.transferCredits).not.toHaveBeenCalled();
   });
 
-  it("recallCredits decrements funded_amount_cents after successful recall", async () => {
-    fundingDb.prepare("UPDATE children SET funded_amount_cents = 500 WHERE address = ?").run("0xchild");
+  it("recallCredits preserves funded_amount_cents when no authorized child route exists", async () => {
+    fundingDb.prepare(
+      "UPDATE children SET funded_amount_cents = 500 WHERE address = ?",
+    ).run("0xchild");
 
     const mockConway = {
-      transferCredits: vi.fn().mockResolvedValue({ status: "ok", amountCents: 500 }),
+      transferCredits: vi.fn(),
     } as any;
 
     const identity = { address: "0xparent" } as any;
-    const funding = new SimpleFundingProtocol(mockConway, identity, makeMockDb(fundingDb));
+    const funding = new SimpleFundingProtocol(
+      mockConway,
+      identity,
+      makeMockDb(fundingDb),
+    );
 
     await funding.recallCredits("0xchild");
 
-    const row = fundingDb.prepare("SELECT funded_amount_cents FROM children WHERE address = ?").get("0xchild") as any;
-    expect(row.funded_amount_cents).toBe(0);
+    const row = fundingDb.prepare(
+      "SELECT funded_amount_cents FROM children WHERE address = ?",
+    ).get("0xchild") as any;
+    expect(row.funded_amount_cents).toBe(500);
+  });
+
+  it("recallCredits succeeds as a no-op when there is no tracked allocation", async () => {
+    const mockConway = {
+      transferCredits: vi.fn(),
+    } as any;
+
+    const identity = { address: "0xparent" } as any;
+    const funding = new SimpleFundingProtocol(
+      mockConway,
+      identity,
+      makeMockDb(fundingDb),
+    );
+
+    const result = await funding.recallCredits("0xchild");
+
+    expect(result).toEqual({ success: true, amountCents: 0 });
+    expect(mockConway.transferCredits).not.toHaveBeenCalled();
   });
 });

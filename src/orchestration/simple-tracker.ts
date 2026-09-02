@@ -151,33 +151,33 @@ export class SimpleFundingProtocol implements FundingProtocol {
     }
   }
 
-  async recallCredits(childAddress: string): Promise<{ success: boolean; amountCents: number }> {
-    const balance = await this.getBalance(childAddress);
-    const amountCents = Math.max(0, Math.floor(balance));
+  async recallCredits(childAddress: string): Promise<{
+    success: boolean;
+    amountCents: number;
+    reason?: string;
+  }> {
+    const trackedAllocation = Math.max(
+      0,
+      Math.floor(await this.getBalance(childAddress)),
+    );
 
-    if (amountCents === 0) {
+    if (trackedAllocation === 0) {
       return { success: true, amountCents: 0 };
     }
 
-    try {
-      const result = await this.conway.transferCredits(
-        this.identity.address,
-        amountCents,
-        `Recall credits from ${childAddress}`,
-      );
-
-      const success = isTransferSuccessful(result.status);
-      const recalled = result.amountCents ?? amountCents;
-      if (success) {
-        this.db.raw.prepare(
-          "UPDATE children SET funded_amount_cents = MAX(0, funded_amount_cents - ?) WHERE address = ?",
-        ).run(recalled, childAddress);
-      }
-
-      return { success, amountCents: recalled };
-    } catch {
-      return { success: false, amountCents: 0 };
-    }
+    // The ConwayClient attached to this protocol is authenticated as the
+    // parent ABOS. Calling transferCredits(parentAddress, ...) from it would
+    // debit the parent, not the child. Until a child-authorized transfer route
+    // (child RPC/message execution or provider-native debit) is available,
+    // recall is unavailable and the local allocation must remain unchanged.
+    return {
+      success: false,
+      amountCents: 0,
+      reason:
+        `Credit recall from ${childAddress} is currently unavailable: ` +
+        `the parent runtime cannot authorize a debit from the child wallet. ` +
+        `${trackedAllocation} cents remain tracked as previously funded.`,
+    };
   }
 
   // TODO: The Conway API only exposes getCreditsBalance() for the calling agent's own
