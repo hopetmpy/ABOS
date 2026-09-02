@@ -579,62 +579,16 @@ describe("Financial Phase 1 Rules", () => {
     expect(ruleIds).not.toContain("financial.inference_daily_cap");
   });
 
-  describe("financial.require_confirmation", () => {
-    it("allows transfers under confirmation threshold", () => {
-      const rules = createFinancialRules(DEFAULT_TREASURY_POLICY);
-      const engine = new PolicyEngine(db, rules);
+  it("does not duplicate TreasuryOutflowAuthority monetary policy", () => {
+    const rules = createFinancialRules(DEFAULT_TREASURY_POLICY);
+    const ruleIds = rules.map((rule) => rule.id);
 
-      const tool = createMockTool({
-        name: "transfer_credits",
-        riskLevel: "dangerous",
-        category: "financial",
-      });
-      const request = createRequest(tool, { amount_cents: 500 }, "agent");
-
-      const decision = engine.evaluate(request);
-      // Should not be quarantined (500 < 1000 threshold)
-      expect(decision.action).not.toBe("quarantine");
-    });
-
-    it("quarantines transfers above confirmation threshold", () => {
-      const rules = createFinancialRules(DEFAULT_TREASURY_POLICY);
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "transfer_credits",
-        riskLevel: "dangerous",
-        category: "financial",
-      });
-      const request = createRequest(tool, { amount_cents: 2000 }, "agent");
-
-      const decision = engine.evaluate(request);
-      // Should be quarantined (2000 > 1000 threshold), but may also be denied
-      // by transfer_max_single if over that limit. 2000 < 5000 so it won't be denied.
-      expect(decision.action).toBe("quarantine");
-      expect(decision.reasonCode).toBe("CONFIRMATION_REQUIRED");
-    });
-
-    it("returns quarantine, not deny, for confirmation threshold", () => {
-      // Use a custom policy with very high transfer limits so only confirmation triggers
-      const policy: TreasuryPolicy = {
-        ...DEFAULT_TREASURY_POLICY,
-        maxSingleTransferCents: 100000,
-        requireConfirmationAboveCents: 500,
-      };
-      const rules = createFinancialRules(policy);
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "transfer_credits",
-        riskLevel: "dangerous",
-        category: "financial",
-      });
-      const request = createRequest(tool, { amount_cents: 1000 }, "agent");
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("quarantine");
-      expect(decision.reasonCode).toBe("CONFIRMATION_REQUIRED");
-    });
+    expect(ruleIds).not.toContain("financial.transfer_max_single");
+    expect(ruleIds).not.toContain("financial.transfer_hourly_cap");
+    expect(ruleIds).not.toContain("financial.transfer_daily_cap");
+    expect(ruleIds).not.toContain("financial.minimum_reserve");
+    expect(ruleIds).not.toContain("financial.require_confirmation");
+    expect(ruleIds).toContain("financial.turn_transfer_limit");
   });
 });
 
@@ -676,7 +630,8 @@ describe("createDefaultRules", () => {
     expect(ruleIds).toContain("rate.self_mod_hourly");
     expect(ruleIds).toContain("rate.spawn_daily");
     expect(ruleIds).not.toContain("financial.inference_daily_cap");
-    expect(ruleIds).toContain("financial.require_confirmation");
+    expect(ruleIds).not.toContain("financial.require_confirmation");
+    expect(ruleIds).toContain("financial.turn_transfer_limit");
   });
 
   it("authority rules have priority 400", () => {
@@ -695,11 +650,10 @@ describe("createDefaultRules", () => {
     }
   });
 
-  it("financial phase 1 rules have priority 500", () => {
+  it("remaining tool-level financial rules have priority 500", () => {
     const rules = createDefaultRules();
-    const financialRules = rules.filter(
-      (r) => r.id === "financial.inference_daily_cap" || r.id === "financial.require_confirmation",
-    );
+    const financialRules = rules.filter((r) => r.id.startsWith("financial."));
+    expect(financialRules.length).toBeGreaterThan(0);
     for (const rule of financialRules) {
       expect(rule.priority).toBe(500);
     }
