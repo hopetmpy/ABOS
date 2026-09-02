@@ -388,6 +388,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     toAddress: string,
     amountCents: number,
     note?: string,
+    options?: { idempotencyKey?: string },
   ): Promise<CreditTransferResult> => {
     const payload = {
       to_address: toAddress,
@@ -395,7 +396,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
       note,
     };
 
-    const idempotencyKey = ulid();
+    const idempotencyKey = options?.idempotencyKey ?? ulid();
     const paths = ["/v1/credits/transfer", "/v1/credits/transfers"];
 
     let lastError = "Unknown transfer error";
