@@ -269,7 +269,21 @@ describe("orchestration/SimpleFundingProtocol", () => {
   });
 
   function makeMockDb(raw: BetterSqlite3.Database) {
-    return { raw } as any;
+    return {
+      raw,
+      insertTransaction: (txn: any) => {
+        raw.prepare(
+          "INSERT INTO transactions (id, type, amount_cents, balance_after_cents, description, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        ).run(
+          txn.id,
+          txn.type,
+          txn.amountCents ?? null,
+          txn.balanceAfterCents ?? null,
+          txn.description,
+          txn.timestamp,
+        );
+      },
+    } as any;
   }
 
   it("fundChild calls transferCredits with the correct amount", async () => {
@@ -289,6 +303,16 @@ describe("orchestration/SimpleFundingProtocol", () => {
       100,
       "Task funding from orchestrator",
     );
+
+    const ledger = fundingDb
+      .prepare(
+        "SELECT type, amount_cents AS amountCents FROM transactions WHERE type = 'capital_allocation'",
+      )
+      .get() as { type: string; amountCents: number } | undefined;
+    expect(ledger).toEqual({
+      type: "capital_allocation",
+      amountCents: 100,
+    });
   });
 
   it("fundChild updates funded_amount_cents in the children table on success", async () => {
