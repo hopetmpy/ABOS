@@ -17,6 +17,11 @@ import { closePrompts } from "./prompts.js";
 import { createDatabase } from "../state/database.js";
 import { ModelRegistry } from "../inference/registry.js";
 import { runAiConnectionFlow } from "./ai-connection.js";
+import { createBuiltinAiConnectionAdapterRegistry } from "./ai-connection-adapters.js";
+import {
+  reconcileAdapterFallbackModels,
+  scopeModelsForAdapter,
+} from "./model-picker.js";
 
 // ─── Readline helpers ─────────────────────────────────────────────
 
@@ -139,7 +144,17 @@ async function pickFromList(
   const raw = await ask(
     `  ${chalk.white("→")} Enter number ${chalk.dim("(Enter to keep " + current + ")")}: `,
   );
-  if (raw === "") return current;
+  if (raw === "") {
+    if (models.some((model) => model.modelId === current)) {
+      return current;
+    }
+    console.log(
+      chalk.yellow(
+        `  Current model "${current}" is not executable through the active connection; select a listed model.`,
+      ),
+    );
+    return pickFromList(label, current, models);
+  }
   const idx = parseInt(raw, 10) - 1;
   if (isNaN(idx) || idx < 0 || idx >= models.length) {
     console.log(chalk.yellow(`  Invalid, keeping "${current}"`));
@@ -228,8 +243,35 @@ async function configureModelStrategy(config: AbosConfig): Promise<void> {
     await discoverOllamaModels(ollamaBaseUrl, db.raw);
   }
 
-  const models = registry.getAll().filter((m) => m.enabled);
+  const adapterRegistry = createBuiltinAiConnectionAdapterRegistry();
+  const activeProvider = config.aiConnection?.active?.provider;
+  const activeAdapter = activeProvider
+    ? adapterRegistry.get(activeProvider)
+    : undefined;
+
+  if (activeAdapter?.discoverModels) {
+    try {
+      await activeAdapter.discoverModels(config, registry);
+    } catch (error) {
+      console.log(
+        chalk.yellow(
+          `  ${activeAdapter.label} model discovery unavailable: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+      );
+    }
+  }
+
+  const allModels = registry.getAll().filter((model) => model.enabled);
+  const models = scopeModelsForAdapter(allModels, activeAdapter);
   db.close();
+
+  if (activeProvider && !activeAdapter) {
+    console.log(
+      chalk.yellow(
+        `  Active provider '${activeProvider}' has no loaded adapter; model compatibility is unknown, so ABOS will not narrow the registry.`,
+      ),
+    );
+  }
 
   const s: ModelStrategyConfig = {
     ...DEFAULT_MODEL_STRATEGY_CONFIG,
@@ -241,6 +283,15 @@ async function configureModelStrategy(config: AbosConfig): Promise<void> {
   s.lowComputeModel = await pickFromList("Low-compute fallback", s.lowComputeModel, models);
   s.criticalModel = await pickFromList("Critical fallback", s.criticalModel, models);
 
+  const selected = registry.get(config.inferenceModel);
+  if (selected) {
+    reconcileAdapterFallbackModels(
+      s,
+      selected,
+      activeAdapter,
+      (modelId) => registry.get(modelId),
+    );
+  }
 
   const maxTokens = await askNumber("Max tokens per turn", s.maxTokensPerTurn);
   s.maxTokensPerTurn = maxTokens;
