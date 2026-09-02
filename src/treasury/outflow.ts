@@ -223,6 +223,32 @@ export class TreasuryOutflowAuthority {
       };
     }
 
+    if (this.policy.transferCooldownMs > 0) {
+      const latest = this.db.raw.prepare(
+        `SELECT created_at
+         FROM treasury_outflows
+         WHERE status IN ('reserved', 'unknown', 'submitted')
+         ORDER BY created_at DESC
+         LIMIT 1`,
+      ).get() as { created_at: string } | undefined;
+
+      if (latest) {
+        const elapsedMs = Date.now() - Date.parse(latest.created_at);
+        if (
+          Number.isFinite(elapsedMs) &&
+          elapsedMs >= 0 &&
+          elapsedMs < this.policy.transferCooldownMs
+        ) {
+          return {
+            status: "blocked",
+            reason:
+              `Transfer cooldown active: ${elapsedMs}ms elapsed < ` +
+              `${this.policy.transferCooldownMs}ms required`,
+          };
+        }
+      }
+    }
+
     const hourlySpend = this.spendTracker.getHourlySpend("transfer");
     if (
       hourlySpend + pending.hourly + amountCents >
