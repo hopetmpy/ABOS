@@ -128,6 +128,31 @@ describe("TreasuryOutflowAuthority", () => {
     expect(transferCredits).not.toHaveBeenCalled();
   });
 
+  it("enforces a configured cooldown across different outflow sources", async () => {
+    const treasury = new TreasuryOutflowAuthority(
+      conway,
+      db,
+      policy({ transferCooldownMs: 60_000 }),
+    );
+
+    const first = await treasury.execute({
+      source: "transfer_credits",
+      recipient: "0xone",
+      amountCents: 100,
+    });
+    expect(first.success).toBe(true);
+
+    const second = await treasury.execute({
+      source: "orchestrator_fund_child",
+      recipient: "0xtwo",
+      amountCents: 100,
+    });
+
+    expect(second.status).toBe("blocked");
+    expect(second.reason).toContain("Transfer cooldown active");
+    expect(transferCredits).toHaveBeenCalledTimes(1);
+  });
+
   it("counts completed spend against the hourly ceiling", async () => {
     const spend = new SpendTracker(db.raw);
     spend.recordSpend({
