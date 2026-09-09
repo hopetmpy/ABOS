@@ -14,6 +14,7 @@ Legacy-Full-Plan: plan/LEGACY_FULL_PLAN.md
 | P-003 | Reconciliar e integrar child capital semantics de PR #29 | PARCIAL | P-001 + P-002; PR #29 abierto | plan/P-003.md |
 | P-004 | Reconciliar documentación arquitectónica con source/runtime v0.3.0 actual | PLANIFICADO | P-001; evitar competir con P-003 | plan/P-004.md |
 | P-005 | Ejecutar acceptance LIVE de fronteras externas críticas | PLANIFICADO | source relevante integrado; autorización/entorno real | plan/P-005.md |
+| P-006 | Remediar advisories de dependencias y restaurar security-audit green | PLANIFICADO | hallazgo heredado de CI; auditar dependency graph antes de cambiar | plan/P-006.md |
 
 ## 1. Regla de autoridad
 
@@ -25,14 +26,23 @@ Legacy-Full-Plan: plan/LEGACY_FULL_PLAN.md
 - Nuevos `P-xxx` deben derivar de gaps ABOS-specific demostrables; no se copian fases de otro proyecto.
 - Un estado HECHO acredita únicamente el objetivo exacto de su módulo.
 - Un PR abierto con source/CI válido permanece PARCIAL respecto de integración hasta reconciliar y mergear.
+- Un gate de CI rojo se clasifica por causa antes de atribuirlo al cambio actual.
 
 ## 2. Ejes actuales
+
+### Eje de seguridad/dependencias
+
+`P-006`
+
+Durante la validación de P-001/P-002, `pnpm audit` descubrió advisories moderados en dependencias ya presentes en `main`. La rama ProjectOps no modificó `package.json` ni `pnpm-lock.yaml`, por lo que el hallazgo se registra como deuda preexistente descubierta durante validación, no como regresión del cutover.
+
+P-006 queda como siguiente frontera prioritaria porque el gate `security-audit` es autoritativo y actualmente rojo. La remediación debe auditar compatibilidad antes de actualizar Vitest o dependencias transitivas.
 
 ### Eje de verdad económica de children
 
 `P-003`
 
-La frontera inmediata es terminar correctamente la semántica de capital de children sin inventar live balance, revenue, profitability o ROI.
+Existe trabajo real en PR #29 para separar funding, capital, P&L, balance, revenue, profitability y ROI. Sigue PARCIAL porque el PR está abierto/no integrado y debe reconciliarse contra el HEAD actual.
 
 ### Eje de coherencia documental
 
@@ -53,7 +63,7 @@ P-005 no convierte un test costoso en requisito para todo cambio. Se ejecuta por
 PR #29 está abierto sobre `abos/child-capital-semantics-v1` y declara CI verde en su head histórico. Su base precede commits posteriores de `main`, incluido este ProjectOps cutover.
 
 Antes de merge:
-- reauditar contra HEAD actual;
+- reauditar PR head contra `main` actual;
 - confirmar que no colisiona con cambios posteriores;
 - verificar tests/CI en la base reconciliada;
 - preservar unknown != zero, funding != balance/expense, internal capital != external P&L y ROI causal.
@@ -73,17 +83,31 @@ Evidencia histórica explícita:
 
 Acceptance LIVE debe respetar costos, permisos, secrets, cleanup y alcance exacto del claim.
 
-## 6. Reglas de secuenciación
+## 6. Fundamento de P-006
 
-1. P-001 y P-002 están HECHO tras este cutover documental.
-2. P-003 es el trabajo recuperable más concreto y queda como Active-Plan PARCIAL, no como supuesto HECHO.
-3. P-004 puede ejecutarse en paralelo únicamente si no interfiere con P-003 ni cambia contratos técnicos.
-4. P-005 puede permanecer BLOQUEADO por falta de autorización/entorno sin bloquear trabajo source no dependiente.
-5. Si aparece un defecto crítico reproducible en runtime, se registra y se decide su prioridad por impacto; no se fuerza dentro de una fase no relacionada.
-6. No abrir auto-profitability/kill/fund optimization sobre children hasta que las entradas económicas requeridas tengan autoridad suficiente.
-7. No crear nuevas fases para esconder un P-xxx incompleto.
+En el CI de PR #30, run `34409821144`, job `security-audit` `102661387742`, `pnpm audit` reportó tres vulnerabilidades moderadas:
 
-## 7. Cierre P-001
+- `stream-json <=3.4.0`, advisory `GHSA-528h-pc64-c93x`, transitiva vía `@solana/web3.js > jayson`, patched `>=3.5.0`;
+- `vitest >=2.1.0 <4.1.11`, advisory `GHSA-82fw-gwwq-j7x9`, patched `>=4.1.11`;
+- `@vitest/mocker >=2.1.0 <4.1.11`, mismo advisory, transitiva vía Vitest.
+
+La rama ProjectOps no modifica `package.json` ni `pnpm-lock.yaml`; el compare contra main confirma que el hallazgo no fue introducido por P-001/P-002.
+
+La corrección se separa porque Vitest requiere salto mayor y `stream-json` es transitiva. Resolverlos dentro de un cutover documental mezclaría responsabilidades y elevaría riesgo sin necesidad.
+
+## 7. Reglas de secuenciación
+
+1. P-001 y P-002 están HECHO tras el cutover documental.
+2. P-006 es la siguiente frontera prioritaria mientras el gate `security-audit` permanezca rojo; debe auditarse antes de tocar dependencias.
+3. P-003 permanece PARCIAL y recuperable; no crear una segunda implementación de child economics.
+4. P-004 puede ejecutarse cuando no interfiera con P-006/P-003 ni cambie contratos técnicos.
+5. P-005 puede permanecer BLOQUEADO por falta de autorización/entorno sin bloquear trabajo source no dependiente.
+6. Si aparece un defecto crítico reproducible en runtime, se registra y se decide su prioridad por impacto; no se fuerza dentro de una fase no relacionada.
+7. No abrir auto-profitability/kill/fund optimization sobre children hasta que las entradas económicas requeridas tengan autoridad suficiente.
+8. No debilitar un gate de CI para ocultar un hallazgo; arreglar la causa o registrar una excepción temporal explícita con evidencia.
+9. No crear nuevas fases para esconder un `P-xxx` incompleto.
+
+## 8. Cierre P-001
 
 P-001: **HECHO**.
 
@@ -91,7 +115,7 @@ Resultado exacto: se reconstruyeron identidad, constitución, baseline técnico,
 
 No acredita operación LIVE externa ni corrige product source.
 
-## 8. Cierre P-002
+## 9. Cierre P-002
 
 P-002: **HECHO**.
 
@@ -99,8 +123,10 @@ Resultado exacto: autoridad operativa migrada a router raíz + matriz `ProjectOp
 
 No acredita ejecución del CLI ProjectOps ni convierte la matriz pública en almacén privado.
 
-## 9. Siguiente trabajo recuperable
+## 10. Siguiente trabajo recuperable
 
-`P-003 — Reconciliar e integrar child capital semantics de PR #29`.
+`P-006 — Remediar advisories de dependencias y restaurar security-audit green`.
 
-Antes de modificar su source debe registrarse una intervención P-003 EN_EJECUCIÓN en el segmento activo y reauditar PR/base/HEAD/CI.
+Antes de modificar dependencias debe registrarse una intervención P-006 EN_EJECUCIÓN en el segmento activo y auditarse la compatibilidad real de cada ruta de remediación.
+
+Después de P-006, P-003 sigue siendo el siguiente bloque técnico ya parcialmente implementado.
