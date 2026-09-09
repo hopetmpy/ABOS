@@ -204,3 +204,69 @@ El sistema operativo documental quedó integrado: `AGENTS.md` gobierna cómo tra
 ### Estado final
 
 HECHO
+
+
+## 2026-09-09 — Auditoría ABOS-specific y migración a ProjectOps modular
+
+Estado: EN_EJECUCIÓN
+
+Plan relacionado: P-001
+
+### Objetivo
+
+Ejecutar la auditoría pendiente de P-001 y migrar el método operativo vigente a una matriz ProjectOps modular que piense y planifique como ABOS, preservando los 39 puntos universales pero separando completamente la identidad, arquitectura, invariantes, evidencia, riesgos y trabajo futuro propios de ABOS.
+
+### Motivo
+
+El repositorio conserva el bootstrap monolítico de septiembre (`AGENTS.md` + `CONTINUITY.md` + `PLAN.md`), mientras el método operativo ha evolucionado hacia manifests compactos, módulos de plan/continuidad, baseline de proyecto y razonamiento adaptativo. Copiar semántica de ZeroIQ, CATO u otro host sería incorrecto; solo debe reutilizarse el método.
+
+### Estado real auditado antes de modificar
+
+- `main` auditado en `a22ef23006f7b858a1cf457d0a75acd181a10aa0`.
+- ABOS es `@abos/runtime` v0.3.0 y declara Node 20/22 como majors soportados.
+- Identidad observable: Autonomous Business Operating System; runtime autónomo persistente con wallet, supervivencia económica, agent loop, heartbeat, memoria, inference, skills, self-modification, environments, Conway/AWS, replicación/linaje y continuidad de ejecución.
+- `constitution.md` es autoridad de conducta del producto y sus tres leyes jerárquicas gobiernan por encima de supervivencia o ingresos.
+- Adaptive Path Intelligence ya formaliza `objective != method`, `UNKNOWN != IMPOSSIBLE`, novedad de rutas, evidencia persistente y capability/environment discovery.
+- PRs recientes cerraron varias ambigüedades de autoridad: executor boundary, wake authority, inference budget/cost, model routing, child health y funding recall.
+- PR #29 permanece abierto sobre semántica de capital/economía de hijos y constituye trabajo real no cerrado.
+- No existe `ProjectOps/` en ABOS antes de esta intervención.
+
+### Semántica que debe preservarse
+
+- ABOS no es ZeroIQ ni CATO y no hereda sus métricas, gates, arquitectura, estados o prioridades.
+- La constitución ABOS permanece separada del protocolo de trabajo del desarrollador/agente.
+- Código/Git/runtime/tests gobiernan claims de implementación; visión/documentación gobierna intención solo cuando no contradice evidencia técnica.
+- Fuente, estado runtime y estado económico no deben mezclarse ni fabricarse.
+- UNKNOWN/UNAVAILABLE/UNAUTHORIZED no equivalen a IMPOSSIBLE.
+- No introducir una segunda autoridad para modelos, orquestación, memoria, finanzas, lifecycle, paths o persistencia.
+
+### Alcance previsto
+
+1. Preservar el protocolo actual íntegro como `ProjectOps/system/ABOS_OPERATING_PROTOCOL.md`.
+2. Convertir `AGENTS.md` raíz en router compacto ABOS-specific.
+3. Crear `ProjectOps/PROJECT.md` con identidad/baseline/invariantes/evidence ladder propios de ABOS.
+4. Crear capa y aceptación de razonamiento adaptativo ABOS-specific.
+5. Migrar continuidad y plan antiguos a historia preservada, sin mantener autoridades duplicadas en raíz.
+6. Crear manifests y módulos activos de continuidad/plan.
+7. Representar trabajo pendiente real, especialmente PR #29, sin inventar fases de otros proyectos.
+8. Validar rutas, autoridades, identidad y ausencia de contaminación semántica.
+
+### Riesgos conocidos
+
+- Publicar estado sensible en un repositorio público.
+- Crear dos fuentes canónicas de continuidad/plan.
+- Confundir el método ProjectOps con una instalación CLI que no fue ejecutada.
+- Importar accidentalmente semántica de otro host.
+- Elevar documentación o un PR abierto a evidencia de runtime.
+
+### Regla de host público
+
+ABOS es público. La matriz trackeada que se construya aquí debe contener únicamente reglas, baseline, plan y continuidad aptos para publicación; secretos, tokens, credenciales, razonamiento privado y estado runtime sensible quedan explícitamente fuera. No se afirmará que el CLI ProjectOps fue instalado si la migración se realiza documentalmente mediante Git.
+
+### Estado de ejecución
+
+Registro de entrada completado antes del cutover documental. La siguiente modificación será la construcción y validación de la matriz ABOS-specific.
+
+### Estado final
+
+EN_EJECUCIÓN
