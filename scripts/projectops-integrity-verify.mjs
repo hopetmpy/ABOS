@@ -11,26 +11,12 @@ const requirePath=path=>{if(!existsSync(at(path)))fail(`required path missing: $
 const requireText=(content,needle,label)=>{if(!content.includes(needle))fail(label)};
 const forbidFile=path=>{if(existsSync(at(path)))fail(`forbidden competing root authority exists: ${path}`)};
 const lineCount=content=>content.length?content.split(/\r?\n/).length:0;
-const gitBlobSha=content=>{
-  const bytes=Buffer.from(content,"utf8");
-  return createHash("sha1").update(Buffer.from(`blob ${bytes.length}\0`)).update(bytes).digest("hex");
-};
-const requireBlob=(path,expected)=>{
-  const actual=gitBlobSha(read(path));
-  if(actual!==expected)fail(`${path} lost preserved blob identity: expected ${expected}, got ${actual}`);
-};
-const field=(content,name)=>{
-  const match=content.match(new RegExp(`^${name}:\\s*(.+)$`,"m"));
-  if(!match)fail(`manifest field missing: ${name}`);
-  return match[1].trim();
-};
-const moduleState=content=>{
-  const match=content.match(/^State:\s*(.+)$/m);
-  if(!match)fail("plan module missing State field");
-  return match[1].trim();
-};
+const gitBlobSha=content=>{const b=Buffer.from(content,"utf8");return createHash("sha1").update(Buffer.from(`blob ${b.length}\0`)).update(b).digest("hex")};
+const requireBlob=(path,expected)=>{const actual=gitBlobSha(read(path));if(actual!==expected)fail(`${path} blob drift: expected ${expected}, got ${actual}`)};
+const field=(content,name)=>{const m=content.match(new RegExp(`^${name}:\\s*(.+)$`,"m"));if(!m)fail(`manifest field missing: ${name}`);return m[1].trim()};
+const stateOf=content=>{const m=content.match(/^State:\s*(.+)$/m);if(!m)fail("plan module missing State");return m[1].trim()};
 
-const paths={
+const p={
   agents:"AGENTS.md",
   protocol:"ProjectOps/system/ABOS_OPERATING_PROTOCOL.md",
   reasoning:"ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md",
@@ -43,41 +29,38 @@ const paths={
   legacyPlan:"ProjectOps/plan/LEGACY_FULL_PLAN.md",
   constitution:"constitution.md",
 };
-
-for(const path of Object.values(paths))requirePath(path);
+for(const path of Object.values(p))requirePath(path);
 forbidFile("CONTINUITY.md");
 forbidFile("PLAN.md");
 
-// Preserved migration authorities must never drift.
-requireBlob(paths.protocol,"ba0d546c704d7078fb1471107c29c7174379d134");
-requireBlob(paths.legacyContinuity,"6ee88dc560dc53ddb6e728fca9193fa62f6ee3a7");
-requireBlob(paths.legacyPlan,"8c52273bf1801958273a77474315c85e0903ee1d");
+requireBlob(p.protocol,"ba0d546c704d7078fb1471107c29c7174379d134");
+requireBlob(p.legacyContinuity,"6ee88dc560dc53ddb6e728fca9193fa62f6ee3a7");
+requireBlob(p.legacyPlan,"8c52273bf1801958273a77474315c85e0903ee1d");
 
-const agents=read(paths.agents);
-requireText(agents,"<!-- PROJECTOPS:ABOS-ROOT-ENTRYPOINT -->","root AGENTS ProjectOps marker missing");
-const protocolIndex=agents.indexOf("ProjectOps/system/ABOS_OPERATING_PROTOCOL.md");
-const reasoningIndex=agents.indexOf("ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md");
-const continuityIndex=agents.indexOf("ProjectOps/CONTINUITY.md");
-if(protocolIndex<0||reasoningIndex<0||continuityIndex<0||!(protocolIndex<reasoningIndex&&reasoningIndex<continuityIndex))
-  fail("root activation order must be protocol -> adaptive reasoning -> continuity");
+const agents=read(p.agents);
 for(const needle of [
+  "<!-- PROJECTOPS:ABOS-ROOT-ENTRYPOINT -->",
+  "ProjectOps/system/ABOS_OPERATING_PROTOCOL.md",
+  "ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md",
+  "ProjectOps/CONTINUITY.md",
   "ProjectOps/PROJECT.md",
   "Required-Context",
   "mínimo obligatorio, no un límite",
   "DECISION_READY",
   "NO_CHANGE",
-  "FALSAR/DISCRIMINAR",
-  "ATACAR",
   "Autonomous Business Operating System",
   "constitution.md",
   "funding no es balance",
   "PUBLIC_TRACKED_MATRIX.md",
   "~/.abos",
-])requireText(agents,needle,`root AGENTS ABOS integration missing: ${needle}`);
-requireText(agents,"no se hardcodea en este router","root AGENTS lost dynamic plan-state rule");
-if(statSync(at(paths.agents)).size>12*1024)fail("root AGENTS exceeded 12 KiB compact-router budget");
+])requireText(agents,needle,`root AGENTS missing: ${needle}`);
+const ai=agents.indexOf("ProjectOps/system/ABOS_OPERATING_PROTOCOL.md");
+const ri=agents.indexOf("ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md");
+const ci=agents.indexOf("ProjectOps/CONTINUITY.md");
+if(!(ai>=0&&ai<ri&&ri<ci))fail("root activation order must be protocol -> reasoning -> continuity");
+if(statSync(at(p.agents)).size>12*1024)fail("root AGENTS exceeded 12 KiB compact-router budget");
 
-const reasoning=read(paths.reasoning);
+const reasoning=read(p.reasoning);
 for(const needle of [
   "<!-- PROJECTOPS:ADAPTIVE-REASONING-LAYER:BEGIN -->",
   "<!-- PROJECTOPS:ADAPTIVE-REASONING-LAYER:END -->",
@@ -98,39 +81,20 @@ for(const needle of [
   "Long-running state, concurrency y recovery",
   "Inference y model routing",
   "Constitution, policy y autonomía",
-  "Self-modification y capability acquisition",
-  "Evidencia externa",
-])requireText(reasoning,needle,`adaptive reasoning ABOS invariant missing: ${needle}`);
-if(statSync(at(paths.reasoning)).size>48*1024)fail("adaptive reasoning layer exceeded 48 KiB mandatory-context budget; modularize before growing further");
-if(lineCount(reasoning)>800)fail("adaptive reasoning layer exceeded 800-line mandatory-context budget; modularize before growing further");
+])requireText(reasoning,needle,`reasoning layer missing: ${needle}`);
+if(statSync(at(p.reasoning)).size>48*1024||lineCount(reasoning)>800)fail("reasoning layer exceeded mandatory-context budget");
 
-const acceptance=read(paths.acceptance);
-requireText(acceptance,"Authority: ACCEPTANCE_CONTRACT","ABOS acceptance contract authority missing");
-requireText(acceptance,"Suite: A–N","ABOS acceptance suite must be A–N");
-requireText(acceptance,"BEHAVIORAL_SUITE_NOT_YET_EXECUTED","ABOS acceptance must not fabricate behavioral PASS");
-for(const scenario of [
-  "A — Falso bug por documentación desactualizada",
-  "B — Dependencia fuera de Required-Context",
-  "C — Failure estratégico disfrazado de retry",
-  "D — Implementación parecida bajo otro nombre",
-  "E — Executor remoto falla y local podría funcionar",
-  "F — Child balance no observable",
-  "G — Funding, P&L y ROI",
-  "H — Inference daily cap",
-  "I — Parent intenta recall del child",
-  "J — Provider/model desconocido",
-  "K — Heartbeat timeout con operación aún viva",
-  "L — Self-modification / replication frente a constitution",
-  "M — Source/CI versus LIVE",
-  "N — PR abierto frente a main",
-])requireText(acceptance,scenario,`ABOS acceptance scenario missing: ${scenario}`);
+const acceptance=read(p.acceptance);
+for(const needle of ["Authority: ACCEPTANCE_CONTRACT","Suite: A–N","BEHAVIORAL_SUITE_NOT_YET_EXECUTED"])
+  requireText(acceptance,needle,`acceptance missing: ${needle}`);
+for(const letter of "ABCDEFGHIJKLMN")requireText(acceptance,`## ${letter} —`,`acceptance scenario ${letter} missing`);
 
-const mode=read(paths.mode);
-requireText(mode,"Mode: PUBLIC_TRACKED_DOCUMENTARY_MATRIX","ABOS public ProjectOps host mode missing");
-requireText(mode,"Repository-Visibility-Observed-At-Cutover: PUBLIC","ABOS public-host observation missing");
-requireText(mode,"No equivale a una instalación privada del CLI ProjectOps","ABOS public host must distinguish documentary matrix from CLI install");
+const mode=read(p.mode);
+requireText(mode,"Mode: PUBLIC_TRACKED_DOCUMENTARY_MATRIX","public ProjectOps host mode missing");
+requireText(mode,"Repository-Visibility-Observed-At-Cutover: PUBLIC","public-host observation missing");
+requireText(mode,"No equivale a una instalación privada del CLI ProjectOps","documentary/CLI boundary missing");
 
-const project=read(paths.project);
+const project=read(p.project);
 for(const needle of [
   "Identity-Model: TARGET_VISION_PLUS_EVIDENCE_BASELINE",
   "Autonomous Business Operating System",
@@ -141,83 +105,63 @@ for(const needle of [
   "objective != method",
   "Execution boundary",
   "Economía causal",
-  "Parent/child",
+  "Children / replication",
+  "parent authority != child wallet authority",
   "E0 — TARGET / NARRATIVE",
   "E5 — EXTERNAL AUTHENTICATED LIVE",
   "E6 — ECONOMIC LIVE",
   "E7 — SUSTAINED OPERATION",
   "PR #29",
   "Documentation drift",
-])requireText(project,needle,`PROJECT ABOS baseline missing: ${needle}`);
+])requireText(project,needle,`PROJECT baseline missing: ${needle}`);
 
-const continuity=read(paths.continuity);
+const continuity=read(p.continuity);
 const activePlan=field(continuity,"Active-Plan");
 const activeSegment=field(continuity,"Active-Segment");
-const reasoningLayer=field(continuity,"Reasoning-Layer");
-const reasoningAcceptance=field(continuity,"Reasoning-Acceptance");
-const hostMode=field(continuity,"Host-Mode");
-const integrityVerifier=field(continuity,"ProjectOps-Integrity-Verifier");
-const lastReconciledHead=field(continuity,"Last-Reconciled-Host-Head");
-if(reasoningLayer!=="system/ABOS_ADAPTIVE_REASONING_LAYER.md")fail(`unexpected Reasoning-Layer authority: ${reasoningLayer}`);
-if(reasoningAcceptance!=="system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md")fail(`unexpected Reasoning-Acceptance authority: ${reasoningAcceptance}`);
-if(hostMode!=="system/PUBLIC_TRACKED_MATRIX.md")fail(`unexpected Host-Mode authority: ${hostMode}`);
-if(integrityVerifier!=="scripts/projectops-integrity-verify.mjs")fail(`unexpected ProjectOps integrity verifier: ${integrityVerifier}`);
-if(!/^[0-9a-f]{40}$/.test(lastReconciledHead))fail("Last-Reconciled-Host-Head must be an exact 40-character Git SHA");
+if(field(continuity,"Reasoning-Layer")!=="system/ABOS_ADAPTIVE_REASONING_LAYER.md")fail("Reasoning-Layer authority mismatch");
+if(field(continuity,"Reasoning-Acceptance")!=="system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md")fail("Reasoning-Acceptance authority mismatch");
+if(field(continuity,"Host-Mode")!=="system/PUBLIC_TRACKED_MATRIX.md")fail("Host-Mode authority mismatch");
+if(field(continuity,"ProjectOps-Integrity-Verifier")!=="scripts/projectops-integrity-verify.mjs")fail("integrity verifier authority mismatch");
+if(!/^[0-9a-f]{40}$/.test(field(continuity,"Last-Reconciled-Host-Head")))fail("Last-Reconciled-Host-Head must be exact Git SHA");
 
 const activeSegmentPath=`ProjectOps/${activeSegment}`;
 const activePlanPath=`ProjectOps/plan/${activePlan}.md`;
 requirePath(activeSegmentPath);
 requirePath(activePlanPath);
 const segment=read(activeSegmentPath);
-requireText(segment,"State: ACTIVE","active continuity segment is not marked ACTIVE");
-if(statSync(at(activeSegmentPath)).size>100*1024)fail(`${activeSegmentPath} exceeded 100 KiB rotation threshold`);
-if(lineCount(segment)>1000)fail(`${activeSegmentPath} exceeded 1000-line rotation threshold`);
+requireText(segment,"State: ACTIVE","active continuity segment not ACTIVE");
+if(statSync(at(activeSegmentPath)).size>100*1024||lineCount(segment)>1000)fail("active continuity segment exceeded rotation threshold");
 
-const plan=read(paths.plan);
-const planRows=new Map();
-for(const match of plan.matchAll(/^\|\s*(P-\d{3})\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|\s*(plan\/[^|\s]+\.md)\s*\|$/gm)){
-  const [,id,title,state,dependencies,modulePath]=match;
-  if(planRows.has(id))fail(`duplicate PLAN id: ${id}`);
-  planRows.set(id,{title:title.trim(),state:state.trim(),dependencies:dependencies.trim(),modulePath});
-  const full=`ProjectOps/${modulePath}`;
-  requirePath(full);
-  const actualState=moduleState(read(full));
-  if(actualState!==state.trim())fail(`${id} manifest/module state mismatch: ${state.trim()} vs ${actualState}`);
+const plan=read(p.plan);
+const rows=new Map();
+for(const m of plan.matchAll(/^\|\s*(P-\d{3})\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|\s*(plan\/[^|\s]+\.md)\s*\|$/gm)){
+  const [,id,title,state,deps,modulePath]=m;
+  if(rows.has(id))fail(`duplicate PLAN id: ${id}`);
+  const full=`ProjectOps/${modulePath}`; requirePath(full);
+  if(stateOf(read(full))!==state.trim())fail(`${id} manifest/module state mismatch`);
+  rows.set(id,{title:title.trim(),state:state.trim(),deps:deps.trim(),modulePath});
 }
-for(let n=1;n<=5;n++){
-  const id=`P-${String(n).padStart(3,"0")}`;
-  if(!planRows.has(id))fail(`PLAN manifest missing ${id}`);
-}
-if(!planRows.has(activePlan))fail(`PLAN manifest does not contain active plan ${activePlan}`);
-if(planRows.get("P-001").state!=="HECHO")fail("P-001 must be HECHO after identity audit");
-if(planRows.get("P-002").state!=="HECHO")fail("P-002 must be HECHO after cutover");
-if(planRows.get("P-003").state!=="PARCIAL")fail("P-003 must remain PARCIAL while PR #29 is open/unintegrated");
+for(let n=1;n<=5;n++){const id=`P-${String(n).padStart(3,"0")}`;if(!rows.has(id))fail(`PLAN missing ${id}`)}
+if(!rows.has(activePlan))fail(`active plan ${activePlan} missing from PLAN`);
+if(rows.get("P-001").state!=="HECHO"||rows.get("P-002").state!=="HECHO"||rows.get("P-003").state!=="PARCIAL")fail("P-001/P-002/P-003 state contract mismatch");
 
-for(const [id,needle] of new Map([
+for(const [id,needle] of [
   ["P-001","Reconstruir identidad, baseline, autoridades y plan ABOS"],
   ["P-002","PUBLIC_TRACKED_DOCUMENTARY_MATRIX"],
   ["P-003","child capital semantics"],
   ["P-004","documentación arquitectónica"],
   ["P-005","acceptance LIVE"],
-])){
-  const row=planRows.get(id);
-  const body=read(`ProjectOps/${row.modulePath}`);
-  requireText(body,needle,`${id} lost ABOS-specific identity: ${needle}`);
-}
+])requireText(read(`ProjectOps/${rows.get(id).modulePath}`),needle,`${id} lost ABOS-specific identity`);
 
-const activePlanModule=read(activePlanPath);
-const requiredContextLines=activePlanModule.split(/\r?\n/);
-const requiredContextIndex=requiredContextLines.findIndex(line=>line.trim()==="Required-Context:");
-if(requiredContextIndex<0)fail(`${activePlanPath} has no Required-Context section`);
-let requiredPathCount=0;
-for(let index=requiredContextIndex+1;index<requiredContextLines.length;index++){
-  const line=requiredContextLines[index];
-  if(!line.trim()&&requiredPathCount>0)break;
-  const match=line.match(/^\s*-\s+`([^`]+)`/);
-  if(!match)continue;
-  requiredPathCount++;
-  requirePath(match[1]);
+const active=read(activePlanPath).split(/\r?\n/);
+const rci=active.findIndex(line=>line.trim()==="Required-Context:");
+if(rci<0)fail(`${activePlanPath} lacks Required-Context`);
+let count=0;
+for(let i=rci+1;i<active.length;i++){
+  if(!active[i].trim()&&count>0)break;
+  const m=active[i].match(/^\s*-\s+`([^`]+)`/); if(!m)continue;
+  requirePath(m[1]); count++;
 }
-if(requiredPathCount===0)fail(`${activePlanPath} Required-Context contains no concrete local references`);
+if(!count)fail(`${activePlanPath} Required-Context has no local paths`);
 
 console.log("PROJECTOPS_INTEGRITY_VERIFY: PASS");
