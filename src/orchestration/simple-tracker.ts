@@ -5,6 +5,7 @@ import type {
   ChildStatus,
   ConwayClient,
 } from "../types.js";
+import { isCreditTransferAccepted } from "../conway/credits.js";
 import { createLogger } from "../observability/logger.js";
 import type { AgentTracker, FundingProtocol } from "./types.js";
 
@@ -144,8 +145,7 @@ export class SimpleFundingProtocol implements FundingProtocol {
       return { success: false };
     }
 
-    const success = isTransferSuccessful(result.status);
-    if (!success) {
+    if (!isCreditTransferAccepted(result.status)) {
       return { success: false };
     }
 
@@ -228,12 +228,4 @@ export class SimpleFundingProtocol implements FundingProtocol {
   async getBalance(_childAddress: string): Promise<number | null> {
     return null;
   }
-}
-
-function isTransferSuccessful(status: string): boolean {
-  const normalized = status.trim().toLowerCase();
-  return normalized.length > 0
-    && !normalized.includes("fail")
-    && !normalized.includes("error")
-    && !normalized.includes("reject");
 }
