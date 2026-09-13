@@ -5,8 +5,10 @@ import type {
   ChildStatus,
   ConwayClient,
 } from "../types.js";
+import { createLogger } from "../observability/logger.js";
 import type { AgentTracker, FundingProtocol } from "./types.js";
 
+const logger = createLogger("orchestration.simple-tracker");
 const IDLE_STATUSES = new Set<ChildStatus>(["running", "healthy"]);
 
 export class SimpleAgentTracker implements AgentTracker {
@@ -131,24 +133,54 @@ export class SimpleFundingProtocol implements FundingProtocol {
       return { success: true };
     }
 
+    let result;
     try {
-      const result = await this.conway.transferCredits(
+      result = await this.conway.transferCredits(
         childAddress,
         transferAmount,
         "Task funding from orchestrator",
       );
-
-      const success = isTransferSuccessful(result.status);
-      if (success) {
-        this.db.raw.prepare(
-          "UPDATE children SET funded_amount_cents = funded_amount_cents + ? WHERE address = ?",
-        ).run(transferAmount, childAddress);
-      }
-
-      return { success };
     } catch {
       return { success: false };
     }
+
+    const success = isTransferSuccessful(result.status);
+    if (!success) {
+      return { success: false };
+    }
+
+    try {
+      const persistAllocation = this.db.raw.transaction(() => {
+        this.db.raw.prepare(
+          "UPDATE children SET funded_amount_cents = funded_amount_cents + ? WHERE address = ?",
+        ).run(transferAmount, childAddress);
+
+        this.db.insertTransaction({
+          id: ulid(),
+          type: "capital_allocation",
+          amountCents: transferAmount,
+          balanceAfterCents: result.balanceAfterCents,
+          description: `Allocate task working capital to child ${childAddress}`,
+          timestamp: new Date().toISOString(),
+        });
+      });
+      persistAllocation();
+    } catch (error) {
+      // The external transfer has already succeeded. Returning false here could
+      // make an orchestrator retry the irreversible transfer and double-fund the
+      // child. Preserve the external success and surface the local evidence gap.
+      logger.error(
+        "Child funding transferred but local capital ledger persistence failed",
+        error instanceof Error ? error : undefined,
+        {
+          childAddress,
+          transferAmount,
+          transferId: result.transferId,
+        },
+      );
+    }
+
+    return { success: true };
   }
 
   async recallCredits(childAddress: string): Promise<{
