@@ -334,7 +334,7 @@ describe("orchestration/SimpleFundingProtocol", () => {
     expect(result.success).toBe(false);
   });
 
-  it("getBalance returns funded_amount_cents from the children table", async () => {
+  it("keeps child balance unknown even when parent funding history exists", async () => {
     fundingDb.prepare("UPDATE children SET funded_amount_cents = 350 WHERE address = ?").run("0xchild");
 
     const mockConway = {} as any;
@@ -342,16 +342,16 @@ describe("orchestration/SimpleFundingProtocol", () => {
     const funding = new SimpleFundingProtocol(mockConway, identity, makeMockDb(fundingDb));
 
     const balance = await funding.getBalance("0xchild");
-    expect(balance).toBe(350);
+    expect(balance).toBeNull();
   });
 
-  it("getBalance returns 0 for unknown address", async () => {
+  it("keeps child balance unknown for an unknown address", async () => {
     const mockConway = {} as any;
     const identity = { address: "0xparent" } as any;
     const funding = new SimpleFundingProtocol(mockConway, identity, makeMockDb(fundingDb));
 
     const balance = await funding.getBalance("0xunknown");
-    expect(balance).toBe(0);
+    expect(balance).toBeNull();
   });
 
   it("recallCredits does not fake a child debit through the parent Conway client", async () => {
@@ -375,6 +375,7 @@ describe("orchestration/SimpleFundingProtocol", () => {
     expect(result.success).toBe(false);
     expect(result.amountCents).toBe(0);
     expect(result.reason).toContain("parent runtime cannot authorize a debit");
+    expect(result.reason).toContain("500 cents remain tracked as previously funded");
     expect(mockConway.transferCredits).not.toHaveBeenCalled();
   });
 
