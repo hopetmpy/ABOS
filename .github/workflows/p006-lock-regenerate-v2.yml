@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: 22
       - uses: pnpm/action-setup@v4
-      - name: Regenerate dependency graph
+      - name: Regenerate dependency graph for published 12.11.1 candidate
         run: pnpm install --no-frozen-lockfile
       - name: Show resolved graph
         run: pnpm list better-sqlite3 vitest @vitest/mocker @solana/web3.js jayson stream-json stream-chain --depth 10 || true
@@ -49,5 +49,5 @@ jobs:
             exit 0
           fi
           git diff --cached --stat
-          git commit -m 'fix(deps): regenerate P-006 lockfile for better-sqlite3 12'
+          git commit -m 'fix(deps): regenerate P-006 lockfile for better-sqlite3 12.11.1'
           git push origin HEAD:abos/p006-security-audit-remediation-v2
