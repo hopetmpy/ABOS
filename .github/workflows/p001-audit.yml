@@ -1,0 +1,120 @@
+name: P001 Exhaustive Audit
+on:
+  push:
+    branches: [abos/p001-full-audit-20260913]
+  workflow_dispatch:
+
+jobs:
+  static-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - name: Full tracked-file inventory and structural audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import crypto from 'node:crypto';
+          import { execFileSync } from 'node:child_process';
+          const tracked = execFileSync('git', ['ls-files', '-z'], {encoding:'utf8'}).split('\0').filter(Boolean).sort();
+          const textExt = new Set(['.ts','.js','.mjs','.cjs','.json','.md','.yml','.yaml','.sh','.toml','.txt']);
+          const textFiles = tracked.filter(f => textExt.has(path.extname(f)) || ['AGENTS.md','PLAN.md','CONTINUITY.md','.npmrc','.nvmrc','.node-version'].includes(f));
+          const tsFiles = tracked.filter(f => /^(src|packages)\/.*\.(ts|tsx)$/.test(f));
+          const sourceTs = tsFiles.filter(f => !/(^|\/)__tests__(\/|$)|\.test\.|\.spec\./.test(f));
+          const testTs = tsFiles.filter(f => !sourceTs.includes(f));
+          console.log('=== P001 INVENTORY ===');
+          console.log(JSON.stringify({trackedFiles:tracked.length,textFiles:textFiles.length,tsFiles:tsFiles.length,sourceTs:sourceTs.length,testTs:testTs.length}, null, 2));
+          console.log('=== TRACKED FILES ===');
+          for (const f of tracked) console.log(f);
+          const hashes = new Map();
+          const findings = [];
+          const imports = new Map();
+          const incoming = new Map(sourceTs.map(f => [f, new Set()]));
+          const sourceSet = new Set(sourceTs);
+          function resolveImport(from, spec) {
+            if (!spec.startsWith('.')) return null;
+            const base = path.posix.normalize(path.posix.join(path.posix.dirname(from), spec));
+            const candidates = [base, base.replace(/\.js$/, '.ts'), base.replace(/\.js$/, '.tsx'), base + '.ts', base + '.tsx', path.posix.join(base,'index.ts')];
+            return candidates.find(c => sourceSet.has(c)) || null;
+          }
+          for (const f of textFiles) {
+            const b = fs.readFileSync(f);
+            const h = crypto.createHash('sha256').update(b).digest('hex');
+            if (!hashes.has(h)) hashes.set(h, []);
+            hashes.get(h).push(f);
+            const s = b.toString('utf8');
+            const lines = s.split(/\r?\n/);
+            const stats = {file:f, lines:lines.length, bytes:b.length,todo:0,stub:0,emptyCatch:0,anyCasts:0,tsIgnore:0,processExit:0,shellExec:0,childProcess:0,network:0,hardLimit:0,silentCatch:0};
+            lines.forEach((line,i) => {
+              if (/\b(todo|fixme|hack|xxx)\b/i.test(line)) { stats.todo++; findings.push({kind:'marker',file:f,line:i+1,text:line.trim().slice(0,240)}); }
+              if (/\b(stub|placeholder|not implemented|unimplemented|mock only|fake)\b/i.test(line)) { stats.stub++; findings.push({kind:'stub-marker',file:f,line:i+1,text:line.trim().slice(0,240)}); }
+              if (/catch\s*(\([^)]*\))?\s*\{\s*\}/.test(line)) { stats.emptyCatch++; findings.push({kind:'empty-catch',file:f,line:i+1,text:line.trim().slice(0,240)}); }
+              if (/\bas\s+any\b|:\s*any\b/.test(line)) stats.anyCasts++;
+              if (/@ts-ignore|@ts-expect-error/.test(line)) { stats.tsIgnore++; findings.push({kind:'ts-suppression',file:f,line:i+1,text:line.trim().slice(0,240)}); }
+              if (/process\.exit\s*\(/.test(line)) stats.processExit++;
+              if (/execSync|execFileSync|\bexec\s*\(|\bspawn\s*\(/.test(line)) stats.shellExec++;
+              if (/node:child_process|from ['"]child_process['"]/.test(line)) stats.childProcess++;
+              if (/\bfetch\s*\(|https?:\/\//.test(line)) stats.network++;
+              if (/\b(MAX|MIN|LIMIT|THRESHOLD|TIMEOUT|BUDGET|RETRIES|RETRY|INTERVAL|WINDOW|CAP)[A-Z0-9_]*\s*=/.test(line)) stats.hardLimit++;
+              if (/catch\s*(\([^)]*\))?\s*\{/.test(line) && /silently|ignore|best effort|best-effort/i.test(lines.slice(i, Math.min(i+4,lines.length)).join(' '))) stats.silentCatch++;
+            });
+            if (Object.values(stats).slice(3).some(v => typeof v === 'number' && v > 0)) findings.push({kind:'file-stats',...stats});
+            if (/\.(ts|tsx)$/.test(f)) {
+              const specs = [];
+              const re = /(?:from\s*|import\s*\()\s*['"]([^'"]+)['"]/g;
+              for (const m of s.matchAll(re)) specs.push(m[1]);
+              imports.set(f, specs);
+              for (const spec of specs) { const resolved = resolveImport(f, spec); if (resolved) incoming.get(resolved)?.add(f); }
+            }
+          }
+          console.log('=== EXACT DUPLICATE CONTENT GROUPS ===');
+          for (const files of hashes.values()) if (files.length > 1) console.log(JSON.stringify(files));
+          console.log('=== SOURCE FILES WITH ZERO STATIC SOURCE IMPORTERS ===');
+          for (const f of sourceTs) if ((incoming.get(f)?.size ?? 0) === 0 && f !== 'src/index.ts') console.log(f);
+          const entry='src/index.ts';
+          const reachable = new Set();
+          const visit = f => { if (reachable.has(f) || !imports.has(f)) return; reachable.add(f); for (const spec of imports.get(f) || []) { const r=resolveImport(f,spec); if (r) visit(r); } };
+          visit(entry);
+          console.log('=== SOURCE NOT STATICALLY REACHABLE FROM src/index.ts ===');
+          for (const f of sourceTs) if (!reachable.has(f)) console.log(f);
+          console.log(`STATIC_REACHABLE=${reachable.size}/${sourceTs.length}`);
+          console.log('=== MARKERS / STRUCTURAL RISK FINDINGS ===');
+          for (const row of findings) console.log(JSON.stringify(row));
+          console.log('=== DIRECTORY COUNTS ===');
+          const counts={}; for (const f of tracked) { const d=f.includes('/')?f.split('/')[0]:'(root)'; counts[d]=(counts[d]||0)+1; }
+          console.log(JSON.stringify(counts,null,2));
+          NODE
+      - name: Typecheck and build
+        run: |
+          pnpm run typecheck
+          pnpm run build
+      - name: Full tests
+        run: pnpm run test:ci
+      - name: Dependency audit
+        continue-on-error: true
+        run: pnpm audit
+      - name: Git grep semantic hotspots
+        shell: bash
+        run: |
+          set +e
+          echo '=== RETRY / FALLBACK / SILENT PATHS ==='
+          git grep -nEi 'retry|fallback|silently|best effort|best-effort' -- src packages scripts
+          echo '=== AUTHORITY / TRUST / PROVENANCE ==='
+          git grep -nEi 'authority|provenance|trusted|untrusted|creator|external' -- src
+          echo '=== LIMITS / THRESHOLDS / CLOSED TAXONOMIES ==='
+          git grep -nEi 'MAX_|MIN_|LIMIT|THRESHOLD|enum|as const|Record<.*>' -- src
+          echo '=== STUB / PLACEHOLDER ==='
+          git grep -nEi 'stub|placeholder|not implemented|unimplemented' -- src packages scripts
+          echo '=== TODO / FIXME / HACK / XXX ==='
+          git grep -nEi 'TODO|FIXME|HACK|XXX' -- src packages scripts
+          exit 0
