@@ -4,17 +4,17 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-006
 Active-Segment: continuity/C0001.md
-Active-Intervention: NONE — P006_PLANIFICADO_INHERITED_SECURITY_AUDIT
+Active-Intervention: P006_DEPENDENCY_SECURITY_REMEDIATION
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/projectops-native-identity-v1
-Host-Head-At-Audit-Open: a22ef23006f7b858a1cf457d0a75acd181a10aa0
-Last-Reconciled-Host-Head: 9029bfff5a67d92bbbe65363999b7a55f24c3237
-Last-Reconciled-Head-Semantics: PRE_SECURITY_DEBT_RECONCILIATION_HEAD
+Current-Host-Branch: abos/p006-security-audit-remediation
+Host-Head-At-Audit-Open: ae31480898a3f1f2a386176cc6782b34782a23cf
+Last-Reconciled-Host-Head: ae31480898a3f1f2a386176cc6782b34782a23cf
+Last-Reconciled-Head-Semantics: PROJECTOPS_CUTOVER_MERGED_P006_OPENED
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -27,11 +27,11 @@ ProjectOps-PR: 30
 ## Estado canónico
 
 - P-001: HECHO — identidad, baseline, autoridades, evidencia y plan ABOS-specific reconstruidos.
-- P-002: HECHO — cutover metodológico a matriz ProjectOps modular/publicable.
+- P-002: HECHO — cutover metodológico a matriz ProjectOps modular/publicable; PR #30 integrado en `main`.
 - P-003: PARCIAL — existe PR #29 abierto con source/CI histórico; no está integrado en `main` y debe reconciliarse contra el HEAD vigente antes de merge.
 - P-004: PLANIFICADO — reconciliación de documentación arquitectónica con source actual.
 - P-005: PLANIFICADO — acceptance LIVE por frontera externa cuando exista autorización y el claim la requiera.
-- P-006: PLANIFICADO — remediación de advisories de dependencias descubiertos durante la validación de PR #30; siguiente frontera prioritaria por gate `security-audit` rojo.
+- P-006: EN_EJECUCIÓN — remediación de advisories de dependencias para restaurar `security-audit` green sin debilitar el gate.
 
 ## Resultado exacto del cutover
 
@@ -68,10 +68,11 @@ Quedaron formalizados:
 - Runtime package observado: `@abos/runtime` v0.3.0.
 - Source schema observado: v14.
 - PR #29 observado abierto en head `423812c56c70d31451075232fe2c8a4d848a7ee5`.
+- PR #30 integrado el 2026-09-13 mediante exact-head; merge SHA `ae31480898a3f1f2a386176cc6782b34782a23cf`.
 
 ## Validación de PR #30
 
-PASS / VERIFICADO:
+PASS / VERIFICADO para el scope ProjectOps:
 - `ProjectOps Integrity` run `34409821116`: SUCCESS sobre head `9029bfff5a67d92bbbe65363999b7a55f24c3237`.
 - Compare `main...branch`: no modifica `package.json`, `pnpm-lock.yaml`, `src/` ni product packages; cambios limitados a router/documentación ProjectOps/verifier/workflow.
 - root `CONTINUITY.md` y `PLAN.md` retirados; historia preservada bajo ProjectOps.
@@ -86,7 +87,7 @@ HALLAZGO HEREDADO / NO REGRESIÓN P-001/P-002:
 
 ## Claims no elevados
 
-NO se declara por este cutover:
+NO se declara:
 - que PR #29 esté integrado;
 - OAuth ChatGPT/Codex LIVE PASS;
 - AWS EC2 billable LIVE PASS;
@@ -98,10 +99,10 @@ NO se declara por este cutover:
 
 ## Siguiente frontera
 
-1. Integrar PR #30 cuando los checks pertinentes al cutover estén reconciliados y no exista otra regresión atribuible a la rama.
-2. Abrir P-006 EN_EJECUCIÓN desde el HEAD integrado y auditar opciones de remediación de dependencies antes de cambiar versiones.
-3. Restaurar `security-audit` green sin debilitar el gate.
-4. Continuar P-003 reauditable contra el nuevo `main`.
+1. Completar P-006 sobre `abos/p006-security-audit-remediation` y restaurar `security-audit` green sin debilitarlo.
+2. Reauditar e integrar P-003 / PR #29 contra el nuevo `main`.
+3. Registrar en el plan los defectos críticos adicionales demostrados por la auditoría exhaustiva 2026-09-13 antes de modificarlos.
+4. Continuar P-004/P-005 según dependencias y evidencia.
 
 ## Política de rotación
 
