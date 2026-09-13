@@ -204,3 +204,108 @@ El sistema operativo documental quedó integrado: `AGENTS.md` gobierna cómo tra
 ### Estado final
 
 HECHO
+
+
+## 2026-09-13 — Auditoría integral del repositorio y reconciliación de main
+
+Estado: EN_EJECUCIÓN
+
+Plan relacionado: P-001
+
+### Objetivo
+
+Auditar ABOS de punta a punta desde el estado real del repositorio, incluyendo documentación, configuración, dependencias, código, tests, persistencia, integraciones, ramas, PRs y CI; reconstruir el mapa completo del sistema; detectar defectos, duplicaciones, stubs, código desconectado, autoridad ambigua y trabajo no integrado; y dejar `main` reconciliado únicamente con cambios que tengan evidencia suficiente para integrarse.
+
+### Motivo
+
+La auditoría anterior no cubrió de forma suficientemente exhaustiva todo el código y omitió incorporar correctamente subsistemas existentes como la implementación OAuth/Codex al modelo mental usado para responder. P-001 exige precisamente reconstruir el plan y estado real desde evidencia actual antes de continuar agregando trabajo.
+
+### Contexto conocido
+
+- `main` auditado al inicio: `a22ef23006f7b858a1cf457d0a75acd181a10aa0`.
+- `main` no está protegido por required status checks.
+- PRs abiertos detectados al inicio: #29 y #30.
+- #29 modifica semántica económica de capital de hijos.
+- #30 migra la autoridad operativa documental a ProjectOps y declara no modificar product source/runtime.
+- El entorno local no puede resolver `github.com`, por lo que una clonación local exacta no está disponible; la inspección de fuente se realizará mediante el conector GitHub autorizado y CI existente/nuevo.
+
+### Semántica que debe preservarse
+
+- No inventar PASS ni HECHO sin evidencia.
+- No duplicar capacidades que ya existan.
+- Mantener separadas identidad, autenticación, modelo, proveedor, autoridad de ejecución, memoria, capacidades, economía y persistencia.
+- Preservar límites reales de seguridad, autorización y policy.
+- No mergear PRs por antigüedad o narrativa; verificar diff, compatibilidad, HEAD exacto y CI.
+
+### Alcance previsto
+
+- `AGENTS.md`, `CONTINUITY.md`, `PLAN.md` y documentación técnica.
+- `src/`, `packages/`, `scripts/`, workflows, manifests y lockfile.
+- Tests, schema/migrations, runtime wiring y CLI.
+- Ramas/PRs relevantes y evidencia de CI.
+- Reconciliación documental y técnica derivada de los hallazgos.
+
+### Auditoría previa requerida
+
+- Leer completo `AGENTS.md`, `CONTINUITY.md` y `PLAN.md` del baseline.
+- Inventariar el árbol completo.
+- Verificar `main`, PRs, heads y estado CI.
+- Auditar antes de modificar cada unidad significativa.
+
+### Riesgos conocidos
+
+- Confundir código existente con trabajo pendiente.
+- Mergear dos cambios incompatibles o con autoridad documental competidora.
+- Declarar cobertura completa sin haber inspeccionado una parte del árbol.
+- Usar tests que codifiquen semántica incorrecta como falsa evidencia.
+
+### Dependencias
+
+- Acceso GitHub autorizado.
+- CI de GitHub para validación ejecutable.
+- Evidencia LIVE que requiera credenciales/cuentas/infraestructura externa puede quedar NO VERIFICADA si no está disponible.
+
+### Plan de ejecución
+
+1. Inventariar árbol y autoridades.
+2. Auditar documentación y contratos declarados.
+3. Auditar cada subsistema de `src/` y sus tests.
+4. Auditar `packages/`, scripts, workflows y dependencias.
+5. Revisar ramas/PRs y comparar contra `main`.
+6. Clasificar hallazgos HECHO / HIPÓTESIS / NO HECHO y por severidad.
+7. Corregir únicamente defectos demostrables con cambios coherentes.
+8. Ejecutar/contrastar build, typecheck, tests, security y CI disponibles.
+9. Integrar en orden seguro con exact-head cuando corresponda.
+10. Reauditar `main` final y reconciliar P-001/continuidad con evidencia.
+
+### Evidencia durante la ejecución
+
+- `AGENTS.md` leído completo en baseline `main`.
+- `CONTINUITY.md` y `PLAN.md` baseline leídos completos.
+- P-001 confirmado como trabajo PLANIFICADO que exige esta reconstrucción.
+- Árbol raíz y árbol `src/` obtenidos de GitHub.
+- Intento de clonación local falló por DNS: `Could not resolve host: github.com`; se clasifica como limitación de entorno, no fallo del source.
+
+### Cambios realizados
+
+- Rama de auditoría creada desde el baseline exacto: `abos/p001-full-audit-20260913`.
+- Esta intervención fue registrada antes de cualquier cambio técnico.
+
+### Validaciones realizadas
+
+En curso.
+
+### Resultado
+
+En curso.
+
+### Pendientes
+
+- Auditoría completa del árbol.
+- Reconciliación de PR #29/#30 y cualquier otro trabajo relevante.
+- Validación ejecutable y CI.
+- Integración segura a `main` si la evidencia lo permite.
+
+### Estado final
+
+EN_EJECUCIÓN
