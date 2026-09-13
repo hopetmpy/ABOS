@@ -40,18 +40,18 @@ if [ "$INSTALL_DIR" != "$LEGACY_ABOS_RUNTIME" ] &&
 fi
 
 # Preflight: Node.js
-# ABOS v0.3.0 supports the even-numbered LTS lines validated by CI: Node 20 and 22.
-# Node 22 LTS is recommended. Reject unsupported majors before pnpm reaches
-# native dependencies such as better-sqlite3 and falls back to node-gyp.
+# ABOS v0.3.0 supports the maintained even-numbered LTS lines validated by CI:
+# Node 22 and 24. Node 22 remains the repository default/recommended lane.
+# Reject unsupported majors before pnpm reaches native/runtime dependencies.
 if ! command -v node >/dev/null 2>&1; then
-  echo "[ERROR] Node.js 20 or 22 is required. Node 22 LTS is recommended." >&2
+  echo "[ERROR] Node.js 22 or 24 is required. Node 22 LTS is recommended." >&2
   exit 1
 fi
 
 NODE_MAJOR=$(node -e "process.stdout.write(String(process.versions.node.split('.')[0]))")
-if [ "$NODE_MAJOR" -ne 20 ] && [ "$NODE_MAJOR" -ne 22 ]; then
+if [ "$NODE_MAJOR" -ne 22 ] && [ "$NODE_MAJOR" -ne 24 ]; then
   echo "[ERROR] Unsupported Node.js version: $(node -v)." >&2
-  echo "[ERROR] ABOS v0.3.0 supports Node 20 or 22; Node 22 LTS is recommended." >&2
+  echo "[ERROR] ABOS v0.3.0 supports Node 22 or 24; Node 22 LTS is recommended." >&2
   exit 1
 fi
 
