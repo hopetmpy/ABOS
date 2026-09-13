@@ -1,0 +1,64 @@
+name: P006 Apply Remediation
+
+on:
+  push:
+    branches: [abos/p006-security-audit-remediation-v2]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'ci(p006): stage deterministic remediation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: abos/p006-security-audit-remediation-v2
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+      - name: Install baseline graph
+        run: pnpm install --frozen-lockfile
+      - name: Apply minimal patched graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm add -D vitest@4.1.11 --save-exact
+          node - <<'NODE'
+          const fs = require('fs');
+          const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          p.pnpm ||= {};
+          p.pnpm.overrides ||= {};
+          p.pnpm.overrides['stream-json@<=3.4.0'] = '3.6.0';
+          fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+          NODE
+          pnpm install --no-frozen-lockfile
+      - name: Show resolved dependency graph
+        run: pnpm list vitest @vitest/mocker @solana/web3.js jayson stream-json --depth 10 || true
+      - name: Security audit
+        run: pnpm audit --prod=false
+      - name: Solana JSON-RPC compatibility smoke
+        run: node scripts/p006-solana-rpc-smoke.mjs
+      - name: Typecheck and build
+        run: |
+          pnpm run typecheck
+          pnpm run build
+      - name: Security tests
+        run: pnpm run test:security
+      - name: Full tests
+        run: pnpm run test:ci
+      - name: Commit deterministic manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add package.json pnpm-lock.yaml
+          git diff --cached --check
+          git diff --cached --stat
+          git commit -m 'fix(deps): remediate P-006 security advisories'
+          git push origin HEAD:abos/p006-security-audit-remediation-v2
