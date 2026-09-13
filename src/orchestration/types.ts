@@ -13,7 +13,12 @@ export interface FundingProtocol {
     /** Present when the recall could not be executed by an authorized child route. */
     reason?: string;
   }>;
-  getBalance(childAddress: string): Promise<number>;
+  /**
+   * Directly observed child credit balance when the funding provider has
+   * authority to observe it. Parent-local funding bookkeeping is not a balance.
+   * UNKNOWN must remain null rather than being coerced to zero.
+   */
+  getBalance(childAddress: string): Promise<number | null>;
 }
 
 export interface OrchestratorTickResult {
