@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: 22
       - uses: pnpm/action-setup@v4
-      - name: Regenerate dependency graph for published 12.11.1 candidate
+      - name: Regenerate dependency graph for published 12.11.1 candidate from current HEAD
         run: pnpm install --no-frozen-lockfile
       - name: Show resolved graph
         run: pnpm list better-sqlite3 vitest @vitest/mocker @solana/web3.js jayson stream-json stream-chain --depth 10 || true
