@@ -26,13 +26,11 @@ Update: development of ABOS has continued across Conway's internal RL environmen
 
 ### Runtime requirement
 
-ABOS v0.3.0 supports **Node.js 20 LTS or 22 LTS**. **Node.js 22 LTS is recommended.**
-Node.js 21, 23, 24, and other majors are intentionally rejected for this release.
+ABOS v0.3.0 supports **Node.js 22 LTS or 24 LTS**. **Node.js 22 LTS is recommended** and remains the repository default.
 
-This restriction is deliberate: ABOS depends on the native `better-sqlite3` module. A reproduced
-Windows x64 install on Node.js 24.14.0 had no matching prebuilt binary and fell back to
-`node-gyp`, turning a normal ABOS install into a Python/native-toolchain build. ABOS now fails
-early on unsupported Node majors instead of allowing that ambiguous installation path.
+Node.js 20 is no longer supported: the patched `stream-json` dependency line required to remediate the current security advisory depends on packages that require Node.js 22 or newer, and Node.js 20 is end-of-life. ABOS keeps `engine-strict=true` so unsupported runtimes fail before a partially compatible installation is mistaken for a supported one.
+
+Node.js 24 is validated by CI alongside Node.js 22, including Linux build/test lanes, anonymous public installation, and Windows installation/state regressions. The native SQLite dependency is pinned to a published `better-sqlite3` 12.x line that provides the normal prebuilt installation path used by those Windows lanes.
 
 Check your runtime before installing:
 
@@ -40,8 +38,7 @@ Check your runtime before installing:
 node -v
 ```
 
-If it reports `v24.x.x` (or another unsupported major), switch to Node.js 22 LTS and reopen the
-terminal before continuing.
+If it is not a supported 22.x or 24.x release, switch to Node.js 22 LTS (recommended) or Node.js 24 LTS and reopen the terminal before continuing.
 
 ```bash
 git clone https://github.com/hopetmpy/ABOS.git
@@ -139,9 +136,7 @@ ABOS agents run on <a href="https://app.conway.tech" target="_blank">Conway Clou
 
 ## Development
 
-Use Node.js 22 LTS for development unless you are explicitly validating the Node 20 compatibility
-lane. The repository includes `.nvmrc` and `.node-version` set to `22`, and
-`engine-strict=true` prevents installs on unsupported Node majors.
+Use Node.js 22 LTS for normal development. Node.js 24 LTS is also a supported CI lane and can be used when validating the newer maintained runtime. The repository includes `.nvmrc` and `.node-version` set to `22`, and `engine-strict=true` rejects unsupported Node majors.
 
 ```bash
 git clone https://github.com/hopetmpy/ABOS.git
