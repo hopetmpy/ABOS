@@ -23,6 +23,7 @@ import { getMetrics } from "../observability/metrics.js";
 import { AlertEngine, createDefaultAlertRules } from "../observability/alerts.js";
 import { metricsInsertSnapshot, metricsPruneOld } from "../state/database.js";
 import { ulid } from "ulid";
+import { getChildEconomicSnapshot } from "../economics/child-economics.js";
 
 const logger = createLogger("heartbeat.tasks");
 
@@ -513,25 +514,43 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
 
     try {
       const transactions = taskCtx.db.getRecentTransactions(5000);
-      let revenueCents = 0;
-      let expenseCents = 0;
+      let unclassifiedTransferInCents = 0;
+      let unclassifiedTransferOutCents = 0;
+      let creditPurchaseCents = 0;
+      let knownOperatingCostCents = 0;
+      let capitalAllocatedCents = 0;
+      let capitalReturnedCents = 0;
+      let fundingRequestCents = 0;
 
       for (const tx of transactions) {
         const amount = Math.max(0, Math.floor(tx.amountCents ?? 0));
         if (amount === 0) continue;
 
-        if (tx.type === "transfer_in" || tx.type === "credit_purchase") {
-          revenueCents += amount;
-          continue;
-        }
-
-        if (
-          tx.type === "inference"
-          || tx.type === "tool_use"
-          || tx.type === "transfer_out"
-          || tx.type === "funding_request"
-        ) {
-          expenseCents += amount;
+        switch (tx.type) {
+          case "capital_allocation":
+            capitalAllocatedCents += amount;
+            break;
+          case "capital_return":
+            capitalReturnedCents += amount;
+            break;
+          case "transfer_in":
+            unclassifiedTransferInCents += amount;
+            break;
+          case "transfer_out":
+            unclassifiedTransferOutCents += amount;
+            break;
+          case "credit_purchase":
+            creditPurchaseCents += amount;
+            break;
+          case "inference":
+          case "tool_use":
+            knownOperatingCostCents += amount;
+            break;
+          case "funding_request":
+            fundingRequestCents += amount;
+            break;
+          default:
+            break;
         }
       }
 
@@ -547,13 +566,35 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
         )
         .get() as { total: number };
 
+      const childEconomics = taskCtx.db.getChildren().map((child) =>
+        getChildEconomicSnapshot(taskCtx.db, child.address),
+      );
+
       const report = {
         timestamp: new Date().toISOString(),
-        revenueCents,
-        expenseCents,
-        netCents: revenueCents - expenseCents,
+        // The current generic transaction ledger does not prove causal business
+        // revenue/expense. Preserve UNKNOWN instead of manufacturing P&L.
+        revenueCents: null,
+        expenseCents: null,
+        netCents: null,
+        classificationStatus: "partial",
+        unclassifiedTransferInCents,
+        unclassifiedTransferOutCents,
+        creditPurchaseCents,
+        knownOperatingCostCents,
+        fundingRequestCents,
+        capitalAllocatedCents,
+        capitalReturnedCents,
+        netInternalCapitalFlowCents:
+          capitalReturnedCents - capitalAllocatedCents,
         fundedToChildrenCents: childFunding.total,
         taskExecutionCostCents: taskCosts.total,
+        childEconomics,
+        limitations: [
+          "Revenue/expense remain unknown because generic transfer types do not prove causal business P&L.",
+          "Legacy transfer_in/transfer_out rows are unclassified; historical child funding may exist among transfer_out rows created before capital_allocation was introduced.",
+          "Credit purchases are resource acquisition and are not classified as revenue.",
+        ],
         activeAgents: taskCtx.db.getChildren().filter(
           (child) => child.status !== "dead" && child.status !== "cleaned_up",
         ).length,

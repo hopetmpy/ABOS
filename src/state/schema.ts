@@ -62,7 +62,9 @@ export const CREATE_TABLES = `
   );
 
   -- Financial transaction log
-  -- Application-level validation: type must be one of 'transfer_out','transfer_in','credit_purchase','topup','x402_payment','inference'
+  -- Application-level validation: transaction type is validated by TransactionType.
+  -- Child working-capital movement uses capital_allocation/capital_return and
+  -- must not be conflated with unclassified transfer_in/transfer_out rows.
   CREATE TABLE IF NOT EXISTS transactions (
     id TEXT PRIMARY KEY,
     type TEXT NOT NULL,

@@ -1839,23 +1839,45 @@ Model: ${ctx.inference.getDefaultModel()}
           `fund child ${child.id}`,
         );
 
-        const { ulid } = await import("ulid");
-        ctx.db.insertTransaction({
-          id: ulid(),
-          type: "transfer_out",
-          amountCents: amount,
-          balanceAfterCents:
-            transfer.balanceAfterCents ?? Math.max(balance - amount, 0),
-          description: `Fund child ${child.name} (${child.id})`,
-          timestamp: new Date().toISOString(),
-        });
+        // The external transfer is the irreversible authority boundary. Persist
+        // parent bookkeeping atomically afterwards; a local write failure must
+        // not make the caller blindly repeat a transfer that already happened.
+        let localPersistenceOk = true;
+        try {
+          ctx.db.runTransaction(() => {
+            ctx.db.insertTransaction({
+              id: ulid(),
+              type: "capital_allocation",
+              amountCents: amount,
+              balanceAfterCents:
+                transfer.balanceAfterCents ?? Math.max(balance - amount, 0),
+              description: `Allocate working capital to child ${child.name} (${child.id})`,
+              timestamp: new Date().toISOString(),
+            });
 
-        // Update funded amount
-        ctx.db.raw
-          .prepare(
-            "UPDATE children SET funded_amount_cents = funded_amount_cents + ? WHERE id = ?",
-          )
-          .run(amount, child.id);
+            ctx.db.raw
+              .prepare(
+                "UPDATE children SET funded_amount_cents = funded_amount_cents + ? WHERE id = ?",
+              )
+              .run(amount, child.id);
+          });
+        } catch (error) {
+          localPersistenceOk = false;
+          logger.error(
+            "Child funding transferred but local capital bookkeeping failed",
+            error instanceof Error ? error : undefined,
+            {
+              childId: child.id,
+              childAddress: child.address,
+              amountCents: amount,
+              transferId: transfer.transferId,
+            },
+          );
+        }
+
+        if (!localPersistenceOk) {
+          return `Funding transfer ${transfer.transferId || "unknown"} completed for child ${child.name}, but local capital bookkeeping failed. Do not retry the transfer blindly; reconcile the external transfer first.`;
+        }
 
         // Transition to funded if wallet_verified
         if (child.status === "wallet_verified") {
