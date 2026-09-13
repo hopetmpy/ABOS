@@ -36,6 +36,8 @@ jobs:
           p.pnpm ||= {};
           p.pnpm.overrides ||= {};
           p.pnpm.overrides['stream-json@<=3.4.0'] = '3.6.0';
+          p.scripts['test:security'] = "vitest run --testNamePattern 'security|injection|policy'";
+          p.scripts['test:financial'] = "vitest run --testNamePattern 'financial|spend|treasury'";
           fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
           NODE
           pnpm install --no-frozen-lockfile
@@ -51,6 +53,8 @@ jobs:
           pnpm run build
       - name: Security tests
         run: pnpm run test:security
+      - name: Financial tests
+        run: pnpm run test:financial
       - name: Full tests
         run: pnpm run test:ci
       - name: Commit deterministic manifests
