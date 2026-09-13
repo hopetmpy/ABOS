@@ -42,8 +42,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "test:coverage": "vitest run --coverage",
-    "test:security": "vitest run --grep 'security|injection|policy'",
-    "test:financial": "vitest run --grep 'financial|spend|treasury'",
+    "test:security": "vitest run --testNamePattern 'security|injection|policy'",
+    "test:financial": "vitest run --testNamePattern 'financial|spend|treasury'",
     "test:ci": "vitest run --reporter=verbose",
     "clean": "rm -rf dist && pnpm -r clean",
     "test:diagnose": "vitest run --reporter=default --reporter=hanging-process"
@@ -70,7 +70,7 @@
     "@types/node": "^20.10.0",
     "tsx": "^4.7.0",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.7"
+    "vitest": "^4.1.11"
   },
   "engines": {
     "node": ">=20 <21 || >=22 <23"
@@ -100,7 +100,8 @@
       "nanoid@<3.3.16": "3.3.18",
       "nanoid@<3.3.18": "3.3.18",
       "postcss@<=8.5.17": ">=8.5.18",
-      "jayson>ws": "8.21.0"
+      "jayson>ws": "8.21.0",
+      "stream-json@<=3.4.0": "3.6.0"
     }
   }
 }
