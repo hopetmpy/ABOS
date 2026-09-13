@@ -1,9 +1,10 @@
 # ProjectOps — PLAN.md — ABOS
 
-Format-Version: 3
+Format-Version: 4
 Authority: CANONICAL_PLAN_MANIFEST
 Migration-State: ACTIVE
 Legacy-Full-Plan: plan/LEGACY_FULL_PLAN.md
+Master-Transformation-Plan: P-007
 
 ## Índice operativo
 
@@ -11,122 +12,214 @@ Legacy-Full-Plan: plan/LEGACY_FULL_PLAN.md
 |---|---|---|---|---|
 | P-001 | Reconstruir identidad, baseline, autoridades y plan ABOS desde evidencia actual | HECHO | — | plan/P-001.md |
 | P-002 | Migrar ABOS a matriz ProjectOps modular y publicable | HECHO | P-001 auditado durante el mismo cutover | plan/P-002.md |
-| P-003 | Reconciliar e integrar child capital semantics de PR #29 | PARCIAL | P-001 + P-002; PR #29 abierto | plan/P-003.md |
-| P-004 | Reconciliar documentación arquitectónica con source/runtime v0.3.0 actual | PLANIFICADO | P-001; evitar competir con P-003 | plan/P-004.md |
-| P-005 | Ejecutar acceptance LIVE de fronteras externas críticas | PLANIFICADO | source relevante integrado; autorización/entorno real | plan/P-005.md |
-| P-006 | Remediar advisories de dependencias y restaurar security-audit green | PLANIFICADO | hallazgo heredado de CI; auditar dependency graph antes de cambiar | plan/P-006.md |
+| P-003 | Reconciliar e integrar child capital semantics de PR #29 | PARCIAL | P-006 primero; PR #29 debe reconciliarse contra main vigente | plan/P-003.md |
+| P-004 | Reconciliar documentación arquitectónica con source/runtime actual | PLANIFICADO | ejecutar correcciones puntuales cuando ayuden; cierre final después de P-035 y antes de P-036 | plan/P-004.md |
+| P-005 | Ejecutar acceptance LIVE de fronteras externas críticas | PLANIFICADO | por subfrontera cuando source integrado + autorización/entorno real; puede quedar LIVE_BLOCKED_EXTERNAL | plan/P-005.md |
+| P-006 | Remediar advisories de dependencias y restaurar security-audit green | PLANIFICADO | siguiente frontera ejecutable heredada | plan/P-006.md |
+| P-007 | Consolidar programa maestro de transformación integral ABOS | HECHO | P-001 + P-002 + auditoría 2026-09-13; no implementa product source | plan/P-007.md |
+| P-008 | Alinear Runtime Truth y capability claims con evidencia real | PLANIFICADO | P-006 + P-003 | plan/P-008.md |
+| P-009 | Corregir Authority, Provenance y trust boundaries end-to-end | PLANIFICADO | P-006; foundation para policy/hands/children | plan/P-009.md |
+| P-010 | Hacer real Policy, Authorization, Approval y Quarantine lifecycle | PLANIFICADO | P-009 | plan/P-010.md |
+| P-011 | Hacer reales Lifecycle, Health, Restart y Recovery | PLANIFICADO | P-009 + P-010 | plan/P-011.md |
+| P-012 | Convertir self-modification en transacción segura y recuperable | PLANIFICADO | P-009 + P-010 + P-011; evidence P-013 | plan/P-012.md |
+| P-013 | Unificar Observability, Audit y Evidence Fabric | PLANIFICADO | P-008 + P-009; se extiende durante la campaña | plan/P-013.md |
+| P-014 | Consolidar Capability Fabric canónico y lifecycle de capacidades | PLANIFICADO | P-008 + P-009 + P-010 + P-013 | plan/P-014.md |
+| P-015 | Sustituir MCP nominal por un runtime MCP real y verificable | PLANIFICADO | P-014 + P-009 + P-010 + P-013 | plan/P-015.md |
+| P-016 | Dar a ABOS manos de computadora, browser y GUI mediante providers reales | PLANIFICADO | P-014 + P-009 + P-010 + P-011 + P-013 | plan/P-016.md |
+| P-017 | Implementar discovery, acquisition, composition y construction de capacidades | PLANIFICADO | P-012 + P-014 + P-015 + P-016 + P-013 | plan/P-017.md |
+| P-018 | Reconciliar Environment y Resource Fabric provider-neutral | PLANIFICADO | P-009 + P-010 + P-011 + P-013 + P-014 | plan/P-018.md |
+| P-019 | Mantener model/connection fabric abierto y añadir adaptive inference | PLANIFICADO | P-008 + P-009 + P-010 + P-013 | plan/P-019.md |
+| P-020 | Unificar Cognitive Fabric: memory, context, knowledge y activation | PLANIFICADO | P-008 + P-013 + P-019 | plan/P-020.md |
+| P-021 | Construir Skill Evolution Engine sobre experiencia verificable | PLANIFICADO | P-014 + P-020 + P-013 | plan/P-021.md |
+| P-022 | Implementar World Model, beliefs e hipótesis falsables | PLANIFICADO | P-020 + P-021 + P-013 | plan/P-022.md |
+| P-023 | Cerrar loop Prediction → Outcome → Error → Learning | PLANIFICADO | P-013 + P-020 + P-022 | plan/P-023.md |
+| P-024 | Crear Simulation, Counterfactual y Experiment Workspace | PLANIFICADO | P-022 + P-023 + P-014 + P-018 | plan/P-024.md |
+| P-025 | Evolucionar Strategic Cognition, Plan Review y Adaptive Path v2 | PLANIFICADO | P-009 + P-010 + P-013 + P-014 + P-018 + P-022..P-024 | plan/P-025.md |
+| P-026 | Implementar Cognitive Cost Controller y adaptive compute | PLANIFICADO | P-019..P-025 + P-013 | plan/P-026.md |
+| P-027 | Implementar Opportunity Discovery y economic experimentation abiertos | PLANIFICADO | P-003 + capabilities/cognition P-014..P-026 según ruta | plan/P-027.md |
+| P-028 | Implementar delegation por competencia, evidencia y coste | PLANIFICADO | P-014 + P-018 + P-022 + P-023 + P-025 + P-026 | plan/P-028.md |
+| P-029 | Hacer real child bootstrap, Constitution gate y Family Knowledge Fabric | PLANIFICADO | P-009 + P-010 + P-011 + P-014 + P-020 + P-021 + P-028 | plan/P-029.md |
+| P-030 | Construir Family Economics y Treasury causal | PLANIFICADO | P-003 HECHO + P-009 + P-010 + P-013 + P-027 + P-029 | plan/P-030.md |
+| P-031 | Habilitar autonomous resource acquisition y reinvestment bajo autoridad | PLANIFICADO | P-010 + P-017 + P-018 + P-026 + P-027 + P-030 | plan/P-031.md |
+| P-032 | Evolucionar Soul y Self-Model semántico sin rigidizar identidad | PLANIFICADO | P-020 + P-022 + P-023 + P-029 | plan/P-032.md |
+| P-033 | Integrar End-to-End Autonomous Runtime como una sola trayectoria | PLANIFICADO | P-008..P-032 según rutas ejercitadas | plan/P-033.md |
+| P-034 | Ejecutar fault injection, recovery y sustained-operation campaign | PLANIFICADO | P-011 + P-012 + P-013 + P-033 | plan/P-034.md |
+| P-035 | Retirar stubs, duplicados y autoridades legacy después de integración | PLANIFICADO | P-008..P-034 materialmente aplicables | plan/P-035.md |
+| P-036 | Cerrar campaña SOURCE_COMPLETE / INTEGRATION_VERIFIED y preparar LIVE | PLANIFICADO | P-003 + P-006 + P-008..P-035 + P-004; P-005 exacto aunque esté externamente bloqueado | plan/P-036.md |
 
 ## 1. Regla de autoridad
 
-- `ProjectOps/CONTINUITY.md` posee exclusivamente `Active-Plan` y `Active-Segment`.
-- Este manifest posee IDs, estados, dependencias/condiciones y rutas de módulos.
-- Los módulos poseen objetivo, semántica, `Required-Context`, criterios y evidencia.
+- `ProjectOps/CONTINUITY.md` posee exclusivamente `Active-Plan`, `Active-Segment` y la intervención viva.
+- Este manifest posee IDs, estados, dependencias/condiciones, campaña y rutas de módulos.
+- Cada módulo posee objetivo, semántica, `Required-Context`, interrogación, validation y Definition of Done.
 - `plan/LEGACY_FULL_PLAN.md` es historia preservada; no es autoridad viva.
-- Los IDs no se reutilizan.
-- Nuevos `P-xxx` deben derivar de gaps ABOS-specific demostrables; no se copian fases de otro proyecto.
+- Los IDs no se reutilizan ni se renumeran para “ordenar” la campaña.
 - Un estado HECHO acredita únicamente el objetivo exacto de su módulo.
-- Un PR abierto con source/CI válido permanece PARCIAL respecto de integración hasta reconciliar y mergear.
-- Un gate de CI rojo se clasifica por causa antes de atribuirlo al cambio actual.
+- Un PR/branch/source escrito no equivale a integración en `main`.
+- El grafo de dependencias gobierna más que el número. P-004/P-005 son tracks transversales/finales aunque tengan IDs antiguos.
 
-## 2. Ejes actuales
+## 2. Objetivo global de esta campaña
 
-### Eje de seguridad/dependencias
+Dejar ABOS **code-complete e integrado** como Autonomous Business Operating System amplio y extensible: todo lo que diga saber, recordar, decidir, adquirir, ejecutar, modificar, delegar o administrar debe corresponder a una autoridad real, una capacidad funcional y evidencia proporcional al claim.
 
-`P-006`
+La campaña no promete que toda frontera externa sea LIVE verificable sin cuentas, credenciales, dinero, hardware o autorización. Sí exige que esa frontera quede preparada en source/integration y clasificada como `LIVE_VERIFIED` o `LIVE_BLOCKED_EXTERNAL` de forma concreta.
 
-Durante la validación de P-001/P-002, `pnpm audit` descubrió advisories moderados en dependencias ya presentes en `main`. La rama ProjectOps no modificó `package.json` ni `pnpm-lock.yaml`, por lo que el hallazgo se registra como deuda preexistente descubierta durante validación, no como regresión del cutover.
+## 3. Trayectoria arquitectónica objetivo
 
-P-006 queda como siguiente frontera prioritaria porque el gate `security-audit` es autoritativo y actualmente rojo. La remediación debe auditar compatibilidad antes de actualizar Vitest o dependencias transitivas.
+Una sola mente, no subsistemas que compiten:
 
-### Eje de verdad económica de children
+**OBJECTIVE → CONTEXT ACTIVATION → WORLD MODEL/BELIEFS → ALTERNATIVES → PREDICT/SIMULATE → DECIDE/REVIEW → AUTHORITY/POLICY → CAPABILITY → ENVIRONMENT/ACTOR/MODEL → EXECUTE → OBSERVE → EVALUATE → LEARN → MEMORY/SKILL → ECONOMIC ACCOUNTING → NEXT DECISION**
 
-`P-003`
+Cada bloque puede poseer componentes especializados, pero debe conservar una autoridad canónica por responsabilidad y correlation/evidence entre bloques.
 
-Existe trabajo real en PR #29 para separar funding, capital, P&L, balance, revenue, profitability y ROI. Sigue PARCIAL porque el PR está abierto/no integrado y debe reconciliarse contra el HEAD actual.
+## 4. Secuencia por olas
 
-### Eje de coherencia documental
+### Ola 0 — baseline y deuda heredada
 
-`P-004`
+1. **P-006**: restaurar security-audit green sin debilitar gate.
+2. **P-003**: reconciliar/mergear child capital semantics existente; no reimplementarlo.
 
-El source actual declara schema v14 mientras partes de documentación arquitectónica aún describen v8. El objetivo es reconciliar docs con autoridades actuales, no reescribir runtime para satisfacer narrativa antigua.
+No comenzar una reescritura cognitiva para evitar estas deudas abiertas.
 
-### Eje de evidencia externa
+### Ola 1 — verdad, autoridad y recovery
 
-`P-005`
+P-008 Runtime Truth; P-009 provenance; P-010 policy/approval; P-011 lifecycle/recovery; P-012 transactional self-mod; P-013 observability/evidence.
 
-ABOS posee source/CI para varias integraciones, pero algunos claims requieren nivel LIVE separado: ChatGPT/Codex device-code real, AWS billable lifecycle autorizado y, cuando corresponda, evidencia económica real.
+Gate: ABOS deja de declarar éxito/capacidad/autoridad por intención o por existencia de código.
 
-P-005 no convierte un test costoso en requisito para todo cambio. Se ejecuta por subfrontera cuando exista autorización y el claim lo necesite.
+### Ola 2 — manos reales y mundo de ejecución
 
-## 3. Fundamento de P-003
+P-014 Capability Fabric; P-015 MCP real; P-016 computer/browser/GUI hands; P-017 acquisition/construction; P-018 environments/resources; P-019 model/connection/adaptive inference.
 
-PR #29 está abierto sobre `abos/child-capital-semantics-v1` y declara CI verde en su head histórico. Su base precede commits posteriores de `main`, incluido este ProjectOps cutover.
+Gate: un capability gap puede resolverse, probarse y registrarse por rutas abiertas sin false capabilities ni fallback silencioso.
 
-Antes de merge:
-- reauditar PR head contra `main` actual;
-- confirmar que no colisiona con cambios posteriores;
-- verificar tests/CI en la base reconciliada;
-- preservar unknown != zero, funding != balance/expense, internal capital != external P&L y ROI causal.
+### Ola 3 — una sola mente que aprende
 
-## 4. Fundamento de P-004
+P-020 Cognitive Fabric; P-021 skills; P-022 world model; P-023 prediction-error learning; P-024 simulation/experiments; P-025 strategic cognition/review; P-026 cognitive cost.
 
-`src/state/schema.ts` declara `SCHEMA_VERSION = 14`, mientras `ARCHITECTURE.md` conserva pasajes de v1→v8 y contadores que pueden haber quedado desactualizados.
+Gate: amplio conocimiento no exige prompt masivo y decisiones relevantes dejan hipótesis, predicción, outcome y aprendizaje trazables.
 
-Debe auditarse el documento completo contra source antes de editar. No se asume que todo el documento esté obsoleto; el drift debe corregirse campo por campo.
+### Ola 4 — organización y economía
 
-## 5. Fundamento de P-005
+P-027 opportunities; P-028 delegation; P-029 children/family knowledge; P-030 treasury/family economics; P-031 resource acquisition/reinvestment; P-032 soul/self-model.
 
-Evidencia histórica explícita:
-- PR #16 no acreditó una autorización humana ChatGPT device-code real en CI.
-- PR #13 no acreditó provisioning AWS EC2 billable LIVE en CI.
-- PR #29 reconoce que live child balance/revenue pueden seguir unknown incluso después de su cambio.
+Gate: autonomía económica significa crear valor y asignar recursos con causalidad/authority, no hardcodear un negocio ni inventar rentabilidad.
 
-Acceptance LIVE debe respetar costos, permisos, secrets, cleanup y alcance exacto del claim.
+### Ola 5 — integración y ataque
 
-## 6. Fundamento de P-006
+P-033 E2E; P-034 fault/sustained; P-035 cleanup/authority retirement; P-004 docs final; P-036 source/integration closure. P-005 se ejecuta incrementalmente cuando cada frontera externa esté autorizada/disponible.
 
-En el CI de PR #30, run `34409821144`, job `security-audit` `102661387742`, `pnpm audit` reportó tres vulnerabilidades moderadas:
+## 5. Invariantes transversales
 
-- `stream-json <=3.4.0`, advisory `GHSA-528h-pc64-c93x`, transitiva vía `@solana/web3.js > jayson`, patched `>=3.5.0`;
-- `vitest >=2.1.0 <4.1.11`, advisory `GHSA-82fw-gwwq-j7x9`, patched `>=4.1.11`;
-- `@vitest/mocker >=2.1.0 <4.1.11`, mismo advisory, transitiva vía Vitest.
+1. **Reality before intelligence**: no construir autonomía sofisticada sobre semántica ficticia.
+2. **Complete before delete**: una capability incompleta se evalúa para completar/integrar/unificar antes de retirar.
+3. **One authority per concern**: no segundo planner/model registry/memory/capability ledger/environment lifecycle/treasury/persistence authority por conveniencia.
+4. **Open world, explicit boundaries**: providers/models/capabilities/knowledge/environments extensibles; constitution, auth, trust, persistence y causalidad financiera estrictos.
+5. **Unknown is first-class**: UNKNOWN/UNAVAILABLE/UNAUTHORIZED/PROHIBITED/IMPOSSIBLE no se colapsan.
+6. **Objective != method**: route failure alimenta evidence/replan; no retry estratégico equivalente.
+7. **No silent boundary switch**: executor/provider/actor cambia sólo por una decisión nueva explícita.
+8. **Money is causal**: unit/source/scope/timestamp/actor y realized vs estimated explícitos.
+9. **Durable effects are recoverable**: idempotency/lease/compensation/late-success handling proporcional al side effect.
+10. **Source state != runtime state**: repo, `~/.abos`, remote environment y child state son dominios distintos.
+11. **Broad knowledge != broad prompt**: persistent universe amplio; working set activado por relevancia/causalidad/uncertainty/value-of-information.
+12. **Install != capability**: acquisition no se promueve hasta probe/evidence.
+13. **CI != LIVE**: evidence ladder exacta.
 
-La rama ProjectOps no modifica `package.json` ni `pnpm-lock.yaml`; el compare contra main confirma que el hallazgo no fue introducido por P-001/P-002.
+## 6. Protocolo de interrogación que cada módulo debe aplicar
 
-La corrección se separa porque Vitest requiere salto mayor y `stream-json` es transitiva. Resolverlos dentro de un cutover documental mezclaría responsabilidades y elevaría riesgo sin necesidad.
+Antes de `DECISION_READY`, además de AGENTS/reasoning layer, preguntar materialmente:
+- ¿por qué existe esta pieza y quién depende de ella?;
+- ¿qué ya existe bajo otro nombre?;
+- ¿qué autoridad produce/consume este estado?;
+- ¿qué pasa si no cambio nada?;
+- ¿qué rompe el cambio mínimo? ¿y el reemplazo total?;
+- ¿qué ocurre si el proceso muere entre efecto y persistencia?;
+- ¿qué pasa al reiniciar?;
+- ¿qué actor/permiso/secret/resource se necesita?;
+- ¿qué hipótesis alternativa explica la misma evidencia?;
+- ¿qué prueba mínima las separa?;
+- pre-mortem: “supón que esto falló mañana; ¿qué probablemente pasó?”;
+- ¿qué evidencia podría demostrar que la decisión fue equivocada?;
+- ¿cómo vuelvo atrás sin corromper identity/state/economics?;
+- ¿estoy cerrando artificialmente una posibilidad futura o, al contrario, eliminando un invariante necesario?
 
-## 7. Reglas de secuenciación
+No se documenta chain-of-thought privado; sí findings, alternatives, decisions y evidence que cambien el proyecto.
 
-1. P-001 y P-002 están HECHO tras el cutover documental.
-2. P-006 es la siguiente frontera prioritaria mientras el gate `security-audit` permanezca rojo; debe auditarse antes de tocar dependencias.
-3. P-003 permanece PARCIAL y recuperable; no crear una segunda implementación de child economics.
-4. P-004 puede ejecutarse cuando no interfiera con P-006/P-003 ni cambie contratos técnicos.
-5. P-005 puede permanecer BLOQUEADO por falta de autorización/entorno sin bloquear trabajo source no dependiente.
-6. Si aparece un defecto crítico reproducible en runtime, se registra y se decide su prioridad por impacto; no se fuerza dentro de una fase no relacionada.
-7. No abrir auto-profitability/kill/fund optimization sobre children hasta que las entradas económicas requeridas tengan autoridad suficiente.
-8. No debilitar un gate de CI para ocultar un hallazgo; arreglar la causa o registrar una excepción temporal explícita con evidencia.
-9. No crear nuevas fases para esconder un `P-xxx` incompleto.
+## 7. Definición de capacidad real
 
-## 8. Cierre P-001
+Toda capability material debe poder terminar en un estado equivalente a:
 
-P-001: **HECHO**.
+`DISCOVERED/UNVERIFIED → ACQUIRED/CONFIGURED → PROBED → VERIFIED/AVAILABLE → DEGRADED/UNAVAILABLE → RETIRED`
 
-Resultado exacto: se reconstruyeron identidad, constitución, baseline técnico, autoridades, invariantes, evidence ladder, work boundaries y gaps suficientes para que ProjectOps razone como ABOS sin depender de semántica de ZeroIQ/CATO.
+Los nombres finales se adaptan al source. Lo obligatorio es la separación semántica y la evidencia. `PROHIBITED`, `UNAUTHORIZED` y `UNKNOWN` se conservan como fronteras distintas cuando corresponda.
 
-No acredita operación LIVE externa ni corrige product source.
+## 8. Estrategia de modelos e inference
 
-## 9. Cierre P-002
+- Actualmente se preserva Codex OAuth como conexión principal disponible; no se fuerza “un solo modelo”.
+- ABOS puede descubrir/seleccionar/cambiar entre modelos compatibles del provider activo y ajustar reasoning effort.
+- Manual lock/ceiling del usuario debe prevalecer.
+- El controlador considera primero si una llamada de modelo es necesaria.
+- Un futuro provider (por ejemplo Anthropic) entra por adapter cuando exista necesidad/autorización; no se inventa soporte ahora.
+- Cross-provider switch nunca es fallback silencioso.
 
-P-002: **HECHO**.
+## 9. Estrategia de manos/capabilities
 
-Resultado exacto: autoridad operativa migrada a router raíz + matriz `ProjectOps/`, preservando protocolo/legacy y retirando root CONTINUITY/PLAN como autoridades competidoras.
+Preferencia por fiabilidad y semántica, no allowlist:
 
-No acredita ejecución del CLI ProjectOps ni convierte la matriz pública en almacén privado.
+API/CLI/capability estructurada → MCP/provider estructurado → browser DOM/accessibility → GUI visual/input.
 
-## 10. Siguiente trabajo recuperable
+Si una ruta falla, se registra evidence y se replantea otra; no se cambia silenciosamente dentro de la misma tool call.
+
+Capability gap:
+
+**reuse → discover → acquire → compose → construct → probe → register → use → observe → retain/evolve/retire**.
+
+## 10. Estrategia cognitiva
+
+Cognitive Fabric no será una segunda memoria. Antes de P-020 se auditan y clasifican retrievers/context/compression/aggregation/knowledge/events existentes. La meta es un Persistent Cognitive Universe con working set progresivo L0–L4, branching/checkpoints y activación por relevance/causality/uncertainty/dependencies/value-of-information/context cost.
+
+Skills se promueven desde experiencia sólo con applicability/evidence/replay suficiente. World model distingue OBSERVED/INFERRED/ESTIMATED/ASSUMED/UNKNOWN. Prediction/outcome learning calibra decisiones. Simulation ejecuta barato antes de efectos caros cuando aporta información.
+
+## 11. Estrategia económica y organizacional
+
+Opportunities son hipótesis abiertas de creación legítima de valor. No existe `business_type` cerrado como universo. Delegation se basa en competence evidence, capabilities, cost y authority. Children heredan constitution/family index/skills/capabilities selectivamente, no todo el history. Treasury separa internal capital de external P&L y nunca fabrica ROI.
+
+## 12. Evidencia y cierre
+
+Cada P define su nivel necesario. Para la campaña se usan estas etiquetas documentales además de E0–E7:
+- `SOURCE_COMPLETE`;
+- `INTEGRATION_VERIFIED`;
+- `LIVE_VERIFIED`;
+- `LIVE_BLOCKED_EXTERNAL`.
+
+`SOURCE_COMPLETE` exige code + wiring + persistence/observability cuando aplique + tests + failure paths + continuity. `INTEGRATION_VERIFIED` exige flujo entre autoridades. `LIVE_VERIFIED` exige proveedor/recurso externo real. `LIVE_BLOCKED_EXTERNAL` sólo es válido si lo único pendiente es realmente externo.
+
+## 13. Paralelismo permitido
+
+Después de satisfacer dependencies, ramas independientes pueden avanzar en paralelo sólo si:
+- no editan la misma autoridad sin coordinación;
+- cada intervención tiene P-xxx/continuity;
+- no se mergea un consumidor antes de su contract/producer;
+- integration gate se ejecuta después de converger.
+
+Un bloqueo LIVE no frena source no dependiente. Un bloqueo de autoridad/persistence/security sí bloquea consumidores que dependan de él.
+
+## 14. P-004 y documentación
+
+P-004 puede corregir drift puntual antes, pero su cierre final ocurre después de P-035 para documentar la arquitectura realmente integrada, no una intención intermedia. Documentación no gobierna source cuando divergen; se reconcilia por autoridad/evidence.
+
+## 15. P-005 y validación física/LIVE
+
+P-005 es un track incremental: Codex OAuth real, AWS billable, MCP/provider externo, economic/child/resource claims y futuras fronteras que requieran E5/E6. No toda capability local requiere E5: una computer/browser E4 realista puede cerrar integración local. Si falta autorización/credencial/dinero, registrar `LIVE_BLOCKED_EXTERNAL` y continuar source.
+
+## 16. P-006 y P-003 siguen primero
+
+La planificación maestra no evade deuda existente. P-007 queda HECHO únicamente como planificación. `Active-Plan` permanece P-006. Después de P-006, reauditar e integrar P-003 antes de construir treasury/family economics dependientes.
+
+## 17. Cierre de campaña
+
+P-036 no significa “todo el universo futuro de ABOS está terminado”. Significa que **todo lo planificado en esta campaña** está code-complete/integrado y que cualquier frontier externa pendiente está explícita. Nuevas capacidades futuras pueden añadirse después mediante el mismo sistema abierto, sin rediseñar el core.
+
+## 18. Siguiente trabajo recuperable
 
 `P-006 — Remediar advisories de dependencias y restaurar security-audit green`.
-
-Antes de modificar dependencias debe registrarse una intervención P-006 EN_EJECUCIÓN en el segmento activo y auditarse la compatibilidad real de cada ruta de remediación.
-
-Después de P-006, P-003 sigue siendo el siguiente bloque técnico ya parcialmente implementado.

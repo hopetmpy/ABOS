@@ -4,17 +4,17 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-006
 Active-Segment: continuity/C0001.md
-Active-Intervention: NONE — P006_PLANIFICADO_INHERITED_SECURITY_AUDIT
+Active-Intervention: NONE — P006_PLANIFICADO_MASTER_PLAN_READY
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/projectops-native-identity-v1
-Host-Head-At-Audit-Open: a22ef23006f7b858a1cf457d0a75acd181a10aa0
-Last-Reconciled-Host-Head: 9029bfff5a67d92bbbe65363999b7a55f24c3237
-Last-Reconciled-Head-Semantics: PRE_SECURITY_DEBT_RECONCILIATION_HEAD
+Current-Host-Branch: abos/p007-canonical-transformation-plan
+Host-Head-At-Audit-Open: ae31480898a3f1f2a386176cc6782b34782a23cf
+Last-Reconciled-Host-Head: ae31480898a3f1f2a386176cc6782b34782a23cf
+Last-Reconciled-Head-Semantics: MASTER_PLAN_DOCUMENTED_BRANCH_PENDING_INTEGRATION
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -22,86 +22,54 @@ ProjectOps-PR: 30
 
 ## Semántica del HEAD reconciliado
 
-`Last-Reconciled-Host-Head` identifica el HEAD real que fue contrastado antes del commit que actualiza este manifest. No pretende ser el SHA del propio commit de continuidad ni un HEAD futuro.
+`Last-Reconciled-Host-Head` identifica el último HEAD de `main` contrastado antes de la planificación. Mientras la rama documental no esté integrada, no pretende ser el SHA de sus commits ni un HEAD futuro.
 
 ## Estado canónico
 
 - P-001: HECHO — identidad, baseline, autoridades, evidencia y plan ABOS-specific reconstruidos.
 - P-002: HECHO — cutover metodológico a matriz ProjectOps modular/publicable.
-- P-003: PARCIAL — existe PR #29 abierto con source/CI histórico; no está integrado en `main` y debe reconciliarse contra el HEAD vigente antes de merge.
-- P-004: PLANIFICADO — reconciliación de documentación arquitectónica con source actual.
-- P-005: PLANIFICADO — acceptance LIVE por frontera externa cuando exista autorización y el claim la requiera.
-- P-006: PLANIFICADO — remediación de advisories de dependencias descubiertos durante la validación de PR #30; siguiente frontera prioritaria por gate `security-audit` rojo.
+- P-003: PARCIAL — PR #29 abierto; no integrado; reauditar después de P-006.
+- P-004: PLANIFICADO — reconciliación documental incremental y cierre final después de P-035.
+- P-005: PLANIFICADO — acceptance LIVE por subfrontera; puede quedar LIVE_BLOCKED_EXTERNAL cuando falte autorización/entorno.
+- P-006: PLANIFICADO — siguiente frontera ejecutable: remediar advisories y restaurar `security-audit` green.
+- P-007: HECHO — programa maestro P-008..P-036 consolidado y ProjectOps Integrity validado; no acredita implementación de esos P.
+- P-008..P-036: ver `ProjectOps/PLAN.md`; permanecen PLANIFICADO salvo estados heredados explícitos.
 
-## Resultado exacto del cutover
+## Plan maestro 2026-09-13
 
-ProjectOps representa ABOS como proyecto independiente.
+Se consolidó la campaña en seis olas más tracks transversales:
+1. P-006 → P-003: baseline/deuda heredada.
+2. P-008..P-013: Runtime Truth, provenance, policy, recovery, self-mod y evidence.
+3. P-014..P-019: Capability Fabric, MCP real, computer/browser/GUI hands, acquisition, environments y adaptive inference.
+4. P-020..P-026: Cognitive Fabric, skills, world model, prediction-learning, simulation, strategic cognition y cognitive cost.
+5. P-027..P-032: opportunities, delegation, children/family knowledge, treasury, resource acquisition y Soul/self-model.
+6. P-033..P-036: E2E, fault/sustained, cleanup y source/integration closure.
 
-Quedó explícita la separación:
-- TARGET / intención;
-- IMPLEMENTATION / source;
-- EXECUTED EVIDENCE;
-- LIVE / ECONOMIC EVIDENCE.
+P-004 documenta la arquitectura realmente integrada; P-005 eleva sólo fronteras LIVE autorizadas.
 
-Quedaron formalizados:
-- constitución ABOS separada del protocolo de desarrollo;
-- autonomía económica sin inventar autoridad;
-- Adaptive Path / objective != method;
-- executor-boundary explícita;
-- one-authority-per-concern;
-- semántica causal de dinero/children;
-- evidencia E0–E7;
-- state checkout vs `~/.abos`;
-- host público sin secrets en ProjectOps;
-- P-003..P-006 específicos del estado actual de ABOS.
+## Evidencia de P-007
 
-## Evidencia de entrada y cutover
-
-- `main` observado al iniciar: `a22ef23006f7b858a1cf457d0a75acd181a10aa0`.
-- Registro previo al cutover: `b8f2fc290078ae67844e09d0d1d472d9d76fb82d`.
-- Protocolo raíz previo blob: `ba0d546c704d7078fb1471107c29c7174379d134`.
-- Continuidad legacy con registro de entrada blob: `6ee88dc560dc53ddb6e728fca9193fa62f6ee3a7`.
-- Plan legacy blob: `8c52273bf1801958273a77474315c85e0903ee1d`.
-- Cutover matrix: `76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1`.
-- Verifier hardening: `57c18bac71235107ce0e8a8f13fa7216766ad85e`.
-- Workflow ProjectOps Integrity: `9029bfff5a67d92bbbe65363999b7a55f24c3237`.
-- Runtime package observado: `@abos/runtime` v0.3.0.
-- Source schema observado: v14.
-- PR #29 observado abierto en head `423812c56c70d31451075232fe2c8a4d848a7ee5`.
-
-## Validación de PR #30
-
-PASS / VERIFICADO:
-- `ProjectOps Integrity` run `34409821116`: SUCCESS sobre head `9029bfff5a67d92bbbe65363999b7a55f24c3237`.
-- Compare `main...branch`: no modifica `package.json`, `pnpm-lock.yaml`, `src/` ni product packages; cambios limitados a router/documentación ProjectOps/verifier/workflow.
-- root `CONTINUITY.md` y `PLAN.md` retirados; historia preservada bajo ProjectOps.
-- protocolo legacy preservado por blob exacto.
-- plan legacy preservado por blob exacto.
-
-HALLAZGO HEREDADO / NO REGRESIÓN P-001/P-002:
-- CI run `34409821144`, job `security-audit` `102661387742`, falló en `pnpm audit` por tres advisories moderados ya presentes en el dependency graph de `main`.
-- `stream-json <=3.4.0` vía `@solana/web3.js > jayson`, patched `>=3.5.0`.
-- `vitest` y `@vitest/mocker >=2.1.0 <4.1.11`, patched `>=4.1.11`.
-- La rama ProjectOps no cambió package/lockfile; el hallazgo se clasifica `PREEXISTING_EXTERNAL_ADVISORY_DISCOVERED_DURING_VALIDATION` y se formaliza como P-006.
+- base exacta de la rama: `main` `ae31480898a3f1f2a386176cc6782b34782a23cf`.
+- branch: `abos/p007-canonical-transformation-plan`.
+- compare hasta `38299d159716715a48f202609c795a7e94c0162b`: exclusivamente `ProjectOps/*`; product source/dependencies no cambiaron.
+- ProjectOps Integrity run `34779277196`, job `103783178815`: SUCCESS.
+- CI run `34779277199`: Windows regression SUCCESS; public-distribution-smoke SUCCESS; Node 20/22 typecheck/build PASS y tests aún en ejecución durante el primer cierre; `security-audit` FAIL es la deuda P-006 ya conocida, no introducida por el diff documental.
 
 ## Claims no elevados
 
-NO se declara por este cutover:
-- que PR #29 esté integrado;
-- OAuth ChatGPT/Codex LIVE PASS;
-- AWS EC2 billable LIVE PASS;
-- child live balance/revenue disponibles;
-- profitability/ROI de children conocidos;
-- operación económica sostenida E7;
-- ejecución del CLI `projectops install`;
-- dependency security audit green mientras P-006 siga pendiente.
+NO se declara por P-007:
+- P-006 resuelto;
+- PR #29/P-003 integrado;
+- P-008..P-036 implementados;
+- MCP real, computer/browser hands, Cognitive Fabric, world model, treasury o autonomous resource acquisition ya activos;
+- OAuth/AWS/economic LIVE PASS;
+- operación sostenida E7.
 
 ## Siguiente frontera
 
-1. Integrar PR #30 cuando los checks pertinentes al cutover estén reconciliados y no exista otra regresión atribuible a la rama.
-2. Abrir P-006 EN_EJECUCIÓN desde el HEAD integrado y auditar opciones de remediación de dependencies antes de cambiar versiones.
-3. Restaurar `security-audit` green sin debilitar el gate.
-4. Continuar P-003 reauditable contra el nuevo `main`.
+`P-006 — Remediar advisories de dependencias y restaurar security-audit green`.
+
+Después de P-006: P-003 se reaudita contra `main` actual y se integra si sigue correcto. El resto avanza por dependencias, no por orden ciego.
 
 ## Política de rotación
 
