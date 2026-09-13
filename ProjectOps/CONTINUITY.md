@@ -11,18 +11,20 @@ Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p007-canonical-transformation-plan
+Current-Host-Branch: main
 Host-Head-At-Audit-Open: ae31480898a3f1f2a386176cc6782b34782a23cf
-Last-Reconciled-Host-Head: ae31480898a3f1f2a386176cc6782b34782a23cf
-Last-Reconciled-Head-Semantics: MASTER_PLAN_DOCUMENTED_BRANCH_PENDING_INTEGRATION
+Last-Reconciled-Host-Head: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
+Last-Reconciled-Head-Semantics: MASTER_PLAN_MERGED_MAIN_PRE_RECONCILIATION_COMMIT
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
 ProjectOps-PR: 30
+Master-Plan-PR: 31
+Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 ## Semántica del HEAD reconciliado
 
-`Last-Reconciled-Host-Head` identifica el último HEAD de `main` contrastado antes de la planificación. Mientras la rama documental no esté integrada, no pretende ser el SHA de sus commits ni un HEAD futuro.
+`Last-Reconciled-Host-Head` identifica el HEAD de `main` observado inmediatamente antes de este commit de reconciliación. El plan maestro ya está integrado; no existe una rama de planificación pendiente como autoridad operativa.
 
 ## Estado canónico
 
@@ -32,7 +34,7 @@ ProjectOps-PR: 30
 - P-004: PLANIFICADO — reconciliación documental incremental y cierre final después de P-035.
 - P-005: PLANIFICADO — acceptance LIVE por subfrontera; puede quedar LIVE_BLOCKED_EXTERNAL cuando falte autorización/entorno.
 - P-006: PLANIFICADO — siguiente frontera ejecutable: remediar advisories y restaurar `security-audit` green.
-- P-007: HECHO — programa maestro P-008..P-036 consolidado y ProjectOps Integrity validado; no acredita implementación de esos P.
+- P-007: HECHO — programa maestro P-008..P-036 consolidado, validado e integrado en `main` mediante PR #31.
 - P-008..P-036: ver `ProjectOps/PLAN.md`; permanecen PLANIFICADO salvo estados heredados explícitos.
 
 ## Plan maestro 2026-09-13
@@ -50,10 +52,12 @@ P-004 documenta la arquitectura realmente integrada; P-005 eleva sólo fronteras
 ## Evidencia de P-007
 
 - base exacta de la rama: `main` `ae31480898a3f1f2a386176cc6782b34782a23cf`.
-- branch: `abos/p007-canonical-transformation-plan`.
-- compare hasta `38299d159716715a48f202609c795a7e94c0162b`: exclusivamente `ProjectOps/*`; product source/dependencies no cambiaron.
-- ProjectOps Integrity run `34779277196`, job `103783178815`: SUCCESS.
-- CI run `34779277199`: Windows regression SUCCESS; public-distribution-smoke SUCCESS; Node 20/22 typecheck/build PASS y tests aún en ejecución durante el primer cierre; `security-audit` FAIL es la deuda P-006 ya conocida, no introducida por el diff documental.
+- planning head final: `70579a4da0867993707b22378b8d2b57d6a4030e`.
+- PR #31: `docs(projectops): canonical ABOS master transformation plan`.
+- merge exact-head: `e33a507164b2ab6490aa43a9d2aefb0cd80ec77a`.
+- compare de la campaña documental: exclusivamente `ProjectOps/*`; product source/dependencies no cambiaron.
+- ProjectOps Integrity pre-merge final run `34779464637`, job `103783693902`: SUCCESS.
+- CI previo de rama: Windows regression SUCCESS; public-distribution-smoke SUCCESS; Node 20/22 typecheck/build PASS; `security-audit` FAIL es la deuda P-006 ya conocida y no fue introducida por el diff documental.
 
 ## Claims no elevados
 
