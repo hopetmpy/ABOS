@@ -12,10 +12,10 @@ Master-Transformation-Plan: P-007
 |---|---|---|---|---|
 | P-001 | Reconstruir identidad, baseline, autoridades y plan ABOS desde evidencia actual | HECHO | — | plan/P-001.md |
 | P-002 | Migrar ABOS a matriz ProjectOps modular y publicable | HECHO | P-001 auditado durante el mismo cutover | plan/P-002.md |
-| P-003 | Reconciliar e integrar child capital semantics de PR #29 | PARCIAL | P-006 primero; PR #29 debe reconciliarse contra main vigente | plan/P-003.md |
+| P-003 | Reconciliar e integrar child capital semantics de PR #29 | EN_EJECUCIÓN | P-006 HECHO; PR #29 diverged y debe reconciliarse contra main vigente | plan/P-003.md |
 | P-004 | Reconciliar documentación arquitectónica con source/runtime actual | PLANIFICADO | ejecutar correcciones puntuales cuando ayuden; cierre final después de P-035 y antes de P-036 | plan/P-004.md |
 | P-005 | Ejecutar acceptance LIVE de fronteras externas críticas | PLANIFICADO | por subfrontera cuando source integrado + autorización/entorno real; puede quedar LIVE_BLOCKED_EXTERNAL | plan/P-005.md |
-| P-006 | Remediar advisories de dependencias y restaurar security-audit green | PLANIFICADO | siguiente frontera ejecutable heredada | plan/P-006.md |
+| P-006 | Remediar advisories de dependencias y restaurar security-audit green | HECHO | integrado por PR #32; main 33e29e91... CI + ProjectOps Integrity green | plan/P-006.md |
 | P-007 | Consolidar programa maestro de transformación integral ABOS | HECHO | P-001 + P-002 + auditoría 2026-09-13; no implementa product source | plan/P-007.md |
 | P-008 | Alinear Runtime Truth y capability claims con evidencia real | PLANIFICADO | P-006 + P-003 | plan/P-008.md |
 | P-009 | Corregir Authority, Provenance y trust boundaries end-to-end | PLANIFICADO | P-006; foundation para policy/hands/children | plan/P-009.md |
@@ -76,8 +76,8 @@ Cada bloque puede poseer componentes especializados, pero debe conservar una aut
 
 ### Ola 0 — baseline y deuda heredada
 
-1. **P-006**: restaurar security-audit green sin debilitar gate.
-2. **P-003**: reconciliar/mergear child capital semantics existente; no reimplementarlo.
+1. **P-006 — HECHO**: security-audit restaurado sin debilitar gate e integrado en `main` por PR #32.
+2. **P-003 — EN_EJECUCIÓN**: reconciliar/mergear child capital semantics existente; no reimplementarlo.
 
 No comenzar una reescritura cognitiva para evitar estas deudas abiertas.
 
@@ -214,7 +214,7 @@ P-005 es un track incremental: Codex OAuth real, AWS billable, MCP/provider exte
 
 ## 16. P-006 y P-003 siguen primero
 
-La planificación maestra no evade deuda existente. P-007 queda HECHO únicamente como planificación. `Active-Plan` permanece P-006. Después de P-006, reauditar e integrar P-003 antes de construir treasury/family economics dependientes.
+La planificación maestra no evade deuda existente. P-007 queda HECHO únicamente como planificación. P-006 ya está HECHO e integrado; `Active-Plan` es P-003. P-003 debe reauditar e integrar la semántica de capital del PR #29 antes de construir treasury/family economics dependientes.
 
 ## 17. Cierre de campaña
 
@@ -222,4 +222,4 @@ P-036 no significa “todo el universo futuro de ABOS está terminado”. Signif
 
 ## 18. Siguiente trabajo recuperable
 
-`P-006 — Remediar advisories de dependencias y restaurar security-audit green`.
+`P-003 — Reconciliar e integrar child capital semantics de PR #29`.
