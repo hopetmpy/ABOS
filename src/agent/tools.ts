@@ -22,6 +22,7 @@ import type {
 import type { PolicyEngine } from "./policy-engine.js";
 import { sanitizeToolResult, sanitizeInput } from "./injection-defense.js";
 import { createLogger } from "../observability/logger.js";
+import { isCreditTransferAccepted } from "../conway/credits.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
 import { expandHomePath, getHomeDir, toPosixShellPath } from "../platform/home.js";
 
@@ -1838,6 +1839,10 @@ Model: ${ctx.inference.getDefaultModel()}
           amount,
           `fund child ${child.id}`,
         );
+
+        if (!isCreditTransferAccepted(transfer.status)) {
+          return `Funding transfer was not accepted for child ${child.name} (status: ${transfer.status || "unknown"}). No local capital allocation was recorded.`;
+        }
 
         // The external transfer is the irreversible authority boundary. Persist
         // parent bookkeeping atomically afterwards; a local write failure must

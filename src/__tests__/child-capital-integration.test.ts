@@ -92,6 +92,35 @@ describe("P-003 child capital integration", () => {
     expect(rows.some((row) => row.type === "transfer_out")).toBe(false);
   });
 
+  it("does not record capital when a provider explicitly rejects the direct child transfer", async () => {
+    const address = "0x5555555555555555555555555555555555555555";
+    addChild("child-rejected", address, "wallet_verified");
+    const identity = createTestIdentity();
+    const config = createTestConfig();
+    conway.transferCredits = vi.fn().mockResolvedValue({
+      transferId: "tx-rejected",
+      status: "rejected",
+      toAddress: address,
+      amountCents: 200,
+    });
+    const tool = createBuiltinTools(config.sandboxId).find(
+      (candidate) => candidate.name === "fund_child",
+    );
+    expect(tool).toBeTruthy();
+
+    const output = await tool!.execute(
+      { child_id: "child-rejected", amount_cents: 200 },
+      { identity, config, db, conway, inference: new MockInferenceClient() },
+    );
+
+    expect(output).toContain("was not accepted");
+    const count = db.raw.prepare(
+      "SELECT COUNT(*) AS count FROM transactions WHERE type = 'capital_allocation'",
+    ).get() as { count: number };
+    expect(count.count).toBe(0);
+    expect(db.getChildById("child-rejected")?.fundedAmountCents).toBe(0);
+  });
+
   it("does not auto-classify UNKNOWN child balance as out_of_credits", async () => {
     const address = "0x3333333333333333333333333333333333333333";
     addChild("child-health", address);
