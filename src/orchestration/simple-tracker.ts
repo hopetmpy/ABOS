@@ -155,14 +155,16 @@ export class SimpleFundingProtocol implements FundingProtocol {
           "UPDATE children SET funded_amount_cents = funded_amount_cents + ? WHERE address = ?",
         ).run(transferAmount, childAddress);
 
-        this.db.insertTransaction({
-          id: ulid(),
-          type: "capital_allocation",
-          amountCents: transferAmount,
-          balanceAfterCents: result.balanceAfterCents,
-          description: `Allocate task working capital to child ${childAddress}`,
-          timestamp: new Date().toISOString(),
-        });
+        this.db.raw.prepare(
+          `INSERT INTO transactions
+           (id, type, amount_cents, balance_after_cents, description)
+           VALUES (?, 'capital_allocation', ?, ?, ?)`,
+        ).run(
+          ulid(),
+          transferAmount,
+          result.balanceAfterCents ?? null,
+          `Allocate task working capital to child ${childAddress}`,
+        );
       });
       persistAllocation();
     } catch (error) {
