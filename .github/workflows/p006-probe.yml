@@ -47,6 +47,8 @@ jobs:
           pnpm list vitest @vitest/mocker @solana/web3.js jayson stream-json --depth 10 || true
       - name: Security audit
         run: pnpm audit
+      - name: Solana JSON-RPC compatibility smoke
+        run: node scripts/p006-solana-rpc-smoke.mjs
       - name: Typecheck and build
         run: |
           pnpm run typecheck
