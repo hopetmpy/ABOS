@@ -1,0 +1,92 @@
+name: P003 Apply Child Capital Reconciliation
+
+on:
+  push:
+    branches:
+      - abos/p003-child-capital-reconciliation-v2
+    paths:
+      - .github/workflows/p003-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: abos/p003-child-capital-reconciliation-v2
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+      - name: Apply deterministic P-003 patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one match, found {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "src/state/schema.ts",
+              "  -- Application-level validation: type must be one of 'transfer_out','transfer_in','credit_purchase','topup','x402_payment','inference'\n",
+              "  -- Application-level validation: transaction type is validated by TransactionType.\n"
+              "  -- Child working-capital movement uses capital_allocation/capital_return and\n"
+              "  -- must not be conflated with unclassified transfer_in/transfer_out rows.\n",
+          )
+
+          replace_once(
+              "src/agent/tools.ts",
+              '''        const transfer = await ctx.conway.transferCredits(\n          child.address,\n          amount,\n          `fund child ${child.id}`,\n        );\n\n        const { ulid } = await import("ulid");\n        ctx.db.insertTransaction({\n          id: ulid(),\n          type: "transfer_out",\n          amountCents: amount,\n          balanceAfterCents:\n            transfer.balanceAfterCents ?? Math.max(balance - amount, 0),\n          description: `Fund child ${child.name} (${child.id})`,\n          timestamp: new Date().toISOString(),\n        });\n\n        // Update funded amount\n        ctx.db.raw\n          .prepare(\n            "UPDATE children SET funded_amount_cents = funded_amount_cents + ? WHERE id = ?",\n          )\n          .run(amount, child.id);\n''',
+              '''        const transfer = await ctx.conway.transferCredits(\n          child.address,\n          amount,\n          `fund child ${child.id}`,\n        );\n\n        // The external transfer is the irreversible authority boundary. Persist\n        // parent bookkeeping atomically afterwards; a local write failure must\n        // not make the caller blindly repeat a transfer that already happened.\n        let localPersistenceOk = true;\n        try {\n          ctx.db.runTransaction(() => {\n            ctx.db.insertTransaction({\n              id: ulid(),\n              type: "capital_allocation",\n              amountCents: amount,\n              balanceAfterCents:\n                transfer.balanceAfterCents ?? Math.max(balance - amount, 0),\n              description: `Allocate working capital to child ${child.name} (${child.id})`,\n              timestamp: new Date().toISOString(),\n            });\n\n            ctx.db.raw\n              .prepare(\n                "UPDATE children SET funded_amount_cents = funded_amount_cents + ? WHERE id = ?",\n              )\n              .run(amount, child.id);\n          });\n        } catch (error) {\n          localPersistenceOk = false;\n          logger.error(\n            "Child funding transferred but local capital bookkeeping failed",\n            error instanceof Error ? error : undefined,\n            {\n              childId: child.id,\n              childAddress: child.address,\n              amountCents: amount,\n              transferId: transfer.transferId,\n            },\n          );\n        }\n\n        if (!localPersistenceOk) {\n          return `Funding transfer ${transfer.transferId || "unknown"} completed for child ${child.name}, but local capital bookkeeping failed. Do not retry the transfer blindly; reconcile the external transfer first.`;\n        }\n''',
+          )
+
+          replace_once(
+              "src/heartbeat/tasks.ts",
+              'import { ulid } from "ulid";\n',
+              'import { ulid } from "ulid";\nimport { getChildEconomicSnapshot } from "../economics/child-economics.js";\n',
+          )
+
+          replace_once(
+              "src/heartbeat/tasks.ts",
+              '''      const transactions = taskCtx.db.getRecentTransactions(5000);\n      let revenueCents = 0;\n      let expenseCents = 0;\n\n      for (const tx of transactions) {\n        const amount = Math.max(0, Math.floor(tx.amountCents ?? 0));\n        if (amount === 0) continue;\n\n        if (tx.type === "transfer_in" || tx.type === "credit_purchase") {\n          revenueCents += amount;\n          continue;\n        }\n\n        if (\n          tx.type === "inference"\n          || tx.type === "tool_use"\n          || tx.type === "transfer_out"\n          || tx.type === "funding_request"\n        ) {\n          expenseCents += amount;\n        }\n      }\n\n      const childFunding = taskCtx.db.raw\n        .prepare("SELECT COALESCE(SUM(funded_amount_cents), 0) AS total FROM children")\n        .get() as { total: number };\n\n      const taskCosts = taskCtx.db.raw\n        .prepare(\n          `SELECT COALESCE(SUM(actual_cost_cents), 0) AS total\n           FROM task_graph\n           WHERE status IN ('completed', 'failed', 'cancelled')`,\n        )\n        .get() as { total: number };\n\n      const report = {\n        timestamp: new Date().toISOString(),\n        revenueCents,\n        expenseCents,\n        netCents: revenueCents - expenseCents,\n        fundedToChildrenCents: childFunding.total,\n        taskExecutionCostCents: taskCosts.total,\n        activeAgents: taskCtx.db.getChildren().filter(\n          (child) => child.status !== "dead" && child.status !== "cleaned_up",\n        ).length,\n      };\n''',
+              '''      const transactions = taskCtx.db.getRecentTransactions(5000);\n      let unclassifiedTransferInCents = 0;\n      let unclassifiedTransferOutCents = 0;\n      let creditPurchaseCents = 0;\n      let knownOperatingCostCents = 0;\n      let capitalAllocatedCents = 0;\n      let capitalReturnedCents = 0;\n      let fundingRequestCents = 0;\n\n      for (const tx of transactions) {\n        const amount = Math.max(0, Math.floor(tx.amountCents ?? 0));\n        if (amount === 0) continue;\n\n        switch (tx.type) {\n          case "capital_allocation":\n            capitalAllocatedCents += amount;\n            break;\n          case "capital_return":\n            capitalReturnedCents += amount;\n            break;\n          case "transfer_in":\n            unclassifiedTransferInCents += amount;\n            break;\n          case "transfer_out":\n            unclassifiedTransferOutCents += amount;\n            break;\n          case "credit_purchase":\n            creditPurchaseCents += amount;\n            break;\n          case "inference":\n          case "tool_use":\n            knownOperatingCostCents += amount;\n            break;\n          case "funding_request":\n            fundingRequestCents += amount;\n            break;\n          default:\n            break;\n        }\n      }\n\n      const childFunding = taskCtx.db.raw\n        .prepare("SELECT COALESCE(SUM(funded_amount_cents), 0) AS total FROM children")\n        .get() as { total: number };\n\n      const taskCosts = taskCtx.db.raw\n        .prepare(\n          `SELECT COALESCE(SUM(actual_cost_cents), 0) AS total\n           FROM task_graph\n           WHERE status IN ('completed', 'failed', 'cancelled')`,\n        )\n        .get() as { total: number };\n\n      const childEconomics = taskCtx.db.getChildren().map((child) =>\n        getChildEconomicSnapshot(taskCtx.db, child.address),\n      );\n\n      const report = {\n        timestamp: new Date().toISOString(),\n        // The current generic transaction ledger does not prove causal business\n        // revenue/expense. Preserve UNKNOWN instead of manufacturing P&L.\n        revenueCents: null,\n        expenseCents: null,\n        netCents: null,\n        classificationStatus: "partial",\n        unclassifiedTransferInCents,\n        unclassifiedTransferOutCents,\n        creditPurchaseCents,\n        knownOperatingCostCents,\n        fundingRequestCents,\n        capitalAllocatedCents,\n        capitalReturnedCents,\n        netInternalCapitalFlowCents:\n          capitalReturnedCents - capitalAllocatedCents,\n        fundedToChildrenCents: childFunding.total,\n        taskExecutionCostCents: taskCosts.total,\n        childEconomics,\n        limitations: [\n          "Revenue/expense remain unknown because generic transfer types do not prove causal business P&L.",\n          "Legacy transfer_in/transfer_out rows are unclassified; historical child funding may exist among transfer_out rows created before capital_allocation was introduced.",\n          "Credit purchases are resource acquisition and are not classified as revenue.",\n        ],\n        activeAgents: taskCtx.db.getChildren().filter(\n          (child) => child.status !== "dead" && child.status !== "cleaned_up",\n        ).length,\n      };\n''',
+          )
+
+          Path("src/__tests__/child-capital-integration.test.ts").write_text(r'''import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";\nimport type { AbosDatabase, HeartbeatLegacyContext, TickContext } from "../types.js";\nimport { createBuiltinTools } from "../agent/tools.js";\nimport { BUILTIN_TASKS } from "../heartbeat/tasks.js";\nimport { HealthMonitor } from "../orchestration/health-monitor.js";\nimport { SimpleAgentTracker, SimpleFundingProtocol } from "../orchestration/simple-tracker.js";\nimport {\n  MockConwayClient,\n  MockInferenceClient,\n  createTestConfig,\n  createTestDb,\n  createTestIdentity,\n} from "./mocks.js";\n\ndescribe("P-003 child capital integration", () => {\n  let db: AbosDatabase;\n  let conway: MockConwayClient;\n\n  beforeEach(() => {\n    db = createTestDb();\n    conway = new MockConwayClient();\n  });\n\n  afterEach(() => {\n    db.close();\n  });\n\n  function addChild(id: string, address: string, status: any = "running"): void {\n    db.insertChild({\n      id,\n      name: id,\n      address,\n      sandboxId: `sandbox-${id}`,\n      genesisPrompt: "test child",\n      fundedAmountCents: 0,\n      status,\n      createdAt: new Date().toISOString(),\n      chainType: "evm",\n    });\n  }\n\n  it("records orchestrator funding as internal capital while keeping live balance unknown", async () => {\n    const address = "0x1111111111111111111111111111111111111111";\n    addChild("child-orchestrator", address);\n    const funding = new SimpleFundingProtocol(\n      conway,\n      createTestIdentity(),\n      db,\n    );\n\n    const result = await funding.fundChild(address, 250);\n\n    expect(result.success).toBe(true);\n    const ledger = db.raw\n      .prepare(\n        "SELECT type, amount_cents AS amountCents FROM transactions ORDER BY rowid DESC LIMIT 1",\n      )\n      .get() as { type: string; amountCents: number };\n    expect(ledger).toEqual({ type: "capital_allocation", amountCents: 250 });\n    expect((await funding.getBalance(address))).toBeNull();\n\n    const child = db.getChildById("child-orchestrator");\n    expect(child?.fundedAmountCents).toBe(250);\n  });\n\n  it("classifies the direct fund_child tool as internal capital, not transfer_out", async () => {\n    const address = "0x2222222222222222222222222222222222222222";\n    addChild("child-tool", address, "wallet_verified");\n    const identity = createTestIdentity();\n    const config = createTestConfig();\n    const tool = createBuiltinTools(config.sandboxId).find(\n      (candidate) => candidate.name === "fund_child",\n    );\n    expect(tool).toBeTruthy();\n\n    const output = await tool!.execute(\n      { child_id: "child-tool", amount_cents: 200 },\n      {\n        identity,\n        config,\n        db,\n        conway,\n        inference: new MockInferenceClient(),\n      },\n    );\n\n    expect(output).toContain("Funded child");\n    const rows = db.raw\n      .prepare("SELECT type, amount_cents AS amountCents FROM transactions")\n      .all() as Array<{ type: string; amountCents: number }>;\n    expect(rows).toContainEqual({ type: "capital_allocation", amountCents: 200 });\n    expect(rows.some((row) => row.type === "transfer_out")).toBe(false);\n  });\n\n  it("does not auto-classify UNKNOWN child balance as out_of_credits", async () => {\n    const address = "0x3333333333333333333333333333333333333333";\n    addChild("child-health", address);\n    db.raw\n      .prepare("UPDATE children SET last_checked = ? WHERE id = ?")\n      .run(new Date().toISOString(), "child-health");\n\n    const funding = new SimpleFundingProtocol(\n      conway,\n      createTestIdentity(),\n      db,\n    );\n    const tracker = new SimpleAgentTracker(db);\n    const messaging = {\n      createMessage: vi.fn(),\n      send: vi.fn(),\n    } as any;\n    const monitor = new HealthMonitor(db, tracker, funding, messaging);\n\n    const report = await monitor.checkAll();\n\n    expect(report.agents).toHaveLength(1);\n    expect(report.agents[0].creditBalance).toBeNull();\n    expect(report.agents[0].issues).not.toContain("out_of_credits");\n  });\n\n  it("keeps generic inflows/outflows outside causal P&L and reports capital separately", async () => {\n    const address = "0x4444444444444444444444444444444444444444";\n    addChild("child-report", address);\n    const now = new Date().toISOString();\n    const addTx = (id: string, type: any, amountCents: number) =>\n      db.insertTransaction({ id, type, amountCents, description: id, timestamp: now });\n\n    addTx("tx-in", "transfer_in", 1_000);\n    addTx("tx-out", "transfer_out", 100);\n    addTx("tx-credit", "credit_purchase", 500);\n    addTx("tx-inference", "inference", 25);\n    addTx("tx-tool", "tool_use", 10);\n    addTx("tx-request", "funding_request", 999);\n    addTx("tx-allocation", "capital_allocation", 400);\n    addTx("tx-return", "capital_return", 150);\n\n    const tickCtx = {\n      tickId: "tick-p003",\n      startedAt: new Date(),\n      creditBalance: 10_000,\n      usdcBalance: 0,\n      survivalTier: "normal",\n      lowComputeMultiplier: 1,\n      config: { entries: [], defaultIntervalMs: 60_000, lowComputeMultiplier: 1 },\n      db: db.raw,\n    } as TickContext;\n    const taskCtx: HeartbeatLegacyContext = {\n      identity: createTestIdentity(),\n      config: createTestConfig(),\n      db,\n      conway,\n    };\n\n    const result = await BUILTIN_TASKS.colony_financial_report(tickCtx, taskCtx);\n    expect(result.shouldWake).toBe(false);\n\n    const report = JSON.parse(db.getKV("last_colony_financial_report")!);\n    expect(report.revenueCents).toBeNull();\n    expect(report.expenseCents).toBeNull();\n    expect(report.netCents).toBeNull();\n    expect(report.unclassifiedTransferInCents).toBe(1_000);\n    expect(report.unclassifiedTransferOutCents).toBe(100);\n    expect(report.creditPurchaseCents).toBe(500);\n    expect(report.knownOperatingCostCents).toBe(35);\n    expect(report.fundingRequestCents).toBe(999);\n    expect(report.capitalAllocatedCents).toBe(400);\n    expect(report.capitalReturnedCents).toBe(150);\n    expect(report.netInternalCapitalFlowCents).toBe(-250);\n    expect(report.childEconomics[0].profitability).toBe("unknown");\n    expect(report.childEconomics[0].roi).toBeNull();\n  });\n});\n'''.replace('\\n', '\n'))
+          PY
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm run build
+      - name: Run P-003 focused tests
+        run: >-
+          pnpm exec vitest run
+          src/__tests__/child-capital-integration.test.ts
+          src/__tests__/child-economics.test.ts
+          src/__tests__/orchestration/simple-tracker.test.ts
+          src/__tests__/orchestration/health-monitor.test.ts
+      - name: Commit validated patch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/state/schema.ts \
+            src/agent/tools.ts \
+            src/heartbeat/tasks.ts \
+            src/__tests__/child-capital-integration.test.ts
+          if git diff --cached --quiet; then
+            echo "No P-003 changes produced"
+            exit 1
+          fi
+          git commit -m "fix(economics): reconcile child capital semantics on current runtime"
+          git push origin HEAD:abos/p003-child-capital-reconciliation-v2
