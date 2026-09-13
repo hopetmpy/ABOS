@@ -4,6 +4,7 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         node-version: [22, 24]
     steps:
@@ -119,6 +120,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
         node-version: [22, 24]
     steps:
@@ -227,6 +229,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
         node-version: [22, 24]
     steps:
