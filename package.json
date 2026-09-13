@@ -51,7 +51,7 @@
   "dependencies": {
     "@solana/web3.js": "^1.98.0",
     "@types/better-sqlite3": "^7.6.0",
-    "better-sqlite3": "^11.0.0",
+    "better-sqlite3": "^13.0.3",
     "bs58": "^6.0.0",
     "chalk": "^5.3.0",
     "cron-parser": "^4.9.0",
@@ -73,7 +73,7 @@
     "vitest": "^4.1.11"
   },
   "engines": {
-    "node": ">=20 <21 || >=22 <23"
+    "node": ">=22 <23 || >=24 <25"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
