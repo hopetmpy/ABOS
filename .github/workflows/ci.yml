@@ -233,20 +233,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-      - name: Anonymous clone, install, build, and smoke public ABOS
+      - name: Anonymous clone, install, build, and smoke public ABOS ref
         shell: bash
         env:
           GIT_TERMINAL_PROMPT: "0"
+          ABOS_REPO_URL: ${{ github.event.pull_request.head.repo.clone_url || 'https://github.com/hopetmpy/ABOS.git' }}
+          ABOS_REF: ${{ github.head_ref || github.ref_name }}
         run: |
           set -euo pipefail
           unset GH_TOKEN GITHUB_TOKEN || true
           rm -rf /tmp/abos-public-smoke
-          git -c credential.helper= clone --depth 1 --branch main --single-branch \
-            https://github.com/hopetmpy/ABOS.git /tmp/abos-public-smoke
+          git -c credential.helper= clone --depth 1 --branch "$ABOS_REF" --single-branch \
+            "$ABOS_REPO_URL" /tmp/abos-public-smoke
           cd /tmp/abos-public-smoke
 
-          test "$(git rev-parse --abbrev-ref HEAD)" = "main"
-          test "$(git config --get remote.origin.url)" = "https://github.com/hopetmpy/ABOS.git"
+          test "$(git rev-parse --abbrev-ref HEAD)" = "$ABOS_REF"
+          test "$(git config --get remote.origin.url)" = "$ABOS_REPO_URL"
 
           corepack enable pnpm
           pnpm install --frozen-lockfile
