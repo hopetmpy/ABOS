@@ -6,7 +6,7 @@ Project: ABOS — Autonomous Business Operating System
 Identity-Model: TARGET_VISION_PLUS_EVIDENCE_BASELINE
 Runtime-Package: `@abos/runtime`
 Runtime-Version-Observed: `0.3.0`
-Supported-Node-Majors: `20,22`
+Supported-Node-Majors: `22,24`
 Recommended-Node-Major: `22`
 State-Root: `~/.abos`
 Source-Root: repository checkout
@@ -84,10 +84,10 @@ Decisiones explícitas y vigentes pueden gobernar qué construir aunque aún no 
 - versión `0.3.0`;
 - binario `abos`;
 - TypeScript/ESM;
-- Node `>=20 <21 || >=22 <23`;
+- Node `>=22 <23 || >=24 <25`;
 - pnpm como package manager.
 
-`.nvmrc` y `.node-version` fijan Node 22 como default del repositorio. CI valida Node 20 y 22 y posee smoke de Windows y distribución pública.
+`.nvmrc` y `.node-version` fijan Node 22 como default del repositorio. CI valida Node 22 y 24, con lanes Linux, Windows y distribución pública independientes. `engine-strict=true` rechaza runtimes fuera del contrato. P-006 retiró Node 20 después de demostrar que la línea upstream parcheada de `stream-json` requiere Node >=22; Node 24 quedó validado con `better-sqlite3` 12.11.1 en fresh install Windows y Linux CI.
 
 El checkout del runtime y el estado operativo están deliberadamente separados. `~/.abos` contiene wallet/config/database/estado del agente; el source no debe vivir dentro de esa carpeta por defecto.
 
