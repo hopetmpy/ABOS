@@ -1,0 +1,61 @@
+name: P006 Remediation Probe
+on:
+  push:
+    branches: [abos/p006-security-audit-remediation]
+
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: vitest-only
+            solana: current
+            stream: none
+          - name: solana-latest
+            solana: 1.99.0
+            stream: none
+          - name: stream-json-patched
+            solana: current
+            stream: 3.6.0
+          - name: solana-latest-stream-json-patched
+            solana: 1.99.0
+            stream: 3.6.0
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - name: Apply candidate graph in runner only
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm add -D vitest@4.1.11 --save-exact
+          if [ "${{ matrix.solana }}" != "current" ]; then
+            pnpm add @solana/web3.js@${{ matrix.solana }} --save-exact
+          fi
+          if [ "${{ matrix.stream }}" != "none" ]; then
+            node - <<'NODE'
+            const fs=require('fs');
+            const p=JSON.parse(fs.readFileSync('package.json','utf8'));
+            p.pnpm ||= {}; p.pnpm.overrides ||= {};
+            p.pnpm.overrides['stream-json@<=3.4.0']='3.6.0';
+            fs.writeFileSync('package.json', JSON.stringify(p,null,2)+'\n');
+            NODE
+            pnpm install --no-frozen-lockfile
+          fi
+      - name: Show resolved graph
+        run: |
+          pnpm list vitest @vitest/mocker @solana/web3.js jayson stream-json --depth 10 || true
+      - name: Security audit
+        run: pnpm audit
+      - name: Typecheck and build
+        run: |
+          pnpm run typecheck
+          pnpm run build
+      - name: Full tests
+        run: pnpm run test:ci
