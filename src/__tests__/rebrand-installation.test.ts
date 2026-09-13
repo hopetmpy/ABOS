@@ -32,7 +32,7 @@ describe("ABOS installation and state separation", () => {
     expect(result.status, result.stderr || result.stdout).toBe(0);
   });
 
-  it("locks ABOS to the validated Node 20/22 LTS runtime lanes", () => {
+  it("locks ABOS to the validated Node 22/24 LTS runtime lanes", () => {
     const root = process.cwd();
     const packageJson = JSON.parse(
       fs.readFileSync(path.join(root, "package.json"), "utf-8"),
@@ -47,12 +47,12 @@ describe("ABOS installation and state separation", () => {
       "utf-8",
     );
 
-    expect(packageJson.engines?.node).toBe(">=20 <21 || >=22 <23");
+    expect(packageJson.engines?.node).toBe(">=22 <23 || >=24 <25");
     expect(npmrc).toBe("engine-strict=true");
     expect(nvmrc).toBe("22");
     expect(nodeVersion).toBe("22");
     expect(installer).toContain(
-      '[ "$NODE_MAJOR" -ne 20 ] && [ "$NODE_MAJOR" -ne 22 ]',
+      '[ "$NODE_MAJOR" -ne 22 ] && [ "$NODE_MAJOR" -ne 24 ]',
     );
     expect(installer).toContain("Node 22 LTS is recommended");
   });
