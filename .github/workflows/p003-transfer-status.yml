@@ -1,0 +1,67 @@
+name: P003 Reconcile Transfer Status Semantics
+
+on:
+  push:
+    branches:
+      - abos/p003-child-capital-reconciliation-v2
+    paths:
+      - .github/workflows/p003-transfer-status.yml
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: abos/p003-child-capital-reconciliation-v2
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+      - name: Patch direct funding transfer status
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p=Path(path); text=p.read_text(); count=text.count(old)
+              if count != 1: raise SystemExit(f"{path}: expected one match, found {count}")
+              p.write_text(text.replace(old,new,1))
+
+          replace_once(
+            "src/agent/tools.ts",
+            'import { createLogger } from "../observability/logger.js";\n',
+            'import { createLogger } from "../observability/logger.js";\nimport { isCreditTransferAccepted } from "../conway/credits.js";\n'
+          )
+
+          replace_once(
+            "src/agent/tools.ts",
+            '''        const transfer = await ctx.conway.transferCredits(\n          child.address,\n          amount,\n          `fund child ${child.id}`,\n        );\n\n        // The external transfer is the irreversible authority boundary. Persist\n''',
+            '''        const transfer = await ctx.conway.transferCredits(\n          child.address,\n          amount,\n          `fund child ${child.id}`,\n        );\n\n        if (!isCreditTransferAccepted(transfer.status)) {\n          return `Funding transfer was not accepted for child ${child.name} (status: ${transfer.status || "unknown"}). No local capital allocation was recorded.`;\n        }\n\n        // The external transfer is the irreversible authority boundary. Persist\n'''
+          )
+
+          p=Path("src/__tests__/child-capital-integration.test.ts")
+          text=p.read_text()
+          marker='''  it("does not auto-classify UNKNOWN child balance as out_of_credits", async () => {\n'''
+          test='''  it("does not record capital when a provider explicitly rejects the direct child transfer", async () => {\n    const address = "0x5555555555555555555555555555555555555555";\n    addChild("child-rejected", address, "wallet_verified");\n    const identity = createTestIdentity();\n    const config = createTestConfig();\n    conway.transferCredits = vi.fn().mockResolvedValue({\n      transferId: "tx-rejected",\n      status: "rejected",\n      toAddress: address,\n      amountCents: 200,\n    });\n    const tool = createBuiltinTools(config.sandboxId).find(\n      (candidate) => candidate.name === "fund_child",\n    );\n    expect(tool).toBeTruthy();\n\n    const output = await tool!.execute(\n      { child_id: "child-rejected", amount_cents: 200 },\n      { identity, config, db, conway, inference: new MockInferenceClient() },\n    );\n\n    expect(output).toContain("was not accepted");\n    const count = db.raw.prepare(\n      "SELECT COUNT(*) AS count FROM transactions WHERE type = 'capital_allocation'",\n    ).get() as { count: number };\n    expect(count.count).toBe(0);\n    expect(db.getChildById("child-rejected")?.fundedAmountCents).toBe(0);\n  });\n\n'''
+          if text.count(marker) != 1: raise SystemExit("integration test insertion marker mismatch")
+          p.write_text(text.replace(marker,test+marker,1))
+          PY
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm run build
+      - run: pnpm exec vitest run src/__tests__/child-capital-integration.test.ts src/__tests__/orchestration/simple-tracker.test.ts
+      - name: Commit validated reconciliation
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/agent/tools.ts src/__tests__/child-capital-integration.test.ts
+          git diff --cached --quiet && { echo "No changes"; exit 1; }
+          git commit -m "fix(economics): reject negative transfer statuses before allocation"
+          git push origin HEAD:abos/p003-child-capital-reconciliation-v2
