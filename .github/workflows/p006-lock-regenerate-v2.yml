@@ -1,0 +1,53 @@
+name: P006 Regenerate Lockfile v2
+
+on:
+  push:
+    branches:
+      - abos/p006-security-audit-remediation-v2
+    paths:
+      - .github/workflows/p006-lock-regenerate-v2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: abos/p006-security-audit-remediation-v2
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+      - name: Regenerate dependency graph
+        run: pnpm install --no-frozen-lockfile
+      - name: Show resolved graph
+        run: pnpm list better-sqlite3 vitest @vitest/mocker @solana/web3.js jayson stream-json stream-chain --depth 10 || true
+      - name: Audit graph
+        run: pnpm audit --prod=false
+      - name: Validate graph on Node 22
+        run: |
+          pnpm run typecheck
+          pnpm run build
+          pnpm run test:security
+          pnpm run test:financial
+          pnpm run test:ci
+      - name: Commit lockfile only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add pnpm-lock.yaml
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'Lockfile already matches package.json.'
+            exit 0
+          fi
+          git diff --cached --stat
+          git commit -m 'fix(deps): regenerate P-006 lockfile for better-sqlite3 12'
+          git push origin HEAD:abos/p006-security-audit-remediation-v2
