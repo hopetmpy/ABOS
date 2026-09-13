@@ -39,13 +39,7 @@ jobs:
             pnpm add @solana/web3.js@${{ matrix.solana }} --save-exact
           fi
           if [ "${{ matrix.stream }}" != "none" ]; then
-            node - <<'NODE'
-            const fs=require('fs');
-            const p=JSON.parse(fs.readFileSync('package.json','utf8'));
-            p.pnpm ||= {}; p.pnpm.overrides ||= {};
-            p.pnpm.overrides['stream-json@<=3.4.0']='3.6.0';
-            fs.writeFileSync('package.json', JSON.stringify(p,null,2)+'\n');
-            NODE
+            node -e "const fs=require('fs'); const p=JSON.parse(fs.readFileSync('package.json','utf8')); p.pnpm ||= {}; p.pnpm.overrides ||= {}; p.pnpm.overrides['stream-json@<=3.4.0']='3.6.0'; fs.writeFileSync('package.json', JSON.stringify(p,null,2)+'\\n');"
             pnpm install --no-frozen-lockfile
           fi
       - name: Show resolved graph
