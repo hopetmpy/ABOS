@@ -156,9 +156,12 @@ export class SimpleFundingProtocol implements FundingProtocol {
     amountCents: number;
     reason?: string;
   }> {
+    const row = this.db.raw
+      .prepare("SELECT funded_amount_cents FROM children WHERE address = ?")
+      .get(childAddress) as { funded_amount_cents: number } | undefined;
     const trackedAllocation = Math.max(
       0,
-      Math.floor(await this.getBalance(childAddress)),
+      Math.floor(row?.funded_amount_cents ?? 0),
     );
 
     if (trackedAllocation === 0) {
@@ -180,19 +183,16 @@ export class SimpleFundingProtocol implements FundingProtocol {
     };
   }
 
-  // TODO: The Conway API only exposes getCreditsBalance() for the calling agent's own
-  // balance. There is no API to query a child agent's balance remotely. This method
-  // returns the locally tracked funded_amount_cents as an upper-bound estimate.
-  // This is an approximation — the child may have spent credits on inference since
-  // funding. When the Conway API adds per-agent balance queries, replace this with
-  // a direct API call. Alternatively, child agents could report their balance via
-  // messaging (status_report with credit_balance field).
-  async getBalance(childAddress: string): Promise<number> {
-    const row = this.db.raw
-      .prepare("SELECT funded_amount_cents FROM children WHERE address = ?")
-      .get(childAddress) as { funded_amount_cents: number } | undefined;
-
-    return row?.funded_amount_cents ?? 0;
+  /**
+   * The parent Conway client cannot query a child wallet's credit balance by
+   * address. children.funded_amount_cents is historical parent bookkeeping,
+   * not an observed child balance, so UNKNOWN must remain null.
+   *
+   * A future FundingProtocol with a child-authorized/provider-native balance
+   * observation may return a number without changing the orchestration contract.
+   */
+  async getBalance(_childAddress: string): Promise<number | null> {
+    return null;
   }
 }
 
