@@ -49,6 +49,30 @@ export interface AutonomousTopupPlan {
   amountUsd?: number;
 }
 
+export interface ProtectedAutonomousTopupRequest {
+  source: "bootstrap" | "sandbox_recovery";
+  targetCreditsCents?: number;
+  requiredCreditsCents?: number;
+}
+
+export type ProtectedAutonomousTopupExecutor = (
+  request: ProtectedAutonomousTopupRequest,
+) => Promise<TopupResult | null>;
+
+let protectedAutonomousTopupExecutor: ProtectedAutonomousTopupExecutor | null = null;
+
+/**
+ * Register the runtime bridge that can turn a diagnosed need into a protected
+ * `topup_credits` execution. The bridge is process-local wiring, not a second
+ * policy or treasury authority; actual authorization/execution remains in the
+ * canonical PolicyEngine/executeTool path.
+ */
+export function setProtectedAutonomousTopupExecutor(
+  executor: ProtectedAutonomousTopupExecutor | null,
+): void {
+  protectedAutonomousTopupExecutor = executor;
+}
+
 /**
  * Produce the smallest provider-supported purchase that closes a demonstrated
  * credit gap. This is deliberately not a universal treasury optimizer: P-030
@@ -216,9 +240,10 @@ export async function topupCredits(
 }
 
 /**
- * Sandbox recovery diagnoses the required tier but does not hide a second
- * financial effect inside `spawn_child`. The autonomous agent can replan into
- * policy-governed `topup_credits` and then retry the original objective.
+ * Recover a Conway sandbox credit shortage without hiding an ungoverned
+ * payment inside spawn_child. When the runtime installed the protected bridge,
+ * recovery creates its own policy-governed `topup_credits` decision/effect.
+ * Without that bridge it remains diagnosis-only and cannot spend.
  */
 export async function topupForSandbox(params: {
   apiUrl: string;
@@ -259,21 +284,27 @@ export async function topupForSandbox(params: {
     };
   }
 
+  if (chainType !== "solana" && protectedAutonomousTopupExecutor) {
+    return protectedAutonomousTopupExecutor({
+      source: "sandbox_recovery",
+      requiredCreditsCents,
+    });
+  }
+
   logger.info(
-    `Sandbox recovery can replan through policy-governed topup_credits (suggested tier $${selectedTier}).`,
+    `Sandbox recovery requires a protected topup execution (suggested tier $${selectedTier}).`,
   );
   return {
     success: false,
     amountUsd: selectedTier,
-    error: `Replan into topup_credits for $${selectedTier} before retrying spawn_child; no hidden payment was executed.${chainNote}`,
+    error: `Protected autonomous topup executor is unavailable; no payment was executed.${chainNote}`,
   };
 }
 
 /**
- * Compatibility signal used by heartbeat while the agent is asleep. Heartbeat
- * may detect need and wake the autonomous agent, but it does not bypass policy
- * by signing a payment itself. Canonical startup uses planAutonomousTopup and
- * executes the resulting topup through PolicyEngine.
+ * Compatibility entrypoint used by startup/heartbeat/runtime recovery. It may
+ * autonomously pay only when the runtime registered the protected executor;
+ * otherwise it remains diagnosis-only. This preserves one PolicyEngine path.
  */
 export async function bootstrapTopup(params: {
   apiUrl: string;
@@ -285,16 +316,23 @@ export async function bootstrapTopup(params: {
   const { creditsCents, creditThresholdCents = 500, chainType } = params;
   if (creditsCents >= creditThresholdCents) return null;
 
+  if (chainType !== "solana" && protectedAutonomousTopupExecutor) {
+    return protectedAutonomousTopupExecutor({
+      source: "bootstrap",
+      targetCreditsCents: creditThresholdCents,
+    });
+  }
+
   const minTier = TOPUP_TIERS[0];
   const chainNote = chainType === "solana"
     ? " Solana identities cannot sign the EVM x402 payment path."
     : "";
   logger.info(
-    `Bootstrap signal requests autonomous policy-governed topup_credits (minimum tier $${minTier}).`,
+    `Bootstrap topup requires the protected policy-governed executor (minimum tier $${minTier}).`,
   );
   return {
     success: false,
     amountUsd: minTier,
-    error: `Autonomous topup requires the policy-governed topup_credits execution path.${chainNote}`,
+    error: `Protected autonomous topup executor is unavailable; no payment was executed.${chainNote}`,
   };
 }
