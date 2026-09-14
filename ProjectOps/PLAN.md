@@ -12,12 +12,12 @@ Master-Transformation-Plan: P-007
 |---|---|---|---|---|
 | P-001 | Reconstruir identidad, baseline, autoridades y plan ABOS desde evidencia actual | HECHO | — | plan/P-001.md |
 | P-002 | Migrar ABOS a matriz ProjectOps modular y publicable | HECHO | P-001 auditado durante el mismo cutover | plan/P-002.md |
-| P-003 | Reconciliar e integrar child capital semantics de PR #29 | EN_EJECUCIÓN | P-006 HECHO; PR #29 diverged y debe reconciliarse contra main vigente | plan/P-003.md |
+| P-003 | Reconciliar e integrar child capital semantics de PR #29 | HECHO | integrado por PR #33; main `fed2fe3c...` CI + ProjectOps Integrity green | plan/P-003.md |
 | P-004 | Reconciliar documentación arquitectónica con source/runtime actual | PLANIFICADO | ejecutar correcciones puntuales cuando ayuden; cierre final después de P-035 y antes de P-036 | plan/P-004.md |
 | P-005 | Ejecutar acceptance LIVE de fronteras externas críticas | PLANIFICADO | por subfrontera cuando source integrado + autorización/entorno real; puede quedar LIVE_BLOCKED_EXTERNAL | plan/P-005.md |
 | P-006 | Remediar advisories de dependencias y restaurar security-audit green | HECHO | integrado por PR #32; main 33e29e91... CI + ProjectOps Integrity green | plan/P-006.md |
 | P-007 | Consolidar programa maestro de transformación integral ABOS | HECHO | P-001 + P-002 + auditoría 2026-09-13; no implementa product source | plan/P-007.md |
-| P-008 | Alinear Runtime Truth y capability claims con evidencia real | PLANIFICADO | P-006 + P-003 | plan/P-008.md |
+| P-008 | Alinear Runtime Truth y capability claims con evidencia real | EN_EJECUCIÓN | P-006 + P-003 HECHO; intervención C0004 activa | plan/P-008.md |
 | P-009 | Corregir Authority, Provenance y trust boundaries end-to-end | PLANIFICADO | P-006; foundation para policy/hands/children | plan/P-009.md |
 | P-010 | Hacer real Policy, Authorization, Approval y Quarantine lifecycle | PLANIFICADO | P-009 | plan/P-010.md |
 | P-011 | Hacer reales Lifecycle, Health, Restart y Recovery | PLANIFICADO | P-009 + P-010 | plan/P-011.md |
@@ -77,9 +77,9 @@ Cada bloque puede poseer componentes especializados, pero debe conservar una aut
 ### Ola 0 — baseline y deuda heredada
 
 1. **P-006 — HECHO**: security-audit restaurado sin debilitar gate e integrado en `main` por PR #32.
-2. **P-003 — EN_EJECUCIÓN**: reconciliar/mergear child capital semantics existente; no reimplementarlo.
+2. **P-003 — HECHO**: child capital semantics reconciliadas por PR #33, integradas y revalidadas en `main`.
 
-No comenzar una reescritura cognitiva para evitar estas deudas abiertas.
+La deuda heredada de Ola 0 está cerrada; P-008 es la primera frontera activa de Ola 1.
 
 ### Ola 1 — verdad, autoridad y recovery
 
@@ -212,9 +212,9 @@ P-004 puede corregir drift puntual antes, pero su cierre final ocurre después d
 
 P-005 es un track incremental: Codex OAuth real, AWS billable, MCP/provider externo, economic/child/resource claims y futuras fronteras que requieran E5/E6. No toda capability local requiere E5: una computer/browser E4 realista puede cerrar integración local. Si falta autorización/credencial/dinero, registrar `LIVE_BLOCKED_EXTERNAL` y continuar source.
 
-## 16. P-006 y P-003 siguen primero
+## 16. Ola 0 cerrada; P-008 activo
 
-La planificación maestra no evade deuda existente. P-007 queda HECHO únicamente como planificación. P-006 ya está HECHO e integrado; `Active-Plan` es P-003. P-003 debe reauditar e integrar la semántica de capital del PR #29 antes de construir treasury/family economics dependientes.
+P-006 y P-003 están HECHO e integrados con revalidación de `main`. P-007 permanece HECHO únicamente como planificación maestra. La siguiente frontera recuperable es P-008 Runtime Truth; no se adelantan P-014/P-019 para evitar arreglar síntomas sin corregir primero la semántica de claims.
 
 ## 17. Cierre de campaña
 
@@ -222,4 +222,4 @@ P-036 no significa “todo el universo futuro de ABOS está terminado”. Signif
 
 ## 18. Siguiente trabajo recuperable
 
-`P-003 — Reconciliar e integrar child capital semantics de PR #29`.
+`P-008 — Alinear Runtime Truth y capability claims con evidencia real`.
