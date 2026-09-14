@@ -220,3 +220,5 @@ jobs:
           git rm .github/workflows/p008-surgical-patch.yml
           git commit -m "fix(runtime-truth): close nominal MCP exposure and preserve environment evidence"
           git push origin HEAD:abos/p008-runtime-truth-v1
+
+# Triggered after CI 34795241873 isolated exactly three P-008 runtime-truth failures.
