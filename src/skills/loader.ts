@@ -37,7 +37,8 @@ const SUSPICIOUS_INSTRUCTION_PATTERNS: { pattern: RegExp; label: string }[] = [
 
 /**
  * Scan the skills directory and load all valid SKILL.md files.
- * Returns loaded skills and syncs them to the database.
+ * Returns only enabled skills whose current runtime requirements are satisfied.
+ * Persisted DB inventory is not itself proof that bins/env requirements still exist.
  */
 export function loadSkills(
   skillsDir: string,
@@ -45,45 +46,43 @@ export function loadSkills(
 ): Skill[] {
   const resolvedDir = resolveHome(skillsDir);
 
-  if (!fs.existsSync(resolvedDir)) {
-    return db.getSkills(true);
-  }
+  if (fs.existsSync(resolvedDir)) {
+    const entries = fs.readdirSync(resolvedDir, { withFileTypes: true });
 
-  const entries = fs.readdirSync(resolvedDir, { withFileTypes: true });
-  const loaded: Skill[] = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
 
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+      const skillMdPath = path.join(resolvedDir, entry.name, "SKILL.md");
+      if (!fs.existsSync(skillMdPath)) continue;
 
-    const skillMdPath = path.join(resolvedDir, entry.name, "SKILL.md");
-    if (!fs.existsSync(skillMdPath)) continue;
+      try {
+        const content = fs.readFileSync(skillMdPath, "utf-8");
+        const skill = parseSkillMd(content, skillMdPath);
+        if (!skill) continue;
 
-    try {
-      const content = fs.readFileSync(skillMdPath, "utf-8");
-      const skill = parseSkillMd(content, skillMdPath);
-      if (!skill) continue;
+        // Requirements are checked before refreshing the persisted definition.
+        if (!checkRequirements(skill)) {
+          continue;
+        }
 
-      // Check requirements
-      if (!checkRequirements(skill)) {
-        continue;
+        // Check if already in DB and preserve enabled state
+        const existing = db.getSkillByName(skill.name);
+        if (existing) {
+          skill.enabled = existing.enabled;
+          skill.installedAt = existing.installedAt;
+        }
+
+        db.upsertSkill(skill);
+      } catch {
+        // Skip invalid skill files
       }
-
-      // Check if already in DB and preserve enabled state
-      const existing = db.getSkillByName(skill.name);
-      if (existing) {
-        skill.enabled = existing.enabled;
-        skill.installedAt = existing.installedAt;
-      }
-
-      db.upsertSkill(skill);
-      loaded.push(skill);
-    } catch {
-      // Skip invalid skill files
     }
   }
 
-  // Return all enabled skills (includes DB-only skills not on disk)
-  return db.getSkills(true);
+  // DB inventory is durable across restart, but availability is not. Re-probe
+  // requirements every load so a removed binary/env var cannot remain active
+  // merely because the skill row survived in SQLite.
+  return db.getSkills(true).filter((skill) => checkRequirements(skill));
 }
 
 /**

@@ -3,6 +3,10 @@ import type {
   CapabilityRequest,
   CapabilityResolution,
 } from "./model.js";
+import {
+  capabilityStateOf,
+  isCapabilityVerifiedAvailable,
+} from "./model.js";
 import type { CapabilityRegistry } from "./registry.js";
 import type { EnvironmentSnapshot } from "../environments/types.js";
 
@@ -24,6 +28,24 @@ function supports(capability: CapabilityDescriptor, requirement: string): boolea
   return haystack.includes(needle);
 }
 
+function satisfiesRequest(
+  capability: CapabilityDescriptor,
+  request: CapabilityRequest,
+): boolean {
+  const requiredPermissions = request.requiredPermissions ?? [];
+  return supports(capability, request.requirement) &&
+    requiredPermissions.every((permission) =>
+      capability.permissions.includes(permission)
+    ) &&
+    (request.maxCostCents == null ||
+      capability.estimatedCostCents == null ||
+      capability.estimatedCostCents <= request.maxCostCents);
+}
+
+function statesOf(capabilities: CapabilityDescriptor[]): string[] {
+  return [...new Set(capabilities.map((capability) => capabilityStateOf(capability)))];
+}
+
 export class CapabilityResolver {
   constructor(private readonly registry: CapabilityRegistry) {}
 
@@ -31,18 +53,11 @@ export class CapabilityResolver {
     request: CapabilityRequest,
     environments: EnvironmentSnapshot[] = [],
   ): CapabilityResolution {
-    const requiredPermissions = request.requiredPermissions ?? [];
     const all = this.registry.list();
 
     const usable = all.filter((capability) =>
-      capability.available &&
-      supports(capability, request.requirement) &&
-      requiredPermissions.every((permission) =>
-        capability.permissions.includes(permission)
-      ) &&
-      (request.maxCostCents == null ||
-        capability.estimatedCostCents == null ||
-        capability.estimatedCostCents <= request.maxCostCents)
+      isCapabilityVerifiedAvailable(capability) &&
+      satisfiesRequest(capability, request)
     );
 
     const preferred = request.preferredEnvironment
@@ -58,9 +73,11 @@ export class CapabilityResolver {
         candidates: preferred,
         missingRequirements: [],
         rationale: request.preferredEnvironment
-          ? `An available capability satisfies the requirement in preferred environment "${request.preferredEnvironment}".`
-          : "An available registered capability satisfies the requirement.",
-        nextActions: ["Select the best candidate using current cost, evidence, and environment health."],
+          ? `A VERIFIED_AVAILABLE capability satisfies the requirement in preferred environment "${request.preferredEnvironment}".`
+          : "A VERIFIED_AVAILABLE registered capability satisfies the requirement.",
+        nextActions: [
+          "Select the best candidate using current cost, evidence, observation time, and environment health.",
+        ],
       };
     }
 
@@ -75,27 +92,85 @@ export class CapabilityResolver {
         candidates: usable,
         missingRequirements: [],
         rationale:
-          "The capability exists, but not in the preferred/current environment.",
+          "A verified capability exists, but not in the preferred/current environment.",
         nextActions: environmentsWithSupport.map(
-          (environment) => `Evaluate environment "${environment}" for this path.`,
+          (environment) => `Evaluate environment "${environment}" for this path using current evidence.`,
         ),
       };
     }
 
-    const unavailableButKnown = all.filter((capability) =>
-      !capability.available && supports(capability, request.requirement)
-    );
-    if (unavailableButKnown.length > 0) {
+    const known = all.filter((capability) => satisfiesRequest(capability, request));
+    if (known.length > 0) {
+      const prohibited = known.filter((capability) =>
+        capabilityStateOf(capability) === "prohibited"
+      );
+      const unauthorized = known.filter((capability) =>
+        capabilityStateOf(capability) === "unauthorized"
+      );
+      const probeable = known.filter((capability) =>
+        [
+          "discovered_unverified",
+          "acquired",
+          "probed",
+          "unknown",
+        ].includes(capabilityStateOf(capability))
+      );
+
+      if (prohibited.length === known.length) {
+        return {
+          kind: "blocked",
+          requirement: request.requirement,
+          candidates: prohibited,
+          missingRequirements: [request.requirement],
+          rationale:
+            "Known candidates for this route are explicitly PROHIBITED. That blocks this route, not necessarily the objective.",
+          nextActions: [
+            "Do not execute the prohibited route.",
+            "Evaluate a materially different legitimate provider, capability, or strategy.",
+          ],
+        };
+      }
+
+      if (unauthorized.length > 0 && unauthorized.length + prohibited.length === known.length) {
+        return {
+          kind: "blocked",
+          requirement: request.requirement,
+          candidates: known,
+          missingRequirements: [request.requirement],
+          rationale:
+            "Known candidates are currently UNAUTHORIZED or PROHIBITED; neither state is runtime availability.",
+          nextActions: [
+            "Obtain legitimate authorization where permitted, or select another provider/path.",
+            "Do not collapse authorization absence into impossibility.",
+          ],
+        };
+      }
+
+      if (probeable.length > 0) {
+        return {
+          kind: "probe",
+          requirement: request.requirement,
+          candidates: known,
+          missingRequirements: [request.requirement],
+          rationale:
+            `ABOS knows candidate capabilities, but none has current VERIFIED_AVAILABLE evidence. States: ${statesOf(known).join(", ")}.`,
+          nextActions: [
+            "Probe the most relevant candidate through its authoritative runtime/provider boundary.",
+            "Promote to VERIFIED_AVAILABLE only after current evidence supports the claim.",
+          ],
+        };
+      }
+
       return {
         kind: "acquire",
         requirement: request.requirement,
-        candidates: unavailableButKnown,
+        candidates: known,
         missingRequirements: [request.requirement],
         rationale:
-          "ABOS knows capabilities that satisfy the requirement, but they are not currently available.",
+          `Known capabilities are not currently usable. States: ${statesOf(known).join(", ")}.`,
         nextActions: [
-          "Determine the missing authorization, installation, configuration, or resource condition.",
-          "Acquire the capability legitimately or evaluate another provider.",
+          "Determine whether the missing condition is availability, degradation, installation, configuration, authorization, or retirement.",
+          "Restore/acquire legitimately or evaluate another provider without claiming success early.",
         ],
       };
     }
@@ -119,10 +194,10 @@ export class CapabilityResolver {
         candidates: partial,
         missingRequirements: [request.requirement],
         rationale:
-          "No single registered capability satisfies the requirement, but multiple partial capabilities may be composable.",
+          "No single verified registered capability satisfies the requirement, but multiple partial capabilities may be composable.",
         nextActions: [
           "Plan an explicit composition with compatible inputs/outputs.",
-          "Verify the composition against the objective before execution.",
+          "Probe every material dependency before presenting the composition as executable.",
         ],
       };
     }
@@ -137,15 +212,15 @@ export class CapabilityResolver {
 
     if (environmentHints.length > 0) {
       return {
-        kind: "acquire",
+        kind: "probe",
         requirement: request.requirement,
         candidates: environmentHints,
         missingRequirements: [request.requirement],
         rationale:
-          "An inspected environment advertises the required capability but it is not yet registered/available for the current path.",
+          "An inspected environment advertises the required capability, but the generic registry does not yet hold VERIFIED_AVAILABLE evidence for the current path.",
         nextActions: [
-          "Register or authorize the environment capability.",
-          "Re-evaluate after the environment state changes.",
+          "Project the authoritative environment observation into capability state.",
+          "Re-evaluate after current evidence is registered.",
         ],
       };
     }

@@ -316,7 +316,7 @@ export async function runAgentLoop(
   // Prime capability discovery once. Inspection failures are represented as
   // environment state (unavailable/unknown), never as a fatal agent-loop error.
   for (const snapshot of await environmentRegistry.inspectAll()) {
-    capabilityRegistry.registerMany(snapshot.capabilities);
+    capabilityRegistry.registerEnvironmentSnapshot(snapshot);
   }
 
   const capabilityTools = createCapabilityTools(

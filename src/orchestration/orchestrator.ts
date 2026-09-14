@@ -1342,7 +1342,7 @@ export class Orchestrator {
 
     if (this.params.capabilityRegistry) {
       for (const snapshot of environmentSnapshots) {
-        this.params.capabilityRegistry.registerMany(snapshot.capabilities);
+        this.params.capabilityRegistry.registerEnvironmentSnapshot(snapshot);
       }
     }
 

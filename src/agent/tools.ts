@@ -1015,7 +1015,7 @@ Model: ${ctx.inference.getDefaultModel()}
     // ── Self-Mod: Install MCP Server ──
     {
       name: "install_mcp_server",
-      description: "Install an MCP server to extend your capabilities.",
+      description: "Install an MCP server package and persist configuration. Runtime execution remains unverified until a real MCP adapter verifies handshake, tool discovery, and calls.",
       category: "self_mod",
       riskLevel: "dangerous",
       parameters: {
@@ -1048,9 +1048,14 @@ Model: ${ctx.inference.getDefaultModel()}
           id: ulid(),
           name: args.name as string,
           type: "mcp" as const,
-          config: args.config ? JSON.parse(args.config as string) : {},
+          config: {
+            ...(args.config ? JSON.parse(args.config as string) : {}),
+            runtimeTruth: "configured_unverified",
+          },
           installedAt: new Date().toISOString(),
-          enabled: true,
+          // `enabled` is the legacy runtime-loading gate. Configuration alone
+          // is not proof of a usable MCP protocol runtime.
+          enabled: false,
         };
 
         ctx.db.installTool(toolEntry);
@@ -1059,11 +1064,11 @@ Model: ${ctx.inference.getDefaultModel()}
           id: ulid(),
           timestamp: new Date().toISOString(),
           type: "mcp_install",
-          description: `Installed MCP server: ${args.name} (${pkg})`,
+          description: `Configured MCP server inventory (runtime unverified): ${args.name} (${pkg})`,
           reversible: true,
         });
 
-        return `MCP server installed: ${args.name}`;
+        return `MCP server package installed and configuration saved: ${args.name}. Runtime execution is UNVERIFIED and remains disabled until a verified MCP adapter is available.`;
       },
     },
 
@@ -1195,19 +1200,20 @@ Model: ${ctx.inference.getDefaultModel()}
     },
     {
       name: "list_skills",
-      description: "List all installed skills.",
+      description: "List installed skill inventory and administrative enablement. Enabled inventory is not proof of current runtime readiness.",
       category: "skills",
       riskLevel: "safe",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
         const skills = ctx.db.getSkills();
         if (skills.length === 0) return "No skills installed.";
-        return skills
+        const rows = skills
           .map(
             (s) =>
-              `${s.name} [${s.enabled ? "active" : "disabled"}] (${s.source}): ${s.description}`,
+              `${s.name} [${s.enabled ? "enabled-in-inventory" : "disabled"}] (${s.source}): ${s.description}`,
           )
           .join("\n");
+        return `Installed skill inventory (enabled is administrative state, not verified runtime readiness):\n${rows}`;
       },
     },
     {
@@ -3315,7 +3321,11 @@ export function loadInstalledTools(db: {
 }): AbosTool[] {
   try {
     const installed = db.getInstalledTools();
-    return installed.map((tool) => ({
+    // P-015 owns the real MCP runtime. Legacy/configured MCP rows must not
+    // become inference-callable tool surfaces merely because inventory says
+    // enabled. Keep them out until protocol-level evidence exists.
+    const runtimeEligible = installed.filter((tool) => tool.type !== "mcp");
+    return runtimeEligible.map((tool) => ({
       name: tool.name,
       description: `Installed tool: ${tool.name}`,
       category: (tool.type === "mcp" ? "conway" : "vm") as ToolCategory,
@@ -3342,8 +3352,12 @@ function createInstalledToolExecutor(tool: {
 }): AbosTool["execute"] {
   return async (args, ctx) => {
     if (tool.type === "mcp") {
-      // MCP tools would be executed via MCP protocol
-      return `MCP tool ${tool.name} invoked with args: ${JSON.stringify(args)}`;
+      // Defense in depth. loadInstalledTools() filters nominal MCP inventory,
+      // but a future accidental direct call must still fail closed rather
+      // than report a fake invocation as success.
+      throw new Error(
+        `MCP tool ${tool.name} is configured but no verified MCP runtime adapter is available.`,
+      );
     }
     // Generic installed tool — execute via sandbox shell if command is configured
     const command = tool.config?.command as string | undefined;

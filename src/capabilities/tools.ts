@@ -2,6 +2,7 @@ import type { AbosTool } from "../types.js";
 import type { CapabilityRegistry } from "./registry.js";
 import { CapabilityResolver } from "./resolver.js";
 import type { EnvironmentRegistry } from "../environments/registry.js";
+import { capabilityStateOf } from "./model.js";
 
 export function createCapabilityTools(
   registry: CapabilityRegistry,
@@ -11,8 +12,8 @@ export function createCapabilityTools(
     {
       name: "resolve_capability",
       description:
-        "Resolve a required capability across registered tools, skills, services, and execution environments. " +
-        "Returns whether to use existing capability, change environment, acquire, compose, or construct.",
+        "Resolve a required capability across registered tools, skills, services, and execution environments using current evidence. " +
+        "Returns whether to use existing capability, change environment, probe, wait for authorization, acquire, compose, or construct.",
       category: "capability",
       riskLevel: "safe",
       parameters: {
@@ -39,7 +40,7 @@ export function createCapabilityTools(
 
         const snapshots = await environments.inspectAll();
         for (const snapshot of snapshots) {
-          registry.registerMany(snapshot.capabilities);
+          registry.registerEnvironmentSnapshot(snapshot);
         }
 
         const resolution = new CapabilityResolver(registry).resolve(
@@ -64,7 +65,11 @@ export function createCapabilityTools(
             type: candidate.type,
             provider: candidate.provider,
             environment: candidate.environment,
+            state: capabilityStateOf(candidate),
             available: candidate.available,
+            observedAt: candidate.observedAt ?? null,
+            authority: candidate.authority ?? null,
+            evidence: candidate.evidence ?? [],
             description: candidate.description,
           })),
         });
@@ -73,7 +78,7 @@ export function createCapabilityTools(
     {
       name: "inspect_environments",
       description:
-        "Inspect registered execution environments and report real current availability, constraints, and advertised capabilities.",
+        "Inspect registered execution environments and report current evidence-backed availability, constraints, and capability states.",
       category: "environment",
       riskLevel: "safe",
       parameters: {
@@ -83,20 +88,27 @@ export function createCapabilityTools(
       execute: async () => {
         const snapshots = await environments.inspectAll();
         for (const snapshot of snapshots) {
-          registry.registerMany(snapshot.capabilities);
+          registry.registerEnvironmentSnapshot(snapshot);
         }
         return JSON.stringify(
           snapshots.map((snapshot) => ({
             id: snapshot.id,
             label: snapshot.label,
             availability: snapshot.availability,
+            observedAt: snapshot.observedAt,
             constraints: snapshot.constraints,
             evidence: snapshot.evidence,
-            capabilities: snapshot.capabilities.map((capability) => ({
-              id: capability.id,
-              description: capability.description,
-              available: capability.available,
-            })),
+            capabilities: snapshot.capabilities.map((capability) => {
+              const projected = registry.get(capability.id);
+              return {
+                id: capability.id,
+                description: capability.description,
+                state: projected ? capabilityStateOf(projected) : "unknown",
+                available: projected?.available ?? false,
+                authority: projected?.authority ?? null,
+                evidence: projected?.evidence ?? snapshot.evidence,
+              };
+            }),
           })),
         );
       },

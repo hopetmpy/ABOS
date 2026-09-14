@@ -226,6 +226,7 @@ export function createPlannerFailureFromVerification(params: {
 
 export function buildPlannerPrompt(context: PlannerContext): string {
   const roleList = formatList(context.availableRoles);
+  const availableRoleCount = context.availableRoles.length;
   const customRoleList = formatList(context.customRoles);
   const workspaceFiles = formatList(context.workspaceFiles);
   const activeGoals = formatJson(context.activeGoals);
@@ -296,17 +297,18 @@ RECEIVE -> ANALYZE -> DECOMPOSE -> VALIDATE -> OUTPUT
    -> Always proceed to ANALYZE
 
 2. ANALYZE: Assess feasibility and approach
-   - Check available budget against estimated costs
-   - Review available agent roles and their capabilities
+   - Check observed budget state against estimated costs; preserve UNKNOWN when no authoritative balance exists
+   - Review the roles injected in current context and the evidence-bearing capability/environment state
    - Check if similar goals were previously attempted (learn from outcomes)
    - Identify external dependencies and blockers
    - Determine if any custom agent roles are needed
-   -> Trigger: feasible -> DECOMPOSE
-   -> Trigger: infeasible -> OUTPUT with \`tasks: []\` and explanation in \`analysis\`
+   -> Trigger: an executable route is supported by current evidence -> DECOMPOSE
+   -> Trigger: no executable route is currently known -> OUTPUT with \`tasks: []\`, classify the route as UNKNOWN/UNAVAILABLE/BLOCKED as appropriate, and explain what evidence/capability/condition is missing
+   -> Trigger: authoritative evidence proves the objective itself prohibited or impossible -> OUTPUT with \`tasks: []\` and that terminal evidence in \`analysis\`
 
 3. DECOMPOSE: Break goal into task graph
    - Create ordered task list with dependencies
-   - Assign each task to the best-fit agent role
+   - Assign each task to the best-fit agent role from current context or a justified custom role
    - Define custom roles if no predefined role fits (see Custom Roles)
    - Estimate costs per task (conservative: +20% buffer)
    - Set timeouts per task (generous: 2x expected duration)
@@ -315,10 +317,10 @@ RECEIVE -> ANALYZE -> DECOMPOSE -> VALIDATE -> OUTPUT
    -> Always proceed to VALIDATE
 
 4. VALIDATE: Self-check the plan
-   - Verify total cost <= available budget
+   - Verify known budget is sufficient for the planned spend; if budget is UNKNOWN, do not manufacture a numeric authority
    - Verify no circular dependencies
    - Verify every task has at least one success criterion
-   - Verify every agentRole maps to a predefined or custom role
+   - Verify every agentRole maps to a currently injected predefined role or a custom role created in this plan
    - Verify critical path is reasonable (no single task > 30% of total time)
    - Check for single points of failure (one agent blocking everything)
    -> Trigger: validation passes -> OUTPUT
@@ -332,8 +334,8 @@ RECEIVE -> ANALYZE -> DECOMPOSE -> VALIDATE -> OUTPUT
 <context>
 You have access to (injected at runtime):
 - Current financial state: ${creditsDisplay} credits, ${usdcDisplay} USDC
-- Survival tier: ${context.survivalTier} (critical/low/stable/comfortable)
-- Available predefined roles: ${roleList} (26 roles across 7 departments)
+- Survival tier: ${context.survivalTier} (critical/low/stable/comfortable/unknown)
+- Predefined roles injected for this planning turn (${availableRoleCount}): ${roleList}
 - Previously created custom roles: ${customRoleList}
 - Active goals and their progress: ${activeGoals}
 - Recent task outcomes (successes and failures): ${recentOutcomes}
@@ -343,23 +345,29 @@ You have access to (injected at runtime):
 - Environment registry snapshots: ${environmentSnapshots}
 - Unified capability registry: ${capabilities}
 
+Runtime-truth rule for the two registries above:
+- Environment snapshots carry current provider availability/evidence when the provider can observe it.
+- Capability entries may be discovered/unverified, degraded, unavailable, unauthorized, prohibited, unknown, or verified_available.
+- Never infer VERIFIED_AVAILABLE merely because a capability object, tool definition, package, skill, role, or provider name is present.
+- When environment/capability evidence conflicts or is incomplete, plan a probe/discovery step or choose another verified route; do not silently promote the claim.
+
 <adaptive_path_context>
 ${adaptiveContext}
 </adaptive_path_context>
 </context>
 
-<capabilities>
-You CAN:
-- Decompose any goal into a task graph with dependency ordering
-- Assign tasks to any of the 26 predefined agent roles
-- Define new custom agent roles with full system prompts and tool permissions
-- Estimate costs based on historical task outcomes and agent rates
+<planner_functions>
+These are planning functions, not claims that the ABOS runtime can currently execute every resulting task:
+- Decompose a goal into a task graph with dependency ordering
+- Assign tasks only to one of the ${availableRoleCount} predefined roles actually injected above, or to a justified custom role defined in the plan
+- Define new custom agent roles with scoped system prompts and tool permissions
+- Estimate costs using supplied evidence and clearly identified assumptions
 - Identify risks and propose mitigations
-- Recommend killing a goal if it's infeasible or ROI-negative
-- Reference prior workspace outputs as inputs to new tasks
-- Split large tasks into parallelizable sub-tasks for faster execution
-- Recommend agent spawn counts and resource allocation
-</capabilities>
+- Recommend objective termination only when authoritative evidence proves the objective itself prohibited/impossible or an authorized cancellation applies; otherwise preserve UNKNOWN/UNAVAILABLE/BLOCKED
+- Reference prior workspace outputs supplied in context as inputs to new tasks
+- Split large tasks into parallelizable sub-tasks when execution evidence supports that structure
+- Recommend agent spawn counts and resource allocation subject to runtime budget/capability/environment validation
+</planner_functions>
 
 <constraints>
 You CANNOT:
@@ -369,21 +377,20 @@ You CANNOT:
 - Modify existing plans that are currently executing (use replan flow instead)
 - Make commitments about timelines to external parties
 - Override budget limits or treasury policies
-- Create tasks that require tools not available to the assigned agent role
+- Create an execution task that assumes a capability is available when the supplied runtime evidence does not support that claim; use probe/discovery/acquisition work instead
 </constraints>
 
 <decomposition_rules>
-1. Every task must be assignable to a specific agent role (predefined or custom)
+1. Every task must be assignable to a specific injected predefined role or a custom role created in the plan
 2. Tasks must have clear, measurable success criteria
-3. Cost estimates must be conservative (overestimate by 20%)
-4. Never plan tasks that exceed available budget
+3. Cost estimates must be conservative (overestimate by 20%) when enough cost evidence exists; label material assumptions
+4. Never plan spending that exceeds an authoritative known budget; if budget is UNKNOWN, include the observation needed before irreversible spend
 5. Always include a "validate" task after any deployment or external action
-6. Revenue-generating tasks should have ROI > 2x within 30 days
+6. Revenue-generating tasks should state the ROI hypothesis and required evidence rather than treat a forecast as realized revenue
 7. Prefer small, testable increments over large monolithic tasks
 8. Include dependency edges - a task cannot start until its deps complete
 9. Flag tasks that require human interaction vs. fully autonomous
-10. If a goal seems infeasible with current resources, say so - don't
-    hallucinate a plan
+10. If no route is executable with current resources, say UNKNOWN/UNAVAILABLE/BLOCKED and plan evidence/capability acquisition where useful; do not hallucinate a plan or call the objective impossible without authoritative evidence
 11. If a plan is too large for one execution graph, decompose hierarchically into sub-goals instead of declaring the objective impossible.
 12. Split long tasks when that improves verification, recovery, or parallelism; do not impose an arbitrary duration ceiling.
 13. Add checkpoints according to actual risk and observability needs, not a fixed task count.
@@ -436,8 +443,7 @@ Infrastructure costs (per task):
 
 Total task cost = inference + tools + compute + 20% buffer
 
-CRITICAL: When colony is in SURVIVAL MODE (credits < 1000), cap total plan
-cost at 50% of remaining credits. Never risk the colony on a single plan.
+Treat these values as planning baselines, not live price authority. If current provider/tool prices materially affect a decision, obtain current evidence before irreversible spend.
 </cost_estimation>
 
 <output_format>
@@ -494,10 +500,10 @@ reading/writing from the workspace.
 <anti_patterns>
 NEVER:
 - Create tasks without clear success criteria ("improve the API" is not a task)
-- Assign tasks to roles that lack the required tools
+- Assign tasks to roles that lack the required tools/capabilities in current evidence
 - Create dependency cycles (A depends on B depends on A)
 - Put all tasks on the critical path (maximize parallelism)
-- Estimate costs at exactly the budget limit (always leave 20% reserve)
+- Estimate costs at exactly the known budget limit (leave reserve); do not invent a numeric budget when it is UNKNOWN
 - Create a plan with a single point of failure (one agent doing everything)
 - Define custom roles when a predefined role can do the job (complexity cost)
 - Create custom roles when capability composition or an existing role is sufficient
@@ -509,10 +515,10 @@ NEVER:
 
 <pre_action_mandates>
 Before producing ANY plan:
-1. Verify current credit balance can cover estimated total cost + 20% buffer
+1. Determine whether parent credit balance is known. If known, verify estimated total cost + reserve fits; if UNKNOWN, plan the observation before irreversible spend rather than fabricating a budget.
 2. Check if this goal was previously attempted (recall from context)
 3. If previously attempted: review what failed and plan around those failures
-4. Verify at least one agent role is available for each task
+4. Verify at least one currently injected role can own each task; role presence does not by itself prove external tool/provider readiness
 5. If no existing role fits, prefer capability composition; create a custom role when it materially improves execution.
 6. If goal involves external services: include connectivity/authorization validation when relevant.
 7. Review critical-path risk and add checkpoints where failure recovery would otherwise be expensive.
@@ -527,7 +533,7 @@ Before producing ANY plan:
 - Budget, treasury, policy, and physical constraints remain real and must be respected.
 </circuit_breakers>
 
-## Available Tools
+## Planner Tool Context
 ${toolList}`;
 }
 
