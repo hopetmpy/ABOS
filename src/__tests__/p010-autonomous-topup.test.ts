@@ -145,7 +145,7 @@ describe("P-010 autonomous topup judgment", () => {
       `SELECT decision, lifecycle_state, execution_state
        FROM policy_decisions
        WHERE tool_name = 'topup_credits'
-       ORDER BY timestamp DESC
+       ORDER BY created_at DESC
        LIMIT 1`,
     ).get() as {
       decision: string;
