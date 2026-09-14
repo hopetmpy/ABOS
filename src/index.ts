@@ -73,7 +73,7 @@ Usage:
   abos --status       Show current abos status
   abos --execute-task-file <path>  Execute one Task envelope and emit TaskResult
   abos --version      Show version
-  abos --help         Show this help
+  abos --help         Show help
 
 Environment:
   CONWAY_API_URL           Conway API URL (default: https://api.conway.tech)
@@ -280,7 +280,7 @@ Sandbox:    ${config.sandboxId}
 State:      ${state}
 Turns:      ${turnCount}
 Tools:      ${tools.length} installed
-Skills:     ${skills.length} active
+Skills:     ${skills.length} enabled in inventory
 Heartbeats: ${heartbeats.filter((h) => h.enabled).length} active
 Children:   ${children.filter((c) => c.status !== "dead").length} alive / ${children.length} total
 Agent ID:   ${registry?.agentId || "not registered"}
