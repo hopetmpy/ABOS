@@ -60,6 +60,7 @@ describe("CapabilityResolver", () => {
       environment: "local",
       available: true,
       state: "verified_available",
+      observedAt: "2026-09-13T23:00:00.000Z",
       evidence: ["service health probe passed"],
     });
 
@@ -83,6 +84,7 @@ describe("CapabilityResolver", () => {
       environment: "aws",
       available: true,
       state: "verified_available",
+      observedAt: "2026-09-13T23:00:00.000Z",
       evidence: ["AWS STS verified and provider probe passed"],
     });
 
