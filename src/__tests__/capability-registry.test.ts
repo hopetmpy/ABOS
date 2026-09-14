@@ -34,6 +34,26 @@ describe("CapabilityRegistry", () => {
     expect(registry.findSupporting("python")).toEqual([]);
   });
 
+  it("rejects verified_available when evidence or observation time is missing", () => {
+    const registry = new CapabilityRegistry();
+    registry.register({
+      id: "claimed:python",
+      type: "cli",
+      provider: "test",
+      description: "Unsubstantiated verified claim",
+      requirements: ["python"],
+      permissions: [],
+      available: true,
+      state: "verified_available",
+      evidence: [],
+    });
+
+    const capability = registry.get("claimed:python")!;
+    expect(capability.available).toBe(false);
+    expect(capabilityStateOf(capability)).toBe("probed");
+    expect(registry.findSupporting("python")).toEqual([]);
+  });
+
   it("projects a current available environment observation into verified capability truth", () => {
     const registry = new CapabilityRegistry();
     registry.registerEnvironmentSnapshot({
