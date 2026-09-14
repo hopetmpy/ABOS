@@ -19,6 +19,7 @@ on:
       - src/__tests__/p010-creator-rotation.test.ts
       - src/__tests__/policy-engine.test.ts
       - src/__tests__/financial.test.ts
+      - src/__tests__/authority-rules.test.ts
       - src/__tests__/heartbeat.test.ts
       - src/__tests__/runtime-truth-policy.test.ts
       - src/__tests__/chain.test.ts
@@ -49,6 +50,6 @@ jobs:
       - name: Typecheck
         run: pnpm run typecheck
       - name: Targeted P-010 policy tests
-        run: pnpm exec vitest run src/__tests__/policy-lifecycle-p010.test.ts src/__tests__/p010-authorization-followup.test.ts src/__tests__/p010-creator-rotation.test.ts src/__tests__/policy-engine.test.ts src/__tests__/financial.test.ts src/__tests__/heartbeat.test.ts src/__tests__/runtime-truth-policy.test.ts src/__tests__/chain.test.ts src/__tests__/authority-provenance.test.ts src/__tests__/agent/general-harness.test.ts src/__tests__/loop.test.ts src/__tests__/adaptive-schema.test.ts src/__tests__/continuity-assembler.test.ts
+        run: pnpm exec vitest run src/__tests__/policy-lifecycle-p010.test.ts src/__tests__/p010-authorization-followup.test.ts src/__tests__/p010-creator-rotation.test.ts src/__tests__/policy-engine.test.ts src/__tests__/financial.test.ts src/__tests__/authority-rules.test.ts src/__tests__/heartbeat.test.ts src/__tests__/runtime-truth-policy.test.ts src/__tests__/chain.test.ts src/__tests__/authority-provenance.test.ts src/__tests__/agent/general-harness.test.ts src/__tests__/loop.test.ts src/__tests__/adaptive-schema.test.ts src/__tests__/continuity-assembler.test.ts
       - name: Full test suite
         run: pnpm test
