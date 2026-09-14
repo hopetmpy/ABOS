@@ -167,6 +167,23 @@ describe("Authority Rules", () => {
       expect(decision.reasonCode).toBe("EXTERNAL_DANGEROUS_TOOL");
     });
 
+    it("blocks destructive tools from explicit external input", () => {
+      const rules = createAuthorityRules();
+      const engine = new PolicyEngine(db, rules);
+
+      const tool = createMockTool({
+        name: "delete_sandbox",
+        riskLevel: "dangerous",
+        category: "conway",
+      });
+      const request = createRequest(tool, {}, "external");
+
+      const decision = engine.evaluate(request);
+      expect(decision.action).toBe("deny");
+      expect(decision.reasonCode).toBe("EXTERNAL_DANGEROUS_TOOL");
+      expect(decision.authorityLevel).toBe("external");
+    });
+
     it("blocks spawn_child from heartbeat input", () => {
       const rules = createAuthorityRules();
       const engine = new PolicyEngine(db, rules);

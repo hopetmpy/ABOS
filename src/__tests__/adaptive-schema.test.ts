@@ -11,7 +11,7 @@ describe("adaptive + environment schema migration", () => {
     const dbPath = path.join(dir, "state.db");
     const db = createDatabase(dbPath);
     try {
-      expect(SCHEMA_VERSION).toBe(14);
+      expect(SCHEMA_VERSION).toBe(15);
 
       const adaptiveNames = db.raw.prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'adaptive_%' ORDER BY name",

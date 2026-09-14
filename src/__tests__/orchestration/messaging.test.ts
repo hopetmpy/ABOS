@@ -21,6 +21,9 @@ function createTestDb(options?: { address?: string; recipients?: string[] }): {
   raw.exec("ALTER TABLE inbox_messages ADD COLUMN status TEXT DEFAULT 'received';");
   raw.exec("ALTER TABLE inbox_messages ADD COLUMN retry_count INTEGER DEFAULT 0;");
   raw.exec("ALTER TABLE inbox_messages ADD COLUMN max_retries INTEGER DEFAULT 3;");
+  raw.exec("ALTER TABLE inbox_messages ADD COLUMN transport TEXT NOT NULL DEFAULT 'legacy_unknown';");
+  raw.exec("ALTER TABLE inbox_messages ADD COLUMN sender_verification TEXT NOT NULL DEFAULT 'unknown';");
+  raw.exec("ALTER TABLE inbox_messages ADD COLUMN transport_sender TEXT;");
 
   const address = options?.address ?? "0xself";
   const recipients = options?.recipients ?? [];
@@ -99,8 +102,8 @@ function makeMessage(overrides: Partial<AgentMessage> = {}): AgentMessage {
   return {
     id: overrides.id ?? "msg-1",
     type: overrides.type ?? "alert",
-    from: overrides.from ?? "0xsender",
-    to: overrides.to ?? "0xreceiver",
+    from: overrides.from ?? "0xfrom",
+    to: overrides.to ?? "0xself",
     goalId: overrides.goalId ?? null,
     taskId: overrides.taskId ?? null,
     content: overrides.content ?? "payload",

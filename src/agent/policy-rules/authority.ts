@@ -39,7 +39,11 @@ function deny(
  * Check if an input source represents external (non-agent) authority.
  */
 function isExternalSource(inputSource: string | undefined): boolean {
-  return inputSource === undefined || inputSource === "heartbeat";
+  return (
+    inputSource === undefined ||
+    inputSource === "heartbeat" ||
+    inputSource === "external"
+  );
 }
 
 /**

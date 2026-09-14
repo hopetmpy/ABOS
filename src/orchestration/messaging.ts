@@ -111,9 +111,11 @@ export class LocalDBTransport implements MessageTransport {
     const id = ulid();
     const fromAddress = this.db.getIdentity("address") ?? "unknown";
     this.db.raw.prepare(
-      `INSERT INTO inbox_messages (id, from_address, to_address, content, received_at, status)
-       VALUES (?, ?, ?, ?, datetime('now'), 'received')`,
-    ).run(id, fromAddress, to, envelope);
+      `INSERT INTO inbox_messages (
+         id, from_address, to_address, content, received_at,
+         transport, sender_verification, transport_sender, status
+       ) VALUES (?, ?, ?, ?, datetime('now'), 'local_db', 'local_trusted', ?, 'received')`,
+    ).run(id, fromAddress, to, envelope, fromAddress);
   }
 
   getRecipients(): string[] {
@@ -500,6 +502,11 @@ function toInboxMessage(row: InboxMessageRow): InboxMessage {
     signedAt: row.receivedAt,
     createdAt: row.receivedAt,
     replyTo: row.replyTo ?? undefined,
+    provenance: {
+      transport: row.transport,
+      senderVerification: row.senderVerification,
+      transportSender: row.transportSender ?? undefined,
+    },
   };
 }
 
@@ -515,11 +522,38 @@ function parseInboundMessage(row: InboxMessage): AgentMessage {
   validateMessage(candidate);
 
   const msg = candidate as AgentMessage;
+  bindMessageIdentityToTransport(row, msg);
   if (msg.expiresAt && Date.parse(msg.expiresAt) < Date.now()) {
     throw new Error("message is expired");
   }
 
   return msg;
+}
+
+function bindMessageIdentityToTransport(
+  inbox: InboxMessage,
+  message: AgentMessage,
+): void {
+  const observedSender =
+    inbox.provenance?.transportSender ?? inbox.from;
+  if (!sameObservedIdentity(message.from, observedSender)) {
+    throw new Error(
+      `message.from does not match transport sender: inner=${message.from}, outer=${observedSender}`,
+    );
+  }
+
+  if (inbox.to && !sameObservedIdentity(message.to, inbox.to)) {
+    throw new Error(
+      `message.to does not match transport recipient: inner=${message.to}, outer=${inbox.to}`,
+    );
+  }
+}
+
+function sameObservedIdentity(left: string, right: string): boolean {
+  if (left.startsWith("0x") && right.startsWith("0x")) {
+    return left.toLowerCase() === right.toLowerCase();
+  }
+  return left === right;
 }
 
 function validateMessage(message: unknown): asserts message is AgentMessage {
