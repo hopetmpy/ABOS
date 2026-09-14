@@ -187,6 +187,10 @@ export function planAutonomousTopup(params: {
  * through the policy-governed `topup_credits` tool. It rejects non-canonical
  * tiers and caps the x402 payment at exactly the requested tier so a server
  * cannot turn a valid topup request into a larger payment.
+ *
+ * Once an x402 attempt has begun, failure is exceptional rather than a
+ * successful string result. That lets executeTool persist EFFECT_FAILED instead
+ * of falsely recording a failed financial effect as succeeded.
  */
 export async function topupCredits(
   apiUrl: string,
@@ -218,12 +222,9 @@ export async function topupCredits(
   );
 
   if (!result.success) {
-    logger.error(`Credit topup failed: ${result.error}`);
-    return {
-      success: false,
-      amountUsd,
-      error: result.error || `HTTP ${result.status}`,
-    };
+    const detail = result.error || `HTTP ${result.status}`;
+    logger.error(`Credit topup failed: ${detail}`);
+    throw new Error(`Credit topup failed: ${detail}`);
   }
 
   const creditsCentsAdded = typeof result.response === "object"
