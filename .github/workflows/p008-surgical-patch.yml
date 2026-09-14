@@ -24,7 +24,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -35,8 +34,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Apply guarded exact replacements
-        shell: python
+        shell: bash
         run: |
+          python - <<'PY'
           from pathlib import Path
 
           def replace_exact(path: str, old: str, new: str, label: str) -> None:
@@ -195,6 +195,7 @@ jobs:
               raise SystemExit("nominal MCP false-success string still present")
           if '${s.enabled ? "active" : "disabled"}' in tools_text:
               raise SystemExit("list_skills still labels DB enablement as active")
+          PY
 
       - name: Typecheck
         run: pnpm run typecheck
@@ -220,5 +221,3 @@ jobs:
           git rm .github/workflows/p008-surgical-patch.yml
           git commit -m "fix(runtime-truth): close nominal MCP exposure and preserve environment evidence"
           git push origin HEAD:abos/p008-runtime-truth-v1
-
-# Triggered after CI 34795241873 isolated exactly three P-008 runtime-truth failures.
