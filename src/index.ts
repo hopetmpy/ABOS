@@ -99,7 +99,7 @@ Environment:
     const encoded = Buffer.from(JSON.stringify(result), "utf8").toString("base64");
     // Stable transport marker for provider adapters. A semantic Task failure is
     // still a successfully transported TaskResult and therefore exits normally.
-    process.stdout.write(`ABOS_TASK_RESULT_BASE64=${encoded}\n`);
+    process.stdout.write(`ABOS_TASK_RESULT_BASE64=${encoded}\\n`);
     process.exit(0);
   }
 
