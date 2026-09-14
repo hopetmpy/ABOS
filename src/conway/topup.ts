@@ -4,7 +4,7 @@
  * Converts USDC to Conway credits via the x402 payment protocol.
  *
  * - Runtime payment authority: the policy-governed `topup_credits` tool.
- * - Startup/heartbeat/sandbox recovery may request a topup, but never pay.
+ * - Automatic callers plan from observed need, then re-enter that protected tool.
  * - The exact selected tier is also the x402 maximum payment cap.
  *
  * Endpoint: GET /pay/{amountUsd}/{walletAddress}
@@ -28,6 +28,132 @@ export interface TopupResult {
   amountUsd: number;
   creditsCentsAdded?: number;
   error?: string;
+}
+
+export type AutonomousTopupReason =
+  | "TOPUP_NEEDED"
+  | "SUFFICIENT_CREDITS"
+  | "EVIDENCE_UNAVAILABLE"
+  | "INSUFFICIENT_USDC"
+  | "NEED_EXCEEDS_SUPPORTED_TIERS"
+  | "EVM_PAYMENT_UNAVAILABLE";
+
+export interface AutonomousTopupPlan {
+  action: "topup" | "none";
+  reasonCode: AutonomousTopupReason;
+  rationale: string;
+  creditsCents: number;
+  targetCreditsCents: number;
+  deficitCents: number;
+  availableUsdcUsd: number;
+  amountUsd?: number;
+}
+
+/**
+ * Produce the smallest provider-supported purchase that closes a demonstrated
+ * credit gap. This is deliberately not a universal treasury optimizer: P-030
+ * owns commitments, contingency, runway and reinvestment. P-010 only prevents
+ * the bootstrap path from either over-buying or requiring a human merely
+ * because money is involved.
+ *
+ * The planner never treats a percentage of wallet balance as a spending goal.
+ * It also refuses to manufacture a decision when balance evidence is invalid.
+ */
+export function planAutonomousTopup(params: {
+  creditsCents: number;
+  availableUsdcUsd: number;
+  targetCreditsCents?: number;
+  requiredCreditsCents?: number;
+  chainType?: ChainType;
+}): AutonomousTopupPlan {
+  const {
+    creditsCents,
+    availableUsdcUsd,
+    targetCreditsCents = 500,
+    requiredCreditsCents,
+    chainType = "evm",
+  } = params;
+
+  const evidenceValid =
+    Number.isFinite(creditsCents) &&
+    creditsCents >= 0 &&
+    Number.isFinite(availableUsdcUsd) &&
+    availableUsdcUsd >= 0 &&
+    Number.isFinite(targetCreditsCents) &&
+    targetCreditsCents >= 0 &&
+    (requiredCreditsCents === undefined ||
+      (Number.isFinite(requiredCreditsCents) && requiredCreditsCents >= 0));
+
+  const observedCredits = evidenceValid ? Math.floor(creditsCents) : 0;
+  const observedUsdc = evidenceValid ? availableUsdcUsd : 0;
+  const target = evidenceValid
+    ? Math.max(
+        Math.floor(targetCreditsCents),
+        requiredCreditsCents === undefined ? 0 : Math.floor(requiredCreditsCents),
+      )
+    : 0;
+  const deficitCents = evidenceValid ? Math.max(0, target - observedCredits) : 0;
+
+  const base = {
+    creditsCents: observedCredits,
+    targetCreditsCents: target,
+    deficitCents,
+    availableUsdcUsd: observedUsdc,
+  };
+
+  if (!evidenceValid) {
+    return {
+      ...base,
+      action: "none",
+      reasonCode: "EVIDENCE_UNAVAILABLE",
+      rationale: "Observed credit/USDC evidence is invalid; do not spend from invented values.",
+    };
+  }
+
+  if (chainType === "solana") {
+    return {
+      ...base,
+      action: "none",
+      reasonCode: "EVM_PAYMENT_UNAVAILABLE",
+      rationale: "The current x402 topup route requires an EVM signing identity.",
+    };
+  }
+
+  if (deficitCents === 0) {
+    return {
+      ...base,
+      action: "none",
+      reasonCode: "SUFFICIENT_CREDITS",
+      rationale: "Observed credits already satisfy the demonstrated target.",
+    };
+  }
+
+  const selectedTier = TOPUP_TIERS.find((tier) => tier * 100 >= deficitCents);
+  if (selectedTier === undefined) {
+    return {
+      ...base,
+      action: "none",
+      reasonCode: "NEED_EXCEEDS_SUPPORTED_TIERS",
+      rationale: `Demonstrated deficit ${deficitCents} cents exceeds the largest supported single topup tier. Replan instead of underfunding silently.`,
+    };
+  }
+
+  if (observedUsdc < selectedTier) {
+    return {
+      ...base,
+      action: "none",
+      reasonCode: "INSUFFICIENT_USDC",
+      rationale: `Smallest tier that closes the demonstrated gap is $${selectedTier}, but observed USDC is $${observedUsdc.toFixed(2)}.`,
+    };
+  }
+
+  return {
+    ...base,
+    action: "topup",
+    reasonCode: "TOPUP_NEEDED",
+    amountUsd: selectedTier,
+    rationale: `Buy the smallest supported tier ($${selectedTier}) that closes the demonstrated ${deficitCents}-cent credit gap.`,
+  };
 }
 
 /**
@@ -90,9 +216,9 @@ export async function topupCredits(
 }
 
 /**
- * Sandbox recovery may diagnose the required tier, but must not hide a money
- * movement inside `spawn_child`. The caller receives a non-success result and
- * the agent must explicitly invoke `topup_credits`, which re-enters PolicyEngine.
+ * Sandbox recovery diagnoses the required tier but does not hide a second
+ * financial effect inside `spawn_child`. The autonomous agent can replan into
+ * policy-governed `topup_credits` and then retry the original objective.
  */
 export async function topupForSandbox(params: {
   apiUrl: string;
@@ -116,25 +242,38 @@ export async function topupForSandbox(params: {
   const deficitCents = (requiredCents != null && currentCents != null)
     ? Math.max(0, requiredCents - currentCents)
     : TOPUP_TIERS[0] * 100;
-  const selectedTier = TOPUP_TIERS.find((tier) => tier * 100 >= deficitCents)
-    ?? TOPUP_TIERS[TOPUP_TIERS.length - 1];
+  const selectedTier = TOPUP_TIERS.find((tier) => tier * 100 >= deficitCents);
   const chainNote = chainType === "solana"
     ? " Solana identities cannot sign the EVM x402 payment path."
     : "";
 
+  if (selectedTier === undefined) {
+    const maxTier = TOPUP_TIERS[TOPUP_TIERS.length - 1];
+    logger.warn(
+      `Sandbox recovery deficit ${deficitCents} cents exceeds the largest single topup tier ($${maxTier}); replanning required.`,
+    );
+    return {
+      success: false,
+      amountUsd: maxTier,
+      error: `Sandbox credit deficit exceeds the largest supported single topup tier; replan instead of assuming a partial topup is sufficient.${chainNote}`,
+    };
+  }
+
   logger.info(
-    `Sandbox recovery requires explicit policy-governed topup_credits (suggested tier $${selectedTier}).`,
+    `Sandbox recovery can replan through policy-governed topup_credits (suggested tier $${selectedTier}).`,
   );
   return {
     success: false,
     amountUsd: selectedTier,
-    error: `Automatic sandbox topup disabled; request topup_credits explicitly before retrying spawn_child.${chainNote}`,
+    error: `Replan into topup_credits for $${selectedTier} before retrying spawn_child; no hidden payment was executed.${chainNote}`,
   };
 }
 
 /**
- * Startup/heartbeat bootstrap is notification-only. It may signal that the
- * minimum tier is needed, but it cannot initiate an x402 payment on its own.
+ * Compatibility signal used by heartbeat while the agent is asleep. Heartbeat
+ * may detect need and wake the autonomous agent, but it does not bypass policy
+ * by signing a payment itself. Canonical startup uses planAutonomousTopup and
+ * executes the resulting topup through PolicyEngine.
  */
 export async function bootstrapTopup(params: {
   apiUrl: string;
@@ -151,11 +290,11 @@ export async function bootstrapTopup(params: {
     ? " Solana identities cannot sign the EVM x402 payment path."
     : "";
   logger.info(
-    `Bootstrap topup requires explicit policy-governed topup_credits (minimum tier $${minTier}).`,
+    `Bootstrap signal requests autonomous policy-governed topup_credits (minimum tier $${minTier}).`,
   );
   return {
     success: false,
     amountUsd: minTier,
-    error: `Automatic bootstrap topup disabled; request topup_credits explicitly.${chainNote}`,
+    error: `Autonomous topup requires the policy-governed topup_credits execution path.${chainNote}`,
   };
 }
