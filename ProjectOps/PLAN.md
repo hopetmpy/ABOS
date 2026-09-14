@@ -19,8 +19,8 @@ Master-Transformation-Plan: P-007
 | P-007 | Consolidar programa maestro de transformación integral ABOS | HECHO | P-001 + P-002 + auditoría 2026-09-13; no implementa product source | plan/P-007.md |
 | P-008 | Alinear Runtime Truth y capability claims con evidencia real | HECHO | integrado por PR #34; main `1a2a5482...` CI + ProjectOps Integrity green | plan/P-008.md |
 | P-009 | Corregir Authority, Provenance y trust boundaries end-to-end | HECHO | integrado por PR #35; main `b9dbf144...` CI `34800425589` + ProjectOps `34800425594` green | plan/P-009.md |
-| P-010 | Hacer real Policy, Authorization, Approval y Quarantine lifecycle | EN_EJECUCIÓN | P-009 HECHO; C0006 activa sobre main `b9dbf144...` | plan/P-010.md |
-| P-011 | Hacer reales Lifecycle, Health, Restart y Recovery | PLANIFICADO | P-009 + P-010 | plan/P-011.md |
+| P-010 | Hacer real Policy, Authorization, Approval y Quarantine lifecycle | HECHO | integrado por PR #36; main `f42c9bd1...` CI `34909182700` + ProjectOps `34909182692` green | plan/P-010.md |
+| P-011 | Hacer reales Lifecycle, Health, Restart y Recovery | EN_EJECUCIÓN | P-009 + P-010 HECHO; C0007 activa | plan/P-011.md |
 | P-012 | Convertir self-modification en transacción segura y recuperable | PLANIFICADO | P-009 + P-010 + P-011; evidence P-013 | plan/P-012.md |
 | P-013 | Unificar Observability, Audit y Evidence Fabric | PLANIFICADO | P-008 + P-009; se extiende durante la campaña | plan/P-013.md |
 | P-014 | Consolidar Capability Fabric canónico y lifecycle de capacidades | PLANIFICADO | P-008 + P-009 + P-010 + P-013 | plan/P-014.md |
@@ -79,7 +79,7 @@ Cada bloque puede poseer componentes especializados, pero debe conservar una aut
 1. **P-006 — HECHO**: security-audit restaurado sin debilitar gate e integrado en `main` por PR #32.
 2. **P-003 — HECHO**: child capital semantics reconciliadas por PR #33, integradas y revalidadas en `main`.
 
-La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth y P-009 Authority/Provenance cerraron las primeras fronteras de Ola 1. P-010 es la intervención activa.
+La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth, P-009 Authority/Provenance y P-010 Policy/Authorization cerraron las primeras fronteras de Ola 1. P-011 Lifecycle/Recovery es la intervención activa.
 
 ### Ola 1 — verdad, autoridad y recovery
 
@@ -225,11 +225,13 @@ P-004 puede corregir drift puntual antes, pero su cierre final ocurre después d
 
 P-005 es un track incremental: Codex OAuth real, AWS billable, MCP/provider externo, economic/child/resource claims y futuras fronteras que requieran E5/E6. No toda capability local requiere E5: una computer/browser E4 realista puede cerrar integración local. Si falta autorización/credencial/dinero, registrar `LIVE_BLOCKED_EXTERNAL` y continuar source.
 
-## 16. Ola 0 cerrada; P-010 activo
+## 16. Ola 0 cerrada; P-011 activo
 
-P-006 y P-003 están HECHO e integrados con revalidación de `main`. P-007 permanece HECHO únicamente como planificación maestra. P-008 Runtime Truth está HECHO e integrado/revalidado. P-009 Authority/Provenance está HECHO, integrado por PR #35 y revalidado en `main` `b9dbf14409d6ee45de6009e33f79146233878065` con CI `34800425589` y ProjectOps `34800425594` SUCCESS. La siguiente frontera activa es P-010 Policy/Authorization/Approval/Quarantine; sus consumidores posteriores no se adelantan antes de resolver su lifecycle real.
+P-006 y P-003 están HECHO e integrados con revalidación de `main`. P-007 permanece HECHO únicamente como planificación maestra. P-008 Runtime Truth está HECHO e integrado/revalidado. P-009 Authority/Provenance está HECHO e integrado por PR #35. P-010 Policy/Authorization/Approval/Quarantine está HECHO, integrado por PR #36 y revalidado en `main` `f42c9bd1d884c74a59d505ddd4c711e93b1aca8e` con CI `34909182700` y ProjectOps `34909182692` SUCCESS. La siguiente frontera activa es P-011 Lifecycle/Health/Restart/Recovery.
 
-P-010 incluye una revisión adversarial material: creator-signed authorization sigue siendo una capability válida para fronteras reales, pero ya no se considera diseño general de gasto autónomo por threshold. El cierre de P-010 debe preservar una ruta explícita/auditable para autonomía económica futura sin restaurar hidden auto-spend.
+P-010 cerró una revisión adversarial material: creator-signed authorization sigue siendo una capability válida para fronteras reales, pero no es diseño general de gasto autónomo por threshold. La frontera integrada preserva una ruta explícita/auditable para autonomía económica futura sin hidden auto-spend.
+
+P-011 inicia en `AUDIT_REQUIRED`: antes de source debe reconstruir producers/consumers de lifecycle, health, restart y recovery, preservar `execution_state=unknown` de P-010 y alcanzar DECISION_READY en C0007.
 
 ## 17. Cierre de campaña
 
@@ -237,4 +239,4 @@ P-036 no significa “todo el universo futuro de ABOS está terminado”. Signif
 
 ## 18. Siguiente trabajo recuperable
 
-`P-010 — Hacer real Policy, Authorization, Approval y Quarantine lifecycle`.
+`P-011 — Hacer reales Lifecycle, Health, Restart y Recovery`.
