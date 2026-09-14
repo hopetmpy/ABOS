@@ -15,6 +15,7 @@ const gitBlobSha=content=>{const b=Buffer.from(content,"utf8");return createHash
 const requireBlob=(path,expected)=>{const actual=gitBlobSha(read(path));if(actual!==expected)fail(`${path} blob drift: expected ${expected}, got ${actual}`)};
 const field=(content,name)=>{const m=content.match(new RegExp(`^${name}:\\s*(.+)$`,"m"));if(!m)fail(`manifest field missing: ${name}`);return m[1].trim()};
 const stateOf=content=>{const m=content.match(/^State:\s*(.+)$/m);if(!m)fail("plan module missing State");return m[1].trim()};
+const validPlanStates=new Set(["ABIERTO","EN_EJECUCIÓN","PARCIAL","BLOQUEADO","HECHO","DESCARTADO","PLANIFICADO"]);
 
 const p={
   agents:"AGENTS.md",
@@ -137,13 +138,17 @@ const rows=new Map();
 for(const m of plan.matchAll(/^\|\s*(P-\d{3})\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|\s*(plan\/[^|\s]+\.md)\s*\|$/gm)){
   const [,id,title,state,deps,modulePath]=m;
   if(rows.has(id))fail(`duplicate PLAN id: ${id}`);
+  const normalizedState=state.trim();
+  if(!validPlanStates.has(normalizedState))fail(`${id} has invalid state: ${normalizedState}`);
   const full=`ProjectOps/${modulePath}`; requirePath(full);
-  if(stateOf(read(full))!==state.trim())fail(`${id} manifest/module state mismatch`);
-  rows.set(id,{title:title.trim(),state:state.trim(),deps:deps.trim(),modulePath});
+  if(stateOf(read(full))!==normalizedState)fail(`${id} manifest/module state mismatch`);
+  rows.set(id,{title:title.trim(),state:normalizedState,deps:deps.trim(),modulePath});
 }
 for(let n=1;n<=5;n++){const id=`P-${String(n).padStart(3,"0")}`;if(!rows.has(id))fail(`PLAN missing ${id}`)}
 if(!rows.has(activePlan))fail(`active plan ${activePlan} missing from PLAN`);
-if(rows.get("P-001").state!=="HECHO"||rows.get("P-002").state!=="HECHO"||rows.get("P-003").state!=="PARCIAL")fail("P-001/P-002/P-003 state contract mismatch");
+if(rows.get("P-001").state!=="HECHO"||rows.get("P-002").state!=="HECHO")fail("P-001/P-002 foundation state contract mismatch");
+const activeState=rows.get(activePlan).state;
+if(!new Set(["ABIERTO","EN_EJECUCIÓN","PARCIAL","BLOQUEADO","PLANIFICADO"]).has(activeState))fail(`active plan ${activePlan} has non-active state: ${activeState}`);
 
 for(const [id,needle] of [
   ["P-001","Reconstruir identidad, baseline, autoridades y plan ABOS"],

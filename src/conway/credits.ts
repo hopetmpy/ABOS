@@ -29,6 +29,29 @@ export async function checkFinancialState(
 }
 
 /**
+ * Determine whether a successful HTTP transfer response represents an accepted
+ * transfer rather than an explicit provider-side rejection.
+ *
+ * Conway may return forward-compatible positive/intermediate statuses such as
+ * submitted or processing, so this deliberately rejects explicit negative
+ * semantics instead of imposing a closed allowlist of success states.
+ */
+export function isCreditTransferAccepted(status: string): boolean {
+  const normalized = status.trim().toLowerCase();
+  if (!normalized) return false;
+
+  return ![
+    "fail",
+    "error",
+    "reject",
+    "declin",
+    "cancel",
+    "denied",
+    "invalid",
+  ].some((marker) => normalized.includes(marker));
+}
+
+/**
  * Determine the survival tier based on current credits.
  * Thresholds are checked in descending order: high > normal > low_compute > critical > dead.
  *

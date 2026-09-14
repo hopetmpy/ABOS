@@ -171,23 +171,20 @@ function readCachedBalance(db: Database): { creditsCents?: number; usdcBalance?:
 async function resolveCreditsCents(
   options: PlannerContextOptions,
   cachedCreditsCents?: number,
-): Promise<number> {
+): Promise<number | null> {
   if (typeof options.creditsCents === "number" && Number.isFinite(options.creditsCents)) {
     return Math.max(0, Math.floor(options.creditsCents));
   }
 
-  if (options.funding && options.identityAddress) {
-    try {
-      const balance = await options.funding.getBalance(options.identityAddress);
-      if (Number.isFinite(balance)) {
-        return Math.max(0, Math.floor(balance));
-      }
-    } catch {
-      // Fall back to cached or default balances.
-    }
+  // FundingProtocol describes child funding/balance observation. It is not a
+  // parent-wallet balance authority, so do not query it with identityAddress.
+  // A fresh explicit observation wins; otherwise use a valid cached parent
+  // observation. If neither exists, preserve UNKNOWN instead of manufacturing 0.
+  if (typeof cachedCreditsCents === "number" && Number.isFinite(cachedCreditsCents)) {
+    return Math.max(0, Math.floor(cachedCreditsCents));
   }
 
-  return Math.max(0, Math.floor(cachedCreditsCents ?? 0));
+  return null;
 }
 
 function resolveUsdcBalance(options: PlannerContextOptions, cachedUsdcBalance?: number): number {
@@ -200,7 +197,10 @@ function resolveUsdcBalance(options: PlannerContextOptions, cachedUsdcBalance?: 
     : 0;
 }
 
-function toSurvivalTier(creditsCents: number): string {
+function toSurvivalTier(creditsCents: number | null): string {
+  if (creditsCents === null) {
+    return "unknown";
+  }
   if (creditsCents <= 0) {
     return "critical";
   }

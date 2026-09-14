@@ -54,7 +54,7 @@ export interface PlannedTask {
 }
 
 export interface PlannerContext {
-  creditsCents: number;
+  creditsCents: number | null;
   usdcBalance: number;
   survivalTier: string;
   availableRoles: string[];
@@ -236,7 +236,9 @@ export function buildPlannerPrompt(context: PlannerContext): string {
   const adaptiveContext = context.adaptiveContext?.trim() || "No adaptive path history exists for this goal yet.";
   const environmentSnapshots = formatJson(context.environmentSnapshots ?? []);
   const capabilities = formatJson(context.capabilities ?? []);
-  const creditsDisplay = `${context.creditsCents} cents`;
+  const creditsDisplay = context.creditsCents === null
+    ? "UNKNOWN (no current parent credit observation)"
+    : `${context.creditsCents} cents`;
   const usdcDisplay = Number.isFinite(context.usdcBalance) ? String(context.usdcBalance) : "0";
 
   return `# Planner Agent

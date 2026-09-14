@@ -307,7 +307,7 @@ export class HealthMonitor {
   private async getCreditBalance(address: string): Promise<number | null> {
     try {
       const balance = await this.funding.getBalance(address);
-      if (!Number.isFinite(balance)) {
+      if (typeof balance !== "number" || !Number.isFinite(balance)) {
         return null;
       }
       return Math.max(0, Math.floor(balance));
@@ -321,7 +321,16 @@ export class HealthMonitor {
   }
 
   private async fundAgent(agent: AgentHealthStatus): Promise<HealAction> {
-    const currentBalance = agent.creditBalance ?? 0;
+    if (agent.creditBalance === null) {
+      return {
+        type: "fund",
+        agentAddress: agent.address,
+        reason: "child credit balance is unknown; refusing automatic funding without an observed low balance",
+        success: false,
+      };
+    }
+
+    const currentBalance = agent.creditBalance;
     const amountCents = Math.max(
       FUND_MIN_TRANSFER_CENTS,
       FUND_TOPUP_TARGET_CENTS - currentBalance,

@@ -5,8 +5,11 @@ import type {
   ChildStatus,
   ConwayClient,
 } from "../types.js";
+import { isCreditTransferAccepted } from "../conway/credits.js";
+import { createLogger } from "../observability/logger.js";
 import type { AgentTracker, FundingProtocol } from "./types.js";
 
+const logger = createLogger("orchestration.simple-tracker");
 const IDLE_STATUSES = new Set<ChildStatus>(["running", "healthy"]);
 
 export class SimpleAgentTracker implements AgentTracker {
@@ -131,24 +134,55 @@ export class SimpleFundingProtocol implements FundingProtocol {
       return { success: true };
     }
 
+    let result;
     try {
-      const result = await this.conway.transferCredits(
+      result = await this.conway.transferCredits(
         childAddress,
         transferAmount,
         "Task funding from orchestrator",
       );
-
-      const success = isTransferSuccessful(result.status);
-      if (success) {
-        this.db.raw.prepare(
-          "UPDATE children SET funded_amount_cents = funded_amount_cents + ? WHERE address = ?",
-        ).run(transferAmount, childAddress);
-      }
-
-      return { success };
     } catch {
       return { success: false };
     }
+
+    if (!isCreditTransferAccepted(result.status)) {
+      return { success: false };
+    }
+
+    try {
+      const persistAllocation = this.db.raw.transaction(() => {
+        this.db.raw.prepare(
+          "UPDATE children SET funded_amount_cents = funded_amount_cents + ? WHERE address = ?",
+        ).run(transferAmount, childAddress);
+
+        this.db.raw.prepare(
+          `INSERT INTO transactions
+           (id, type, amount_cents, balance_after_cents, description)
+           VALUES (?, 'capital_allocation', ?, ?, ?)`,
+        ).run(
+          ulid(),
+          transferAmount,
+          result.balanceAfterCents ?? null,
+          `Allocate task working capital to child ${childAddress}`,
+        );
+      });
+      persistAllocation();
+    } catch (error) {
+      // The external transfer has already succeeded. Returning false here could
+      // make an orchestrator retry the irreversible transfer and double-fund the
+      // child. Preserve the external success and surface the local evidence gap.
+      logger.error(
+        "Child funding transferred but local capital ledger persistence failed",
+        error instanceof Error ? error : undefined,
+        {
+          childAddress,
+          transferAmount,
+          transferId: result.transferId,
+        },
+      );
+    }
+
+    return { success: true };
   }
 
   async recallCredits(childAddress: string): Promise<{
@@ -156,9 +190,12 @@ export class SimpleFundingProtocol implements FundingProtocol {
     amountCents: number;
     reason?: string;
   }> {
+    const row = this.db.raw
+      .prepare("SELECT funded_amount_cents FROM children WHERE address = ?")
+      .get(childAddress) as { funded_amount_cents: number } | undefined;
     const trackedAllocation = Math.max(
       0,
-      Math.floor(await this.getBalance(childAddress)),
+      Math.floor(row?.funded_amount_cents ?? 0),
     );
 
     if (trackedAllocation === 0) {
@@ -180,26 +217,15 @@ export class SimpleFundingProtocol implements FundingProtocol {
     };
   }
 
-  // TODO: The Conway API only exposes getCreditsBalance() for the calling agent's own
-  // balance. There is no API to query a child agent's balance remotely. This method
-  // returns the locally tracked funded_amount_cents as an upper-bound estimate.
-  // This is an approximation — the child may have spent credits on inference since
-  // funding. When the Conway API adds per-agent balance queries, replace this with
-  // a direct API call. Alternatively, child agents could report their balance via
-  // messaging (status_report with credit_balance field).
-  async getBalance(childAddress: string): Promise<number> {
-    const row = this.db.raw
-      .prepare("SELECT funded_amount_cents FROM children WHERE address = ?")
-      .get(childAddress) as { funded_amount_cents: number } | undefined;
-
-    return row?.funded_amount_cents ?? 0;
+  /**
+   * The parent Conway client cannot query a child wallet's credit balance by
+   * address. children.funded_amount_cents is historical parent bookkeeping,
+   * not an observed child balance, so UNKNOWN must remain null.
+   *
+   * A future FundingProtocol with a child-authorized/provider-native balance
+   * observation may return a number without changing the orchestration contract.
+   */
+  async getBalance(_childAddress: string): Promise<number | null> {
+    return null;
   }
-}
-
-function isTransferSuccessful(status: string): boolean {
-  const normalized = status.trim().toLowerCase();
-  return normalized.length > 0
-    && !normalized.includes("fail")
-    && !normalized.includes("error")
-    && !normalized.includes("reject");
 }
