@@ -219,6 +219,8 @@ function createMinimumReserveRule(policy: TreasuryPolicy): PolicyRule {
       }
       const hourlySpend = spendTracker.getHourlySpend("transfer");
       const dailySpend = spendTracker.getDailySpend("transfer");
+      void hourlySpend;
+      void dailySpend;
 
       // This rule is a declaration — actual balance checking
       // requires the async getCreditsBalance call which happens
@@ -256,25 +258,31 @@ function createTurnTransferLimitRule(policy: TreasuryPolicy): PolicyRule {
 }
 
 /**
- * Return 'quarantine' (not deny) for transfer amounts above
- * requireConfirmationAboveCents. This is a soft limit requiring confirmation.
+ * Quarantine creator-sensitive financial effects above the configured
+ * confirmation threshold. Transfers express cents directly; topup_credits
+ * expresses canonical USD tiers and is converted to cents here.
  */
 function createRequireConfirmationRule(policy: TreasuryPolicy): PolicyRule {
   return {
     id: "financial.require_confirmation",
-    description: `Quarantine transfers above ${policy.requireConfirmationAboveCents} cents for confirmation`,
+    description: `Quarantine creator-sensitive financial actions above ${policy.requireConfirmationAboveCents} cents for confirmation`,
     priority: 500,
-    appliesTo: { by: "name", names: ["transfer_credits"] },
+    appliesTo: { by: "name", names: ["transfer_credits", "topup_credits"] },
     evaluate(request: PolicyRequest): PolicyRuleResult | null {
-      const amount = request.args.amount_cents as number | undefined;
+      const amount = request.tool.name === "topup_credits"
+        ? typeof request.args.amount_usd === "number"
+          ? request.args.amount_usd * 100
+          : undefined
+        : request.args.amount_cents as number | undefined;
       if (amount === undefined) return null;
 
       if (amount > policy.requireConfirmationAboveCents) {
+        const label = request.tool.name === "topup_credits" ? "Topup" : "Transfer";
         return {
           rule: "financial.require_confirmation",
           action: "quarantine",
           reasonCode: "CONFIRMATION_REQUIRED",
-          humanMessage: `Transfer of ${amount} cents ($${(amount / 100).toFixed(2)}) exceeds confirmation threshold of ${policy.requireConfirmationAboveCents} cents ($${(policy.requireConfirmationAboveCents / 100).toFixed(2)})`,
+          humanMessage: `${label} of ${amount} cents ($${(amount / 100).toFixed(2)}) exceeds confirmation threshold of ${policy.requireConfirmationAboveCents} cents ($${(policy.requireConfirmationAboveCents / 100).toFixed(2)})`,
         };
       }
 
