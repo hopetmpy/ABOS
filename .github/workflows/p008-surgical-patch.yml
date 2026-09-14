@@ -49,4 +49,4 @@ jobs:
           git commit -m "fix(runtime-truth): close nominal MCP exposure and preserve environment evidence"
           git push origin HEAD:abos/p008-runtime-truth-v1
 
-# Trigger after exact source needles were reconciled from run 34795758027 evidence.
+# Trigger after correcting the MCP audit-description exact-match indentation from run 34795890338.
