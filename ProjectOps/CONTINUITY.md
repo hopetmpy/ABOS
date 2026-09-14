@@ -4,7 +4,7 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-010
 Active-Segment: continuity/C0006.md
-Active-Intervention: P010_POLICY_AUTH_APPROVAL_QUARANTINE_LIFECYCLE — EN_EJECUCIÓN
+Active-Intervention: P010_POLICY_AUTH_APPROVAL_QUARANTINE_LIFECYCLE — READY_FOR_INTEGRATION
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -13,8 +13,8 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p010-policy-approval-lifecycle-v1
 Host-Head-At-Audit-Open: b9dbf14409d6ee45de6009e33f79146233878065
-Last-Reconciled-Host-Head: b9dbf14409d6ee45de6009e33f79146233878065
-Last-Reconciled-Head-Semantics: P009_HECHO_MAIN_GREEN_P010_AUDIT_ACTIVE
+Last-Reconciled-Host-Head: 78c02002eabd1abdeb5f5d1ee5f409d65500065b
+Last-Reconciled-Head-Semantics: P010_SOURCE_BRANCH_GREEN_READY_FOR_INTEGRATION
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -51,12 +51,18 @@ P009-Final-Branch-ProjectOps: 34800214797 SUCCESS
 P009-Merge: b9dbf14409d6ee45de6009e33f79146233878065
 P009-Main-CI: 34800425589 SUCCESS
 P009-Main-ProjectOps: 34800425594 SUCCESS
+P010-Source-Head: 78c02002eabd1abdeb5f5d1ee5f409d65500065b
+P010-Branch-CI: 34908128854 SUCCESS
+P010-Branch-ProjectOps: 34908128816 SUCCESS
+P010-Core-Validate: 34908129031 SUCCESS
 
 ## Semántica del HEAD reconciliado
 
-`Last-Reconciled-Host-Head` es el `main` exacto que integra P-009 por PR #35 y que fue revalidado por CI + ProjectOps Integrity. P-009 queda HECHO únicamente para su objetivo exacto: authority/provenance/trust boundaries. No eleva Social inbound a autenticación criptográfica LIVE; `relay_asserted` sigue siendo el máximo claim demostrado en esa frontera.
+`Last-Reconciled-Host-Head` es el source head exacto P-010 que implementa la frontera durable de policy/authorization y que fue validado por CI + ProjectOps + P010 Core Validate. P-010 permanece EN_EJECUCIÓN hasta su integración/revalidación en `main`; `READY_FOR_INTEGRATION` no equivale a HECHO.
 
-P-010 se activa desde ese `main` ya verde. Su rama y C0006 registran auditoría/interrogación antes de cualquier cambio productivo; EN_EJECUCIÓN no implica que policy/approval/quarantine ya hayan sido corregidos.
+P-009 permanece HECHO únicamente para su objetivo exacto: authority/provenance/trust boundaries. No eleva Social inbound a autenticación criptográfica LIVE; `relay_asserted` sigue siendo el máximo claim demostrado en esa frontera.
+
+P-010 conserva provenance P-009 y extiende la misma `PolicyEngine`/`policy_decisions` en vez de crear una autoridad paralela. Su branch gate demuestra E3/source local, no autorización/provider LIVE E5/E6.
 
 ## Estado canónico
 
@@ -69,7 +75,7 @@ P-010 se activa desde ese `main` ya verde. Su rama y C0006 registran auditoría/
 - P-007: HECHO — programa maestro P-008..P-036 consolidado.
 - P-008: HECHO — Runtime Truth integrado y revalidado.
 - P-009: HECHO — Authority/Provenance/trust boundaries integrados por PR #35 y revalidados sobre `main` `b9dbf144...`.
-- P-010: EN_EJECUCIÓN — Policy/Authorization/Approval/Quarantine lifecycle; auditoría C0006 activa, source aún no modificado bajo esta intervención.
+- P-010: EN_EJECUCIÓN / READY_FOR_INTEGRATION — source branch implementado y verde; falta PR exact-head, merge y revalidación de `main` antes de HECHO.
 - P-011..P-036: ver `ProjectOps/PLAN.md`; permanecen en su estado explícito.
 
 ## P-009 — cierre verificable
@@ -103,21 +109,50 @@ Claims no demostrados por P-009:
 - policy/approval/quarantine lifecycle P-010;
 - cualquier fase posterior.
 
-## P-010 — apertura
+## P-010 — branch listo para integración
 
-Baseline: `main` `b9dbf14409d6ee45de6009e33f79146233878065`, CI y ProjectOps verdes.
+Baseline de activación: `main` `b9dbf14409d6ee45de6009e33f79146233878065`, CI y ProjectOps verdes.
 
-Objetivo: convertir policy de clasificación parcial en una autoridad runtime consistente para allow/deny/authorization/confirmation/quarantine/resume/expiry, preservando provenance P-009 y evitando ejecutar side effects antes del gate.
+Source head validado: `78c02002eabd1abdeb5f5d1ee5f409d65500065b`.
 
-La primera tarea es auditoría completa de producers/consumers/persistence/continuations y failure matrix de P-010. No hay `DECISION_READY` ni source change P-010 todavía.
+Resultado material:
+- schema v16 extiende `policy_decisions` con lifecycle durable;
+- policy execution fail-closed y desacoplada de SpendTracker;
+- creator-signed approve/revoke EVM/Solana con exact scope, expiry, revocation/cancellation y one-shot claim;
+- creator rotation invalida stale authorization scope;
+- execution outcomes distinguen running/succeeded/failed/unknown y evitan retry ciego de efectos no resueltos;
+- CLI usa la misma DB/authority canónica, sin approval store paralelo;
+- `send_message` usa validación chain-aware;
+- rate-limit usa evidencia causal de ejecución;
+- topup x402 queda limitado al tier exacto decidido;
+- startup/heartbeat/in-loop/sandbox recovery entran por un bridge protegido hacia `executeTool → PolicyEngine` y no reintroducen hidden auto-spend;
+- auto-topup mínimo compra sólo el tier más pequeño que cubre necesidad demostrada, no exige creator approval por monto fijo y no duplica P-025/P-030/P-031.
+
+Evidencia de branch:
+- ProjectOps Integrity `34908128816`: SUCCESS;
+- CI `34908128854`: SUCCESS, incluyendo Node 22/24, Windows 22/24, public distribution, security y rebrand;
+- P010 Core Validate `34908129031`: SUCCESS, incluyendo typecheck, targeted P-010 policy tests y full suite.
+
+Claims no demostrados todavía:
+- E5 creator/provider LIVE real;
+- exactly-once externo cuando el provider no lo demuestra;
+- integración/revalidación de P-010 en `main`.
 
 ## Límites / bloqueos actuales
 
 - clone/container local: NO DISPONIBLE por resolución DNS previamente observada; no se repite ciegamente.
 - GitHub connector + GitHub Actions: DISPONIBLE / AUTORIZADO.
 - CI/E3 no acredita LIVE/E5/E6.
-- El ajuste puntual de baseline schema v15 en `PROJECT.md`/verifier acompaña el cierre P-009; P-004 permanece PLANIFICADO y no se declara cerrado.
+- El ajuste puntual de baseline schema v16 en `PROJECT.md` acompaña P-010; P-004 permanece PLANIFICADO y no se declara cerrado.
+
+## Siguiente punto verificable
+
+1. Gatear el head documental exacto.
+2. Abrir PR P-010 exact-head contra `main`.
+3. Verificar mergeability, reviews/threads y ausencia de drift.
+4. Merge protegido.
+5. Revalidar exact `main` por CI + ProjectOps; sólo entonces declarar P-010 HECHO / INTEGRATION_VERIFIED.
 
 ## Política de rotación
 
-`C0005` queda CLOSED / HECHO como historia P-009. `C0006` es el segmento activo de P-010. Nunca se crea un segundo manifest `CONTINUITY.md`.
+`C0005` queda CLOSED / HECHO como historia P-009. `C0006` permanece segmento activo hasta que P-010 complete integración y cierre. Nunca se crea un segundo manifest `CONTINUITY.md`.
