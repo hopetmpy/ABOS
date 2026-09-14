@@ -6,7 +6,7 @@ on:
       - abos/p010-policy-approval-lifecycle-v1
     paths:
       - .github/workflows/p010-core-apply.yml
-      - scripts/p010-core-apply-v2.py
+      - scripts/p010-core-apply-v3.py
 
 permissions:
   contents: write
@@ -24,14 +24,14 @@ jobs:
           node-version: '22'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Apply guarded P-010 core v2 patch
-        run: python3 scripts/p010-core-apply-v2.py
+      - name: Apply guarded P-010 core v3 patch
+        run: python3 scripts/p010-core-apply-v3.py
       - name: ProjectOps integrity
         run: node scripts/projectops-integrity-verify.mjs
       - name: Typecheck
         run: pnpm run typecheck
       - name: Targeted P-010 policy tests
-        run: pnpm exec vitest run src/__tests__/policy-lifecycle-p010.test.ts src/__tests__/policy-engine.test.ts src/__tests__/runtime-truth-policy.test.ts src/__tests__/chain.test.ts
+        run: pnpm exec vitest run src/__tests__/policy-lifecycle-p010.test.ts src/__tests__/policy-engine.test.ts src/__tests__/runtime-truth-policy.test.ts src/__tests__/chain.test.ts src/__tests__/authority-provenance.test.ts src/__tests__/agent/general-harness.test.ts src/__tests__/loop.test.ts src/__tests__/adaptive-schema.test.ts src/__tests__/continuity-assembler.test.ts
       - name: Full test suite
         run: pnpm test
       - name: Commit productive patch
@@ -51,8 +51,14 @@ jobs:
             src/agent/tools.ts \
             src/agent/loop.ts \
             src/agent/policy-rules/financial.ts \
+            src/agent/harnesses/general-harness.ts \
             src/__tests__/policy-lifecycle-p010.test.ts \
             src/__tests__/policy-engine.test.ts \
+            src/__tests__/authority-provenance.test.ts \
+            src/__tests__/agent/general-harness.test.ts \
+            src/__tests__/loop.test.ts \
+            src/__tests__/adaptive-schema.test.ts \
+            src/__tests__/continuity-assembler.test.ts \
             ProjectOps/PROJECT.md \
             ProjectOps/plan/P-010.md \
             scripts/projectops-integrity-verify.mjs
