@@ -2,7 +2,7 @@
  * Rate Limit Policy Rules
  *
  * Enforces rate limits on sensitive operations to prevent abuse.
- * Queries the policy_decisions table to count recent operations.
+ * Counts causal execution evidence rather than pre-effect allow decisions.
  */
 
 import type {
@@ -20,10 +20,14 @@ function deny(
 }
 
 /**
- * Count recent policy decisions for a tool within a time window.
- * Uses the policy_decisions table which logs all tool evaluations.
+ * Count recent operations with evidence that an effect ran or may have run.
+ *
+ * v16 rows count running/succeeded/unknown execution states. A known failed
+ * execution is not counted because the effect is known not to have succeeded.
+ * Migrated legacy rows have no execution evidence, so their historical
+ * decision='allow' semantics are preserved conservatively.
  */
-function countRecentDecisions(
+function countRecentExecutions(
   db: import("better-sqlite3").Database,
   toolName: string,
   windowMs: number,
@@ -34,7 +38,15 @@ function countRecentDecisions(
   const row = db
     .prepare(
       `SELECT COUNT(*) as count FROM policy_decisions
-       WHERE tool_name = ? AND decision = 'allow' AND created_at >= ?`,
+       WHERE tool_name = ?
+         AND created_at >= ?
+         AND (
+           (lifecycle_state = 'legacy' AND decision = 'allow')
+           OR (
+             lifecycle_state <> 'legacy'
+             AND execution_state IN ('running', 'succeeded', 'unknown')
+           )
+         )`,
     )
     .get(toolName, cutoffStr) as { count: number };
   return row.count;
@@ -50,14 +62,11 @@ function createGenesisPromptDailyRule(): PolicyRule {
     priority: 600,
     appliesTo: { by: "name", names: ["update_genesis_prompt"] },
     evaluate(request: PolicyRequest): PolicyRuleResult | null {
-      // Access the raw database through the tool context
-      // The db is available via context.db, but we need the raw sqlite instance
-      // Rate limit rules need the raw DB to query policy_decisions
       const db = (request.context.db as any)?.raw ?? (request.context as any).rawDb;
       if (!db) return deny(this.id, "DB_UNAVAILABLE", "Rate limit check failed: database not accessible");
 
       const oneDayMs = 24 * 60 * 60 * 1000;
-      const recentCount = countRecentDecisions(db, "update_genesis_prompt", oneDayMs);
+      const recentCount = countRecentExecutions(db, "update_genesis_prompt", oneDayMs);
 
       if (recentCount >= 1) {
         return deny(
@@ -86,7 +95,7 @@ function createSelfModHourlyRule(): PolicyRule {
       if (!db) return deny(this.id, "DB_UNAVAILABLE", "Rate limit check failed: database not accessible");
 
       const oneHourMs = 60 * 60 * 1000;
-      const recentCount = countRecentDecisions(db, "edit_own_file", oneHourMs);
+      const recentCount = countRecentExecutions(db, "edit_own_file", oneHourMs);
 
       if (recentCount >= 10) {
         return deny(
@@ -115,7 +124,7 @@ function createSpawnDailyRule(): PolicyRule {
       if (!db) return deny(this.id, "DB_UNAVAILABLE", "Rate limit check failed: database not accessible");
 
       const oneDayMs = 24 * 60 * 60 * 1000;
-      const recentCount = countRecentDecisions(db, "spawn_child", oneDayMs);
+      const recentCount = countRecentExecutions(db, "spawn_child", oneDayMs);
 
       if (recentCount >= 3) {
         return deny(
