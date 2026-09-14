@@ -12,6 +12,23 @@ function unique(values: Array<string | undefined>): string[] {
   return [...new Set(values.filter((value): value is string => Boolean(value)))];
 }
 
+function hasValidObservation(value: string | null | undefined): boolean {
+  return typeof value === "string" && value.trim().length > 0 && Number.isFinite(Date.parse(value));
+}
+
+function normalizeClaimState(capability: CapabilityDescriptor): CapabilityState {
+  const requestedState = capabilityStateOf(capability);
+  if (requestedState !== "verified_available") return requestedState;
+
+  const hasEvidence = (capability.evidence ?? []).some((entry) => entry.trim().length > 0);
+  if (!hasEvidence || !hasValidObservation(capability.observedAt)) {
+    // A producer may have executed a probe, but without evidence + observation
+    // time the generic registry cannot truthfully advertise current availability.
+    return "probed";
+  }
+  return requestedState;
+}
+
 function environmentCapabilityState(
   snapshot: EnvironmentSnapshot,
   capability: CapabilityDescriptor,
@@ -30,7 +47,7 @@ export class CapabilityRegistry {
   private readonly entries = new Map<string, CapabilityDescriptor>();
 
   register(capability: CapabilityDescriptor): void {
-    const state = capabilityStateOf(capability);
+    const state = normalizeClaimState(capability);
     this.entries.set(capability.id, {
       ...capability,
       state,
