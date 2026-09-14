@@ -22,58 +22,32 @@ replace_exact(
 
 replace_exact(
     tools,
-    '''        const { ulid } = await import("ulid");
-          const toolEntry = {
-            id: ulid(),
-            name: args.name as string,
-            type: "mcp" as const,
-            config: args.config ? JSON.parse(args.config as string) : {},
-            installedAt: new Date().toISOString(),
-            enabled: true,
-          };
+    '''          config: args.config ? JSON.parse(args.config as string) : {},
+          installedAt: new Date().toISOString(),
+          enabled: true,''',
+    '''          config: {
+            ...(args.config ? JSON.parse(args.config as string) : {}),
+            runtimeTruth: "configured_unverified",
+          },
+          installedAt: new Date().toISOString(),
+          // `enabled` is the legacy runtime-loading gate. Configuration alone
+          // is not proof of a usable MCP protocol runtime.
+          enabled: false,''',
+    "builtin MCP runtime state",
+)
 
-          ctx.db.installTool(toolEntry);
+replace_exact(
+    tools,
+    '            description: `Installed MCP server: ${args.name} (${pkg})`,',
+    '            description: `Configured MCP server inventory (runtime unverified): ${args.name} (${pkg})`,',
+    "builtin MCP audit description",
+)
 
-          ctx.db.insertModification({
-            id: ulid(),
-            timestamp: new Date().toISOString(),
-            type: "mcp_install",
-            description: `Installed MCP server: ${args.name} (${pkg})`,
-            reversible: true,
-          });
-
-          return `MCP server installed: ${args.name}`;''',
-    '''        const { ulid } = await import("ulid");
-          const configuredMcp = args.config
-            ? JSON.parse(args.config as string)
-            : {};
-          const toolEntry = {
-            id: ulid(),
-            name: args.name as string,
-            type: "mcp" as const,
-            config: {
-              ...configuredMcp,
-              runtimeTruth: "configured_unverified",
-            },
-            installedAt: new Date().toISOString(),
-            // `enabled` is the legacy runtime-loading gate. Do not promote MCP
-            // configuration into an executable tool until a real adapter has
-            // verified protocol handshake, discovery, and calls.
-            enabled: false,
-          };
-
-          ctx.db.installTool(toolEntry);
-
-          ctx.db.insertModification({
-            id: ulid(),
-            timestamp: new Date().toISOString(),
-            type: "mcp_install",
-            description: `Configured MCP server inventory (runtime unverified): ${args.name} (${pkg})`,
-            reversible: true,
-          });
-
-          return `MCP server package installed and configuration saved: ${args.name}. Runtime execution is UNVERIFIED and remains disabled until a verified MCP adapter is available.`;''',
-    "builtin MCP persistence",
+replace_exact(
+    tools,
+    '        return `MCP server installed: ${args.name}`;',
+    '        return `MCP server package installed and configuration saved: ${args.name}. Runtime execution is UNVERIFIED and remains disabled until a verified MCP adapter is available.`;',
+    "builtin MCP result",
 )
 
 replace_exact(
@@ -86,17 +60,17 @@ replace_exact(
 replace_exact(
     tools,
     '''        return skills
-            .map(
-              (s) =>
-                `${s.name} [${s.enabled ? "active" : "disabled"}] (${s.source}): ${s.description}`,
-            )
-            .join("\\n");''',
+          .map(
+            (s) =>
+              `${s.name} [${s.enabled ? "active" : "disabled"}] (${s.source}): ${s.description}`,
+          )
+          .join("\\n");''',
     '''        const rows = skills
-            .map(
-              (s) =>
-                `${s.name} [${s.enabled ? "enabled-in-inventory" : "disabled"}] (${s.source}): ${s.description}`,
-            )
-            .join("\\n");
+          .map(
+            (s) =>
+              `${s.name} [${s.enabled ? "enabled-in-inventory" : "disabled"}] (${s.source}): ${s.description}`,
+          )
+          .join("\\n");
         return `Installed skill inventory (enabled is administrative state, not verified runtime readiness):\\n${rows}`;''',
     "list_skills projection",
 )
@@ -104,52 +78,52 @@ replace_exact(
 replace_exact(
     tools,
     '''    const installed = db.getInstalledTools();
-      return installed.map((tool) => ({''',
+    return installed.map((tool) => ({''',
     '''    const installed = db.getInstalledTools();
-      // P-015 owns the real MCP runtime. Legacy/configured MCP rows must not
-      // become inference-callable tool surfaces merely because inventory says
-      // enabled. Keep them out until protocol-level evidence exists.
-      const runtimeEligible = installed.filter((tool) => tool.type !== "mcp");
-      return runtimeEligible.map((tool) => ({''',
+    // P-015 owns the real MCP runtime. Legacy/configured MCP rows must not
+    // become inference-callable tool surfaces merely because inventory says
+    // enabled. Keep them out until protocol-level evidence exists.
+    const runtimeEligible = installed.filter((tool) => tool.type !== "mcp");
+    return runtimeEligible.map((tool) => ({''',
     "installed MCP exposure filter",
 )
 
 replace_exact(
     tools,
     '''    if (tool.type === "mcp") {
-        // MCP tools would be executed via MCP protocol
-        return `MCP tool ${tool.name} invoked with args: ${JSON.stringify(args)}`;
-      }''',
+      // MCP tools would be executed via MCP protocol
+      return `MCP tool ${tool.name} invoked with args: ${JSON.stringify(args)}`;
+    }''',
     '''    if (tool.type === "mcp") {
-        // Defense in depth. loadInstalledTools() filters nominal MCP inventory,
-        // but a future accidental direct call must still fail closed rather
-        // than report a fake invocation as success.
-        throw new Error(
-          `MCP tool ${tool.name} is configured but no verified MCP runtime adapter is available.`,
-        );
-      }''',
+      // Defense in depth. loadInstalledTools() filters nominal MCP inventory,
+      // but a future accidental direct call must still fail closed rather
+      // than report a fake invocation as success.
+      throw new Error(
+        `MCP tool ${tool.name} is configured but no verified MCP runtime adapter is available.`,
+      );
+    }''',
     "nominal MCP executor",
 )
 
 replace_exact(
     "src/agent/loop.ts",
     '''  for (const snapshot of await environmentRegistry.inspectAll()) {
-      capabilityRegistry.registerMany(snapshot.capabilities);
-    }''',
+    capabilityRegistry.registerMany(snapshot.capabilities);
+  }''',
     '''  for (const snapshot of await environmentRegistry.inspectAll()) {
-      capabilityRegistry.registerEnvironmentSnapshot(snapshot);
-    }''',
+    capabilityRegistry.registerEnvironmentSnapshot(snapshot);
+  }''',
     "agent-loop environment evidence projection",
 )
 
 replace_exact(
     "src/orchestration/orchestrator.ts",
     '''      for (const snapshot of environmentSnapshots) {
-          this.params.capabilityRegistry.registerMany(snapshot.capabilities);
-        }''',
+        this.params.capabilityRegistry.registerMany(snapshot.capabilities);
+      }''',
     '''      for (const snapshot of environmentSnapshots) {
-          this.params.capabilityRegistry.registerEnvironmentSnapshot(snapshot);
-        }''',
+        this.params.capabilityRegistry.registerEnvironmentSnapshot(snapshot);
+      }''',
     "planner environment evidence projection",
 )
 
