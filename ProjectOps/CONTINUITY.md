@@ -13,8 +13,8 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p008-runtime-truth-v1
 Host-Head-At-Audit-Open: fed2fe3c836dfc4351934a4abedf78898782728e
-Last-Reconciled-Host-Head: fed2fe3c836dfc4351934a4abedf78898782728e
-Last-Reconciled-Head-Semantics: P003_INTEGRATED_MAIN_GREEN_P008_AUDIT_OPEN
+Last-Reconciled-Host-Head: 36cd70026e941ab997ee5f533da26fdd62b05438
+Last-Reconciled-Head-Semantics: P008_DECISION_READY_CORE_AND_PROMPT_TRUTH_IMPLEMENTED_PR34_DRAFT_VALIDATION_PENDING
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -27,10 +27,13 @@ P003-PR: 33
 P003-Merge: fed2fe3c836dfc4351934a4abedf78898782728e
 P003-Main-CI: 34791524178
 P003-Main-ProjectOps: 34791524147
+P008-PR: 34
 
 ## Semántica del HEAD reconciliado
 
-`Host-Head-At-Audit-Open` y `Last-Reconciled-Host-Head` identifican el `main` exacto que integra P-003 y sobre el que se abrió P-008. La rama actual todavía no eleva ningún claim de P-008; primero audita producers, consumers, authority, evidence y restart semantics.
+`Host-Head-At-Audit-Open` identifica el `main` exacto desde el que se abrió P-008. `Last-Reconciled-Host-Head` identifica el último head de la rama activa cuya realidad técnica/documental ya fue reconciliada en C0004. No implica integración en `main`.
+
+P-008 ya superó la fase exclusivamente investigativa: alcanzó `DECISION_READY` para el contrato core y tiene source implementado. Sigue EN_EJECUCIÓN porque quedan rutas materiales por auditar/corregir y falta validación/integración completa.
 
 ## Estado canónico
 
@@ -41,7 +44,7 @@ P003-Main-ProjectOps: 34791524147
 - P-005: PLANIFICADO — acceptance LIVE por subfrontera; puede quedar LIVE_BLOCKED_EXTERNAL cuando falte autorización/entorno.
 - P-006: HECHO — remediación de advisories integrada por PR #32 y revalidada en `main`.
 - P-007: HECHO — programa maestro P-008..P-036 consolidado mediante PR #31.
-- P-008: EN_EJECUCIÓN — Runtime Truth/capability claims; auditoría abierta, source todavía no modificado en esta intervención.
+- P-008: EN_EJECUCIÓN — Runtime Truth/capability claims; core lifecycle/evidence, restart-skill truth y prompt-truth implementados; residual MCP/status audit + exact-head validation pendientes.
 - P-009..P-036: ver `ProjectOps/PLAN.md`; permanecen PLANIFICADO salvo estados explícitos.
 
 ## P-003 — cierre verificable
@@ -55,45 +58,67 @@ P003-Main-ProjectOps: 34791524147
 - public distribution smoke 22/24 PASS;
 - dependency audit PASS;
 - rebrand integrity PASS;
-- PR #29 cerrado como superseded, preservado como evidencia histórica;
+- PR #29 cerrado como superseded;
 - C0003: CLOSED / HECHO.
 
 No se elevaron claims de live child balance/revenue/profitability/ROI donde la authority permanece ausente.
 
-## P-008 — estado de entrada
+## P-008 — realidad actual
 
-Required-Context comenzó a auditarse sobre `fed2fe3c...`.
+Authority/architecture:
+- `CapabilityRegistry` permanece como única generic capability authority;
+- `available` legacy es sólo proyección derivada;
+- `VERIFIED_AVAILABLE` requiere evidence y `observedAt` válidos;
+- environment evidence se proyecta al registry sin crear segunda source of truth;
+- resolver preserva UNKNOWN / UNAUTHORIZED / PROHIBITED y sólo usa existing capability cuando está verificada.
 
-Hallazgos preliminares:
-- `CapabilityDescriptor` expresa `available` como booleano sin lifecycle/provenance suficiente por sí solo;
-- `CapabilityRegistry.ingestTools()` promueve tools a `available: true` por existencia en la colección;
-- `ingestSkills()` usa `enabled !== false` como disponibilidad;
-- `CapabilityResolver` consume ese booleano para `use_existing`;
-- snapshots de environments se registran como capabilities y requieren auditoría de provenance/probe semantics;
-- GitHub code search devolvió `incomplete_results=true`, por lo que un resultado vacío no se usa como evidencia de ausencia;
-- clone local desde el entorno actual quedó NO DISPONIBLE por resolución DNS; GitHub connector permanece disponible/autorizado.
+Restart/runtime:
+- persisted skills se revalidan contra requisitos actuales;
+- inventory enabled/installed no se considera runtime readiness;
+- la hipótesis de que DB cargaba installed tools disabled fue falsada: `getInstalledTools()` ya filtra `enabled = 1`.
 
-La intervención no está `DECISION_READY`: primero se debe reconstruir el grafo completo de producers/consumers y comprobar si ya existe otro lifecycle canónico reutilizable.
+Prompt:
+- claims estáticos de possession/readiness fueron corregidos;
+- tool definitions cargadas se presentan como `LOADED TOOL SURFACES`, no `AVAILABLE TOOLS`;
+- architectural support se diferencia de availability verificada;
+- child balance UNKNOWN no dispara `out_of_credits` ni autofunding.
+
+Validación adversarial:
+- CI exact-head `67d09828...` falló correctamente porque un fixture pretendía `verified_available` sin `observedAt`;
+- no se debilitó source; se corrigió el fixture en `29534cc...`;
+- ProjectOps Integrity sobre `52d3d30...`: SUCCESS (`34794186407`);
+- CI sobre `52d3d30...`: `34794186414` seguía EN_EJECUCIÓN en el último chequeo anterior a la reconciliación; no es PASS todavía.
+
+PR:
+- #34 permanece OPEN / DRAFT / NO MERGEAR todavía.
 
 ## Claims no elevados
 
-NO se declara todavía:
+NO se declara:
 - P-008 HECHO;
-- capability lifecycle unificado;
-- tools/skills/providers realmente VERIFIED por existir en source/config;
-- restart/degradation semantics resueltas;
+- CI exact-head actual PASS hasta observarlo completo;
+- installed/configured MCP como MCP ejecutable;
+- ausencia total de otras rutas status/list de overclaim hasta auditarlas;
+- PR #34 listo para merge;
+- P-008 integrado/revalidado en `main`;
 - P-009..P-036 implementados;
 - ninguna frontera LIVE elevada sin evidencia proporcional.
 
 ## Siguiente acción verificable
 
-1. completar Required-Context de P-008 y seguir dependencias materiales fuera de él;
-2. mapear producers/consumers de capability/status y cualquier persistence/restart path;
-3. discriminar si corresponde EXTEND/UNIFY/REFACTOR/NO_CHANGE parcial;
-4. alcanzar `DECISION_READY`;
-5. sólo entonces modificar source;
-6. ejecutar tests adversariales de overclaim, degradation y restart;
-7. integrar únicamente con gates branch/PR/main verificables.
+1. leer resultado del CI exact-head ya iniciado; diagnosticar cualquier fallo antes de repetir;
+2. auditar/corregir installed MCP nominal sin preimplementar P-015;
+3. auditar status/list surfaces restantes que puedan confundir inventory/configuration con availability;
+4. reauditar planner/children consumers después de los cambios;
+5. revalidar branch/PR exact-head;
+6. sólo con Definition of Done demostrada preparar integración y posterior validación de `main`.
+
+## Bloqueos / límites actuales
+
+- clone/container local: NO DISPONIBLE por resolución DNS observada;
+- GitHub connector y GitHub Actions: DISPONIBLE / AUTORIZADO;
+- no existe bloqueo general para continuar por GitHub;
+- una limitación de herramienta no se convierte en PASS ni en HECHO.
 
 ## Política de rotación
 
