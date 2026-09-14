@@ -103,7 +103,7 @@ Gate: amplio conocimiento no exige prompt masivo y decisiones relevantes dejan h
 
 P-027 opportunities; P-028 delegation; P-029 children/family knowledge; P-030 treasury/family economics; P-031 resource acquisition/reinvestment; P-032 soul/self-model.
 
-Gate: autonomía económica significa crear valor y asignar recursos con causalidad/authority, no hardcodear un negocio ni inventar rentabilidad.
+Gate: autonomía económica significa crear valor y asignar recursos con causalidad/authority/judgment, no hardcodear un negocio, fabricar rentabilidad ni convertir thresholds arbitrarios en dependencia humana.
 
 ### Ola 5 — integración y ataque
 
@@ -124,6 +124,10 @@ P-033 E2E; P-034 fault/sustained; P-035 cleanup/authority retirement; P-004 docs
 11. **Broad knowledge != broad prompt**: persistent universe amplio; working set activado por relevancia/causalidad/uncertainty/value-of-information.
 12. **Install != capability**: acquisition no se promueve hasta probe/evidence.
 13. **CI != LIVE**: evidence ladder exacta.
+14. **Judgment before restriction**: antes de eliminar, desactivar o human-gate una capability legítima por riesgo, demostrar si el problema puede gobernarse con contexto, razonamiento, planning, verificación, observabilidad, adaptación o aprendizaje.
+15. **Human escalation is a real boundary, not a convenience**: precio, porcentaje, dificultad, novedad o desviación histórica no bastan para pedir permiso; escala cuando exista authority/identity/legal/external permission/capability boundary real o oversight manual explícito.
+16. **Threshold is signal, not intelligence**: límites fijos pueden alertar, activar revisión o representar restricciones externas; no sustituyen necesidad, expected value, commitments, liquidez, contingencia y causalidad.
+17. **Autonomy remains auditable**: que ABOS pueda decidir solo no autoriza hidden side effects; decisiones materiales deben atravesar boundaries explícitas con evidence/outcome proporcional al riesgo.
 
 ## 6. Protocolo de interrogación que cada módulo debe aplicar
 
@@ -141,7 +145,10 @@ Antes de `DECISION_READY`, además de AGENTS/reasoning layer, preguntar material
 - pre-mortem: “supón que esto falló mañana; ¿qué probablemente pasó?”;
 - ¿qué evidencia podría demostrar que la decisión fue equivocada?;
 - ¿cómo vuelvo atrás sin corromper identity/state/economics?;
-- ¿estoy cerrando artificialmente una posibilidad futura o, al contrario, eliminando un invariante necesario?
+- ¿estoy cerrando artificialmente una posibilidad futura o, al contrario, eliminando un invariante necesario?;
+- **si quiero restringir una capability, ¿es una frontera real, un riesgo gobernable, una capability inmadura, algo redundante/perjudicial o UNKNOWN?**;
+- **¿qué ruta preserva autonomía legítima sin reintroducir el defecto?**;
+- **¿estoy usando creator approval o un threshold fijo para sustituir juicio que el sistema debería desarrollar?**
 
 No se documenta chain-of-thought privado; sí findings, alternatives, decisions y evidence que cambien el proyecto.
 
@@ -180,9 +187,15 @@ Cognitive Fabric no será una segunda memoria. Antes de P-020 se auditan y clasi
 
 Skills se promueven desde experiencia sólo con applicability/evidence/replay suficiente. World model distingue OBSERVED/INFERRED/ESTIMATED/ASSUMED/UNKNOWN. Prediction/outcome learning calibra decisiones. Simulation ejecuta barato antes de efectos caros cuando aporta información.
 
+Strategic cognition debe poder descomponer un compromiso en resultados/dependencias, descubrir qué más hace falta, comparar rutas y distinguir una anomalía que necesita evidencia adicional de una frontera que realmente necesita permiso externo.
+
 ## 11. Estrategia económica y organizacional
 
 Opportunities son hipótesis abiertas de creación legítima de valor. No existe `business_type` cerrado como universo. Delegation se basa en competence evidence, capabilities, cost y authority. Children heredan constitution/family index/skills/capabilities selectivamente, no todo el history. Treasury separa internal capital de external P&L y nunca fabrica ROI.
+
+Autonomía económica no significa gastar sin criterio ni pedir permiso por cada gasto. ABOS debe evolucionar hacia decisiones basadas en necesidad/commitment, capital libre, ingresos/anticipos causalmente observados, expected value, downside, timing, liquidez, reserva de contingencia, provider risk y aprendizaje prediction→outcome. Puede gastar una proporción extraordinaria cuando la causa lo justifica y debe evitar sobrecomprar aunque el saldo lo permita.
+
+P-025 aporta juicio estratégico; P-030 autoridad económica/treasury causal; P-031 adquisición/reinversión autónoma. Ninguno crea una authority paralela para adelantar trabajo de otro.
 
 ## 12. Evidencia y cierre
 
@@ -215,6 +228,8 @@ P-005 es un track incremental: Codex OAuth real, AWS billable, MCP/provider exte
 ## 16. Ola 0 cerrada; P-010 activo
 
 P-006 y P-003 están HECHO e integrados con revalidación de `main`. P-007 permanece HECHO únicamente como planificación maestra. P-008 Runtime Truth está HECHO e integrado/revalidado. P-009 Authority/Provenance está HECHO, integrado por PR #35 y revalidado en `main` `b9dbf14409d6ee45de6009e33f79146233878065` con CI `34800425589` y ProjectOps `34800425594` SUCCESS. La siguiente frontera activa es P-010 Policy/Authorization/Approval/Quarantine; sus consumidores posteriores no se adelantan antes de resolver su lifecycle real.
+
+P-010 incluye una revisión adversarial material: creator-signed authorization sigue siendo una capability válida para fronteras reales, pero ya no se considera diseño general de gasto autónomo por threshold. El cierre de P-010 debe preservar una ruta explícita/auditable para autonomía económica futura sin restaurar hidden auto-spend.
 
 ## 17. Cierre de campaña
 
