@@ -41,7 +41,7 @@ export interface AutonomousTopupExecutionOptions {
   social?: SocialClientInterface;
   policyEngine: PolicyEngine;
   spendTracker?: SpendTrackerInterface;
-  source: "startup" | "runtime_recovery";
+  source: "startup" | "runtime_recovery" | "sandbox_recovery";
   tools?: AbosTool[];
   targetCreditsCents?: number;
   requiredCreditsCents?: number;
