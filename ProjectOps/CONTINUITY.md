@@ -41,11 +41,17 @@ P009-Decision-Head: d0560f413020b0c98d6c9e844549e3f850638df0
 P009-Source-Head: d5976ee6a89ba13e552cf95842fca410a87fccf8
 P009-Targeted-Validation: 34799290285 SUCCESS
 P009-Targeted-Tests: 6/6 FILES; 159/159 TESTS PASS
+P009-Test-Reconciliation-Head: 8d62ea83b59aed2290ff73aec555c7b4a7bdd393
+P009-Test-Reconciliation-Validation: 34799787105 SUCCESS
+P009-Test-Reconciliation-Tests: 4/4 FILES; 36/36 TESTS PASS
+P009-Branch-Gate: SELF_VALIDATING_PENDING
 P009-PR: 35
 
 ## Semántica del HEAD reconciliado
 
 `Last-Reconciled-Host-Head` sigue siendo el `main` exacto ya integrado y revalidado que cierra P-008 y sirve de baseline a P-009. P-009 ya posee implementación en rama, pero un commit posterior de rama no se interpreta como integración en `main` hasta pasar gates, merge y revalidación de `main`.
+
+La reconciliación documental final de P-009 usa un gate auto-validable para no crear un ciclo de commits que invalide su propia evidencia: el commit humano que actualiza este manifest junto con `ProjectOps/plan/P-009.md` es `P009_BRANCH_GATE_HEAD`. Ese SHA pasa a `INTEGRATION_READY` únicamente si su CI exacto y ProjectOps Integrity son SUCCESS y PR #35 sigue exact-head, mergeable y sin objeción material. No se requiere otro commit sólo para escribir esa etiqueta.
 
 ## Estado canónico
 
@@ -57,7 +63,7 @@ P009-PR: 35
 - P-006: HECHO — advisories remediados y security-audit restaurado/integrado.
 - P-007: HECHO — programa maestro P-008..P-036 consolidado.
 - P-008: HECHO — Runtime Truth implementado, PR #34 mergeado y exact `main` revalidado.
-- P-009: EN_EJECUCIÓN — Authority, Provenance y trust boundaries implementado en rama; validación/integración pendiente en C0005.
+- P-009: EN_EJECUCIÓN — Authority, Provenance y trust boundaries implementado en rama; gate de rama auto-validable pendiente de evidencia exact-head e integración en C0005.
 - P-010..P-036: ver `ProjectOps/PLAN.md`; permanecen PLANIFICADO salvo estado explícito.
 
 ## P-008 — cierre verificable
@@ -138,7 +144,25 @@ Evidencia dirigida:
 - 159/159 tests PASS;
 - 7/7 pruebas nuevas de `authority-provenance.test.ts` PASS.
 
-El source head bot `d5976ee6...` recibió gates estándar `action_required` antes de runner por política de actor. Eso es `BLOCKED_PRE_RUNNER / ACTOR_APPROVAL_POLICY / NO VERIFICADO`, no source FAIL. C0005 y P-009 registran la reconciliación humana destinada a obtener un head ejecutable por CI completo.
+Full-CI y reconciliación posterior:
+- primer head humano post-source `bea28d4679c75665ec63f9c2c06c69287e38d6f9`: ProjectOps, Windows 22/24, rebrand, dependency audit y public-distribution smoke 22/24 SUCCESS;
+- full tests Node 22/24: 1915/1918 PASS; exactamente tres assertions obsoletas, sin cuarto fallo distinto observado;
+- esas assertions esperaban schema v14 o `inputSource="agent"`, ambos incompatibles con el contrato P-009 ya decidido;
+- decisión: corregir expectativas, no revertir source ni relajar provenance;
+- reconciliation run `34799787105`: SUCCESS;
+- typecheck PASS; 4/4 archivos PASS; 36/36 tests PASS;
+- `loop.test.ts` 24/24 PASS; `authority-provenance.test.ts` 7/7 PASS;
+- commit verificado `8d62ea83b59aed2290ff73aec555c7b4a7bdd393`;
+- helpers temporales eliminados; diff posterior limitado a tres archivos de test.
+
+### Gate de rama P-009
+
+El commit humano que contiene esta reconciliación canónica junto con `ProjectOps/plan/P-009.md` es `P009_BRANCH_GATE_HEAD`. P-009 pasa automáticamente a `INTEGRATION_READY` —sin otro commit documental— si:
+1. CI del SHA exacto = SUCCESS;
+2. ProjectOps Integrity del SHA exacto = SUCCESS;
+3. PR #35 sigue apuntando al mismo SHA, está mergeable y no existe objeción material/review pendiente.
+
+Hasta que esas tres condiciones se demuestren, `P009-Branch-Gate` permanece `SELF_VALIDATING_PENDING` y P-009 sigue EN_EJECUCIÓN. Aun después de `INTEGRATION_READY`, P-009 no será HECHO hasta merge protegido y revalidación exacta de `main`.
 
 ## Límites / bloqueos actuales
 
