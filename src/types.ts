@@ -161,6 +161,8 @@ export interface AgentTurn {
   state: AgentState;
   input?: string;
   inputSource?: InputSource;
+  /** Durable explanation of the inbound evidence that produced this turn. */
+  inputProvenance?: TurnInputProvenance;
   thinking: string;
   toolCalls: ToolCallResult[];
   tokenUsage: TokenUsage;
@@ -171,6 +173,7 @@ export type InputSource =
   | "heartbeat"
   | "creator"
   | "agent"
+  | "external"
   | "system"
   | "wakeup";
 
@@ -232,6 +235,28 @@ export interface SocialClientInterface {
   unreadCount(): Promise<number>;
 }
 
+/**
+ * Evidence about how an inbound sender identity was observed. Values are open
+ * strings so new transports/verification mechanisms do not require a core
+ * allowlist. They are evidence, not a second identity authority.
+ */
+export interface MessageProvenance {
+  transport: string;
+  senderVerification: string;
+  /** Sender identity observed/asserted by the transport, when available. */
+  transportSender?: string;
+}
+
+export interface TurnInputMessageProvenance extends MessageProvenance {
+  messageId: string;
+  assertedSender: string;
+}
+
+export interface TurnInputProvenance {
+  messages: TurnInputMessageProvenance[];
+  transformations: string[];
+}
+
 export interface InboxMessage {
   id: string;
   from: string;
@@ -246,6 +271,8 @@ export interface InboxMessage {
   signedAt: string;
   createdAt: string;
   replyTo?: string;
+  /** Transport/verification evidence. Missing means legacy unknown. */
+  provenance?: MessageProvenance;
 }
 
 // ─── Heartbeat ───────────────────────────────────────────────────

@@ -5,7 +5,7 @@
  * The database IS the abos's memory.
  */
 
-export const SCHEMA_VERSION = 14;
+export const SCHEMA_VERSION = 15;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -959,4 +959,23 @@ export const MIGRATION_V14 = `
 
   CREATE INDEX IF NOT EXISTS idx_environment_migration_events_migration
     ON environment_migration_events(migration_id, created_at);
+`;
+
+
+// === Authority / Provenance v1 ===
+// Additive only. Existing inbox rows intentionally default to legacy/unknown.
+export const MIGRATION_V15_ALTER_INBOX_TRANSPORT = `
+  ALTER TABLE inbox_messages ADD COLUMN transport TEXT NOT NULL DEFAULT 'legacy_unknown';
+`;
+
+export const MIGRATION_V15_ALTER_INBOX_SENDER_VERIFICATION = `
+  ALTER TABLE inbox_messages ADD COLUMN sender_verification TEXT NOT NULL DEFAULT 'unknown';
+`;
+
+export const MIGRATION_V15_ALTER_INBOX_TRANSPORT_SENDER = `
+  ALTER TABLE inbox_messages ADD COLUMN transport_sender TEXT;
+`;
+
+export const MIGRATION_V15_ALTER_TURNS_INPUT_PROVENANCE = `
+  ALTER TABLE turns ADD COLUMN input_provenance TEXT;
 `;

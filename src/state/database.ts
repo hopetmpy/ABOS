@@ -49,6 +49,10 @@ import {
   MIGRATION_V12,
   MIGRATION_V13,
   MIGRATION_V14,
+  MIGRATION_V15_ALTER_INBOX_TRANSPORT,
+  MIGRATION_V15_ALTER_INBOX_SENDER_VERIFICATION,
+  MIGRATION_V15_ALTER_INBOX_TRANSPORT_SENDER,
+  MIGRATION_V15_ALTER_TURNS_INPUT_PROVENANCE,
 } from "./schema.js";
 import type {
   RiskLevel,
@@ -137,14 +141,15 @@ export function createDatabase(dbPath: string): AbosDatabase {
 
   const insertTurn = (turn: AgentTurn): void => {
     db.prepare(
-      `INSERT INTO turns (id, timestamp, state, input, input_source, thinking, tool_calls, token_usage, cost_cents)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO turns (id, timestamp, state, input, input_source, input_provenance, thinking, tool_calls, token_usage, cost_cents)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       turn.id,
       turn.timestamp,
       turn.state,
       turn.input ?? null,
       turn.inputSource ?? null,
+      turn.inputProvenance ? JSON.stringify(turn.inputProvenance) : null,
       turn.thinking,
       JSON.stringify(turn.toolCalls),
       JSON.stringify(turn.tokenUsage),
@@ -474,8 +479,8 @@ export function createDatabase(dbPath: string): AbosDatabase {
     db.prepare(
       `INSERT OR IGNORE INTO inbox_messages (
         id, from_address, to_address, content, raw_content,
-        received_at, reply_to, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'received')`,
+        received_at, reply_to, transport, sender_verification, transport_sender, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'received')`,
     ).run(
       msg.id,
       msg.from,
@@ -484,6 +489,9 @@ export function createDatabase(dbPath: string): AbosDatabase {
       msg.rawContent ?? null,
       msg.createdAt || new Date().toISOString(),
       msg.replyTo ?? null,
+      msg.provenance?.transport ?? "legacy_unknown",
+      msg.provenance?.senderVerification ?? "unknown",
+      msg.provenance?.transportSender ?? null,
     );
   };
 
@@ -643,6 +651,15 @@ function applyMigrations(db: DatabaseType): void {
     {
       version: 14,
       apply: () => db.exec(MIGRATION_V14),
+    },
+    {
+      version: 15,
+      apply: () => {
+        try { db.exec(MIGRATION_V15_ALTER_INBOX_TRANSPORT); } catch { logger.debug("V15 ALTER (inbox transport) skipped — column likely exists"); }
+        try { db.exec(MIGRATION_V15_ALTER_INBOX_SENDER_VERIFICATION); } catch { logger.debug("V15 ALTER (inbox sender_verification) skipped — column likely exists"); }
+        try { db.exec(MIGRATION_V15_ALTER_INBOX_TRANSPORT_SENDER); } catch { logger.debug("V15 ALTER (inbox transport_sender) skipped — column likely exists"); }
+        try { db.exec(MIGRATION_V15_ALTER_TURNS_INPUT_PROVENANCE); } catch { logger.debug("V15 ALTER (turn input_provenance) skipped — column likely exists"); }
+      },
     },
   ];
 
@@ -1501,7 +1518,7 @@ export function claimInboxMessages(
 
     const rows = db.prepare(
       `SELECT id, from_address, content, received_at, processed_at, reply_to, to_address, raw_content,
-              status, retry_count, max_retries
+              transport, sender_verification, transport_sender, status, retry_count, max_retries
        FROM inbox_messages
        WHERE ${clauses.join(" AND ")}
        ORDER BY received_at ASC
@@ -1527,6 +1544,9 @@ export function claimInboxMessages(
       replyTo: row.reply_to ?? null,
       toAddress: row.to_address ?? null,
       rawContent: row.raw_content ?? null,
+      transport: row.transport ?? "legacy_unknown",
+      senderVerification: row.sender_verification ?? "unknown",
+      transportSender: row.transport_sender ?? null,
       status: "in_progress" as const,
       retryCount: (row.retry_count ?? 0) + 1,
       maxRetries: row.max_retries ?? 3,
@@ -1576,6 +1596,9 @@ export interface InboxMessageRow {
   replyTo: string | null;
   toAddress: string | null;
   rawContent: string | null;
+  transport: string;
+  senderVerification: string;
+  transportSender: string | null;
   status: string;
   retryCount: number;
   maxRetries: number;
@@ -1616,6 +1639,13 @@ function deserializeTurn(row: any): AgentTurn {
     state: row.state,
     input: row.input ?? undefined,
     inputSource: row.input_source ?? undefined,
+    inputProvenance: row.input_provenance
+      ? safeJsonParse(
+          row.input_provenance,
+          undefined as AgentTurn["inputProvenance"],
+          "deserializeTurn.inputProvenance",
+        )
+      : undefined,
     thinking: row.thinking,
     toolCalls: safeJsonParse(row.tool_calls || "[]", [] as ToolCallResult[], "deserializeTurn.toolCalls"),
     tokenUsage: safeJsonParse(row.token_usage || "{}", {} as any, "deserializeTurn.tokenUsage"),
@@ -1731,6 +1761,11 @@ function deserializeInboxMessage(row: any): InboxMessage {
     signedAt: row.received_at,
     createdAt: row.received_at,
     replyTo: row.reply_to ?? undefined,
+    provenance: {
+      transport: row.transport ?? "legacy_unknown",
+      senderVerification: row.sender_verification ?? "unknown",
+      transportSender: row.transport_sender ?? undefined,
+    },
   };
 }
 

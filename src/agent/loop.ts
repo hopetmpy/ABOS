@@ -121,6 +121,43 @@ const MAX_TOOL_CALLS_PER_TURN = 10;
 const MAX_CONSECUTIVE_ERRORS = 5;
 const MAX_REPETITIVE_TURNS = 3;
 
+/**
+ * Project durable inbox evidence onto the existing InputSource policy contract.
+ * Only the in-process LocalDB path is treated as agent-originated; social and
+ * legacy/unknown transports remain external/untrusted.
+ */
+export function deriveInboxInputSource(
+  messages: readonly InboxMessageRow[],
+): InputSource {
+  if (messages.length === 0) return "external";
+  return messages.every(
+    (message) =>
+      message.transport === "local_db" &&
+      message.senderVerification === "local_trusted",
+  )
+    ? "agent"
+    : "external";
+}
+
+export function buildInboxInputProvenance(
+  messages: readonly InboxMessageRow[],
+): NonNullable<AgentTurn["inputProvenance"]> {
+  return {
+    messages: messages.map((message) => ({
+      messageId: message.id,
+      assertedSender: message.fromAddress,
+      transportSender: message.transportSender ?? undefined,
+      transport: message.transport,
+      senderVerification: message.senderVerification,
+    })),
+    transformations: [
+      "inbox_claimed",
+      "content_sanitized_and_formatted_for_inference",
+      "authority_derived_from_transport_evidence",
+    ],
+  };
+}
+
 export interface AgentLoopOptions {
   identity: AbosIdentity;
   config: AbosConfig;
@@ -1095,7 +1132,13 @@ export async function runAgentLoop(
   const maxCycleTurns = config.maxTurnsPerCycle ?? 25;
   let cycleTurnCount = 0;
 
-  let pendingInput: { content: string; source: string } | undefined = {
+  let pendingInput:
+    | {
+        content: string;
+        source: InputSource;
+        provenance?: AgentTurn["inputProvenance"];
+      }
+    | undefined = {
     content: wakeupInput,
     source: "wakeup",
   };
@@ -1133,7 +1176,11 @@ export async function runAgentLoop(
               return `[Message from ${from.content}]: ${content.content}`;
             })
             .join("\n\n");
-          pendingInput = { content: formatted, source: "agent" };
+          pendingInput = {
+            content: formatted,
+            source: deriveInboxInputSource(claimedMessages),
+            provenance: buildInboxInputProvenance(claimedMessages),
+          };
         }
       }
 
@@ -1409,7 +1456,8 @@ export async function runAgentLoop(
         timestamp: new Date().toISOString(),
         state: db.getAgentState(),
         input: currentInput?.content,
-        inputSource: currentInput?.source as any,
+        inputSource: currentInput?.source,
+        inputProvenance: currentInput?.provenance,
         thinking: response.message.content || "",
         toolCalls: [],
         tokenUsage: response.usage,

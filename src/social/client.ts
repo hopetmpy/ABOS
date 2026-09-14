@@ -174,6 +174,11 @@ export function createSocialClient(
           signedAt: m.signedAt,
           createdAt: m.createdAt,
           replyTo: m.replyTo,
+          provenance: {
+            transport: "social_relay",
+            senderVerification: "relay_asserted",
+            transportSender: m.from,
+          },
         })),
         nextCursor: data.next_cursor,
       };
