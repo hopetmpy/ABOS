@@ -2,19 +2,19 @@
 
 Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
-Active-Plan: P-009
-Active-Segment: continuity/C0005.md
-Active-Intervention: P009_AUTHORITY_PROVENANCE_TRUST_BOUNDARIES — EN_EJECUCIÓN
+Active-Plan: P-010
+Active-Segment: continuity/C0006.md
+Active-Intervention: P010_POLICY_AUTH_APPROVAL_QUARANTINE_LIFECYCLE — EN_EJECUCIÓN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p009-authority-provenance-v1
-Host-Head-At-Audit-Open: 1a2a548276ec47289c77b2085c5c939c6bca0019
-Last-Reconciled-Host-Head: 1a2a548276ec47289c77b2085c5c939c6bca0019
-Last-Reconciled-Head-Semantics: P008_HECHO_MAIN_GREEN_P009_IMPLEMENTED_BRANCH_VALIDATION_PENDING
+Current-Host-Branch: abos/p010-policy-approval-lifecycle-v1
+Host-Head-At-Audit-Open: b9dbf14409d6ee45de6009e33f79146233878065
+Last-Reconciled-Host-Head: b9dbf14409d6ee45de6009e33f79146233878065
+Last-Reconciled-Head-Semantics: P009_HECHO_MAIN_GREEN_P010_AUDIT_ACTIVE
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -25,18 +25,19 @@ P006-PR: 32
 P006-Merge: 33e29e91e36d38b0197f4248216472592fb9f84d
 P003-PR: 33
 P003-Merge: fed2fe3c836dfc4351934a4abedf78898782728e
-P003-Main-CI: 34791524178
-P003-Main-ProjectOps: 34791524147
+P003-Main-CI: 34791524178 SUCCESS
+P003-Main-ProjectOps: 34791524147 SUCCESS
 P008-PR: 34
 P008-Source-Head: 1678f6fed32e634f963b05af16708597cdd1a615
 P008-Final-Branch-Head: 6af44c500f0beab6470882b08e0494ad74b039c2
-P008-Targeted-Validation: 34795993901
+P008-Targeted-Validation: 34795993901 SUCCESS
 P008-Targeted-Tests: 32/32 PASS
 P008-Final-Branch-CI: 34796596165 SUCCESS
 P008-Final-Branch-ProjectOps: 34796596223 SUCCESS
 P008-Merge: 1a2a548276ec47289c77b2085c5c939c6bca0019
 P008-Main-CI: 34797078874 SUCCESS
 P008-Main-ProjectOps: 34797078882 SUCCESS
+P009-PR: 35
 P009-Decision-Head: d0560f413020b0c98d6c9e844549e3f850638df0
 P009-Source-Head: d5976ee6a89ba13e552cf95842fca410a87fccf8
 P009-Targeted-Validation: 34799290285 SUCCESS
@@ -44,134 +45,79 @@ P009-Targeted-Tests: 6/6 FILES; 159/159 TESTS PASS
 P009-Test-Reconciliation-Head: 8d62ea83b59aed2290ff73aec555c7b4a7bdd393
 P009-Test-Reconciliation-Validation: 34799787105 SUCCESS
 P009-Test-Reconciliation-Tests: 4/4 FILES; 36/36 TESTS PASS
-P009-Branch-Gate: SELF_VALIDATING_PENDING
-P009-PR: 35
+P009-Final-Branch-Head: b1df6cc57e00b1bde0dd829f01f346defa17d8ee
+P009-Final-Branch-CI: 34800214747 SUCCESS
+P009-Final-Branch-ProjectOps: 34800214797 SUCCESS
+P009-Merge: b9dbf14409d6ee45de6009e33f79146233878065
+P009-Main-CI: 34800425589 SUCCESS
+P009-Main-ProjectOps: 34800425594 SUCCESS
 
 ## Semántica del HEAD reconciliado
 
-`Last-Reconciled-Host-Head` sigue siendo el `main` exacto ya integrado y revalidado que cierra P-008 y sirve de baseline a P-009. P-009 ya posee implementación en rama, pero un commit posterior de rama no se interpreta como integración en `main` hasta pasar gates, merge y revalidación de `main`.
+`Last-Reconciled-Host-Head` es el `main` exacto que integra P-009 por PR #35 y que fue revalidado por CI + ProjectOps Integrity. P-009 queda HECHO únicamente para su objetivo exacto: authority/provenance/trust boundaries. No eleva Social inbound a autenticación criptográfica LIVE; `relay_asserted` sigue siendo el máximo claim demostrado en esa frontera.
 
-La reconciliación documental final de P-009 usa un gate auto-validable para no crear un ciclo de commits que invalide su propia evidencia: el commit humano que actualiza este manifest junto con `ProjectOps/plan/P-009.md` es `P009_BRANCH_GATE_HEAD`. Ese SHA pasa a `INTEGRATION_READY` únicamente si su CI exacto y ProjectOps Integrity son SUCCESS y PR #35 sigue exact-head, mergeable y sin objeción material. No se requiere otro commit sólo para escribir esa etiqueta.
+P-010 se activa desde ese `main` ya verde. Su rama y C0006 registran auditoría/interrogación antes de cualquier cambio productivo; EN_EJECUCIÓN no implica que policy/approval/quarantine ya hayan sido corregidos.
 
 ## Estado canónico
 
-- P-001: HECHO — identidad, baseline, autoridades, evidencia y plan ABOS-specific reconstruidos.
+- P-001: HECHO — identidad, baseline, autoridades y plan ABOS-specific reconstruidos.
 - P-002: HECHO — cutover metodológico a matriz ProjectOps modular/publicable.
-- P-003: HECHO — child capital semantics reconciliadas por PR #33 e integradas/revalidadas en `main` `fed2fe3c...`.
-- P-004: PLANIFICADO — reconciliación documental incremental y cierre final después de P-035.
-- P-005: PLANIFICADO — acceptance LIVE por subfrontera; puede quedar LIVE_BLOCKED_EXTERNAL cuando falte autorización/entorno.
+- P-003: HECHO — child capital semantics integradas/revalidadas.
+- P-004: PLANIFICADO — track documental; se permiten reconciliaciones puntuales, cierre final después de P-035.
+- P-005: PLANIFICADO — acceptance LIVE incremental; puede quedar LIVE_BLOCKED_EXTERNAL.
 - P-006: HECHO — advisories remediados y security-audit restaurado/integrado.
 - P-007: HECHO — programa maestro P-008..P-036 consolidado.
-- P-008: HECHO — Runtime Truth implementado, PR #34 mergeado y exact `main` revalidado.
-- P-009: EN_EJECUCIÓN — Authority, Provenance y trust boundaries implementado en rama; gate de rama auto-validable pendiente de evidencia exact-head e integración en C0005.
-- P-010..P-036: ver `ProjectOps/PLAN.md`; permanecen PLANIFICADO salvo estado explícito.
+- P-008: HECHO — Runtime Truth integrado y revalidado.
+- P-009: HECHO — Authority/Provenance/trust boundaries integrados por PR #35 y revalidados sobre `main` `b9dbf144...`.
+- P-010: EN_EJECUCIÓN — Policy/Authorization/Approval/Quarantine lifecycle; auditoría C0006 activa, source aún no modificado bajo esta intervención.
+- P-011..P-036: ver `ProjectOps/PLAN.md`; permanecen en su estado explícito.
 
-## P-008 — cierre verificable
+## P-009 — cierre verificable
 
-### Resultado implementado
+Resultado integrado:
+- `InputSource` distingue `external`;
+- inbox/turn persistence v15 conserva transport/sender-verification provenance;
+- Social inbound queda `social_relay / relay_asserted` y legacy `legacy_unknown / unknown`;
+- LocalDB interno puede acreditar `local_db / local_trusted`;
+- conversational inbox deja de autoelevar mensajes externos a `agent`;
+- Colony liga `message.from/to` interno al sender/recipient exterior persistido antes de handlers y parent/child authorization;
+- migration v14→v15 es aditiva y legacy ambiguity degrada trust en vez de inventarlo;
+- no se creó una segunda identity/provenance authority.
 
-- `CapabilityRegistry` permanece como única generic capability authority.
-- `available` legacy es proyección derivada; `VERIFIED_AVAILABLE` exige evidence y `observedAt` válidos.
-- Environment snapshots proyectan authority/evidence/temporalidad mediante `registerEnvironmentSnapshot()`.
-- Resolver sólo usa existing capability cuando está verificada y preserva UNKNOWN / UNAUTHORIZED / PROHIBITED.
-- Persisted skills se revalidan contra el runtime actual; inventory/configuration no se presenta como readiness.
-- System prompt, planner y status/list distinguen soporte arquitectónico, inventory y availability verificada.
-- Child balance UNKNOWN permanece UNKNOWN y no provoca `out_of_credits` ni autofunding.
-- MCP nominal queda `configured_unverified`, disabled de superficies inference-callable y fail-closed ante ejecución directa accidental.
-- P-015 conserva la implementación de MCP real; P-008 no la adelantó.
-- La hipótesis de que `loadInstalledTools()` cargaba filas disabled quedó FALSADA: DB ya filtra `enabled = 1`; el defecto real era enabled/installed != verified readiness.
-- `EnvironmentSelector` degraded no se cambió: NO_CHANGE, porque degraded puede seguir siendo operacional.
+Evidencia:
+- implementación dirigida `34799290285`: typecheck PASS; 6/6 files; 159/159 tests;
+- reconciliación de tres expectativas obsoletas `34799787105`: typecheck PASS; 4/4 files; 36/36 tests;
+- branch gate `b1df6cc...`: CI `34800214747` SUCCESS; ProjectOps `34800214797` SUCCESS;
+- PR #35 exact-head, ready, mergeable y sin review/thread material antes del merge;
+- squash merge protegido → `main` `b9dbf14409d6ee45de6009e33f79146233878065`;
+- main CI `34800425589`: SUCCESS;
+- main ProjectOps Integrity `34800425594`: SUCCESS;
+- Node 22/24 typecheck/build/full tests/security tests SUCCESS;
+- Windows 22/24 SUCCESS;
+- public distribution smoke 22/24 SUCCESS;
+- dependency audit y rebrand integrity SUCCESS.
 
-### Evidencia de rama
+Claims no demostrados por P-009:
+- autenticación criptográfica E5 del sender Social inbound;
+- provider/OAuth/AWS/economic LIVE;
+- policy/approval/quarantine lifecycle P-010;
+- cualquier fase posterior.
 
-- Source head: `1678f6fed32e634f963b05af16708597cdd1a615`.
-- Targeted run `34795993901`: typecheck PASS; 9/9 test files PASS; 32/32 tests PASS.
-- Final branch head `6af44c500f0beab6470882b08e0494ad74b039c2`:
-  - CI `34796596165`: SUCCESS;
-  - ProjectOps Integrity `34796596223`: SUCCESS;
-  - PR #34 exact-head, mergeable y sin objeción material antes del merge.
+## P-010 — apertura
 
-### Integración y validación de main
+Baseline: `main` `b9dbf14409d6ee45de6009e33f79146233878065`, CI y ProjectOps verdes.
 
-- PR #34 actualizado a evidencia vigente, marcado ready y mergeado por squash con expected exact-head `6af44c500...`.
-- Main integrado: `1a2a548276ec47289c77b2085c5c939c6bca0019`.
-- Main CI `34797078874`: SUCCESS.
-- Main ProjectOps Integrity `34797078882`: SUCCESS.
-- Node 22/24 typecheck, build, full tests y security tests: SUCCESS.
-- Windows regression 22/24: SUCCESS.
-- public distribution smoke 22/24: SUCCESS.
-- dependency/security audit: SUCCESS.
-- rebrand integrity: SUCCESS.
-- C0004: CLOSED / HECHO.
+Objetivo: convertir policy de clasificación parcial en una autoridad runtime consistente para allow/deny/authorization/confirmation/quarantine/resume/expiry, preservando provenance P-009 y evitando ejecutar side effects antes del gate.
 
-### Claims deliberadamente NO elevados
-
-P-008 no demuestra ni declara:
-- runtime MCP real — permanece P-015;
-- P-009 o posteriores implementados;
-- OAuth/AWS/economic/provider LIVE no ejercitado;
-- capabilities externas no observadas como disponibles.
-
-## P-009 — implementación y evidencia actual
-
-Objetivo: preservar provenance y autoridad real desde ingress hasta policy/tool execution, separando asserted identity de transport/authenticated identity y evitando privilege elevation por payload, relabeling o forwarding.
-
-Baseline exacto: `main` `1a2a548276ec47289c77b2085c5c939c6bca0019`, verde después de P-008.
-
-Auditoría y decisión:
-- H1 external→agent privilege elevation: CONFIRMADA;
-- H2 relabel sólo representacional: FALSADA para inbox conversacional;
-- H3 pérdida en persistence/forwarding: CONFIRMADA;
-- H4 contratos parciales deben UNIFY/EXTEND: CONFIRMADA;
-- decisión: `EXTEND + UNIFY + CORRECT + MIGRATE`, no CREATE.
-
-Resultado source `d5976ee6a89ba13e552cf95842fca410a87fccf8`:
-- `external` es source explícito y policy lo trata como external;
-- provenance mínimo se persiste en inbox/turns con migration v15 aditiva;
-- Social inbound queda `social_relay / relay_asserted`;
-- LocalDB internal queda `local_db / local_trusted`;
-- legacy queda `legacy_unknown / unknown` y no se promociona;
-- conversational inbox deriva authority desde evidencia de transporte, no desde el hecho de haber llegado al agente;
-- Colony liga sender/recipient inner con el outer observado antes de parent/child authorization;
-- se reutiliza el verificador canónico existente cuando exista evidencia inbound verificable; no se inventó un segundo verifier.
-
-Evidencia dirigida:
-- run inicial `34799157518`: fallo de fixture histórico v14 después de patch/typecheck/adversarial tests; no produjo source commit;
-- run corregido `34799290285`: SUCCESS;
-- Node `22.23.2`;
-- typecheck PASS;
-- 6/6 test files PASS;
-- 159/159 tests PASS;
-- 7/7 pruebas nuevas de `authority-provenance.test.ts` PASS.
-
-Full-CI y reconciliación posterior:
-- primer head humano post-source `bea28d4679c75665ec63f9c2c06c69287e38d6f9`: ProjectOps, Windows 22/24, rebrand, dependency audit y public-distribution smoke 22/24 SUCCESS;
-- full tests Node 22/24: 1915/1918 PASS; exactamente tres assertions obsoletas, sin cuarto fallo distinto observado;
-- esas assertions esperaban schema v14 o `inputSource="agent"`, ambos incompatibles con el contrato P-009 ya decidido;
-- decisión: corregir expectativas, no revertir source ni relajar provenance;
-- reconciliation run `34799787105`: SUCCESS;
-- typecheck PASS; 4/4 archivos PASS; 36/36 tests PASS;
-- `loop.test.ts` 24/24 PASS; `authority-provenance.test.ts` 7/7 PASS;
-- commit verificado `8d62ea83b59aed2290ff73aec555c7b4a7bdd393`;
-- helpers temporales eliminados; diff posterior limitado a tres archivos de test.
-
-### Gate de rama P-009
-
-El commit humano que contiene esta reconciliación canónica junto con `ProjectOps/plan/P-009.md` es `P009_BRANCH_GATE_HEAD`. P-009 pasa automáticamente a `INTEGRATION_READY` —sin otro commit documental— si:
-1. CI del SHA exacto = SUCCESS;
-2. ProjectOps Integrity del SHA exacto = SUCCESS;
-3. PR #35 sigue apuntando al mismo SHA, está mergeable y no existe objeción material/review pendiente.
-
-Hasta que esas tres condiciones se demuestren, `P009-Branch-Gate` permanece `SELF_VALIDATING_PENDING` y P-009 sigue EN_EJECUCIÓN. Aun después de `INTEGRATION_READY`, P-009 no será HECHO hasta merge protegido y revalidación exacta de `main`.
+La primera tarea es auditoría completa de producers/consumers/persistence/continuations y failure matrix de P-010. No hay `DECISION_READY` ni source change P-010 todavía.
 
 ## Límites / bloqueos actuales
 
-- clone/container local: NO DISPONIBLE por resolución DNS previamente observada; no se reintenta ciegamente la misma ruta.
+- clone/container local: NO DISPONIBLE por resolución DNS previamente observada; no se repite ciegamente.
 - GitHub connector + GitHub Actions: DISPONIBLE / AUTORIZADO.
-- P-009 está implementado en rama pero **NO HECHO** hasta branch/PR/main integration-verification.
-- Social sender inbound no posee aún autenticación criptográfica E5 demostrada; permanece `relay_asserted`.
-- LIVE/E5/E6 permanece separado de CI/E3.
+- CI/E3 no acredita LIVE/E5/E6.
+- El ajuste puntual de baseline schema v15 en `PROJECT.md`/verifier acompaña el cierre P-009; P-004 permanece PLANIFICADO y no se declara cerrado.
 
 ## Política de rotación
 
-`C0004` queda cerrado como historia P-008. `C0005` es el segmento activo de P-009. Nunca se crea un segundo manifest `CONTINUITY.md`.
+`C0005` queda CLOSED / HECHO como historia P-009. `C0006` es el segmento activo de P-010. Nunca se crea un segundo manifest `CONTINUITY.md`.

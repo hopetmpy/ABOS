@@ -18,8 +18,8 @@ Master-Transformation-Plan: P-007
 | P-006 | Remediar advisories de dependencias y restaurar security-audit green | HECHO | integrado por PR #32; main 33e29e91... CI + ProjectOps Integrity green | plan/P-006.md |
 | P-007 | Consolidar programa maestro de transformación integral ABOS | HECHO | P-001 + P-002 + auditoría 2026-09-13; no implementa product source | plan/P-007.md |
 | P-008 | Alinear Runtime Truth y capability claims con evidencia real | HECHO | integrado por PR #34; main `1a2a5482...` CI + ProjectOps Integrity green | plan/P-008.md |
-| P-009 | Corregir Authority, Provenance y trust boundaries end-to-end | EN_EJECUCIÓN | P-006 HECHO; intervención C0005 activa sobre main `1a2a5482...` | plan/P-009.md |
-| P-010 | Hacer real Policy, Authorization, Approval y Quarantine lifecycle | PLANIFICADO | P-009 | plan/P-010.md |
+| P-009 | Corregir Authority, Provenance y trust boundaries end-to-end | HECHO | integrado por PR #35; main `b9dbf144...` CI `34800425589` + ProjectOps `34800425594` green | plan/P-009.md |
+| P-010 | Hacer real Policy, Authorization, Approval y Quarantine lifecycle | EN_EJECUCIÓN | P-009 HECHO; C0006 activa sobre main `b9dbf144...` | plan/P-010.md |
 | P-011 | Hacer reales Lifecycle, Health, Restart y Recovery | PLANIFICADO | P-009 + P-010 | plan/P-011.md |
 | P-012 | Convertir self-modification en transacción segura y recuperable | PLANIFICADO | P-009 + P-010 + P-011; evidence P-013 | plan/P-012.md |
 | P-013 | Unificar Observability, Audit y Evidence Fabric | PLANIFICADO | P-008 + P-009; se extiende durante la campaña | plan/P-013.md |
@@ -79,7 +79,7 @@ Cada bloque puede poseer componentes especializados, pero debe conservar una aut
 1. **P-006 — HECHO**: security-audit restaurado sin debilitar gate e integrado en `main` por PR #32.
 2. **P-003 — HECHO**: child capital semantics reconciliadas por PR #33, integradas y revalidadas en `main`.
 
-La deuda heredada de Ola 0 está cerrada; P-008 cerró la primera frontera de Ola 1 y P-009 es la intervención activa.
+La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth y P-009 Authority/Provenance cerraron las primeras fronteras de Ola 1. P-010 es la intervención activa.
 
 ### Ola 1 — verdad, autoridad y recovery
 
@@ -212,9 +212,9 @@ P-004 puede corregir drift puntual antes, pero su cierre final ocurre después d
 
 P-005 es un track incremental: Codex OAuth real, AWS billable, MCP/provider externo, economic/child/resource claims y futuras fronteras que requieran E5/E6. No toda capability local requiere E5: una computer/browser E4 realista puede cerrar integración local. Si falta autorización/credencial/dinero, registrar `LIVE_BLOCKED_EXTERNAL` y continuar source.
 
-## 16. Ola 0 cerrada; P-009 activo
+## 16. Ola 0 cerrada; P-010 activo
 
-P-006 y P-003 están HECHO e integrados con revalidación de `main`. P-007 permanece HECHO únicamente como planificación maestra. P-008 Runtime Truth está HECHO e integrado/revalidado en `main` `1a2a548276ec47289c77b2085c5c939c6bca0019`. La siguiente frontera recuperable y activa es P-009 Authority/Provenance; no se adelantan P-010 ni P-014..P-018 porque dependen materialmente de trust boundaries correctas.
+P-006 y P-003 están HECHO e integrados con revalidación de `main`. P-007 permanece HECHO únicamente como planificación maestra. P-008 Runtime Truth está HECHO e integrado/revalidado. P-009 Authority/Provenance está HECHO, integrado por PR #35 y revalidado en `main` `b9dbf14409d6ee45de6009e33f79146233878065` con CI `34800425589` y ProjectOps `34800425594` SUCCESS. La siguiente frontera activa es P-010 Policy/Authorization/Approval/Quarantine; sus consumidores posteriores no se adelantan antes de resolver su lifecycle real.
 
 ## 17. Cierre de campaña
 
@@ -222,4 +222,4 @@ P-036 no significa “todo el universo futuro de ABOS está terminado”. Signif
 
 ## 18. Siguiente trabajo recuperable
 
-`P-009 — Corregir Authority, Provenance y trust boundaries end-to-end`.
+`P-010 — Hacer real Policy, Authorization, Approval y Quarantine lifecycle`.
