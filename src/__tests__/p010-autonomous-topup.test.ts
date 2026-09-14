@@ -4,7 +4,12 @@ import { DEFAULT_TREASURY_POLICY } from "../types.js";
 import { PolicyEngine } from "../agent/policy-engine.js";
 import { createDefaultRules } from "../agent/policy-rules/index.js";
 import { executeTool } from "../agent/tools.js";
-import { planAutonomousTopup } from "../conway/topup.js";
+import { executeAutonomousTopup } from "../agent/autonomous-topup.js";
+import {
+  bootstrapTopup,
+  planAutonomousTopup,
+  setProtectedAutonomousTopupExecutor,
+} from "../conway/topup.js";
 import {
   createTestConfig,
   createTestDb,
@@ -18,9 +23,11 @@ describe("P-010 autonomous topup judgment", () => {
 
   beforeEach(() => {
     db = createTestDb();
+    setProtectedAutonomousTopupExecutor(null);
   });
 
   afterEach(() => {
+    setProtectedAutonomousTopupExecutor(null);
     db.close();
   });
 
@@ -102,6 +109,31 @@ describe("P-010 autonomous topup judgment", () => {
     expect(plan.reasonCode).toBe("EVM_PAYMENT_UNAVAILABLE");
   });
 
+  it("delegates bootstrap recovery only through the installed protected executor", async () => {
+    const account = createTestIdentity().account;
+    const protectedExecutor = vi.fn().mockResolvedValue({
+      success: true,
+      amountUsd: 5,
+      creditsCentsAdded: 500,
+    });
+    setProtectedAutonomousTopupExecutor(protectedExecutor);
+
+    const result = await bootstrapTopup({
+      apiUrl: "https://api.conway.tech",
+      account,
+      creditsCents: 0,
+      creditThresholdCents: 500,
+      chainType: "evm",
+    });
+
+    expect(result?.success).toBe(true);
+    expect(protectedExecutor).toHaveBeenCalledTimes(1);
+    expect(protectedExecutor).toHaveBeenCalledWith({
+      source: "bootstrap",
+      targetCreditsCents: 500,
+    });
+  });
+
   it("executes an autonomous system topup through PolicyEngine and records its outcome", async () => {
     const execute = vi.fn().mockResolvedValue("topup ok");
     const tool: AbosTool = {
@@ -156,5 +188,63 @@ describe("P-010 autonomous topup judgment", () => {
     expect(row?.decision).toBe("allow");
     expect(row?.lifecycle_state).toBe("evaluated_allow");
     expect(row?.execution_state).toBe("succeeded");
+  });
+
+  it("does not blindly redispatch while a prior topup effect is unresolved", async () => {
+    const execute = vi.fn().mockResolvedValue("topup ok");
+    const tool: AbosTool = {
+      name: "topup_credits",
+      description: "test topup",
+      category: "financial",
+      riskLevel: "caution",
+      parameters: { type: "object", properties: {} },
+      execute,
+    };
+    const identity = createTestIdentity();
+    const config = createTestConfig({ treasuryPolicy: DEFAULT_TREASURY_POLICY });
+    const policyEngine = new PolicyEngine(
+      db.raw,
+      createDefaultRules(DEFAULT_TREASURY_POLICY),
+    );
+    const conway = new MockConwayClient();
+    const inference = new MockInferenceClient();
+
+    await executeTool(
+      "topup_credits",
+      { amount_usd: 5 },
+      [tool],
+      { identity, config, db, conway, inference },
+      policyEngine,
+      {
+        inputSource: "system",
+        actorAddress: identity.address,
+        turnToolCallCount: 0,
+      },
+    );
+    const prior = db.raw.prepare(
+      `SELECT id FROM policy_decisions
+       WHERE tool_name = 'topup_credits'
+       ORDER BY created_at DESC LIMIT 1`,
+    ).get() as { id: string };
+    db.raw.prepare(
+      `UPDATE policy_decisions
+       SET execution_state = 'unknown'
+       WHERE id = ?`,
+    ).run(prior.id);
+
+    const recovery = await executeAutonomousTopup({
+      identity,
+      config,
+      db,
+      conway,
+      inference,
+      policyEngine,
+      tools: [tool],
+      source: "runtime_recovery",
+      cooldownMs: 0,
+    });
+
+    expect(recovery.status).toBe("unresolved_previous_effect");
+    expect(execute).toHaveBeenCalledTimes(1);
   });
 });
