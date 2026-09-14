@@ -47,6 +47,7 @@ declare module "@abos/runtime/state/database.js" {
   }
 
   export interface AbosCliDatabase {
+    raw: any;
     getAgentState(): string;
     getTurnCount(): number;
     getInstalledTools(): CliInstalledTool[];
@@ -56,4 +57,50 @@ declare module "@abos/runtime/state/database.js" {
   }
 
   export function createDatabase(path: string): AbosCliDatabase;
+}
+
+declare module "@abos/runtime/agent/policy-authorization.js" {
+  export type PolicyAuthorizationAction = "approve" | "revoke";
+
+  export interface PendingPolicyAuthorization {
+    id: string;
+    toolName: string;
+    scopeHash: string;
+    reason: string;
+    createdAt: string;
+  }
+
+  export interface PolicyAuthorizationChallenge {
+    version: "abos.policy-authorization.v1";
+    action: PolicyAuthorizationAction;
+    decisionId: string;
+    toolName: string;
+    scopeHash: string;
+    creatorAddress: string;
+    expiresAt: string;
+    message: string;
+  }
+
+  export function listPendingPolicyAuthorizations(db: any): PendingPolicyAuthorization[];
+  export function buildPolicyAuthorizationChallenge(
+    db: any,
+    decisionId: string,
+    action: PolicyAuthorizationAction,
+    expiresAt: string,
+  ): PolicyAuthorizationChallenge;
+  export function applyCreatorPolicyAuthorization(
+    db: any,
+    params: {
+      decisionId: string;
+      action: PolicyAuthorizationAction;
+      expiresAt: string;
+      signature: string;
+    },
+  ): Promise<{
+    decisionId: string;
+    action: PolicyAuthorizationAction;
+    lifecycleState: "approved" | "revoked";
+    creatorAddress: string;
+    expiresAt: string;
+  }>;
 }
