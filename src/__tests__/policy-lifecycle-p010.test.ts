@@ -11,6 +11,7 @@ import {
 } from "../agent/policy-authorization.js";
 import { executeTool } from "../agent/tools.js";
 import type { AbosTool, PolicyRequest, PolicyRule, ToolContext } from "../types.js";
+import { createTestConfig } from "./mocks.js";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -82,7 +83,7 @@ describe("P-010 durable policy lifecycle", () => {
       parameters: { type: "object", properties: {} },
       execute: async () => { effects += 1; return "executed"; },
     };
-    const context = { db } as ToolContext;
+    const context = { db, config: createTestConfig() } as ToolContext;
     const engine = new PolicyEngine(db.raw, [quarantinedRule()]);
     const result = await executeTool(
       tool.name,
@@ -110,7 +111,7 @@ describe("P-010 durable policy lifecycle", () => {
       parameters: { type: "object", properties: {} },
       execute: async () => { effects += 1; return "executed"; },
     };
-    const context = { db } as ToolContext;
+    const context = { db, config: createTestConfig() } as ToolContext;
     const engine = new PolicyEngine(db.raw, [quarantinedRule()]);
     const turnContext = { inputSource: "external" as const, turnToolCallCount: 0 };
 
@@ -153,7 +154,7 @@ describe("P-010 durable policy lifecycle", () => {
       parameters: { type: "object", properties: {} },
       execute: async () => "unused",
     };
-    const context = { db } as ToolContext;
+    let context = { db, config: createTestConfig() } as ToolContext;
     const request = requestFor(tool, context);
     const engine = new PolicyEngine(db.raw, [quarantinedRule()]);
     const decision = engine.evaluate(request);
@@ -166,10 +167,47 @@ describe("P-010 durable policy lifecycle", () => {
     db.close();
 
     db = createDatabase(dbPath);
+    context = { db, config: createTestConfig() } as ToolContext;
+    void context;
     const first = claimApprovedPolicyAuthorization(db.raw, scopeHash);
     const second = claimApprovedPolicyAuthorization(db.raw, scopeHash);
     expect(first?.decisionId).toBe(decision.id);
     expect(second).toBeNull();
+    db.close();
+  });
+
+  it("does not resurrect a consumed authorization after restart", () => {
+    const dbPath = fixturePath();
+    let db = createDatabase(dbPath);
+    const tool: AbosTool = {
+      name: "restart_consumed_scope",
+      description: "test",
+      category: "financial",
+      riskLevel: "dangerous",
+      parameters: { type: "object", properties: {} },
+      execute: async () => "unused",
+    };
+    const context = { db, config: createTestConfig() } as ToolContext;
+    const request = requestFor(tool, context);
+    const engine = new PolicyEngine(db.raw, [quarantinedRule()]);
+    const decision = engine.evaluate(request);
+    engine.persistDecision(decision, request);
+    const expiresAt = new Date(Date.now() + 60_000).toISOString();
+    db.raw.prepare(
+      "UPDATE policy_decisions SET lifecycle_state='approved', expires_at=?, approved_at=? WHERE id=?",
+    ).run(expiresAt, new Date().toISOString(), decision.id);
+    const scopeHash = computePolicyScopeHash(request);
+    expect(claimApprovedPolicyAuthorization(db.raw, scopeHash)?.decisionId).toBe(decision.id);
+    db.close();
+
+    db = createDatabase(dbPath);
+    expect(claimApprovedPolicyAuthorization(db.raw, scopeHash)).toBeNull();
+    const row = db.raw.prepare(
+      "SELECT lifecycle_state, claim_token, claimed_at FROM policy_decisions WHERE id=?",
+    ).get(decision.id) as { lifecycle_state: string; claim_token: string | null; claimed_at: string | null };
+    expect(row.lifecycle_state).toBe("consumed");
+    expect(row.claim_token).toBeTruthy();
+    expect(row.claimed_at).toBeTruthy();
     db.close();
   });
 });
