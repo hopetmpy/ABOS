@@ -3,9 +3,9 @@
  *
  * Converts USDC to Conway credits via the x402 payment protocol.
  *
- * - On startup: bootstraps with the minimum tier ($5) so the agent can run.
- * - At runtime: the agent uses the `topup_credits` tool to choose how much.
- * - Heartbeat: wakes the agent when USDC is available but credits are low.
+ * - Runtime payment authority: the policy-governed `topup_credits` tool.
+ * - Startup/heartbeat/sandbox recovery may request a topup, but never pay.
+ * - The exact selected tier is also the x402 maximum payment cap.
  *
  * Endpoint: GET /pay/{amountUsd}/{walletAddress}
  * Payment: x402 (USDC on Base, signed TransferWithAuthorization)
@@ -14,7 +14,7 @@
  */
 
 import type { PrivateKeyAccount, Address } from "viem";
-import { x402Fetch, getUsdcBalance } from "./x402.js";
+import { x402Fetch } from "./x402.js";
 import { createLogger } from "../observability/logger.js";
 import type { ChainType } from "../identity/chain.js";
 
@@ -33,8 +33,10 @@ export interface TopupResult {
 /**
  * Execute a credit topup via x402 payment.
  *
- * Calls GET /pay/{amountUsd}/{address} which returns HTTP 402.
- * x402Fetch handles the payment signing and retry automatically.
+ * This is the only payment-capable topup primitive. Callers must reach it
+ * through the policy-governed `topup_credits` tool. It rejects non-canonical
+ * tiers and caps the x402 payment at exactly the requested tier so a server
+ * cannot turn a valid topup request into a larger payment.
  */
 export async function topupCredits(
   apiUrl: string,
@@ -42,12 +44,28 @@ export async function topupCredits(
   amountUsd: number,
   recipientAddress?: Address,
 ): Promise<TopupResult> {
+  if (!TOPUP_TIERS.includes(amountUsd)) {
+    return {
+      success: false,
+      amountUsd,
+      error: `Invalid topup tier: $${amountUsd}. Valid tiers: ${TOPUP_TIERS.join(", ")}`,
+    };
+  }
+
   const address = recipientAddress || account.address;
   const url = `${apiUrl}/pay/${amountUsd}/${address}`;
+  const maxPaymentCents = amountUsd * 100;
 
   logger.info(`Attempting credit topup: $${amountUsd} USD for ${address}`);
 
-  const result = await x402Fetch(url, account, "GET");
+  const result = await x402Fetch(
+    url,
+    account,
+    "GET",
+    undefined,
+    undefined,
+    maxPaymentCents,
+  );
 
   if (!result.success) {
     logger.error(`Credit topup failed: ${result.error}`);
@@ -72,11 +90,9 @@ export async function topupCredits(
 }
 
 /**
- * Attempt a credit topup in response to a 402 sandbox creation error.
- *
- * Parses the error response to determine the deficit, picks the smallest
- * tier that covers it, checks USDC balance, and calls topupCredits().
- * Returns null if the error isn't a 402 or topup can't proceed.
+ * Sandbox recovery may diagnose the required tier, but must not hide a money
+ * movement inside `spawn_child`. The caller receives a non-success result and
+ * the agent must explicitly invoke `topup_credits`, which re-enters PolicyEngine.
  */
 export async function topupForSandbox(params: {
   apiUrl: string;
@@ -84,19 +100,9 @@ export async function topupForSandbox(params: {
   error: Error & { status?: number; responseText?: string };
   chainType?: ChainType;
 }): Promise<TopupResult | null> {
-  const { apiUrl, account, error, chainType } = params;
-
-  // Solana wallets cannot use x402 for topup (EVM-only payment protocol)
-  if (chainType === "solana") {
-    logger.info(
-      "Sandbox topup skipped: Solana wallets cannot use x402. Fund via Conway credits API or dashboard.",
-    );
-    return null;
-  }
-
+  const { error, chainType } = params;
   if (error.status !== 402 && !error.message?.includes("INSUFFICIENT_CREDITS")) return null;
 
-  // Parse the 402 response body for credit details
   let requiredCents: number | undefined;
   let currentCents: number | undefined;
   try {
@@ -104,46 +110,31 @@ export async function topupForSandbox(params: {
     requiredCents = body.details?.required_cents;
     currentCents = body.details?.current_balance_cents;
   } catch {
-    // If we can't parse the body, check for INSUFFICIENT_CREDITS in message
-    if (!error.message?.includes("INSUFFICIENT_CREDITS")) return null;
+    // The status/message check above is already enough to classify the recovery.
   }
 
-  // Calculate deficit in cents; default to minimum tier if details missing
   const deficitCents = (requiredCents != null && currentCents != null)
-    ? requiredCents - currentCents
+    ? Math.max(0, requiredCents - currentCents)
     : TOPUP_TIERS[0] * 100;
-
-  // Pick smallest tier that covers the deficit (tier is in USD, deficit in cents)
   const selectedTier = TOPUP_TIERS.find((tier) => tier * 100 >= deficitCents)
     ?? TOPUP_TIERS[TOPUP_TIERS.length - 1];
+  const chainNote = chainType === "solana"
+    ? " Solana identities cannot sign the EVM x402 payment path."
+    : "";
 
-  // Check USDC balance before attempting payment
-  let usdcBalance: number;
-  try {
-    usdcBalance = await getUsdcBalance(account.address);
-  } catch (err: any) {
-    logger.warn(`Failed to check USDC balance for sandbox topup: ${err.message}`);
-    return null;
-  }
-
-  if (usdcBalance < selectedTier) {
-    logger.info(
-      `Sandbox topup skipped: USDC $${usdcBalance.toFixed(2)} < tier $${selectedTier}`,
-    );
-    return null;
-  }
-
-  logger.info(`Sandbox topup: deficit=${deficitCents}c, buying $${selectedTier} tier`);
-  return topupCredits(apiUrl, account, selectedTier);
+  logger.info(
+    `Sandbox recovery requires explicit policy-governed topup_credits (suggested tier $${selectedTier}).`,
+  );
+  return {
+    success: false,
+    amountUsd: selectedTier,
+    error: `Automatic sandbox topup disabled; request topup_credits explicitly before retrying spawn_child.${chainNote}`,
+  };
 }
 
 /**
- * Bootstrap topup: buy the minimum tier ($5) on startup so the agent
- * can run inference. The agent decides larger topups itself via the
- * `topup_credits` tool.
- *
- * Only triggers when credits are below threshold AND USDC covers the
- * minimum tier.
+ * Startup/heartbeat bootstrap is notification-only. It may signal that the
+ * minimum tier is needed, but it cannot initiate an x402 payment on its own.
  */
 export async function bootstrapTopup(params: {
   apiUrl: string;
@@ -152,41 +143,19 @@ export async function bootstrapTopup(params: {
   creditThresholdCents?: number;
   chainType?: ChainType;
 }): Promise<TopupResult | null> {
-  const { apiUrl, account, creditsCents, creditThresholdCents = 500, chainType } = params;
-
-  // Solana wallets cannot use x402 for topup (EVM-only payment protocol)
-  if (chainType === "solana") {
-    if (creditsCents < creditThresholdCents) {
-      logger.info(
-        "Bootstrap topup skipped: Solana wallets cannot use x402. Fund via Conway credits API or dashboard.",
-      );
-    }
-    return null;
-  }
-
-  if (creditsCents >= creditThresholdCents) {
-    return null;
-  }
-
-  let usdcBalance: number;
-  try {
-    usdcBalance = await getUsdcBalance(account.address);
-  } catch (err: any) {
-    logger.warn(`Failed to check USDC balance for bootstrap topup: ${err.message}`);
-    return null;
-  }
+  const { creditsCents, creditThresholdCents = 500, chainType } = params;
+  if (creditsCents >= creditThresholdCents) return null;
 
   const minTier = TOPUP_TIERS[0];
-  if (usdcBalance < minTier) {
-    logger.info(
-      `Bootstrap topup skipped: USDC balance $${usdcBalance.toFixed(2)} below minimum tier ($${minTier})`,
-    );
-    return null;
-  }
-
+  const chainNote = chainType === "solana"
+    ? " Solana identities cannot sign the EVM x402 payment path."
+    : "";
   logger.info(
-    `Bootstrap topup: credits=$${(creditsCents / 100).toFixed(2)}, USDC=$${usdcBalance.toFixed(2)}, buying $${minTier}`,
+    `Bootstrap topup requires explicit policy-governed topup_credits (minimum tier $${minTier}).`,
   );
-
-  return topupCredits(apiUrl, account, minTier);
+  return {
+    success: false,
+    amountUsd: minTier,
+    error: `Automatic bootstrap topup disabled; request topup_credits explicitly.${chainNote}`,
+  };
 }
