@@ -131,6 +131,13 @@ function createTransferHourlyCapRule(policy: TreasuryPolicy): PolicyRule {
       if (amount === undefined) return null;
 
       const spendTracker = request.turnContext.sessionSpend;
+      if (!spendTracker) {
+        return deny(
+          "financial.spend_evidence_unavailable",
+          "SPEND_EVIDENCE_UNAVAILABLE",
+          "Financial action refused because spend-tracking evidence is unavailable",
+        );
+      }
       const check = spendTracker.checkLimit(amount, "transfer", policy);
 
       if (!check.allowed && check.reason?.includes("Hourly")) {
@@ -160,6 +167,13 @@ function createTransferDailyCapRule(policy: TreasuryPolicy): PolicyRule {
       if (amount === undefined) return null;
 
       const spendTracker = request.turnContext.sessionSpend;
+      if (!spendTracker) {
+        return deny(
+          "financial.spend_evidence_unavailable",
+          "SPEND_EVIDENCE_UNAVAILABLE",
+          "Financial action refused because spend-tracking evidence is unavailable",
+        );
+      }
       const check = spendTracker.checkLimit(amount, "transfer", policy);
 
       if (!check.allowed && check.reason?.includes("Daily")) {
@@ -196,6 +210,13 @@ function createMinimumReserveRule(policy: TreasuryPolicy): PolicyRule {
       // The balance check is done inside the tool execute function,
       // but we can check spend tracker totals as an additional guard
       const spendTracker = request.turnContext.sessionSpend;
+      if (!spendTracker) {
+        return deny(
+          "financial.spend_evidence_unavailable",
+          "SPEND_EVIDENCE_UNAVAILABLE",
+          "Financial action refused because spend-tracking evidence is unavailable",
+        );
+      }
       const hourlySpend = spendTracker.getHourlySpend("transfer");
       const dailySpend = spendTracker.getDailySpend("transfer");
 

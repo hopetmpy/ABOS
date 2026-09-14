@@ -3389,8 +3389,8 @@ export function toolsToInferenceFormat(
 }
 
 /**
- * Execute a tool call and return the result.
- * Optionally evaluates against the policy engine before execution.
+ * Execute a protected tool call and return the result.
+ * Policy context is mandatory; absence fails closed before side effects.
  */
 export async function executeTool(
   toolName: string,
@@ -3400,8 +3400,10 @@ export async function executeTool(
   policyEngine?: PolicyEngine,
   turnContext?: {
     inputSource: InputSource | undefined;
+    inputProvenance?: import("../types.js").TurnInputProvenance;
+    actorAddress?: string;
     turnToolCallCount: number;
-    sessionSpend: SpendTrackerInterface;
+    sessionSpend?: SpendTrackerInterface;
   },
 ): Promise<ToolCallResult> {
   const tool = tools.find((t) => t.name === toolName);
@@ -3418,31 +3420,117 @@ export async function executeTool(
     };
   }
 
-  // Policy evaluation (if engine is provided)
-  if (policyEngine && turnContext) {
-    const request: PolicyRequest = {
-      tool,
-      args,
-      context,
-      turnContext,
+  // P-010: protected execution is fail-closed when policy authority/context is absent.
+  if (!policyEngine || !turnContext) {
+    return {
+      id: ulid(),
+      name: toolName,
+      arguments: args,
+      result: "",
+      durationMs: Date.now() - startTime,
+      error: "Policy context required: protected tool execution refused without PolicyEngine and turn context",
     };
-    const decision = policyEngine.evaluate(request);
-    policyEngine.logDecision(decision);
+  }
 
-    if (decision.action !== "allow") {
+  const request: PolicyRequest = { tool, args, context, turnContext };
+  const decision = policyEngine.evaluate(request);
+  if (!decision.id) {
+    return {
+      id: ulid(),
+      name: toolName,
+      arguments: args,
+      result: "",
+      durationMs: Date.now() - startTime,
+      error: "Policy evaluation failed closed: durable decision id missing",
+    };
+  }
+
+  try {
+    policyEngine.persistDecision(decision, request);
+  } catch (error) {
+    return {
+      id: ulid(),
+      name: toolName,
+      arguments: args,
+      result: "",
+      durationMs: Date.now() - startTime,
+      error: `Policy persistence failed closed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+
+  if (decision.action === "deny") {
+    return {
+      id: ulid(),
+      name: toolName,
+      arguments: args,
+      result: "",
+      durationMs: Date.now() - startTime,
+      error: `Policy denied: ${decision.reasonCode} — ${decision.humanMessage}`,
+    };
+  }
+
+  let authorizationDecisionId: string | undefined;
+  if (decision.action === "quarantine") {
+    const authorization = policyEngine.claimApprovedAuthorization(request);
+    if (!authorization) {
       return {
         id: ulid(),
         name: toolName,
         arguments: args,
         result: "",
         durationMs: Date.now() - startTime,
-        error: `Policy denied: ${decision.reasonCode} — ${decision.humanMessage}`,
+        error: `Policy authorization required: decision=${decision.id} — ${decision.reasonCode} — ${decision.humanMessage}`,
+      };
+    }
+    try {
+      policyEngine.attachAuthorization(decision.id, authorization);
+      authorizationDecisionId = authorization.decisionId;
+    } catch (error) {
+      return {
+        id: ulid(),
+        name: toolName,
+        arguments: args,
+        result: "",
+        durationMs: Date.now() - startTime,
+        error: `Policy authorization consumption failed closed: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   }
 
   try {
-    let result = await tool.execute(args, context);
+    policyEngine.recordExecution(decision.id, "running", {
+      authorizationDecisionId: authorizationDecisionId ?? null,
+    });
+  } catch (error) {
+    return {
+      id: ulid(),
+      name: toolName,
+      arguments: args,
+      result: "",
+      durationMs: Date.now() - startTime,
+      error: `Policy execution claim failed closed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+
+  try {
+    let result: string;
+    try {
+      result = await tool.execute(args, context);
+    } catch (err: any) {
+      try {
+        policyEngine.recordExecution(decision.id, "failed", { error: err?.message || String(err) });
+      } catch {
+        // Preserve the original tool failure; the pre-effect running record remains durable evidence.
+      }
+      return {
+        id: ulid(),
+        name: toolName,
+        arguments: args,
+        result: "",
+        durationMs: Date.now() - startTime,
+        error: err?.message || String(err),
+      };
+    }
 
     // Sanitize results from external source tools
     if (EXTERNAL_SOURCE_TOOLS.has(toolName)) {
@@ -3450,7 +3538,7 @@ export async function executeTool(
     }
 
     // Record spend for financial operations
-    if (turnContext && !result.startsWith("Blocked:")) {
+    if (turnContext.sessionSpend && !result.startsWith("Blocked:")) {
       if (toolName === "transfer_credits") {
         const amount = args.amount_cents as number | undefined;
         if (amount && amount > 0) {
@@ -3491,6 +3579,19 @@ export async function executeTool(
           );
         }
       }
+    }
+
+    try {
+      policyEngine.recordExecution(decision.id, "succeeded");
+    } catch (error) {
+      return {
+        id: ulid(),
+        name: toolName,
+        arguments: args,
+        result,
+        durationMs: Date.now() - startTime,
+        error: `Policy execution outcome UNKNOWN after tool effect; do not retry blindly: ${error instanceof Error ? error.message : String(error)}`,
+      };
     }
 
     return {

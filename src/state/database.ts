@@ -53,6 +53,7 @@ import {
   MIGRATION_V15_ALTER_INBOX_SENDER_VERIFICATION,
   MIGRATION_V15_ALTER_INBOX_TRANSPORT_SENDER,
   MIGRATION_V15_ALTER_TURNS_INPUT_PROVENANCE,
+  MIGRATION_V16_POLICY_LIFECYCLE,
 } from "./schema.js";
 import type {
   RiskLevel,
@@ -659,6 +660,22 @@ function applyMigrations(db: DatabaseType): void {
         try { db.exec(MIGRATION_V15_ALTER_INBOX_SENDER_VERIFICATION); } catch { logger.debug("V15 ALTER (inbox sender_verification) skipped — column likely exists"); }
         try { db.exec(MIGRATION_V15_ALTER_INBOX_TRANSPORT_SENDER); } catch { logger.debug("V15 ALTER (inbox transport_sender) skipped — column likely exists"); }
         try { db.exec(MIGRATION_V15_ALTER_TURNS_INPUT_PROVENANCE); } catch { logger.debug("V15 ALTER (turn input_provenance) skipped — column likely exists"); }
+      },
+    },
+    {
+      version: 16,
+      apply: () => {
+        const policyTable = db
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'policy_decisions'")
+          .get();
+        if (!policyTable) {
+          // Self-heal an incomplete legacy DB by replaying the idempotent V4
+          // CREATE authority before applying additive lifecycle columns.
+          db.exec(MIGRATION_V4);
+        }
+        for (const statement of MIGRATION_V16_POLICY_LIFECYCLE) {
+          db.exec(statement);
+        }
       },
     },
   ];

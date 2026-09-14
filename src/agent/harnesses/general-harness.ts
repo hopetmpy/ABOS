@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { AbosTool, SpendTrackerInterface } from "../../types.js";
+import type { AbosTool } from "../../types.js";
 import { isProtectedFile } from "../../self-mod/code.js";
 import { BaseHarness } from "./base-harness.js";
 import type { HarnessTool } from "../harness-types.js";
@@ -45,21 +45,6 @@ const GENERAL_WRAPPED_TOOL_ALLOWLIST = new Set([
 const GENERAL_SPEC_ALIAS_TARGETS = {
   web_fetch: "x402_fetch",
 } as const;
-const NOOP_SPEND_TRACKER: SpendTrackerInterface = {
-  recordSpend: () => {},
-  getHourlySpend: () => 0,
-  getDailySpend: () => 0,
-  getTotalSpend: () => 0,
-  checkLimit: () => ({
-    allowed: true,
-    currentHourlySpend: 0,
-    currentDailySpend: 0,
-    limitHourly: Number.MAX_SAFE_INTEGER,
-    limitDaily: Number.MAX_SAFE_INTEGER,
-  }),
-  pruneOldRecords: () => 0,
-};
-
 export class GeneralHarness extends BaseHarness {
   readonly id = "general";
   readonly description = "General-purpose agent for research, web interaction, and non-coding execution tasks.";
@@ -297,7 +282,7 @@ When calling task_done, provide:
           {
             inputSource: this.context.inputSource,
             turnToolCallCount: this.transferToolCallCount,
-            sessionSpend: this.context.spendTracker ?? NOOP_SPEND_TRACKER,
+            sessionSpend: this.context.spendTracker,
           },
         );
         if (tool.name === "transfer_credits") {
@@ -345,7 +330,7 @@ When calling task_done, provide:
               {
                 inputSource: this.context.inputSource,
                 turnToolCallCount: this.transferToolCallCount,
-                sessionSpend: this.context.spendTracker ?? NOOP_SPEND_TRACKER,
+                sessionSpend: this.context.spendTracker,
               },
             );
 

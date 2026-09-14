@@ -6,6 +6,9 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { runAgentLoop } from "../agent/loop.js";
+import { PolicyEngine } from "../agent/policy-engine.js";
+import { SpendTracker } from "../agent/spend-tracker.js";
+import { createDefaultRules } from "../agent/policy-rules/index.js";
 import { Orchestrator } from "../orchestration/orchestrator.js";
 import {
   MockInferenceClient,
@@ -39,12 +42,16 @@ describe("Agent Loop", () => {
   let conway: MockConwayClient;
   let identity: ReturnType<typeof createTestIdentity>;
   let config: ReturnType<typeof createTestConfig>;
+  let policyEngine: PolicyEngine;
+  let spendTracker: SpendTracker;
 
   beforeEach(() => {
     db = createTestDb();
     conway = new MockConwayClient();
     identity = createTestIdentity();
     config = createTestConfig();
+    policyEngine = new PolicyEngine(db.raw, createDefaultRules(config.treasuryPolicy));
+    spendTracker = new SpendTracker(db.raw);
   });
 
   afterEach(() => {
@@ -63,6 +70,8 @@ describe("Agent Loop", () => {
     const turns: AgentTurn[] = [];
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config,
       db,
@@ -96,6 +105,8 @@ describe("Agent Loop", () => {
     const turns: AgentTurn[] = [];
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config,
       db,
@@ -104,13 +115,14 @@ describe("Agent Loop", () => {
       onTurnComplete: (turn) => turns.push(turn),
     });
 
-    // The tool result should contain a blocked message, not an error
+    // P-010: forbidden commands are classified by policy before the tool effect.
     const execTurn = turns.find((t) =>
       t.toolCalls.some((tc) => tc.name === "exec"),
     );
     expect(execTurn).toBeDefined();
     const execCall = execTurn!.toolCalls.find((tc) => tc.name === "exec");
-    expect(execCall!.result).toContain("Blocked");
+    expect(execCall!.error).toContain("Policy denied");
+    expect(execCall!.error).toContain("FORBIDDEN_COMMAND");
 
     // conway.exec should NOT have been called
     expect(conway.execCalls.length).toBe(0);
@@ -124,6 +136,8 @@ describe("Agent Loop", () => {
     ]);
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config,
       db,
@@ -142,6 +156,8 @@ describe("Agent Loop", () => {
     ]);
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config,
       db,
@@ -159,6 +175,8 @@ describe("Agent Loop", () => {
     ]);
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config,
       db,
@@ -193,6 +211,8 @@ describe("Agent Loop", () => {
     const turns: AgentTurn[] = [];
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config,
       db,
@@ -228,6 +248,8 @@ describe("Agent Loop", () => {
     const turns: AgentTurn[] = [];
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config,
       db,
@@ -254,6 +276,8 @@ describe("Agent Loop", () => {
     const consoleSpy3 = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config: { ...config, logLevel: "debug" },
       db,
@@ -287,6 +311,8 @@ describe("Agent Loop", () => {
     const consoleSpy2 = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config,
       db,
@@ -323,6 +349,8 @@ describe("Agent Loop", () => {
     const turns: AgentTurn[] = [];
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config,
       db,
@@ -346,6 +374,8 @@ describe("Agent Loop", () => {
     ]);
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config,
       db,
@@ -373,6 +403,8 @@ describe("Agent Loop", () => {
     const turns: AgentTurn[] = [];
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config: lowLimitConfig,
       db,
@@ -395,6 +427,8 @@ describe("Agent Loop", () => {
     ]);
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config: lowLimitConfig,
       db,
@@ -424,6 +458,8 @@ describe("Agent Loop", () => {
     const turns: AgentTurn[] = [];
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config: limit5Config,
       db,
@@ -447,6 +483,8 @@ describe("Agent Loop", () => {
     const stateChanges: AgentState[] = [];
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config,
       db,
@@ -498,6 +536,8 @@ describe("Agent Loop", () => {
     const turns: AgentTurn[] = [];
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config,
       db,
@@ -538,6 +578,8 @@ describe("Agent Loop", () => {
     const turns: AgentTurn[] = [];
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config,
       db,
@@ -590,6 +632,8 @@ describe("Agent Loop", () => {
     const turns: AgentTurn[] = [];
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config,
       db,
@@ -643,6 +687,8 @@ describe("Agent Loop", () => {
     const stateChanges: AgentState[] = [];
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config,
       db,
@@ -705,6 +751,8 @@ describe("Agent Loop", () => {
     const turns: AgentTurn[] = [];
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config,
       db,
@@ -763,6 +811,8 @@ describe("Agent Loop", () => {
     const turns: AgentTurn[] = [];
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config,
       db,
@@ -799,6 +849,8 @@ describe("Agent Loop", () => {
     const turns: AgentTurn[] = [];
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config,
       db,
@@ -833,6 +885,8 @@ describe("Agent Loop", () => {
     ]);
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config,
       db,
@@ -881,6 +935,8 @@ describe("Agent Loop", () => {
     ]);
 
     await runAgentLoop({
+      policyEngine,
+      spendTracker,
       identity,
       config,
       db,

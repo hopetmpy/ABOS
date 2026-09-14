@@ -5,7 +5,7 @@
  * The database IS the abos's memory.
  */
 
-export const SCHEMA_VERSION = 15;
+export const SCHEMA_VERSION = 16;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -979,3 +979,28 @@ export const MIGRATION_V15_ALTER_INBOX_TRANSPORT_SENDER = `
 export const MIGRATION_V15_ALTER_TURNS_INPUT_PROVENANCE = `
   ALTER TABLE turns ADD COLUMN input_provenance TEXT;
 `;
+
+// === Policy / Authorization lifecycle v1 (P-010) ===
+// Additive only. Legacy rows remain historical decisions and are never
+// interpreted as approvals merely because the schema was migrated.
+export const MIGRATION_V16_POLICY_LIFECYCLE: readonly string[] = [
+  `ALTER TABLE policy_decisions ADD COLUMN request_json TEXT`,
+  `ALTER TABLE policy_decisions ADD COLUMN provenance_json TEXT`,
+  `ALTER TABLE policy_decisions ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'legacy'`,
+  `ALTER TABLE policy_decisions ADD COLUMN scope_hash TEXT`,
+  `ALTER TABLE policy_decisions ADD COLUMN required_authority TEXT`,
+  `ALTER TABLE policy_decisions ADD COLUMN expires_at TEXT`,
+  `ALTER TABLE policy_decisions ADD COLUMN authorization_json TEXT`,
+  `ALTER TABLE policy_decisions ADD COLUMN approved_at TEXT`,
+  `ALTER TABLE policy_decisions ADD COLUMN revoked_at TEXT`,
+  `ALTER TABLE policy_decisions ADD COLUMN cancelled_at TEXT`,
+  `ALTER TABLE policy_decisions ADD COLUMN claim_token TEXT`,
+  `ALTER TABLE policy_decisions ADD COLUMN claimed_at TEXT`,
+  `ALTER TABLE policy_decisions ADD COLUMN execution_state TEXT NOT NULL DEFAULT 'not_started'`,
+  `ALTER TABLE policy_decisions ADD COLUMN execution_json TEXT`,
+  `ALTER TABLE policy_decisions ADD COLUMN completed_at TEXT`,
+  `ALTER TABLE policy_decisions ADD COLUMN constitution_result TEXT NOT NULL DEFAULT 'not_evaluated'`,
+  `CREATE INDEX IF NOT EXISTS idx_policy_lifecycle_state ON policy_decisions(lifecycle_state, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_policy_scope_hash ON policy_decisions(scope_hash, lifecycle_state)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_policy_claim_token ON policy_decisions(claim_token) WHERE claim_token IS NOT NULL`,
+];

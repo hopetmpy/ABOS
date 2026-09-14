@@ -216,7 +216,7 @@ describe("P-009 authority provenance", () => {
     const version = migrated.raw
       .prepare("SELECT MAX(version) AS version FROM schema_version")
       .get() as { version: number };
-    expect(version.version).toBe(15);
+    expect(version.version).toBe(16);
     const legacy = migrated.getUnprocessedInboxMessages(10)[0];
     expect(legacy?.provenance).toEqual({
       transport: "legacy_unknown",
