@@ -141,6 +141,7 @@ export function computePolicyScopeHash(request: PolicyRequest): string {
         args: request.args,
         inputSource: request.turnContext.inputSource ?? null,
         actorAddress: actorEvidence,
+        creatorAddress: request.context.config.creatorAddress,
         provenance,
       }),
     )
