@@ -13,8 +13,8 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p008-runtime-truth-v1
 Host-Head-At-Audit-Open: fed2fe3c836dfc4351934a4abedf78898782728e
-Last-Reconciled-Host-Head: 36cd70026e941ab997ee5f533da26fdd62b05438
-Last-Reconciled-Head-Semantics: P008_DECISION_READY_CORE_AND_PROMPT_TRUTH_IMPLEMENTED_PR34_DRAFT_VALIDATION_PENDING
+Last-Reconciled-Host-Head: 1678f6fed32e634f963b05af16708597cdd1a615
+Last-Reconciled-Head-Semantics: P008_SOURCE_IMPLEMENTED_TARGETED_GREEN_FULL_CI_BLOCKED_PRE_RUNNER_BY_BOT_ACTOR
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -28,12 +28,17 @@ P003-Merge: fed2fe3c836dfc4351934a4abedf78898782728e
 P003-Main-CI: 34791524178
 P003-Main-ProjectOps: 34791524147
 P008-PR: 34
+P008-Source-Head: 1678f6fed32e634f963b05af16708597cdd1a615
+P008-Targeted-Validation: 34795993901
+P008-Targeted-Tests: 32/32 PASS
+P008-Full-CI-Bot-Head: 34796019132 ACTION_REQUIRED JOBS_NULL
+P008-ProjectOps-Bot-Head: 34796019127 ACTION_REQUIRED JOBS_NULL
 
 ## Semántica del HEAD reconciliado
 
-`Host-Head-At-Audit-Open` identifica el `main` exacto desde el que se abrió P-008. `Last-Reconciled-Host-Head` identifica el último head de la rama activa cuya realidad técnica/documental ya fue reconciliada en C0004. No implica integración en `main`.
+`Host-Head-At-Audit-Open` identifica el `main` exacto desde el que se abrió P-008. `Last-Reconciled-Host-Head` identifica el source head de la rama activa cuya realidad técnica y evidencia ya fueron reconciliadas en C0004. No implica integración en `main` ni full CI PASS.
 
-P-008 ya superó la fase exclusivamente investigativa: alcanzó `DECISION_READY` para el contrato core y tiene source implementado. Sigue EN_EJECUCIÓN porque quedan rutas materiales por auditar/corregir y falta validación/integración completa.
+P-008 ya alcanzó `DECISION_READY`, tiene source implementado y validación dirigida verde. Permanece EN_EJECUCIÓN porque el full CI del source head quedó bloqueado antes del runner por policy del actor `github-actions[bot]`, y todavía faltan branch exact-head green + integración + validación de `main`.
 
 ## Estado canónico
 
@@ -44,7 +49,7 @@ P-008 ya superó la fase exclusivamente investigativa: alcanzó `DECISION_READY`
 - P-005: PLANIFICADO — acceptance LIVE por subfrontera; puede quedar LIVE_BLOCKED_EXTERNAL cuando falte autorización/entorno.
 - P-006: HECHO — remediación de advisories integrada por PR #32 y revalidada en `main`.
 - P-007: HECHO — programa maestro P-008..P-036 consolidado mediante PR #31.
-- P-008: EN_EJECUCIÓN — Runtime Truth/capability claims; core lifecycle/evidence, restart-skill truth y prompt-truth implementados; residual MCP/status audit + exact-head validation pendientes.
+- P-008: EN_EJECUCIÓN — source implementado; targeted validation verde; full CI exact-head pendiente de ejecución normal por actor/policy.
 - P-009..P-036: ver `ProjectOps/PLAN.md`; permanecen PLANIFICADO salvo estados explícitos.
 
 ## P-003 — cierre verificable
@@ -69,56 +74,71 @@ Authority/architecture:
 - `CapabilityRegistry` permanece como única generic capability authority;
 - `available` legacy es sólo proyección derivada;
 - `VERIFIED_AVAILABLE` requiere evidence y `observedAt` válidos;
-- environment evidence se proyecta al registry sin crear segunda source of truth;
+- environment evidence se proyecta al registry con `registerEnvironmentSnapshot()`;
 - resolver preserva UNKNOWN / UNAUTHORIZED / PROHIBITED y sólo usa existing capability cuando está verificada.
 
-Restart/runtime:
+Restart/inventory:
 - persisted skills se revalidan contra requisitos actuales;
 - inventory enabled/installed no se considera runtime readiness;
-- la hipótesis de que DB cargaba installed tools disabled fue falsada: `getInstalledTools()` ya filtra `enabled = 1`.
+- la hipótesis de que DB cargaba installed tools disabled fue falsada: `getInstalledTools()` ya filtra `enabled = 1`;
+- CLI/status/list auditados expresan inventory cuando sólo existe inventory.
 
-Prompt:
+Prompt/planner:
 - claims estáticos de possession/readiness fueron corregidos;
-- tool definitions cargadas se presentan como `LOADED TOOL SURFACES`, no `AVAILABLE TOOLS`;
+- tool definitions cargadas se presentan como loaded surfaces, no availability probada;
 - architectural support se diferencia de availability verificada;
-- child balance UNKNOWN no dispara `out_of_credits` ni autofunding.
+- child balance UNKNOWN no dispara `out_of_credits` ni autofunding;
+- planner no convierte roles/capabilities descritas en readiness.
 
-Validación adversarial:
-- CI exact-head `67d09828...` falló correctamente porque un fixture pretendía `verified_available` sin `observedAt`;
-- no se debilitó source; se corrigió el fixture en `29534cc...`;
-- ProjectOps Integrity sobre `52d3d30...`: SUCCESS (`34794186407`);
-- CI sobre `52d3d30...`: `34794186414` seguía EN_EJECUCIÓN en el último chequeo anterior a la reconciliación; no es PASS todavía.
+MCP nominal:
+- P-015 conserva la implementación del protocolo MCP real;
+- built-in install persiste `runtimeTruth: configured_unverified` y `enabled:false`;
+- MCP nominal no entra a superficies inference-callable desde installed inventory;
+- una llamada directa accidental al executor nominal falla cerrado en vez de devolver éxito ficticio;
+- runtime-truth policy conserva una segunda barrera.
 
-PR:
-- #34 permanece OPEN / DRAFT / NO MERGEAR todavía.
+Environment evidence:
+- agent loop y orchestrator ya proyectan snapshots completos, preservando availability/evidence/observedAt en vez de registrar sólo descriptors desnudos.
+
+## Validación adversarial
+
+- Head `67d09828...`: CI falló correctamente porque un fixture pretendía `verified_available` sin `observedAt`; se corrigió el fixture, no se debilitó source.
+- Head `34080a08...`: CI `34795241873` aisló 3 fallos reales en `installed-tools-runtime-truth.test.ts`; 1907/1910 tests PASS y el resto de gates materiales no reveló otro defecto en ese run.
+- Run dirigido final `34795993901`:
+  - 10 reemplazos guardados PASS;
+  - typecheck PASS;
+  - 9/9 test files PASS;
+  - 32/32 tests PASS;
+  - commit/push PASS.
+- Source head resultante: `1678f6fed32e634f963b05af16708597cdd1a615`.
+- Artefactos one-shot eliminados en el mismo commit y ausentes del diff neto del PR.
+- Full CI/Integrity sobre `1678f6f...`: `action_required` con `jobs=[]`, actor `github-actions[bot]`; clasificación `BLOCKED_PRE_RUNNER / ACTOR_APPROVAL_POLICY / NO VERIFICADO`.
 
 ## Claims no elevados
 
 NO se declara:
 - P-008 HECHO;
-- CI exact-head actual PASS hasta observarlo completo;
-- installed/configured MCP como MCP ejecutable;
-- ausencia total de otras rutas status/list de overclaim hasta auditarlas;
+- full CI exact-head PASS sobre `1678f6f...`;
 - PR #34 listo para merge;
 - P-008 integrado/revalidado en `main`;
+- MCP real implementado — pertenece a P-015;
 - P-009..P-036 implementados;
 - ninguna frontera LIVE elevada sin evidencia proporcional.
 
 ## Siguiente acción verificable
 
-1. leer resultado del CI exact-head ya iniciado; diagnosticar cualquier fallo antes de repetir;
-2. auditar/corregir installed MCP nominal sin preimplementar P-015;
-3. auditar status/list surfaces restantes que puedan confundir inventory/configuration con availability;
-4. reauditar planner/children consumers después de los cambios;
-5. revalidar branch/PR exact-head;
-6. sólo con Definition of Done demostrada preparar integración y posterior validación de `main`.
+1. Crear esta reconciliación como commit normal de usuario sobre el source `1678f6f...`.
+2. Observar full CI + ProjectOps Integrity del nuevo exact-head.
+3. Si falla, diagnosticar job exacto antes de repetir.
+4. Si queda verde, reauditar diff final de P-008 y actualizar PR #34 con evidencia vigente.
+5. Sólo entonces preparar integración; después validar `main` antes de declarar P-008 HECHO.
 
 ## Bloqueos / límites actuales
 
 - clone/container local: NO DISPONIBLE por resolución DNS observada;
-- GitHub connector y GitHub Actions: DISPONIBLE / AUTORIZADO;
-- no existe bloqueo general para continuar por GitHub;
-- una limitación de herramienta no se convierte en PASS ni en HECHO.
+- GitHub connector + GitHub Actions: DISPONIBLE / AUTORIZADO;
+- full CI del bot source head: BLOCKED_PRE_RUNNER por actor/policy, no source fail;
+- una limitación de herramienta o plataforma no se convierte en PASS ni HECHO.
 
 ## Política de rotación
 
