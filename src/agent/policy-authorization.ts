@@ -127,6 +127,10 @@ function getAuthorizationRow(
   return row;
 }
 
+function requestCreatorAddress(request: PolicyRequest): string | null {
+  return request.context.config?.creatorAddress ?? null;
+}
+
 export function computePolicyScopeHash(request: PolicyRequest): string {
   const provenance = request.turnContext.inputProvenance ?? null;
   const actorEvidence =
@@ -141,7 +145,7 @@ export function computePolicyScopeHash(request: PolicyRequest): string {
         args: request.args,
         inputSource: request.turnContext.inputSource ?? null,
         actorAddress: actorEvidence,
-        creatorAddress: request.context.config.creatorAddress,
+        creatorAddress: requestCreatorAddress(request),
         provenance,
       }),
     )
@@ -183,8 +187,17 @@ export function persistPolicyDecisionLifecycle(
     actorAddress: decision.actorAddress ?? null,
     inputProvenance: decision.inputProvenance ?? null,
   });
+  const creatorAddress = requestCreatorAddress(request);
+  if (
+    decision.action === "quarantine" &&
+    (!creatorAddress || !detectChainType(creatorAddress))
+  ) {
+    throw new Error(
+      `Policy decision ${decision.id} requires creator authorization but no valid creator authority is configured`,
+    );
+  }
   const authorizationJson = decision.action === "quarantine"
-    ? canonicalPolicyJson({ expectedCreatorAddress: request.context.config.creatorAddress })
+    ? canonicalPolicyJson({ expectedCreatorAddress: creatorAddress })
     : null;
 
   db.transaction(() => {
