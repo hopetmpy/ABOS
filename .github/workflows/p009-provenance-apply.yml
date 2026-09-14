@@ -1,0 +1,49 @@
+name: P009 Provenance Apply
+
+on:
+  push:
+    branches:
+      - abos/p009-authority-provenance-v1
+    paths:
+      - .github/workflows/p009-provenance-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: abos/p009-authority-provenance-v1
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - name: Apply guarded P-009 patch
+        run: python scripts/p009-provenance-apply.py
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Targeted adversarial tests
+        run: >-
+          pnpm exec vitest run
+          src/__tests__/authority-provenance.test.ts
+          src/__tests__/authority-rules.test.ts
+          src/__tests__/inbox-processing.test.ts
+          src/__tests__/social.test.ts
+          src/__tests__/orchestration/messaging.test.ts
+          src/__tests__/orchestration/colony-task-assignment.test.ts
+      - name: Commit verified source and remove one-shot helpers
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src
+          git rm .github/workflows/p009-provenance-apply.yml scripts/p009-provenance-apply.py
+          git diff --cached --check
+          git commit -m "fix(authority): preserve inbound provenance (P-009)"
+          git push origin HEAD:abos/p009-authority-provenance-v1
