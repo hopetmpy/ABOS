@@ -48,3 +48,5 @@ jobs:
           git rm .github/workflows/p008-surgical-patch.yml scripts/p008-surgical-patch.py
           git commit -m "fix(runtime-truth): close nominal MCP exposure and preserve environment evidence"
           git push origin HEAD:abos/p008-runtime-truth-v1
+
+# Trigger after exact source needles were reconciled from run 34795758027 evidence.
