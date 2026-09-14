@@ -22,6 +22,7 @@ import {
 } from "./heartbeat/config.js";
 import { consumeNextWakeEvent } from "./state/database.js";
 import { runAgentLoop } from "./agent/loop.js";
+import { createBuiltinTools, executeTool } from "./agent/tools.js";
 import { ModelRegistry } from "./inference/registry.js";
 import { loadCodexCatalog, syncCodexCatalogToRegistry } from "./codex/catalog.js";
 import { loadSkills } from "./skills/loader.js";
@@ -34,7 +35,7 @@ import type { AbosIdentity, AgentState, Skill, SocialClientInterface } from "./t
 import { DEFAULT_TREASURY_POLICY } from "./types.js";
 import { createLogger, setGlobalLogLevel, StructuredLogger } from "./observability/logger.js";
 import { prettySink } from "./observability/pretty-sink.js";
-import { bootstrapTopup } from "./conway/topup.js";
+import { planAutonomousTopup } from "./conway/topup.js";
 import { randomUUID } from "crypto";
 import { keccak256, toHex } from "viem";
 import { ABOS_VERSION } from "./version.js";
@@ -98,7 +99,7 @@ Environment:
     const encoded = Buffer.from(JSON.stringify(result), "utf8").toString("base64");
     // Stable transport marker for provider adapters. A semantic Task failure is
     // still a successfully transported TaskResult and therefore exits normally.
-    process.stdout.write(`ABOS_TASK_RESULT_BASE64=${encoded}\\n`);
+    process.stdout.write(`ABOS_TASK_RESULT_BASE64=${encoded}\n`);
     process.exit(0);
   }
 
@@ -476,36 +477,63 @@ async function run(): Promise<void> {
     logger.warn(`[${new Date().toISOString()}] State repo init failed: ${err.message}`);
   }
 
-  // Bootstrap topup: buy minimum credits ($5) from USDC so the agent can start.
-  // The agent decides larger topups itself via the topup_credits tool.
+  // Bootstrap topup: restore autonomous minimum provisioning without restoring
+  // the old direct-payment bypass. The planner uses observed credits + USDC and
+  // the selected `topup_credits` execution re-enters the canonical PolicyEngine.
   try {
-    let bootstrapTimer: ReturnType<typeof setTimeout>;
-    const bootstrapTimeout = new Promise<null>((_, reject) => {
-      bootstrapTimer = setTimeout(() => reject(new Error("bootstrap topup timed out")), 15_000);
-    });
-    try {
-      await Promise.race([
-        (async () => {
-          const creditsCents = await conway.getCreditsBalance().catch(() => 0);
-          const topupResult = await bootstrapTopup({
-            apiUrl: config.conwayApiUrl,
-            account,
-            creditsCents,
-            chainType: resolvedChainType,
-          });
-          if (topupResult?.success) {
-            logger.info(
-              `[${new Date().toISOString()}] Bootstrap topup: +$${topupResult.amountUsd} credits from USDC`,
-            );
-          }
-        })(),
-        bootstrapTimeout,
-      ]);
-    } finally {
-      clearTimeout(bootstrapTimer!);
+    if (resolvedChainType === "solana") {
+      logger.info(
+        `[${new Date().toISOString()}] Bootstrap topup not executable: current x402 payment route requires EVM.`,
+      );
+    } else {
+      const creditsCents = await conway.getCreditsBalance();
+      const { getUsdcBalance } = await import("./conway/x402.js");
+      const availableUsdcUsd = await getUsdcBalance(identity.address, "eip155:8453", resolvedChainType);
+      const plan = planAutonomousTopup({
+        creditsCents,
+        availableUsdcUsd,
+        chainType: resolvedChainType,
+      });
+
+      db.setKV(
+        "last_autonomous_topup_plan",
+        JSON.stringify({ ...plan, observedAt: new Date().toISOString(), source: "startup" }),
+      );
+
+      if (plan.action === "topup" && plan.amountUsd !== undefined) {
+        const bootstrapTools = createBuiltinTools(config.sandboxId);
+        const result = await executeTool(
+          "topup_credits",
+          { amount_usd: plan.amountUsd },
+          bootstrapTools,
+          { identity, config, db, conway, inference, social },
+          policyEngine,
+          {
+            inputSource: "system",
+            actorAddress: identity.address,
+            turnToolCallCount: 0,
+            sessionSpend: spendTracker,
+          },
+        );
+
+        if (result.error) {
+          logger.warn(
+            `[${new Date().toISOString()}] Autonomous bootstrap topup was not executed: ${result.error}`,
+          );
+        } else {
+          logger.info(
+            `[${new Date().toISOString()}] Autonomous bootstrap topup executed: $${plan.amountUsd}. ${plan.rationale}`,
+          );
+        }
+      } else {
+        logger.info(
+          `[${new Date().toISOString()}] Autonomous bootstrap topup not needed/executable: ${plan.reasonCode}. ${plan.rationale}`,
+        );
+      }
     }
   } catch (err: any) {
-    logger.warn(`[${new Date().toISOString()}] Bootstrap topup skipped: ${err.message}`);
+    // Missing/failed balance evidence is not zero and must not manufacture spend.
+    logger.warn(`[${new Date().toISOString()}] Autonomous bootstrap topup skipped: ${err.message}`);
   }
 
   // Start heartbeat daemon (Phase 1.1: DurableScheduler)
