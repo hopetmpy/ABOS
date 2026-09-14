@@ -1,0 +1,222 @@
+name: P008 Surgical Runtime Truth Patch
+
+on:
+  push:
+    branches:
+      - abos/p008-runtime-truth-v1
+    paths:
+      - .github/workflows/p008-surgical-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v4
+        with:
+          ref: abos/p008-runtime-truth-v1
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply guarded exact replacements
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_exact(path: str, old: str, new: str, label: str) -> None:
+              file = Path(path)
+              text = file.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly 1 match in {path}, found {count}")
+              file.write_text(text.replace(old, new, 1), encoding="utf-8")
+              print(f"patched {label}")
+
+          tools = "src/agent/tools.ts"
+
+          replace_exact(
+              tools,
+              '      description: "Install an MCP server to extend your capabilities.",',
+              '      description: "Install an MCP server package and persist configuration. Runtime execution remains unverified until a real MCP adapter verifies handshake, tool discovery, and calls.",',
+              "builtin MCP description",
+          )
+
+          replace_exact(
+              tools,
+              '''        const { ulid } = await import("ulid");
+          const toolEntry = {
+            id: ulid(),
+            name: args.name as string,
+            type: "mcp" as const,
+            config: args.config ? JSON.parse(args.config as string) : {},
+            installedAt: new Date().toISOString(),
+            enabled: true,
+          };
+
+          ctx.db.installTool(toolEntry);
+
+          ctx.db.insertModification({
+            id: ulid(),
+            timestamp: new Date().toISOString(),
+            type: "mcp_install",
+            description: `Installed MCP server: ${args.name} (${pkg})`,
+            reversible: true,
+          });
+
+          return `MCP server installed: ${args.name}`;''',
+              '''        const { ulid } = await import("ulid");
+          const configuredMcp = args.config
+            ? JSON.parse(args.config as string)
+            : {};
+          const toolEntry = {
+            id: ulid(),
+            name: args.name as string,
+            type: "mcp" as const,
+            config: {
+              ...configuredMcp,
+              runtimeTruth: "configured_unverified",
+            },
+            installedAt: new Date().toISOString(),
+            // `enabled` is the legacy runtime-loading gate. Do not promote MCP
+            // configuration into an executable tool until a real adapter has
+            // verified protocol handshake, discovery, and calls.
+            enabled: false,
+          };
+
+          ctx.db.installTool(toolEntry);
+
+          ctx.db.insertModification({
+            id: ulid(),
+            timestamp: new Date().toISOString(),
+            type: "mcp_install",
+            description: `Configured MCP server inventory (runtime unverified): ${args.name} (${pkg})`,
+            reversible: true,
+          });
+
+          return `MCP server package installed and configuration saved: ${args.name}. Runtime execution is UNVERIFIED and remains disabled until a verified MCP adapter is available.`;''',
+              "builtin MCP persistence",
+          )
+
+          replace_exact(
+              tools,
+              '      description: "List all installed skills.",',
+              '      description: "List installed skill inventory and administrative enablement. Enabled inventory is not proof of current runtime readiness.",',
+              "list_skills description",
+          )
+
+          replace_exact(
+              tools,
+              '''        return skills
+            .map(
+              (s) =>
+                `${s.name} [${s.enabled ? "active" : "disabled"}] (${s.source}): ${s.description}`,
+            )
+            .join("\\n");''',
+              '''        const rows = skills
+            .map(
+              (s) =>
+                `${s.name} [${s.enabled ? "enabled-in-inventory" : "disabled"}] (${s.source}): ${s.description}`,
+            )
+            .join("\\n");
+        return `Installed skill inventory (enabled is administrative state, not verified runtime readiness):\\n${rows}`;''',
+              "list_skills projection",
+          )
+
+          replace_exact(
+              tools,
+              '''    const installed = db.getInstalledTools();
+      return installed.map((tool) => ({''',
+              '''    const installed = db.getInstalledTools();
+      // P-015 owns the real MCP runtime. Legacy/configured MCP rows must not
+      // become inference-callable tool surfaces merely because inventory says
+      // enabled. Keep them out until protocol-level evidence exists.
+      const runtimeEligible = installed.filter((tool) => tool.type !== "mcp");
+      return runtimeEligible.map((tool) => ({''',
+              "installed MCP exposure filter",
+          )
+
+          replace_exact(
+              tools,
+              '''    if (tool.type === "mcp") {
+        // MCP tools would be executed via MCP protocol
+        return `MCP tool ${tool.name} invoked with args: ${JSON.stringify(args)}`;
+      }''',
+              '''    if (tool.type === "mcp") {
+        // Defense in depth. loadInstalledTools() filters nominal MCP inventory,
+        // but a future accidental direct call must still fail closed rather
+        // than report a fake invocation as success.
+        throw new Error(
+          `MCP tool ${tool.name} is configured but no verified MCP runtime adapter is available.`,
+        );
+      }''',
+              "nominal MCP executor",
+          )
+
+          replace_exact(
+              "src/agent/loop.ts",
+              '''  for (const snapshot of await environmentRegistry.inspectAll()) {
+      capabilityRegistry.registerMany(snapshot.capabilities);
+    }''',
+              '''  for (const snapshot of await environmentRegistry.inspectAll()) {
+      capabilityRegistry.registerEnvironmentSnapshot(snapshot);
+    }''',
+              "agent-loop environment evidence projection",
+          )
+
+          replace_exact(
+              "src/orchestration/orchestrator.ts",
+              '''      for (const snapshot of environmentSnapshots) {
+          this.params.capabilityRegistry.registerMany(snapshot.capabilities);
+        }''',
+              '''      for (const snapshot of environmentSnapshots) {
+          this.params.capabilityRegistry.registerEnvironmentSnapshot(snapshot);
+        }''',
+              "planner environment evidence projection",
+          )
+
+          tools_text = Path(tools).read_text(encoding="utf-8")
+          if "MCP tool ${tool.name} invoked with args" in tools_text:
+              raise SystemExit("nominal MCP false-success string still present")
+          if '${s.enabled ? "active" : "disabled"}' in tools_text:
+              raise SystemExit("list_skills still labels DB enablement as active")
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Run P-008 targeted adversarial tests
+        run: >-
+          pnpm exec vitest run
+          src/__tests__/installed-tools-runtime-truth.test.ts
+          src/__tests__/runtime-truth-policy.test.ts
+          src/__tests__/planner-runtime-truth.test.ts
+          src/__tests__/system-prompt-runtime-truth.test.ts
+          src/__tests__/status-runtime-truth.test.ts
+          src/__tests__/skill-runtime-truth.test.ts
+          src/__tests__/capability-registry.test.ts
+          src/__tests__/capability-resolver.test.ts
+          src/__tests__/capability-tools.test.ts
+
+      - name: Commit guarded patch and remove one-shot workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/agent/tools.ts src/agent/loop.ts src/orchestration/orchestrator.ts
+          git rm .github/workflows/p008-surgical-patch.yml
+          git commit -m "fix(runtime-truth): close nominal MCP exposure and preserve environment evidence"
+          git push origin HEAD:abos/p008-runtime-truth-v1
