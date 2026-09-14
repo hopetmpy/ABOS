@@ -1,4 +1,4 @@
-name: P010 Core Apply
+name: P010 Core Validate
 
 on:
   push:
@@ -6,26 +6,35 @@ on:
       - abos/p010-policy-approval-lifecycle-v1
     paths:
       - .github/workflows/p010-core-apply.yml
-      - scripts/p010-core-apply-v3.py
+      - src/agent/**
+      - src/state/**
+      - src/types.ts
+      - src/__tests__/policy-lifecycle-p010.test.ts
+      - src/__tests__/policy-engine.test.ts
+      - src/__tests__/runtime-truth-policy.test.ts
+      - src/__tests__/chain.test.ts
+      - src/__tests__/authority-provenance.test.ts
+      - src/__tests__/agent/general-harness.test.ts
+      - src/__tests__/loop.test.ts
+      - src/__tests__/adaptive-schema.test.ts
+      - src/__tests__/continuity-assembler.test.ts
+      - ProjectOps/**
+      - scripts/projectops-integrity-verify.mjs
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Apply guarded P-010 core v3 patch
-        run: python3 scripts/p010-core-apply-v3.py
       - name: ProjectOps integrity
         run: node scripts/projectops-integrity-verify.mjs
       - name: Typecheck
@@ -34,33 +43,3 @@ jobs:
         run: pnpm exec vitest run src/__tests__/policy-lifecycle-p010.test.ts src/__tests__/policy-engine.test.ts src/__tests__/runtime-truth-policy.test.ts src/__tests__/chain.test.ts src/__tests__/authority-provenance.test.ts src/__tests__/agent/general-harness.test.ts src/__tests__/loop.test.ts src/__tests__/adaptive-schema.test.ts src/__tests__/continuity-assembler.test.ts
       - name: Full test suite
         run: pnpm test
-      - name: Commit productive patch
-        run: |
-          if git diff --quiet; then
-            echo "No source changes to commit"
-            exit 0
-          fi
-          git config user.name "hopetmpy"
-          git config user.email "hope.tmpy@gmail.com"
-          git add \
-            src/state/schema.ts \
-            src/state/database.ts \
-            src/types.ts \
-            src/agent/policy-authorization.ts \
-            src/agent/policy-engine.ts \
-            src/agent/tools.ts \
-            src/agent/loop.ts \
-            src/agent/policy-rules/financial.ts \
-            src/agent/harnesses/general-harness.ts \
-            src/__tests__/policy-lifecycle-p010.test.ts \
-            src/__tests__/policy-engine.test.ts \
-            src/__tests__/authority-provenance.test.ts \
-            src/__tests__/agent/general-harness.test.ts \
-            src/__tests__/loop.test.ts \
-            src/__tests__/adaptive-schema.test.ts \
-            src/__tests__/continuity-assembler.test.ts \
-            ProjectOps/PROJECT.md \
-            ProjectOps/plan/P-010.md \
-            scripts/projectops-integrity-verify.mjs
-          git commit -m "feat(p010): add durable policy authorization core"
-          git push origin HEAD:abos/p010-policy-approval-lifecycle-v1
