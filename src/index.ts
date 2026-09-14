@@ -22,7 +22,6 @@ import {
 } from "./heartbeat/config.js";
 import { consumeNextWakeEvent } from "./state/database.js";
 import { runAgentLoop } from "./agent/loop.js";
-import { createBuiltinTools, executeTool } from "./agent/tools.js";
 import { ModelRegistry } from "./inference/registry.js";
 import { loadCodexCatalog, syncCodexCatalogToRegistry } from "./codex/catalog.js";
 import { loadSkills } from "./skills/loader.js";
@@ -31,11 +30,14 @@ import { createSocialClient } from "./social/client.js";
 import { PolicyEngine } from "./agent/policy-engine.js";
 import { SpendTracker } from "./agent/spend-tracker.js";
 import { createDefaultRules } from "./agent/policy-rules/index.js";
+import {
+  executeAutonomousTopup,
+  installProtectedAutonomousTopupRuntime,
+} from "./agent/autonomous-topup.js";
 import type { AbosIdentity, AgentState, Skill, SocialClientInterface } from "./types.js";
 import { DEFAULT_TREASURY_POLICY } from "./types.js";
 import { createLogger, setGlobalLogLevel, StructuredLogger } from "./observability/logger.js";
 import { prettySink } from "./observability/pretty-sink.js";
-import { planAutonomousTopup } from "./conway/topup.js";
 import { randomUUID } from "crypto";
 import { keccak256, toHex } from "viem";
 import { ABOS_VERSION } from "./version.js";
@@ -454,6 +456,20 @@ async function run(): Promise<void> {
   const policyEngine = new PolicyEngine(db.raw, rules);
   const spendTracker = new SpendTracker(db.raw);
 
+  // Install one process-local bridge for startup, heartbeat, in-loop and sandbox
+  // recovery. The bridge never receives direct payment authority: every effect
+  // re-enters executeAutonomousTopup -> executeTool -> canonical PolicyEngine.
+  installProtectedAutonomousTopupRuntime({
+    identity,
+    config,
+    db,
+    conway,
+    inference,
+    social,
+    policyEngine,
+    spendTracker,
+  });
+
   // Load and sync heartbeat config
   const heartbeatConfigPath = resolvePath(config.heartbeatConfigPath);
   const heartbeatConfig = loadHeartbeatConfig(heartbeatConfigPath);
@@ -477,62 +493,33 @@ async function run(): Promise<void> {
     logger.warn(`[${new Date().toISOString()}] State repo init failed: ${err.message}`);
   }
 
-  // Bootstrap topup: restore autonomous minimum provisioning without restoring
-  // the old direct-payment bypass. The planner uses observed credits + USDC and
-  // the selected `topup_credits` execution re-enters the canonical PolicyEngine.
+  // Bootstrap topup uses the same protected coordinator installed above. It
+  // observes real balances, chooses only the smallest sufficient provider tier,
+  // and preserves UNKNOWN instead of manufacturing zero on observation failure.
   try {
-    if (resolvedChainType === "solana") {
+    const topup = await executeAutonomousTopup({
+      identity,
+      config,
+      db,
+      conway,
+      inference,
+      social,
+      policyEngine,
+      spendTracker,
+      source: "startup",
+      cooldownMs: 0,
+    });
+
+    if (topup.status === "executed") {
       logger.info(
-        `[${new Date().toISOString()}] Bootstrap topup not executable: current x402 payment route requires EVM.`,
+        `[${new Date().toISOString()}] Autonomous bootstrap topup executed: $${topup.plan.amountUsd}. ${topup.plan.rationale}`,
       );
     } else {
-      const creditsCents = await conway.getCreditsBalance();
-      const { getUsdcBalance } = await import("./conway/x402.js");
-      const availableUsdcUsd = await getUsdcBalance(identity.address, "eip155:8453", resolvedChainType);
-      const plan = planAutonomousTopup({
-        creditsCents,
-        availableUsdcUsd,
-        chainType: resolvedChainType,
-      });
-
-      db.setKV(
-        "last_autonomous_topup_plan",
-        JSON.stringify({ ...plan, observedAt: new Date().toISOString(), source: "startup" }),
+      logger.info(
+        `[${new Date().toISOString()}] Autonomous bootstrap topup ${topup.status}: ${topup.evidence.join(" ")}`,
       );
-
-      if (plan.action === "topup" && plan.amountUsd !== undefined) {
-        const bootstrapTools = createBuiltinTools(config.sandboxId);
-        const result = await executeTool(
-          "topup_credits",
-          { amount_usd: plan.amountUsd },
-          bootstrapTools,
-          { identity, config, db, conway, inference, social },
-          policyEngine,
-          {
-            inputSource: "system",
-            actorAddress: identity.address,
-            turnToolCallCount: 0,
-            sessionSpend: spendTracker,
-          },
-        );
-
-        if (result.error) {
-          logger.warn(
-            `[${new Date().toISOString()}] Autonomous bootstrap topup was not executed: ${result.error}`,
-          );
-        } else {
-          logger.info(
-            `[${new Date().toISOString()}] Autonomous bootstrap topup executed: $${plan.amountUsd}. ${plan.rationale}`,
-          );
-        }
-      } else {
-        logger.info(
-          `[${new Date().toISOString()}] Autonomous bootstrap topup not needed/executable: ${plan.reasonCode}. ${plan.rationale}`,
-        );
-      }
     }
   } catch (err: any) {
-    // Missing/failed balance evidence is not zero and must not manufacture spend.
     logger.warn(`[${new Date().toISOString()}] Autonomous bootstrap topup skipped: ${err.message}`);
   }
 
