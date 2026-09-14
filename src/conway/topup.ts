@@ -288,7 +288,7 @@ export async function topupForSandbox(params: {
   if (chainType !== "solana" && protectedAutonomousTopupExecutor) {
     return protectedAutonomousTopupExecutor({
       source: "sandbox_recovery",
-      requiredCreditsCents,
+      requiredCreditsCents: requiredCents,
     });
   }
 
