@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { ulid } from "ulid";
 import type Database from "better-sqlite3";
 import { insertPolicyDecision, type PolicyDecisionRow } from "../state/database.js";
+import { detectChainType, normalizeAddress, verifySignedMessage } from "../identity/chain.js";
 import type { PolicyDecision, PolicyRequest } from "../types.js";
 
 export type PolicyLifecycleState =
@@ -23,6 +24,8 @@ export type PolicyExecutionState =
   | "failed"
   | "unknown";
 
+export type PolicyAuthorizationAction = "approve" | "revoke";
+
 export interface ClaimedPolicyAuthorization {
   decisionId: string;
   claimToken: string;
@@ -35,6 +38,33 @@ export interface PendingPolicyAuthorization {
   scopeHash: string;
   reason: string;
   createdAt: string;
+}
+
+export interface PolicyAuthorizationChallenge {
+  version: "abos.policy-authorization.v1";
+  action: PolicyAuthorizationAction;
+  decisionId: string;
+  toolName: string;
+  scopeHash: string;
+  creatorAddress: string;
+  expiresAt: string;
+  message: string;
+}
+
+export interface CreatorPolicyAuthorizationResult {
+  decisionId: string;
+  action: PolicyAuthorizationAction;
+  lifecycleState: "approved" | "revoked";
+  creatorAddress: string;
+  expiresAt: string;
+}
+
+interface PolicyAuthorizationRow {
+  id: string;
+  tool_name: string;
+  scope_hash: string | null;
+  lifecycle_state: string;
+  authorization_json: string | null;
 }
 
 export function canonicalPolicyJson(value: unknown): string {
@@ -50,6 +80,51 @@ function canonicalize(value: unknown): unknown {
       .sort()
       .map((key) => [key, canonicalize(record[key])]),
   );
+}
+
+function normalizeExpiry(expiresAt: string): string {
+  const timestamp = Date.parse(expiresAt);
+  if (!Number.isFinite(timestamp)) {
+    throw new Error(`Invalid authorization expiry: ${expiresAt}`);
+  }
+  return new Date(timestamp).toISOString();
+}
+
+function parseAuthorizationEvidence(value: string | null): Record<string, unknown> | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function expectedCreatorAddress(row: PolicyAuthorizationRow): string {
+  const evidence = parseAuthorizationEvidence(row.authorization_json);
+  const address =
+    (evidence?.expectedCreatorAddress as string | undefined) ??
+    (evidence?.creatorAddress as string | undefined);
+  if (!address || !detectChainType(address)) {
+    throw new Error(`Policy decision ${row.id} has no valid creator authority binding`);
+  }
+  return address;
+}
+
+function getAuthorizationRow(
+  db: Database.Database,
+  decisionId: string,
+): PolicyAuthorizationRow {
+  const row = db.prepare(
+    `SELECT id, tool_name, scope_hash, lifecycle_state, authorization_json
+     FROM policy_decisions
+     WHERE id = ?`,
+  ).get(decisionId) as PolicyAuthorizationRow | undefined;
+  if (!row) throw new Error(`Policy decision not found: ${decisionId}`);
+  if (!row.scope_hash) throw new Error(`Policy decision ${decisionId} has no scope hash`);
+  return row;
 }
 
 export function computePolicyScopeHash(request: PolicyRequest): string {
@@ -107,13 +182,16 @@ export function persistPolicyDecisionLifecycle(
     actorAddress: decision.actorAddress ?? null,
     inputProvenance: decision.inputProvenance ?? null,
   });
+  const authorizationJson = decision.action === "quarantine"
+    ? canonicalPolicyJson({ expectedCreatorAddress: request.context.config.creatorAddress })
+    : null;
 
   db.transaction(() => {
     insertPolicyDecision(db, row);
     const result = db.prepare(
       `UPDATE policy_decisions
        SET request_json = ?, provenance_json = ?, lifecycle_state = ?, scope_hash = ?,
-           required_authority = ?, constitution_result = ?
+           required_authority = ?, authorization_json = ?, constitution_result = ?
        WHERE id = ?`,
     ).run(
       canonicalPolicyJson({ toolName: request.tool.name, args: request.args }),
@@ -121,12 +199,154 @@ export function persistPolicyDecisionLifecycle(
       lifecycleState,
       decision.scopeHash,
       decision.action === "quarantine" ? "creator" : null,
+      authorizationJson,
       "not_evaluated",
       decision.id,
     );
     if (result.changes !== 1) {
       throw new Error(`Failed to materialize policy lifecycle for ${decision.id}`);
     }
+  })();
+}
+
+/**
+ * Build the exact domain-separated message that the configured creator must
+ * sign externally. The creator authority is read from the durable pending
+ * decision; callers cannot substitute an arbitrary signer address.
+ */
+export function buildPolicyAuthorizationChallenge(
+  db: Database.Database,
+  decisionId: string,
+  action: PolicyAuthorizationAction,
+  expiresAt: string,
+): PolicyAuthorizationChallenge {
+  const row = getAuthorizationRow(db, decisionId);
+  if (action === "approve" && row.lifecycle_state !== "pending_authorization") {
+    throw new Error(
+      `Policy decision ${decisionId} cannot be approved from state ${row.lifecycle_state}`,
+    );
+  }
+  if (
+    action === "revoke" &&
+    row.lifecycle_state !== "pending_authorization" &&
+    row.lifecycle_state !== "approved"
+  ) {
+    throw new Error(
+      `Policy decision ${decisionId} cannot be revoked from state ${row.lifecycle_state}`,
+    );
+  }
+
+  const creatorAddress = expectedCreatorAddress(row);
+  const chainType = detectChainType(creatorAddress)!;
+  const normalizedCreator = normalizeAddress(creatorAddress, chainType);
+  const normalizedExpiry = normalizeExpiry(expiresAt);
+  const payload = {
+    version: "abos.policy-authorization.v1" as const,
+    action,
+    decisionId: row.id,
+    toolName: row.tool_name,
+    scopeHash: row.scope_hash!,
+    creatorAddress: normalizedCreator,
+    expiresAt: normalizedExpiry,
+  };
+
+  return {
+    ...payload,
+    message: canonicalPolicyJson(payload),
+  };
+}
+
+/**
+ * Apply a creator approval or revocation after verifying an externally
+ * produced EVM/Solana signature. The private key never enters ABOS.
+ */
+export async function applyCreatorPolicyAuthorization(
+  db: Database.Database,
+  params: {
+    decisionId: string;
+    action: PolicyAuthorizationAction;
+    expiresAt: string;
+    signature: string;
+    now?: Date;
+  },
+): Promise<CreatorPolicyAuthorizationResult> {
+  const challenge = buildPolicyAuthorizationChallenge(
+    db,
+    params.decisionId,
+    params.action,
+    params.expiresAt,
+  );
+  const now = params.now ?? new Date();
+  if (Date.parse(challenge.expiresAt) <= now.getTime()) {
+    throw new Error(`Authorization evidence expired at ${challenge.expiresAt}`);
+  }
+
+  const chainType = detectChainType(challenge.creatorAddress)!;
+  const verified = await verifySignedMessage(
+    challenge.creatorAddress,
+    challenge.message,
+    params.signature,
+    chainType,
+  );
+  if (!verified) {
+    throw new Error("Creator signature verification failed");
+  }
+
+  const evidence = canonicalPolicyJson({
+    version: challenge.version,
+    action: params.action,
+    decisionId: challenge.decisionId,
+    toolName: challenge.toolName,
+    scopeHash: challenge.scopeHash,
+    expectedCreatorAddress: challenge.creatorAddress,
+    creatorAddress: challenge.creatorAddress,
+    chainType,
+    expiresAt: challenge.expiresAt,
+    signature: params.signature,
+    challenge: challenge.message,
+    verifiedAt: now.toISOString(),
+  });
+
+  return db.transaction(() => {
+    if (params.action === "approve") {
+      const result = db.prepare(
+        `UPDATE policy_decisions
+         SET lifecycle_state = 'approved', authorization_json = ?, expires_at = ?, approved_at = ?
+         WHERE id = ? AND lifecycle_state = 'pending_authorization'`,
+      ).run(evidence, challenge.expiresAt, now.toISOString(), challenge.decisionId);
+      if (result.changes !== 1) {
+        throw new Error(`Policy decision ${challenge.decisionId} was not pending at approval commit`);
+      }
+      return {
+        decisionId: challenge.decisionId,
+        action: params.action,
+        lifecycleState: "approved" as const,
+        creatorAddress: challenge.creatorAddress,
+        expiresAt: challenge.expiresAt,
+      };
+    }
+
+    const current = getAuthorizationRow(db, challenge.decisionId);
+    const priorAuthorization = parseAuthorizationEvidence(current.authorization_json);
+    const revocationEvidence = canonicalPolicyJson({
+      ...JSON.parse(evidence),
+      priorAuthorization,
+    });
+    const result = db.prepare(
+      `UPDATE policy_decisions
+       SET lifecycle_state = 'revoked', authorization_json = ?, revoked_at = ?
+       WHERE id = ? AND lifecycle_state IN ('pending_authorization','approved')`,
+    ).run(revocationEvidence, now.toISOString(), challenge.decisionId);
+    if (result.changes !== 1) {
+      throw new Error(`Policy decision ${challenge.decisionId} was no longer revocable`);
+    }
+    return {
+      decisionId: challenge.decisionId,
+      action: params.action,
+      lifecycleState: "revoked" as const,
+      creatorAddress: challenge.creatorAddress,
+      expiresAt: challenge.expiresAt,
+    };
   })();
 }
 
