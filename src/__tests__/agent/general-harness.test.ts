@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { GeneralHarness } from "../../agent/harnesses/general-harness.js";
 import { PolicyEngine } from "../../agent/policy-engine.js";
+import { SpendTracker } from "../../agent/spend-tracker.js";
 import { createFinancialRules } from "../../agent/policy-rules/financial.js";
 import type { HarnessContext } from "../../agent/harness-types.js";
 import type { AbosTool } from "../../types.js";
@@ -62,6 +63,8 @@ describe("agent/GeneralHarness", () => {
       abortSignal: new AbortController().signal,
       goalId: "goal-1",
       toolCatalog,
+      policyEngine: new PolicyEngine(appDb.raw, []),
+      spendTracker: new SpendTracker(appDb.raw),
       toolContext: {
         identity,
         config: createTestConfig({ dbPath }),

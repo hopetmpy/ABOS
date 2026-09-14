@@ -23,6 +23,12 @@ async function main(): Promise<void> {
     case "send":
       await import("./commands/send.js");
       break;
+    case "approvals":
+    case "authorization-challenge":
+    case "approve":
+    case "revoke":
+      await import("./commands/authorization.js");
+      break;
     default:
       console.log(`
 ABOS CLI - Creator Tools
@@ -32,6 +38,13 @@ Usage:
   abos-cli logs [--tail N]     View abos logs
   abos-cli fund <amount> [--to 0x...]  Transfer Conway credits
   abos-cli send <to-address> <message> Send a social message
+  abos-cli approvals           List pending policy authorizations
+  abos-cli authorization-challenge <approve|revoke> <decision-id> [--expires-at ISO]
+                               Print the exact message to sign externally
+  abos-cli approve <decision-id> --expires-at <ISO> --signature <signature>
+                               Verify creator signature and approve exact scope
+  abos-cli revoke <decision-id> --expires-at <ISO> --signature <signature>
+                               Verify creator signature and revoke authorization
 `);
   }
 }

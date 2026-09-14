@@ -1,8 +1,13 @@
 /**
  * Financial Policy Rules
  *
- * Enforces spend limits, domain allowlists, and transfer caps
- * to prevent iterative credit drain and unauthorized payments.
+ * Enforces explicit financial execution guards while P-030 evolves treasury
+ * into contextual/evidence-driven economic judgment.
+ *
+ * Important: a monetary amount by itself is not creator authority evidence and
+ * does not justify human-gating an otherwise legitimate ABOS decision. Fixed
+ * transfer caps that remain here are configurable transitional guards, not a
+ * universal definition of rational economic behavior.
  */
 
 import type {
@@ -92,12 +97,16 @@ function createX402DomainAllowlistRule(policy: TreasuryPolicy): PolicyRule {
 }
 
 /**
- * Deny single transfers above the configured max.
+ * Transitional configurable single-transfer guard.
+ *
+ * This is intentionally not creator approval. P-030 owns replacement/evolution
+ * toward contextual treasury judgment once commitments, liquidity, reserves
+ * and economic evidence are available as canonical inputs.
  */
 function createTransferMaxSingleRule(policy: TreasuryPolicy): PolicyRule {
   return {
     id: "financial.transfer_max_single",
-    description: `Deny transfers above ${policy.maxSingleTransferCents} cents`,
+    description: `Deny transfers above configured transitional guard ${policy.maxSingleTransferCents} cents`,
     priority: 500,
     appliesTo: { by: "name", names: ["transfer_credits"] },
     evaluate(request: PolicyRequest): PolicyRuleResult | null {
@@ -108,7 +117,7 @@ function createTransferMaxSingleRule(policy: TreasuryPolicy): PolicyRule {
         return deny(
           "financial.transfer_max_single",
           "SPEND_LIMIT_EXCEEDED",
-          `Transfer of ${amount} cents exceeds single transfer max of ${policy.maxSingleTransferCents} cents ($${(policy.maxSingleTransferCents / 100).toFixed(2)})`,
+          `Transfer of ${amount} cents exceeds configured transitional single-transfer guard of ${policy.maxSingleTransferCents} cents ($${(policy.maxSingleTransferCents / 100).toFixed(2)})`,
         );
       }
 
@@ -118,12 +127,12 @@ function createTransferMaxSingleRule(policy: TreasuryPolicy): PolicyRule {
 }
 
 /**
- * Deny if hourly transfer total would exceed cap.
+ * Transitional configurable hourly transfer guard.
  */
 function createTransferHourlyCapRule(policy: TreasuryPolicy): PolicyRule {
   return {
     id: "financial.transfer_hourly_cap",
-    description: `Deny if hourly transfers exceed ${policy.maxHourlyTransferCents} cents`,
+    description: `Deny if hourly transfers exceed configured transitional guard ${policy.maxHourlyTransferCents} cents`,
     priority: 500,
     appliesTo: { by: "name", names: ["transfer_credits"] },
     evaluate(request: PolicyRequest): PolicyRuleResult | null {
@@ -131,13 +140,20 @@ function createTransferHourlyCapRule(policy: TreasuryPolicy): PolicyRule {
       if (amount === undefined) return null;
 
       const spendTracker = request.turnContext.sessionSpend;
+      if (!spendTracker) {
+        return deny(
+          "financial.spend_evidence_unavailable",
+          "SPEND_EVIDENCE_UNAVAILABLE",
+          "Financial action refused because spend-tracking evidence is unavailable",
+        );
+      }
       const check = spendTracker.checkLimit(amount, "transfer", policy);
 
       if (!check.allowed && check.reason?.includes("Hourly")) {
         return deny(
           "financial.transfer_hourly_cap",
           "SPEND_LIMIT_EXCEEDED",
-          `Transfer would exceed hourly cap: current ${check.currentHourlySpend} + ${amount} > ${check.limitHourly} cents ($${(check.limitHourly / 100).toFixed(2)}/hr)`,
+          `Transfer would exceed configured transitional hourly guard: current ${check.currentHourlySpend} + ${amount} > ${check.limitHourly} cents ($${(check.limitHourly / 100).toFixed(2)}/hr)`,
         );
       }
 
@@ -147,12 +163,12 @@ function createTransferHourlyCapRule(policy: TreasuryPolicy): PolicyRule {
 }
 
 /**
- * Deny if daily transfer total would exceed cap.
+ * Transitional configurable daily transfer guard.
  */
 function createTransferDailyCapRule(policy: TreasuryPolicy): PolicyRule {
   return {
     id: "financial.transfer_daily_cap",
-    description: `Deny if daily transfers exceed ${policy.maxDailyTransferCents} cents`,
+    description: `Deny if daily transfers exceed configured transitional guard ${policy.maxDailyTransferCents} cents`,
     priority: 500,
     appliesTo: { by: "name", names: ["transfer_credits"] },
     evaluate(request: PolicyRequest): PolicyRuleResult | null {
@@ -160,13 +176,20 @@ function createTransferDailyCapRule(policy: TreasuryPolicy): PolicyRule {
       if (amount === undefined) return null;
 
       const spendTracker = request.turnContext.sessionSpend;
+      if (!spendTracker) {
+        return deny(
+          "financial.spend_evidence_unavailable",
+          "SPEND_EVIDENCE_UNAVAILABLE",
+          "Financial action refused because spend-tracking evidence is unavailable",
+        );
+      }
       const check = spendTracker.checkLimit(amount, "transfer", policy);
 
       if (!check.allowed && check.reason?.includes("Daily")) {
         return deny(
           "financial.transfer_daily_cap",
           "SPEND_LIMIT_EXCEEDED",
-          `Transfer would exceed daily cap: current ${check.currentDailySpend} + ${amount} > ${check.limitDaily} cents ($${(check.limitDaily / 100).toFixed(2)}/day)`,
+          `Transfer would exceed configured transitional daily guard: current ${check.currentDailySpend} + ${amount} > ${check.limitDaily} cents ($${(check.limitDaily / 100).toFixed(2)}/day)`,
         );
       }
 
@@ -176,41 +199,48 @@ function createTransferDailyCapRule(policy: TreasuryPolicy): PolicyRule {
 }
 
 /**
- * Deny any financial operation that would bring balance below minimum reserve.
+ * Reserve declaration retained as a transitional treasury concern.
+ *
+ * The current request contract does not expose an authoritative current
+ * balance here, so this rule must not fabricate a reserve decision. P-030 will
+ * make reserve/liquidity semantics causal and contextual.
  */
 function createMinimumReserveRule(policy: TreasuryPolicy): PolicyRule {
   return {
     id: "financial.minimum_reserve",
-    description: `Deny if balance would drop below ${policy.minimumReserveCents} cents reserve`,
+    description: `Configured transitional minimum-reserve signal: ${policy.minimumReserveCents} cents`,
     priority: 500,
     appliesTo: {
       by: "name",
       names: ["transfer_credits", "x402_fetch", "fund_child"],
     },
     evaluate(request: PolicyRequest): PolicyRuleResult | null {
-      // For transfer_credits and fund_child, we can check from args
       const amount = request.args.amount_cents as number | undefined;
       if (amount === undefined) return null;
 
-      // We need the current balance from context
-      // The balance check is done inside the tool execute function,
-      // but we can check spend tracker totals as an additional guard
       const spendTracker = request.turnContext.sessionSpend;
+      if (!spendTracker) {
+        return deny(
+          "financial.spend_evidence_unavailable",
+          "SPEND_EVIDENCE_UNAVAILABLE",
+          "Financial action refused because spend-tracking evidence is unavailable",
+        );
+      }
       const hourlySpend = spendTracker.getHourlySpend("transfer");
       const dailySpend = spendTracker.getDailySpend("transfer");
+      void hourlySpend;
+      void dailySpend;
 
-      // This rule is a declaration — actual balance checking
-      // requires the async getCreditsBalance call which happens
-      // inside the tool execution. The tool itself has a guard
-      // (cannot transfer more than half balance).
+      // Do not infer balance/reserve from historical spend. The tool/provider
+      // boundary owns observed balance until P-030 introduces canonical treasury
+      // state with commitments/liquidity/contingency semantics.
       return null;
     },
   };
 }
 
 /**
- * Deny if too many transfer operations in a single turn.
- * Prevents iterative credit drain within one turn.
+ * Transitional per-turn anti-drain guard.
  */
 function createTurnTransferLimitRule(policy: TreasuryPolicy): PolicyRule {
   return {
@@ -235,35 +265,12 @@ function createTurnTransferLimitRule(policy: TreasuryPolicy): PolicyRule {
 }
 
 /**
- * Return 'quarantine' (not deny) for transfer amounts above
- * requireConfirmationAboveCents. This is a soft limit requiring confirmation.
- */
-function createRequireConfirmationRule(policy: TreasuryPolicy): PolicyRule {
-  return {
-    id: "financial.require_confirmation",
-    description: `Quarantine transfers above ${policy.requireConfirmationAboveCents} cents for confirmation`,
-    priority: 500,
-    appliesTo: { by: "name", names: ["transfer_credits"] },
-    evaluate(request: PolicyRequest): PolicyRuleResult | null {
-      const amount = request.args.amount_cents as number | undefined;
-      if (amount === undefined) return null;
-
-      if (amount > policy.requireConfirmationAboveCents) {
-        return {
-          rule: "financial.require_confirmation",
-          action: "quarantine",
-          reasonCode: "CONFIRMATION_REQUIRED",
-          humanMessage: `Transfer of ${amount} cents ($${(amount / 100).toFixed(2)}) exceeds confirmation threshold of ${policy.requireConfirmationAboveCents} cents ($${(policy.requireConfirmationAboveCents / 100).toFixed(2)})`,
-        };
-      }
-
-      return null;
-    },
-  };
-}
-
-/**
  * Create all financial policy rules.
+ *
+ * Deliberately absent: amount-only creator confirmation. Creator-signed
+ * authorization remains a supported lifecycle, but it is invoked only by a
+ * rule representing a real external/creator authority boundary or explicit
+ * manual oversight — not because a value crossed an arbitrary amount.
  */
 export function createFinancialRules(
   treasuryPolicy: TreasuryPolicy,
@@ -276,6 +283,5 @@ export function createFinancialRules(
     createTransferDailyCapRule(treasuryPolicy),
     createMinimumReserveRule(treasuryPolicy),
     createTurnTransferLimitRule(treasuryPolicy),
-    createRequireConfirmationRule(treasuryPolicy),
   ];
 }

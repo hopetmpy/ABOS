@@ -1492,11 +1492,12 @@ export async function runAgentLoop(
             tools,
             toolContext,
             policyEngine,
-            spendTracker ? {
+            {
               inputSource: currentInputSource,
+              inputProvenance: currentInput?.provenance,
               turnToolCallCount: turn.toolCalls.filter(t => t.name === "transfer_credits").length,
-              sessionSpend: spendTracker,
-            } : undefined,
+              ...(spendTracker ? { sessionSpend: spendTracker } : {}),
+            },
           );
 
           // Override the ID to match the inference call's ID

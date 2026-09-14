@@ -6,6 +6,7 @@
  */
 
 import type { PolicyRule, PolicyRequest, PolicyRuleResult } from "../../types.js";
+import { isValidAddress } from "../../identity/chain.js";
 
 const PACKAGE_NAME_RE = /^[@a-zA-Z0-9._/-]+$/;
 const SKILL_NAME_RE = /^[a-zA-Z0-9-]+$/;
@@ -158,12 +159,13 @@ function createCronExpressionRule(): PolicyRule {
 }
 
 /**
- * Validate Ethereum address format.
+ * Financial transfers remain EVM-specific, while social identity is already
+ * chain-aware and therefore accepts either a valid EVM or Solana address.
  */
 function createAddressFormatRule(): PolicyRule {
   return {
     id: "validate.address_format",
-    description: "Validate Ethereum address format (0x + 40 hex chars)",
+    description: "Validate financial EVM addresses and chain-aware social identities",
     priority: 100,
     appliesTo: {
       by: "name",
@@ -173,6 +175,17 @@ function createAddressFormatRule(): PolicyRule {
       const address = (request.args.to_address as string | undefined)
         ?? (request.args.agent_address as string | undefined);
       if (address === undefined) return null;
+
+      if (request.tool.name === "send_message") {
+        if (!isValidAddress(address)) {
+          return deny(
+            "validate.address_format",
+            "VALIDATION_FAILED",
+            `Invalid social identity address: "${address}". Expected a valid EVM or Solana address.`,
+          );
+        }
+        return null;
+      }
 
       if (!ADDRESS_RE.test(address)) {
         return deny(

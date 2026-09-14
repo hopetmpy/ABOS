@@ -18,8 +18,8 @@ Master-Transformation-Plan: P-007
 | P-006 | Remediar advisories de dependencias y restaurar security-audit green | HECHO | integrado por PR #32; main 33e29e91... CI + ProjectOps Integrity green | plan/P-006.md |
 | P-007 | Consolidar programa maestro de transformación integral ABOS | HECHO | P-001 + P-002 + auditoría 2026-09-13; no implementa product source | plan/P-007.md |
 | P-008 | Alinear Runtime Truth y capability claims con evidencia real | HECHO | integrado por PR #34; main `1a2a5482...` CI + ProjectOps Integrity green | plan/P-008.md |
-| P-009 | Corregir Authority, Provenance y trust boundaries end-to-end | EN_EJECUCIÓN | P-006 HECHO; intervención C0005 activa sobre main `1a2a5482...` | plan/P-009.md |
-| P-010 | Hacer real Policy, Authorization, Approval y Quarantine lifecycle | PLANIFICADO | P-009 | plan/P-010.md |
+| P-009 | Corregir Authority, Provenance y trust boundaries end-to-end | HECHO | integrado por PR #35; main `b9dbf144...` CI `34800425589` + ProjectOps `34800425594` green | plan/P-009.md |
+| P-010 | Hacer real Policy, Authorization, Approval y Quarantine lifecycle | EN_EJECUCIÓN | P-009 HECHO; C0006 activa sobre main `b9dbf144...` | plan/P-010.md |
 | P-011 | Hacer reales Lifecycle, Health, Restart y Recovery | PLANIFICADO | P-009 + P-010 | plan/P-011.md |
 | P-012 | Convertir self-modification en transacción segura y recuperable | PLANIFICADO | P-009 + P-010 + P-011; evidence P-013 | plan/P-012.md |
 | P-013 | Unificar Observability, Audit y Evidence Fabric | PLANIFICADO | P-008 + P-009; se extiende durante la campaña | plan/P-013.md |
@@ -79,7 +79,7 @@ Cada bloque puede poseer componentes especializados, pero debe conservar una aut
 1. **P-006 — HECHO**: security-audit restaurado sin debilitar gate e integrado en `main` por PR #32.
 2. **P-003 — HECHO**: child capital semantics reconciliadas por PR #33, integradas y revalidadas en `main`.
 
-La deuda heredada de Ola 0 está cerrada; P-008 cerró la primera frontera de Ola 1 y P-009 es la intervención activa.
+La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth y P-009 Authority/Provenance cerraron las primeras fronteras de Ola 1. P-010 es la intervención activa.
 
 ### Ola 1 — verdad, autoridad y recovery
 
@@ -103,7 +103,7 @@ Gate: amplio conocimiento no exige prompt masivo y decisiones relevantes dejan h
 
 P-027 opportunities; P-028 delegation; P-029 children/family knowledge; P-030 treasury/family economics; P-031 resource acquisition/reinvestment; P-032 soul/self-model.
 
-Gate: autonomía económica significa crear valor y asignar recursos con causalidad/authority, no hardcodear un negocio ni inventar rentabilidad.
+Gate: autonomía económica significa crear valor y asignar recursos con causalidad/authority/judgment, no hardcodear un negocio, fabricar rentabilidad ni convertir thresholds arbitrarios en dependencia humana.
 
 ### Ola 5 — integración y ataque
 
@@ -124,6 +124,10 @@ P-033 E2E; P-034 fault/sustained; P-035 cleanup/authority retirement; P-004 docs
 11. **Broad knowledge != broad prompt**: persistent universe amplio; working set activado por relevancia/causalidad/uncertainty/value-of-information.
 12. **Install != capability**: acquisition no se promueve hasta probe/evidence.
 13. **CI != LIVE**: evidence ladder exacta.
+14. **Judgment before restriction**: antes de eliminar, desactivar o human-gate una capability legítima por riesgo, demostrar si el problema puede gobernarse con contexto, razonamiento, planning, verificación, observabilidad, adaptación o aprendizaje.
+15. **Human escalation is a real boundary, not a convenience**: precio, porcentaje, dificultad, novedad o desviación histórica no bastan para pedir permiso; escala cuando exista authority/identity/legal/external permission/capability boundary real o oversight manual explícito.
+16. **Threshold is signal, not intelligence**: límites fijos pueden alertar, activar revisión o representar restricciones externas; no sustituyen necesidad, expected value, commitments, liquidez, contingencia y causalidad.
+17. **Autonomy remains auditable**: que ABOS pueda decidir solo no autoriza hidden side effects; decisiones materiales deben atravesar boundaries explícitas con evidence/outcome proporcional al riesgo.
 
 ## 6. Protocolo de interrogación que cada módulo debe aplicar
 
@@ -141,7 +145,10 @@ Antes de `DECISION_READY`, además de AGENTS/reasoning layer, preguntar material
 - pre-mortem: “supón que esto falló mañana; ¿qué probablemente pasó?”;
 - ¿qué evidencia podría demostrar que la decisión fue equivocada?;
 - ¿cómo vuelvo atrás sin corromper identity/state/economics?;
-- ¿estoy cerrando artificialmente una posibilidad futura o, al contrario, eliminando un invariante necesario?
+- ¿estoy cerrando artificialmente una posibilidad futura o, al contrario, eliminando un invariante necesario?;
+- **si quiero restringir una capability, ¿es una frontera real, un riesgo gobernable, una capability inmadura, algo redundante/perjudicial o UNKNOWN?**;
+- **¿qué ruta preserva autonomía legítima sin reintroducir el defecto?**;
+- **¿estoy usando creator approval o un threshold fijo para sustituir juicio que el sistema debería desarrollar?**
 
 No se documenta chain-of-thought privado; sí findings, alternatives, decisions y evidence que cambien el proyecto.
 
@@ -180,9 +187,15 @@ Cognitive Fabric no será una segunda memoria. Antes de P-020 se auditan y clasi
 
 Skills se promueven desde experiencia sólo con applicability/evidence/replay suficiente. World model distingue OBSERVED/INFERRED/ESTIMATED/ASSUMED/UNKNOWN. Prediction/outcome learning calibra decisiones. Simulation ejecuta barato antes de efectos caros cuando aporta información.
 
+Strategic cognition debe poder descomponer un compromiso en resultados/dependencias, descubrir qué más hace falta, comparar rutas y distinguir una anomalía que necesita evidencia adicional de una frontera que realmente necesita permiso externo.
+
 ## 11. Estrategia económica y organizacional
 
 Opportunities son hipótesis abiertas de creación legítima de valor. No existe `business_type` cerrado como universo. Delegation se basa en competence evidence, capabilities, cost y authority. Children heredan constitution/family index/skills/capabilities selectivamente, no todo el history. Treasury separa internal capital de external P&L y nunca fabrica ROI.
+
+Autonomía económica no significa gastar sin criterio ni pedir permiso por cada gasto. ABOS debe evolucionar hacia decisiones basadas en necesidad/commitment, capital libre, ingresos/anticipos causalmente observados, expected value, downside, timing, liquidez, reserva de contingencia, provider risk y aprendizaje prediction→outcome. Puede gastar una proporción extraordinaria cuando la causa lo justifica y debe evitar sobrecomprar aunque el saldo lo permita.
+
+P-025 aporta juicio estratégico; P-030 autoridad económica/treasury causal; P-031 adquisición/reinversión autónoma. Ninguno crea una authority paralela para adelantar trabajo de otro.
 
 ## 12. Evidencia y cierre
 
@@ -212,9 +225,11 @@ P-004 puede corregir drift puntual antes, pero su cierre final ocurre después d
 
 P-005 es un track incremental: Codex OAuth real, AWS billable, MCP/provider externo, economic/child/resource claims y futuras fronteras que requieran E5/E6. No toda capability local requiere E5: una computer/browser E4 realista puede cerrar integración local. Si falta autorización/credencial/dinero, registrar `LIVE_BLOCKED_EXTERNAL` y continuar source.
 
-## 16. Ola 0 cerrada; P-009 activo
+## 16. Ola 0 cerrada; P-010 activo
 
-P-006 y P-003 están HECHO e integrados con revalidación de `main`. P-007 permanece HECHO únicamente como planificación maestra. P-008 Runtime Truth está HECHO e integrado/revalidado en `main` `1a2a548276ec47289c77b2085c5c939c6bca0019`. La siguiente frontera recuperable y activa es P-009 Authority/Provenance; no se adelantan P-010 ni P-014..P-018 porque dependen materialmente de trust boundaries correctas.
+P-006 y P-003 están HECHO e integrados con revalidación de `main`. P-007 permanece HECHO únicamente como planificación maestra. P-008 Runtime Truth está HECHO e integrado/revalidado. P-009 Authority/Provenance está HECHO, integrado por PR #35 y revalidado en `main` `b9dbf14409d6ee45de6009e33f79146233878065` con CI `34800425589` y ProjectOps `34800425594` SUCCESS. La siguiente frontera activa es P-010 Policy/Authorization/Approval/Quarantine; sus consumidores posteriores no se adelantan antes de resolver su lifecycle real.
+
+P-010 incluye una revisión adversarial material: creator-signed authorization sigue siendo una capability válida para fronteras reales, pero ya no se considera diseño general de gasto autónomo por threshold. El cierre de P-010 debe preservar una ruta explícita/auditable para autonomía económica futura sin restaurar hidden auto-spend.
 
 ## 17. Cierre de campaña
 
@@ -222,4 +237,4 @@ P-036 no significa “todo el universo futuro de ABOS está terminado”. Signif
 
 ## 18. Siguiente trabajo recuperable
 
-`P-009 — Corregir Authority, Provenance y trust boundaries end-to-end`.
+`P-010 — Hacer real Policy, Authorization, Approval y Quarantine lifecycle`.

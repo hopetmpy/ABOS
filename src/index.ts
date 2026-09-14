@@ -30,11 +30,14 @@ import { createSocialClient } from "./social/client.js";
 import { PolicyEngine } from "./agent/policy-engine.js";
 import { SpendTracker } from "./agent/spend-tracker.js";
 import { createDefaultRules } from "./agent/policy-rules/index.js";
+import {
+  executeAutonomousTopup,
+  installProtectedAutonomousTopupRuntime,
+} from "./agent/autonomous-topup.js";
 import type { AbosIdentity, AgentState, Skill, SocialClientInterface } from "./types.js";
 import { DEFAULT_TREASURY_POLICY } from "./types.js";
 import { createLogger, setGlobalLogLevel, StructuredLogger } from "./observability/logger.js";
 import { prettySink } from "./observability/pretty-sink.js";
-import { bootstrapTopup } from "./conway/topup.js";
 import { randomUUID } from "crypto";
 import { keccak256, toHex } from "viem";
 import { ABOS_VERSION } from "./version.js";
@@ -453,6 +456,20 @@ async function run(): Promise<void> {
   const policyEngine = new PolicyEngine(db.raw, rules);
   const spendTracker = new SpendTracker(db.raw);
 
+  // Install one process-local bridge for startup, heartbeat, in-loop and sandbox
+  // recovery. The bridge never receives direct payment authority: every effect
+  // re-enters executeAutonomousTopup -> executeTool -> canonical PolicyEngine.
+  installProtectedAutonomousTopupRuntime({
+    identity,
+    config,
+    db,
+    conway,
+    inference,
+    social,
+    policyEngine,
+    spendTracker,
+  });
+
   // Load and sync heartbeat config
   const heartbeatConfigPath = resolvePath(config.heartbeatConfigPath);
   const heartbeatConfig = loadHeartbeatConfig(heartbeatConfigPath);
@@ -476,36 +493,34 @@ async function run(): Promise<void> {
     logger.warn(`[${new Date().toISOString()}] State repo init failed: ${err.message}`);
   }
 
-  // Bootstrap topup: buy minimum credits ($5) from USDC so the agent can start.
-  // The agent decides larger topups itself via the topup_credits tool.
+  // Bootstrap topup uses the same protected coordinator installed above. It
+  // observes real balances, chooses only the smallest sufficient provider tier,
+  // and preserves UNKNOWN instead of manufacturing zero on observation failure.
   try {
-    let bootstrapTimer: ReturnType<typeof setTimeout>;
-    const bootstrapTimeout = new Promise<null>((_, reject) => {
-      bootstrapTimer = setTimeout(() => reject(new Error("bootstrap topup timed out")), 15_000);
+    const topup = await executeAutonomousTopup({
+      identity,
+      config,
+      db,
+      conway,
+      inference,
+      social,
+      policyEngine,
+      spendTracker,
+      source: "startup",
+      cooldownMs: 0,
     });
-    try {
-      await Promise.race([
-        (async () => {
-          const creditsCents = await conway.getCreditsBalance().catch(() => 0);
-          const topupResult = await bootstrapTopup({
-            apiUrl: config.conwayApiUrl,
-            account,
-            creditsCents,
-            chainType: resolvedChainType,
-          });
-          if (topupResult?.success) {
-            logger.info(
-              `[${new Date().toISOString()}] Bootstrap topup: +$${topupResult.amountUsd} credits from USDC`,
-            );
-          }
-        })(),
-        bootstrapTimeout,
-      ]);
-    } finally {
-      clearTimeout(bootstrapTimer!);
+
+    if (topup.status === "executed") {
+      logger.info(
+        `[${new Date().toISOString()}] Autonomous bootstrap topup executed: $${topup.plan.amountUsd}. ${topup.plan.rationale}`,
+      );
+    } else {
+      logger.info(
+        `[${new Date().toISOString()}] Autonomous bootstrap topup ${topup.status}: ${topup.evidence.join(" ")}`,
+      );
     }
   } catch (err: any) {
-    logger.warn(`[${new Date().toISOString()}] Bootstrap topup skipped: ${err.message}`);
+    logger.warn(`[${new Date().toISOString()}] Autonomous bootstrap topup skipped: ${err.message}`);
   }
 
   // Start heartbeat daemon (Phase 1.1: DurableScheduler)

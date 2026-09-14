@@ -586,7 +586,7 @@ export type RiskLevel = 'safe' | 'caution' | 'dangerous' | 'forbidden';
 export type PolicyAction = 'allow' | 'deny' | 'quarantine';
 
 // Who initiated the action
-export type AuthorityLevel = 'system' | 'agent' | 'external';
+export type AuthorityLevel = 'system' | 'creator' | 'agent' | 'external';
 
 // Spend categories
 export type SpendCategory = 'transfer' | 'x402' | 'inference' | 'other';
@@ -611,8 +611,10 @@ export interface PolicyRequest {
   context: ToolContext;
   turnContext: {
     inputSource: InputSource | undefined;
+    inputProvenance?: TurnInputProvenance;
+    actorAddress?: string;
     turnToolCallCount: number;
-    sessionSpend: SpendTrackerInterface;
+    sessionSpend?: SpendTrackerInterface;
   };
 }
 
@@ -624,6 +626,8 @@ export interface PolicyRuleResult {
 }
 
 export interface PolicyDecision {
+  /** Durable evaluation identity. Optional only for legacy callers/tests. */
+  id?: string;
   action: PolicyAction;
   reasonCode: string;
   humanMessage: string;
@@ -631,6 +635,11 @@ export interface PolicyDecision {
   authorityLevel: AuthorityLevel;
   toolName: string;
   argsHash: string;
+  /** Exact actor/action/args/provenance scope for authorization matching. */
+  scopeHash?: string;
+  inputSource?: InputSource;
+  inputProvenance?: TurnInputProvenance;
+  actorAddress?: string;
   rulesEvaluated: string[];
   rulesTriggered: string[];
   timestamp: string;

@@ -71,7 +71,23 @@ function createRawTestDb(): Database.Database {
       rules_triggered TEXT NOT NULL DEFAULT '[]',
       reason TEXT NOT NULL DEFAULT '',
       latency_ms INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      request_json TEXT,
+      provenance_json TEXT,
+      lifecycle_state TEXT NOT NULL DEFAULT 'legacy',
+      scope_hash TEXT,
+      required_authority TEXT,
+      expires_at TEXT,
+      authorization_json TEXT,
+      approved_at TEXT,
+      revoked_at TEXT,
+      cancelled_at TEXT,
+      claim_token TEXT,
+      claimed_at TEXT,
+      execution_state TEXT NOT NULL DEFAULT 'not_started',
+      execution_json TEXT,
+      completed_at TEXT,
+      constitution_result TEXT NOT NULL DEFAULT 'not_evaluated'
     );
     CREATE TABLE IF NOT EXISTS spend_tracking (
       id TEXT PRIMARY KEY,
@@ -510,7 +526,7 @@ describe("PolicyEngine", () => {
     });
 
     it("returns agent for creator", () => {
-      expect(PolicyEngine.deriveAuthorityLevel("creator")).toBe("agent");
+      expect(PolicyEngine.deriveAuthorityLevel("creator")).toBe("creator");
     });
 
     it("returns agent for agent", () => {
@@ -689,11 +705,11 @@ describe("executeTool with PolicyEngine", () => {
       inference,
     };
 
-    // No policyEngine or turnContext - backward compatible
+    // P-010: protected execution without policy authority fails closed.
     const result = await executeTool("check_credits", {}, tools, context);
 
-    expect(result.error).toBeUndefined();
-    expect(result.result).toContain("Credit balance");
+    expect(result.error).toContain("Policy context required");
+    expect(result.result).toBe("");
   });
 
   it("allows tool execution when policy allows", async () => {

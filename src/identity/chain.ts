@@ -7,7 +7,7 @@
  * Ported from aiws control-plane wallet.ts + siws.ts utilities.
  */
 
-import type { PrivateKeyAccount } from "viem";
+import { recoverMessageAddress, type PrivateKeyAccount } from "viem";
 import nacl from "tweetnacl";
 import bs58 from "bs58";
 
@@ -43,6 +43,42 @@ export function detectChainType(address: string): ChainType | null {
 
 export function normalizeAddress(address: string, chain: ChainType): string {
   return chain === "evm" ? address.toLowerCase() : address;
+}
+
+/**
+ * Verify a creator-provided message signature without importing or storing the
+ * creator's private key. EVM uses EIP-191 personal-sign recovery; Solana uses
+ * an Ed25519 detached signature over the exact UTF-8 message bytes.
+ */
+export async function verifySignedMessage(
+  address: string,
+  message: string,
+  signature: string,
+  chainType?: ChainType,
+): Promise<boolean> {
+  const resolvedChain = chainType ?? detectChainType(address);
+  if (!resolvedChain || !isValidAddress(address, resolvedChain)) return false;
+
+  try {
+    if (resolvedChain === "evm") {
+      const recovered = await recoverMessageAddress({
+        message,
+        signature: signature as `0x${string}`,
+      });
+      return normalizeAddress(recovered, "evm") === normalizeAddress(address, "evm");
+    }
+
+    const publicKey = bs58.decode(address);
+    const signatureBytes = bs58.decode(signature);
+    if (publicKey.length !== 32 || signatureBytes.length !== 64) return false;
+    return nacl.sign.detached.verify(
+      new TextEncoder().encode(message),
+      signatureBytes,
+      publicKey,
+    );
+  } catch {
+    return false;
+  }
 }
 
 // ─── Chain Identity Interface ────────────────────────────────

@@ -10,7 +10,7 @@ Supported-Node-Majors: `22,24`
 Recommended-Node-Major: `22`
 State-Root: `~/.abos`
 Source-Root: repository checkout
-Schema-Version-Observed-In-Source: `14`
+Schema-Version-Observed-In-Source: `16`
 ProjectOps-Protocol: `ProjectOps/system/ABOS_OPERATING_PROTOCOL.md`
 Adaptive-Reasoning: `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md`
 Plan-Authority: `ProjectOps/PLAN.md`
@@ -20,31 +20,17 @@ Host-Mode: `ProjectOps/system/PUBLIC_TRACKED_MATRIX.md`
 
 ## 1. Identidad canónica
 
-ABOS es un **Autonomous Business Operating System**: un runtime de agente autónomo, persistente, soberano y económicamente consciente, diseñado para continuar operando, aprender de evidencia, administrar recursos, actuar en el mundo mediante capacidades autorizadas, evolucionar y replicarse sin depender de un operador humano para cada paso.
+ABOS es un **Autonomous Business Operating System**: un runtime de agente soberano, persistente y económicamente consciente que puede razonar, actuar, conservar estado, adquirir/usar capacidades, operar entre entornos autorizados, administrar recursos, evolucionar y replicarse bajo evidencia y límites reales.
 
-Su identidad no es simplemente “un chatbot con tools”, ni un job runner, ni un predictor. El objeto operativo es un **agente persistente** con:
-- identidad y wallet;
-- estado durable;
-- contexto/memoria;
-- razonamiento y selección de rutas;
-- herramientas/capacidades;
-- política y fronteras de autoridad;
-- heartbeat y continuidad temporal;
-- economía/supervivencia;
-- entornos de ejecución;
-- self-modification;
-- skills;
-- interacción social/registry;
-- replicación y linaje.
+No es sólo un chatbot con tools, un predictor ni un job runner. Su unidad de continuidad es un agente persistente con identidad/wallet, estado durable, memoria/contexto, razonamiento y rutas, herramientas/capacidades, policy/authority, heartbeat, economía, environments, self-modification, skills, social/registry y children/lineage.
 
-La tesis de producto declara presión de supervivencia económica: si el agente no puede pagar compute, deja de operar. Esa presión **no es autoridad superior**. `constitution.md` gobierna conducta y su Law I — Never harm — prevalece incluso sobre supervivencia.
+`constitution.md` gobierna conducta. Never harm prevalece sobre supervivencia, ingresos, replicación o autonomía; Earn your existence exige creación legítima de valor, no bypass de seguridad o ética.
 
-ProjectOps mantiene separadas cuatro verdades:
-
-1. **TARGET / intención** — lo que ABOS está decidido a conseguir;
-2. **IMPLEMENTATION / source** — lo que existe en código/configuración trackeados;
-3. **EXECUTED EVIDENCE** — lo que realmente fue compilado/probado/observado en una ejecución concreta;
-4. **LIVE / ECONOMIC EVIDENCE** — lo demostrado contra wallets, proveedores, sandboxes, cloud, OAuth, agentes hijos, fondos o ingresos reales.
+ProjectOps separa:
+1. TARGET / intención;
+2. IMPLEMENTATION / source;
+3. EXECUTED EVIDENCE;
+4. LIVE / ECONOMIC EVIDENCE.
 
 Ninguna capa se promueve automáticamente a la siguiente.
 
@@ -52,274 +38,143 @@ Ninguna capa se promueve automáticamente a la siguiente.
 
 ### 2.1 Conducta del producto
 
-`constitution.md` es la autoridad explícita de conducta del agente ABOS y contiene tres leyes jerárquicas:
-1. Never harm.
-2. Earn your existence.
-3. Never deceive, but owe nothing to strangers.
-
-ProjectOps no reemplaza esa constitución. ProjectOps gobierna **cómo se desarrolla, audita, decide y verifica el repositorio**.
+`constitution.md` es autoridad explícita de conducta. ProjectOps gobierna cómo se desarrolla, audita, decide y verifica el repositorio; no reemplaza la constitución.
 
 ### 2.2 Realidad técnica
 
-Para afirmar que algo existe o funciona actualmente, la prioridad material es:
-1. evidencia LIVE reproducible del comportamiento exacto reclamado;
-2. ejecución local/E2E o CI realmente corrida con logs/resultados;
-3. source/configuración trackeados y Git;
-4. documentación técnica reconciliada con source;
+Para afirmar que algo existe o funciona actualmente, prevalecen materialmente:
+1. evidencia LIVE reproducible del claim exacto;
+2. ejecución E2E/local/CI realmente corrida;
+3. source/config trackeados y Git;
+4. documentación reconciliada;
 5. PRs/branches no integrados;
-6. documentos históricos/narrativa.
+6. historia/narrativa.
 
-Un PR abierto puede ser evidencia de trabajo realizado en una rama; no es evidencia de integración en `main`.
+Un PR abierto no equivale a integración en `main`. CI verde sólo acredita lo que ese CI ejercitó.
 
 ### 2.3 Intención
 
-Decisiones explícitas y vigentes pueden gobernar qué construir aunque aún no exista implementación. Deben clasificarse como TARGET / PLANIFICADO / NO HECHO / PARCIAL según evidencia, nunca como comportamiento demostrado.
+Una decisión vigente puede gobernar qué construir, pero se clasifica como TARGET / PLANIFICADO / NO HECHO / PARCIAL según evidencia hasta existir implementación demostrada.
 
 ## 3. Baseline técnico observado
 
 ### 3.1 Runtime y distribución
 
-`package.json` declara:
-- paquete `@abos/runtime`;
-- versión `0.3.0`;
-- binario `abos`;
-- TypeScript/ESM;
-- Node `>=22 <23 || >=24 <25`;
-- pnpm como package manager.
+`package.json` declara `@abos/runtime` 0.3.0, TypeScript/ESM y Node `>=22 <23 || >=24 <25`. `.nvmrc`/`.node-version` fijan Node 22 por defecto. CI valida Node 22 y 24, Windows/Linux y distribución pública.
 
-`.nvmrc` y `.node-version` fijan Node 22 como default del repositorio. CI valida Node 22 y 24, con lanes Linux, Windows y distribución pública independientes. `engine-strict=true` rechaza runtimes fuera del contrato. P-006 retiró Node 20 después de demostrar que la línea upstream parcheada de `stream-json` requiere Node >=22; Node 24 quedó validado con `better-sqlite3` 12.11.1 en fresh install Windows y Linux CI.
-
-El checkout del runtime y el estado operativo están deliberadamente separados. `~/.abos` contiene wallet/config/database/estado del agente; el source no debe vivir dentro de esa carpeta por defecto.
+Checkout source y `~/.abos` son dominios distintos. `~/.abos` contiene estado runtime del agente y no se trata como checkout del runtime.
 
 ### 3.2 Persistencia
 
-`src/state/schema.ts` declara `SCHEMA_VERSION = 14`.
+`src/state/schema.ts` declara `SCHEMA_VERSION = 16` durante P-010; v16 extiende `policy_decisions` de forma aditiva para lifecycle de policy/authorization sin reinterpretar filas legacy como approvals.
 
-HECHO observado en source: existe una base SQLite con identidad, turns, tool calls, heartbeat, finanzas, skills, children, registry, memory/soul, orchestration/adaptive/environment state y migraciones acumuladas.
-
-Hallazgo documental: `ARCHITECTURE.md` todavía contiene pasajes que describen migraciones `v1 -> v8`; source v14 y PRs posteriores demuestran que esa parte del documento necesita reconciliación antes de usarse como autoridad de versión.
+La SQLite canónica conserva identity, turns/tool calls, heartbeat, finanzas, skills, children, registry, memory/soul, orchestration/adaptive/environment state y migrations acumuladas. P-009 añadió provenance de inbox/turns de forma aditiva; legacy ambiguity degrada a UNKNOWN en vez de inventar trust.
 
 ### 3.3 Ciclo principal
 
-La documentación y source describen un agente long-running con ciclo ReAct y continuidad:
+El agente long-running opera sobre un ciclo ReAct/continuidad equivalente a **Think → Act → Observe → Repeat**, alternando ejecución/sueño y heartbeat durable.
 
-**Think → Act → Observe → Repeat**
+### 3.4 AI connections e inference
 
-El runtime alterna estados de ejecución/sueño y un heartbeat durable conserva tareas, health/credit observations y wake events entre turnos.
-
-### 3.4 Conexiones de IA
-
-La arquitectura actual separa:
-- connection method;
-- provider adapter;
-- model identity;
-- active runtime route.
-
-Los IDs de método/proveedor son abiertos; las convenciones/adapters actualmente enviados no constituyen un universo cerrado.
+La arquitectura separa connection method, provider adapter, model identity y active runtime route. IDs/provider/model son abiertos, no un enum universal cerrado.
 
 Autoridades conocidas:
-- `ModelRegistry` conserva catálogo/model identity del main agent;
-- `AiConnectionAdapterRegistry` coordina setup/auth/discovery;
-- adapters específicos poseen autenticación/transporte de su proveedor;
-- `InferenceRouter` posee selección/ejecución de ruta del main agent;
-- `InferenceBudgetTracker`/ledger posee gasto observado de inference.
+- `ModelRegistry`: catálogo/model identity del main agent;
+- `AiConnectionAdapterRegistry`: setup/auth/discovery;
+- adapters: autenticación/transporte provider-specific;
+- `InferenceRouter`: selección/ejecución del main agent;
+- inference budget/ledger: gasto observado.
 
-PR #16 integró OAuth ChatGPT/Codex mediante device-code y hot model routing. Su propio acceptance boundary dejó explícito que una autorización humana ChatGPT LIVE no fue ejecutada por CI.
+OAuth/provider configurado o source/CI no equivale a autenticación LIVE.
 
 ### 3.5 Adaptive Path Intelligence
 
-`docs/ADAPTIVE_PATH_INTELLIGENCE.md` es arquitectura canónica para la evolución adaptive-path.
+`docs/ADAPTIVE_PATH_INTELLIGENCE.md` conserva la arquitectura adaptive-path. Invariantes: **objective != method**, failure != impossible, no retry estratégico equivalente bajo condiciones equivalentes, UNKNOWN != IMPOSSIBLE, evidence alimenta replanning y capability/environment routes no sustituyen policy/auth/treasury/constitution.
 
-Invariantes source/documentados:
-- objective != method;
-- strategic failure != technical retry;
-- no retry estratégico equivalente bajo condiciones equivalentes;
-- cambios materiales pueden reabrir una ruta;
-- UNKNOWN != IMPOSSIBLE;
-- capacidades faltantes pueden discover/acquire/compose/construct;
-- environments son medios, no el objetivo;
-- policy/auth/treasury/physical/technical constraints siguen siendo autoridades;
-- evidence se persiste y retroalimenta el planner.
+### 3.6 Environments y recovery
 
-El subsistema se apoya en `src/intelligence/`, `src/capabilities/` y `src/environments/` sin sustituir el orchestrator existente.
-
-### 3.6 Environments, lifecycle y movilidad
-
-PRs #12–#15 construyeron una secuencia provider-neutral:
-- environment execution/lifecycle;
-- AWS EC2 lifecycle + Task execution;
-- cross-environment recovery/reuse/migration;
-- execution continuity + artifact portability.
-
-Principios preservados:
-- provider ID es dato, no allowlist central;
-- resource failure no equivale a provider failure;
-- source/target environment se seleccionan por capacidades/evidencia;
-- failures de ejecución se convierten en evidencia, no en fallback implícito;
-- continuidad de Task/artifacts no crea segunda autoridad de Task/Path/memory.
-
-AWS LIVE billable execution no quedó acreditada por CI; los PRs marcaron explícitamente esa frontera física/económica.
+Environments son medios provider-neutral. Resource failure no equivale a provider failure. Cambiar executor/host exige una nueva decisión explícita; no existe fallback silencioso dentro del mismo acto.
 
 ### 3.7 Execution boundary
 
-PR #17 cerró un defecto semántico importante: worker harnesses ya no deben cambiar silenciosamente de un executor seleccionado a filesystem/exec local cuando el executor falla.
+**Execution boundary**: un fallo de la frontera seleccionada se observa y se devuelve; cambiar de ruta requiere replanning explícito después de registrar evidencia.
 
-Invariante canónico:
+### 3.8 Temporalidad y estado corrupto
 
-**un fallo de la frontera seleccionada se observa y se devuelve; cambiar de ruta requiere una nueva decisión explícita del orchestration/adaptive path.**
+Heartbeat usa persistencia durable, leases/retry/AbortSignal y evita overlap material. Config ausente y config corrupta son estados distintos; corrupción no se reinterpreta como first-run.
 
-### 3.8 Heartbeat y temporalidad
+### 3.9 Children / replication
 
-PRs #19 y #21 consolidaron:
-- scheduler como autoridad única de persistencia de wake event;
-- callback de wake como notificación, no segunda persistencia;
-- lease renewal alrededor de tasks que timeout;
-- no overlap de retry mientras una ejecución anterior sigue viva;
-- AbortSignal cooperativo;
-- semántica de retry después del intento inicial;
-- eliminación de retry slots obsoletos.
+ABOS puede crear children con wallet, sandbox, genesis/constitution y lineage. P-003 ya integró child capital semantics; P-009 reforzó sender/provenance en parent-child messaging.
 
-Esto convierte idempotencia, leases y partial failure en invariantes importantes del runtime long-running.
+Invariantes: parent executor != child runtime; parent bookkeeping != child live balance; **parent authority != child wallet authority**.
 
-### 3.9 Configuración y estado corrupto
+### 3.10 Economía causal
 
-PR #20 estableció que config ausente y config corrupta no son el mismo estado. `null` representa first-run/missing; un archivo existente inválido debe fallar explícitamente y preservarse, no reescribirse como setup nuevo.
-
-### 3.10 Inference y costos
-
-PRs #22–#27 reforzaron:
-- cancellation end-to-end;
-- fallback de modelos desde el `ModelRegistry` abierto;
-- accounting de costo de worker inference en cents;
-- compatibilidad model/connection;
-- daily inference ceiling aplicado en la ruta real del `InferenceRouter` usando el ledger canónico.
-
-No debe reaparecer una segunda tabla de precios o una policy desconectada del path real.
-
-### 3.11 Children / replication
-
-ABOS puede crear children con wallet, sandbox, genesis/constitution y lineage.
-
-PR #18 conectó límites reales de config al child spawn.
-PR #25 impidió que el parent simule un recall de créditos que requiere autorización del child.
-PR #28 hizo que child health se observe dentro del sandbox del child mediante la misma señal física de proceso usada por start/reconciliation; eliminó un contrato HTTP inexistente y conservó child balance como `null` cuando no existe evidencia directa.
-
-Por lo tanto:
-- parent executor != child runtime;
-- parent bookkeeping != child balance;
-- parent authority != child wallet authority.
-
-### 3.12 Economía de children — estado actual
-
-PR #29 está **ABIERTO** y no integrado a `main` durante esta auditoría.
-
-Su objetivo es corregir semántica de capital antes de profitability decisions:
-- `funded_amount_cents` es bookkeeping histórico, no live balance;
-- funding de parent a child es capital allocation, no automáticamente expense;
-- live child balance desconocido permanece `null`;
-- attributed child revenue desconocido mantiene profitability `unknown`;
-- ROI no se fabrica desde funding acumulado;
-- P&L externo se separa de internal capital flows.
-
-Este trabajo es real pero PARCIAL hasta reconciliarse e integrarse. No se debe asumir que los tipos/ledger del PR ya gobiernan `main`.
+**Economía causal**: funding != balance; allocation != expense; expected revenue != realized revenue; profitability unknown != loss; ROI requiere denominador y autoridad válidos. P-003 dejó child capital semantics integradas/revalidadas; balance/revenue externo siguen UNKNOWN cuando falta evidencia.
 
 ## 4. Invariantes duros ABOS
 
-### 4.1 Constitución sobre supervivencia
-
-Never harm prevalece sobre ganar dinero, continuar vivo, replicarse o ejecutar un objetivo.
-
-### 4.2 Valor legítimo
-
-Earn your existence significa crear valor que otros aceptan pagar voluntariamente; presión de compute no justifica manipulación, spam, scam, fraude o abuso.
-
-### 4.3 Objetivo estable, ruta adaptable
-
-Fallar una ruta actualiza el world model; no destruye automáticamente el objetivo. Retry ciego de la misma estrategia bajo condiciones equivalentes está prohibido.
-
-### 4.4 Unknown no se convierte en cero/imposible
-
-Especialmente en finanzas, environments, capabilities y children, ausencia de observación debe conservarse como UNKNOWN/UNAVAILABLE/UNAUTHORIZED según corresponda.
-
-### 4.5 Una autoridad por responsabilidad
-
-No crear un segundo orchestrator, ModelRegistry, memory store, lifecycle authority, path ledger, wake persistence authority, inference-spend authority o child economic authority por conveniencia local.
-
-### 4.6 Fronteras de ejecución explícitas
-
-Una tool call no cambia de executor/host silenciosamente al fallar. Replanning decide otro camino después de registrar evidencia.
-
-### 4.7 Persistencia recuperable
-
-Turnos, tasks, attempts, wake events, artifacts, resources, children y modificaciones deben poder sobrevivir interrupciones de forma coherente con sus contratos. Partial failure no se reinterpreta como success.
-
-### 4.8 Economía causal
-
-Toda afirmación de gasto, balance, revenue, P&L, capital allocation, profitability o ROI debe identificar su autoridad y unidad. Métricas derivadas no sustituyen observaciones externas faltantes.
-
-### 4.9 Self-modification auditable
-
-Self-modification requiere protección de archivos/leyes, audit trail, Git/reversibilidad y no puede autocertificar que un cambio es seguro por el mero hecho de compilar.
-
-### 4.10 Replication conserva leyes y autoridad
-
-Children heredan constitution y poseen identidad/estado propios. Parent puede coordinar/fundar/observar dentro de interfaces autorizadas; no puede falsificar autoridad del child.
-
-### 4.11 Source state != runtime state
-
-El checkout de ABOS y `~/.abos` son dominios distintos. Migration/update no debe destruir o confundir wallet, DB, config o identity state.
-
-### 4.12 Open-world capabilities sin bypass de seguridad
-
-Provider/model/environment/capability registries deben poder crecer sin enums cerrados arbitrarios. Open-world no significa saltarse autorización, policy, treasury, constitution o trust boundaries.
+1. Constitution sobre survival/economics.
+2. Valor legítimo, no fraude/spam/abuso.
+3. Objetivo estable, ruta adaptable; no retry ciego.
+4. UNKNOWN/UNAVAILABLE/UNAUTHORIZED/PROHIBITED/IMPOSSIBLE distintos.
+5. Una autoridad por responsabilidad; auditar antes de crear.
+6. Execution boundary explícita; no fallback silencioso.
+7. Efectos durables recuperables/idempotentes según riesgo.
+8. Economía causal con units/source/scope/time/actor.
+9. Self-modification auditada y reversible.
+10. Children preservan constitution, identidad y autoridad propias.
+11. Source state != runtime state.
+12. Open-world capabilities no implica bypass de policy/auth/treasury/constitution/trust.
+13. Provenance externo no se eleva por contenido o forwarding.
 
 ## 5. Autoridades prácticas observadas
 
-Esta lista describe responsabilidades a preservar, no una garantía de que nunca evolucionarán:
-
-- Agent execution: `src/agent/loop.ts` + runtime bootstrap.
-- Policy: `src/agent/policy-engine.ts` y reglas asociadas.
-- Main-agent model identity: `src/inference/registry.ts` / `ModelRegistry`.
-- Main-agent routing: `src/inference/router.ts`.
-- AI setup/auth/discovery: `src/ai-connections/registry.ts` + adapters.
+Responsabilidades a preservar, sujetas a evolución auditada:
+- Agent execution: `src/agent/loop.ts` + bootstrap.
+- Policy: `src/agent/policy-engine.ts` + rules.
+- Main model identity: `src/inference/registry.ts` / `ModelRegistry`.
+- Main routing: `src/inference/router.ts`.
+- AI setup/auth/discovery: `src/ai-connections/` + adapters.
 - Codex OAuth/session: `src/codex/`.
 - Persistent database: `src/state/`.
 - Adaptive paths/evidence: `src/intelligence/`.
-- Capability discovery/resolution: `src/capabilities/`.
-- Environment registration/lifecycle/mobility: `src/environments/`.
-- Orchestration/TaskGraph: `src/orchestration/` y persistencia asociada.
-- Heartbeat scheduling: `src/heartbeat/`.
-- Wallet/identity: `src/identity/` + external chain/provider evidence.
+- Capabilities: `src/capabilities/`.
+- Environments/resources: `src/environments/`.
+- Orchestration/TaskGraph: `src/orchestration/`.
+- Heartbeat: `src/heartbeat/`.
+- Wallet/identity: `src/identity/` + external evidence.
 - Memory: `src/memory/`.
 - Soul: `src/soul/`.
 - Self-modification: `src/self-mod/` + Git audit trail.
 - Replication/children: `src/replication/`.
 - On-chain registry: `src/registry/`.
-- Product constitution: `constitution.md` + protected propagation/validation routes.
+- Product constitution: `constitution.md`.
 
-Antes de modificar una autoridad, seguir consumidores/productores reales; nombres de carpetas no bastan.
+Nombres de carpetas no bastan: antes de cambiar una authority se siguen producers/consumers reales.
 
 ## 6. Escalera de evidencia ABOS
 
 ### E0 — TARGET / NARRATIVE
 
-Existe intención, documentación o decisión. No demuestra source.
+Intención/documentación/decisión; no demuestra source.
 
 ### E1 — SOURCE
 
-La ruta existe en código/configuración trackeada. No demuestra que compile ni se ejecute.
+Ruta trackeada; no demuestra ejecución.
 
 ### E2 — STATIC / UNIT EXECUTION
 
-Typecheck/unit/security tests pertinentes ejecutados PASS. No demuestra integración completa ni provider LIVE.
+Typecheck/unit/security tests pertinentes PASS.
 
 ### E3 — CI / INTEGRATION
 
-Workflow autoritativo corrió sobre el SHA relevante y pasó gates aplicables. Solo acredita lo que el workflow ejercitó.
+Workflow autoritativo PASS sobre SHA relevante; sólo acredita lo ejercitado.
 
 ### E4 — LOCAL / SANDBOX E2E
 
-Flujo completo ejecutado en entorno realista con persistencia/restart cuando aplique.
+Flujo completo en entorno realista con persistence/restart cuando aplique.
 
 ### E5 — EXTERNAL AUTHENTICATED LIVE
 
@@ -327,65 +182,36 @@ OAuth/provider/cloud/blockchain/sandbox real ejecutado con autorización válida
 
 ### E6 — ECONOMIC LIVE
 
-Fondos/costos/balances/revenue/ROI necesarios para el claim fueron observados o atribuidos causalmente por autoridades reales; no inferidos desde bookkeeping parcial.
+Fondos/costes/balances/revenue/ROI necesarios para el claim observados o atribuidos causalmente por autoridades reales.
 
 ### E7 — SUSTAINED OPERATION
 
-El comportamiento se sostuvo en el tiempo bajo restarts, failures, budget pressure, recovery y observabilidad suficiente.
+Comportamiento sostenido bajo restart/failure/budget pressure/recovery con observabilidad suficiente.
 
-Un claim debe conservar el nivel exacto. E3 nunca se promociona a E5/E6 por narrativa.
+E3 nunca se promociona a E5/E6 por narrativa.
 
-## 7. Gaps y fronteras observadas al cutover
+## 7. Gaps y fronteras vigentes
 
-### 7.1 PR #29 — child capital semantics
+### 7.1 PR #29 / child capital semantics
 
-Estado: PARCIAL / OPEN PR. Es el trabajo técnico concreto más cercano a integración y se modela como P-003.
+**PR #29** fue la fuente histórica de trabajo que P-003 reconciliaba. Su semántica material quedó integrada mediante PR #33 y revalidada; no se usa el estado histórico del PR #29 como autoridad runtime actual.
 
 ### 7.2 Documentation drift
 
-`ARCHITECTURE.md` contiene detalles que quedaron detrás del source, incluyendo referencias a schema/migrations v8 mientras source declara v14. La documentación sigue siendo valiosa para topología, pero versiones/contadores deben reconciliarse antes de afirmar actualidad. Se modela como P-004.
+**Documentation drift** sigue siendo un track P-004. `ARCHITECTURE.md` puede contener versiones históricas (por ejemplo migrations v8) que no gobiernan el source actual. En este cutover se reconcilia únicamente el baseline de schema a v15 porque P-009 lo modificó materialmente; P-004 permanece PLANIFICADO para el cierre documental integral posterior.
 
-### 7.3 ChatGPT/Codex OAuth LIVE
+### 7.3 Fronteras LIVE
 
-PR #16 dejó explícito que CI no ejecutó una autorización humana device-code real. La implementación puede estar E1/E3 mientras la aceptación externa siga NO HECHA. Se modela dentro de P-005.
+Codex OAuth humano, AWS billable, providers externos, saldos/revenue atribuibles y otras fronteras E5/E6 requieren evidencia real; CI/source no las autocertifican.
 
-### 7.4 AWS billable LIVE
+### 7.4 P-010 activo
 
-PR #13 y fases de movilidad validaron source/simulación/control-plane inyectado, pero no acreditaron provisioning EC2 billable LIVE en CI. Se modela dentro de P-005.
-
-### 7.5 Child economics posterior a PR #29
-
-Incluso PR #29 conserva live balance y attributed revenue como unknown cuando no existe autoridad real. No se debe abrir una fase de auto-kill/profitability control hasta que esos inputs posean semántica y evidencia suficientes.
+Policy/Authorization/Approval/Quarantine lifecycle está EN_EJECUCIÓN como auditoría. No se considera resuelto hasta demostrar allow/deny/approval/quarantine/continuation/restart semantics sin side effects prematuros ni bypass.
 
 ## 8. Anti-contaminación entre proyectos
 
-ProjectOps puede reutilizar protocolo, manifests, módulos, required-context, reasoning gates y verifier como **método**.
-
-Está prohibido importar de otros proyectos sin evidencia ABOS-specific:
-- thresholds;
-- signal states;
-- scientific gates;
-- Android mission semantics;
-- métricas de trading;
-- fases numeradas históricas;
-- resultados físicos;
-- arquitectura de producto;
-- nomenclatura de módulos;
-- criterios de éxito.
-
-La pregunta correcta siempre es: **¿qué significa esto dentro de ABOS y qué evidencia del propio ABOS lo respalda?**
+ProjectOps puede reutilizar método, nunca identidad/thresholds/arquitectura/resultados de ZeroIQ, CATO u otros hosts. Toda conclusión debe ser ABOS-specific y respaldada por evidencia del propio ABOS.
 
 ## 9. Definición global de progreso
 
-ABOS avanza cuando una modificación:
-- preserva constitution e invariantes;
-- reduce ambigüedad o deuda real;
-- mantiene autoridades coherentes;
-- mejora capacidad/autonomía sin inventar poder inexistente;
-- convierte failures en evidencia útil;
-- conserva reversibilidad/continuidad;
-- respeta semántica económica;
-- prueba el nivel de claim correcto;
-- deja ProjectOps reconciliado.
-
-Más código sin estas propiedades no es progreso.
+ABOS avanza cuando una modificación preserva constitution/invariantes, reduce deuda real, mantiene authorities coherentes, mejora capacidad sin inventar poder, convierte failures en evidencia, conserva recovery, respeta economía causal, prueba el nivel exacto del claim y deja ProjectOps reconciliado.

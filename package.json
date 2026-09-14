@@ -17,6 +17,10 @@
     "./state/database.js": {
       "types": "./dist/state/database.d.ts",
       "default": "./dist/state/database.js"
+    },
+    "./agent/policy-authorization.js": {
+      "types": "./dist/agent/policy-authorization.d.ts",
+      "default": "./dist/agent/policy-authorization.js"
     }
   },
   "bin": {
