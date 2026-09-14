@@ -38,8 +38,8 @@ replace_exact(
 
 replace_exact(
     tools,
-    '            description: `Installed MCP server: ${args.name} (${pkg})`,',
-    '            description: `Configured MCP server inventory (runtime unverified): ${args.name} (${pkg})`,',
+    '          description: `Installed MCP server: ${args.name} (${pkg})`,',
+    '          description: `Configured MCP server inventory (runtime unverified): ${args.name} (${pkg})`,',
     "builtin MCP audit description",
 )
 
