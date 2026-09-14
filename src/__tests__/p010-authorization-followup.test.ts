@@ -64,8 +64,8 @@ function createPendingDecision(
       scopeHash,
       inputSource: "agent",
       actorAddress: request.turnContext.actorAddress,
-      rulesEvaluated: ["financial.require_confirmation"],
-      rulesTriggered: ["financial.require_confirmation"],
+      rulesEvaluated: ["external.creator_authorization"],
+      rulesTriggered: ["external.creator_authorization"],
       timestamp: new Date().toISOString(),
     },
     request,
@@ -348,14 +348,19 @@ describe("P-010 creator-signed authorization follow-up", () => {
     }))?.action).toBe("deny");
   });
 
-  it("quarantines large topups but leaves the minimum canonical tier autonomous", () => {
-    const rule = createFinancialRules(DEFAULT_TREASURY_POLICY)
-      .find((item) => item.id === "financial.require_confirmation")!;
+  it("does not convert amount alone into creator approval by default", () => {
+    const rules = createFinancialRules(DEFAULT_TREASURY_POLICY);
+    expect(rules.find((item) => item.id === "financial.require_confirmation"))
+      .toBeUndefined();
 
-    expect(rule.evaluate(ruleRequest("topup_credits", { amount_usd: 5 }))).toBeNull();
-    const large = rule.evaluate(ruleRequest("topup_credits", { amount_usd: 25 }));
-    expect(large?.action).toBe("quarantine");
-    expect(large?.reasonCode).toBe("CONFIRMATION_REQUIRED");
+    const topupRules = rules.filter((rule) =>
+      rule.appliesTo.by === "name" && rule.appliesTo.names.includes("topup_credits")
+    );
+    const outcomes = topupRules
+      .map((rule) => rule.evaluate(ruleRequest("topup_credits", { amount_usd: 2500 })))
+      .filter((result) => result !== null);
+
+    expect(outcomes.some((result) => result?.action === "quarantine")).toBe(false);
   });
 
   it("rate limits executed/uncertain effects, not pre-effect allows or known failures", () => {
