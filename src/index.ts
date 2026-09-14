@@ -73,7 +73,7 @@ Usage:
   abos --status       Show current abos status
   abos --execute-task-file <path>  Execute one Task envelope and emit TaskResult
   abos --version      Show version
-  abos --help         Show help
+  abos --help         Show this help
 
 Environment:
   CONWAY_API_URL           Conway API URL (default: https://api.conway.tech)
