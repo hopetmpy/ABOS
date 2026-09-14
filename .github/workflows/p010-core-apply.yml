@@ -1,0 +1,45 @@
+name: P010 Core Apply
+
+on:
+  push:
+    branches:
+      - abos/p010-policy-approval-lifecycle-v1
+    paths:
+      - .github/workflows/p010-core-apply.yml
+      - scripts/p010-core-apply.py
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply guarded P-010 core patch
+        run: python3 scripts/p010-core-apply.py
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Targeted P-010 policy tests
+        run: pnpm exec vitest run src/__tests__/policy-lifecycle-p010.test.ts src/__tests__/policy-engine.test.ts src/__tests__/runtime-truth-policy.test.ts src/__tests__/chain.test.ts
+      - name: Full test suite
+        run: pnpm test
+      - name: Commit productive patch
+        run: |
+          if git diff --quiet; then
+            echo "No source changes to commit"
+            exit 0
+          fi
+          git config user.name "hopetmpy"
+          git config user.email "hope.tmpy@gmail.com"
+          git add src/state/schema.ts src/state/database.ts src/types.ts src/agent/policy-authorization.ts src/agent/policy-engine.ts src/agent/tools.ts src/agent/loop.ts src/agent/policy-rules/financial.ts src/__tests__/policy-lifecycle-p010.test.ts src/__tests__/policy-engine.test.ts
+          git commit -m "feat(p010): add durable policy authorization core"
+          git push origin HEAD:abos/p010-policy-approval-lifecycle-v1
