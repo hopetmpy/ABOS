@@ -60,25 +60,35 @@ export async function installNpmPackage(
 }
 
 /**
- * Install an MCP server.
- * The abos can add new capabilities by installing MCP servers.
+ * Configure an MCP server in durable inventory.
+ *
+ * P-015 owns the real MCP transport/handshake/tool-discovery runtime. Until
+ * that runtime verifies a server, configuration alone must not promote the
+ * entry into the enabled installed-tool set consumed by the agent loop.
  */
 export async function installMcpServer(
-  conway: ConwayClient,
+  _conway: ConwayClient,
   db: AbosDatabase,
   name: string,
   command: string,
   args?: string[],
   env?: Record<string, string>,
 ): Promise<{ success: boolean; error?: string }> {
-  // Record in database
   const tool: InstalledTool = {
     id: ulid(),
     name: `mcp:${name}`,
     type: "mcp",
-    config: { command, args, env },
+    config: {
+      command,
+      args,
+      env,
+      runtimeTruth: "configured_unverified",
+    },
     installedAt: new Date().toISOString(),
-    enabled: true,
+    // `enabled` is the legacy runtime-loading gate. Keep nominal MCP disabled
+    // until P-015 can establish protocol-level evidence and explicitly enable
+    // a real discovered tool surface.
+    enabled: false,
   };
 
   db.installTool(tool);
@@ -86,7 +96,7 @@ export async function installMcpServer(
   logModification(
     db,
     "mcp_install",
-    `Installed MCP server: ${name} (${command})`,
+    `Configured MCP server (unverified, not runtime-enabled): ${name} (${command})`,
     { reversible: true },
   );
 
@@ -94,7 +104,11 @@ export async function installMcpServer(
 }
 
 /**
- * List all installed tools.
+ * List runtime-enabled installed tools.
+ *
+ * This API reflects the database's enabled filter; it is not a complete
+ * historical/configuration inventory and it is not independent readiness
+ * evidence for external dependencies.
  */
 export function listInstalledTools(
   db: AbosDatabase,
