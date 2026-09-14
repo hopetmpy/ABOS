@@ -1,32 +1,20 @@
 /**
- * Authority + Rate Limit + Financial Phase 1 Rule Tests
+ * Authority + rate-limit + financial boundary tests.
  *
- * Tests for Sub-phase 1.4: Financial Policy & Treasury Configuration
- * - Authority rules: external input blocked from dangerous tools
- * - Authority rules: self-mod from external blocked on protected paths
- * - Rate limit rules: genesis prompt, self-mod, spawn
- * - Financial Phase 1 rules: inference daily cap, require confirmation
- * - Treasury config loading and validation
- * - promptWithDefault behavior
+ * These tests intentionally use the canonical migrated test database so policy
+ * lifecycle queries cannot drift behind the runtime schema. P-010 also makes
+ * explicit that an amount alone is not creator authority evidence.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import Database from "better-sqlite3";
-import path from "path";
-import os from "os";
-import fs from "fs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type Database from "better-sqlite3";
 import type {
   AbosTool,
-  PolicyRule,
-  PolicyRequest,
-  PolicyRuleResult,
-  ToolContext,
   InputSource,
+  PolicyRequest,
   SpendTrackerInterface,
-  SpendCategory,
-  SpendEntry,
+  ToolContext,
   TreasuryPolicy,
-  LimitCheckResult,
 } from "../types.js";
 import { DEFAULT_TREASURY_POLICY } from "../types.js";
 import { PolicyEngine } from "../agent/policy-engine.js";
@@ -34,51 +22,15 @@ import { createAuthorityRules } from "../agent/policy-rules/authority.js";
 import { createRateLimitRules } from "../agent/policy-rules/rate-limits.js";
 import { createFinancialRules } from "../agent/policy-rules/financial.js";
 import { createDefaultRules } from "../agent/policy-rules/index.js";
-
-// ─── Test Helpers ───────────────────────────────────────────────
+import { createTestConfig, createTestDb } from "./mocks.js";
 
 function createRawTestDb(): Database.Database {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "authority-test-"));
-  const dbPath = path.join(tmpDir, "test.db");
-  const db = new Database(dbPath);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS schema_version (
-      version INTEGER PRIMARY KEY,
-      applied_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS policy_decisions (
-      id TEXT PRIMARY KEY,
-      turn_id TEXT,
-      tool_name TEXT NOT NULL,
-      tool_args_hash TEXT NOT NULL,
-      risk_level TEXT NOT NULL CHECK(risk_level IN ('safe','caution','dangerous','forbidden')),
-      decision TEXT NOT NULL CHECK(decision IN ('allow','deny','quarantine')),
-      rules_evaluated TEXT NOT NULL DEFAULT '[]',
-      rules_triggered TEXT NOT NULL DEFAULT '[]',
-      reason TEXT NOT NULL DEFAULT '',
-      latency_ms INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS spend_tracking (
-      id TEXT PRIMARY KEY,
-      tool_name TEXT NOT NULL,
-      amount_cents INTEGER NOT NULL,
-      recipient TEXT,
-      domain TEXT,
-      category TEXT NOT NULL CHECK(category IN ('transfer','x402','inference','other')),
-      window_hour TEXT NOT NULL,
-      window_day TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-  `);
-
-  return db;
+  return createTestDb().raw;
 }
 
-function createMockSpendTracker(overrides: Partial<SpendTrackerInterface> = {}): SpendTrackerInterface {
+function createMockSpendTracker(
+  overrides: Partial<SpendTrackerInterface> = {},
+): SpendTrackerInterface {
   return {
     recordSpend: () => {},
     getHourlySpend: () => 0,
@@ -88,8 +40,8 @@ function createMockSpendTracker(overrides: Partial<SpendTrackerInterface> = {}):
       allowed: true,
       currentHourlySpend: 0,
       currentDailySpend: 0,
-      limitHourly: 10000,
-      limitDaily: 25000,
+      limitHourly: 10_000,
+      limitDaily: 25_000,
     }),
     pruneOldRecords: () => 0,
     ...overrides,
@@ -111,8 +63,8 @@ function createMockTool(overrides: Partial<AbosTool> = {}): AbosTool {
 function createMockContext(rawDb?: Database.Database): ToolContext {
   return {
     identity: {} as any,
-    config: {} as any,
-    db: rawDb ? { raw: rawDb } as any : {} as any,
+    config: createTestConfig(),
+    db: rawDb ? ({ raw: rawDb } as any) : ({} as any),
     conway: {} as any,
     inference: {} as any,
   };
@@ -137,7 +89,17 @@ function createRequest(
   };
 }
 
-// ─── Authority Rules Tests ──────────────────────────────────────
+function insertLegacyAllow(
+  db: Database.Database,
+  id: string,
+  toolName: string,
+): void {
+  db.prepare(
+    `INSERT INTO policy_decisions
+      (id, tool_name, tool_args_hash, risk_level, decision, reason, created_at)
+     VALUES (?, ?, ?, 'dangerous', 'allow', 'ALLOWED', datetime('now'))`,
+  ).run(id, toolName, `hash-${id}`);
+}
 
 describe("Authority Rules", () => {
   let db: Database.Database;
@@ -151,244 +113,150 @@ describe("Authority Rules", () => {
   });
 
   describe("authority.external_tool_restriction", () => {
-    it("blocks destructive tools from external (undefined) input", () => {
-      const rules = createAuthorityRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "delete_sandbox",
-        riskLevel: "dangerous",
-        category: "conway",
-      });
-      const request = createRequest(tool, {}, undefined);
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("deny");
-      expect(decision.reasonCode).toBe("EXTERNAL_DANGEROUS_TOOL");
+    it("blocks destructive tools from external or heartbeat input", () => {
+      const engine = new PolicyEngine(db, createAuthorityRules());
+      for (const [name, source] of [
+        ["delete_sandbox", undefined],
+        ["delete_sandbox", "external"],
+        ["spawn_child", "heartbeat"],
+        ["fund_child", undefined],
+        ["update_genesis_prompt", undefined],
+      ] as Array<[string, InputSource | undefined]>) {
+        const decision = engine.evaluate(
+          createRequest(
+            createMockTool({
+              name,
+              riskLevel: "dangerous",
+              category: name === "spawn_child" || name === "fund_child"
+                ? "replication"
+                : name === "update_genesis_prompt"
+                  ? "self_mod"
+                  : "conway",
+            }),
+            {},
+            source,
+          ),
+        );
+        expect(decision.action).toBe("deny");
+        expect(decision.reasonCode).toBe("EXTERNAL_DANGEROUS_TOOL");
+      }
     });
 
-    it("blocks destructive tools from explicit external input", () => {
-      const rules = createAuthorityRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "delete_sandbox",
-        riskLevel: "dangerous",
-        category: "conway",
-      });
-      const request = createRequest(tool, {}, "external");
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("deny");
-      expect(decision.reasonCode).toBe("EXTERNAL_DANGEROUS_TOOL");
-      expect(decision.authorityLevel).toBe("external");
+    it("preserves the explicit external exceptions", () => {
+      const engine = new PolicyEngine(db, createAuthorityRules());
+      for (const [name, source] of [
+        ["register_erc8004", undefined],
+        ["register_erc8004", "heartbeat"],
+        ["give_feedback", undefined],
+      ] as Array<[string, InputSource | undefined]>) {
+        const decision = engine.evaluate(
+          createRequest(
+            createMockTool({ name, riskLevel: "dangerous", category: "registry" }),
+            {},
+            source,
+          ),
+        );
+        expect(decision.action).toBe("allow");
+      }
     });
 
-    it("blocks spawn_child from heartbeat input", () => {
-      const rules = createAuthorityRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "spawn_child",
-        riskLevel: "dangerous",
-        category: "replication",
-      });
-      const request = createRequest(tool, {}, "heartbeat");
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("deny");
-      expect(decision.reasonCode).toBe("EXTERNAL_DANGEROUS_TOOL");
-    });
-
-    it("blocks fund_child from external input", () => {
-      const rules = createAuthorityRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "fund_child",
-        riskLevel: "dangerous",
-        category: "replication",
-      });
-      const request = createRequest(tool, {}, undefined);
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("deny");
-      expect(decision.reasonCode).toBe("EXTERNAL_DANGEROUS_TOOL");
-    });
-
-    it("blocks update_genesis_prompt from external input", () => {
-      const rules = createAuthorityRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "update_genesis_prompt",
-        riskLevel: "dangerous",
-        category: "self_mod",
-      });
-      const request = createRequest(tool, {}, undefined);
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("deny");
-      expect(decision.reasonCode).toBe("EXTERNAL_DANGEROUS_TOOL");
-    });
-
-    it("allows register_erc8004 from external input", () => {
-      const rules = createAuthorityRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "register_erc8004",
-        riskLevel: "dangerous",
-        category: "registry",
-      });
-      const request = createRequest(tool, {}, undefined);
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("allow");
-    });
-
-    it("allows register_erc8004 from heartbeat input", () => {
-      const rules = createAuthorityRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "register_erc8004",
-        riskLevel: "dangerous",
-        category: "registry",
-      });
-      const request = createRequest(tool, {}, "heartbeat");
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("allow");
-    });
-
-    it("allows give_feedback from external input", () => {
-      const rules = createAuthorityRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "give_feedback",
-        riskLevel: "dangerous",
-        category: "registry",
-      });
-      const request = createRequest(tool, {}, undefined);
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("allow");
-    });
-
-    it("allows destructive tools from agent input", () => {
-      const rules = createAuthorityRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "delete_sandbox",
-        riskLevel: "dangerous",
-        category: "conway",
-      });
-      const request = createRequest(tool, {}, "agent");
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("allow");
-    });
-
-    it("allows destructive tools from creator input", () => {
-      const rules = createAuthorityRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "spawn_child",
-        riskLevel: "dangerous",
-        category: "replication",
-      });
-      const request = createRequest(tool, {}, "creator");
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("allow");
+    it("allows dangerous tools from agent and creator authority", () => {
+      const engine = new PolicyEngine(db, createAuthorityRules());
+      const agentDecision = engine.evaluate(
+        createRequest(
+          createMockTool({
+            name: "delete_sandbox",
+            riskLevel: "dangerous",
+            category: "conway",
+          }),
+          {},
+          "agent",
+        ),
+      );
+      const creatorDecision = engine.evaluate(
+        createRequest(
+          createMockTool({
+            name: "spawn_child",
+            riskLevel: "dangerous",
+            category: "replication",
+          }),
+          {},
+          "creator",
+        ),
+      );
+      expect(agentDecision.action).toBe("allow");
+      expect(creatorDecision.action).toBe("allow");
     });
 
     it("allows safe tools from external input", () => {
-      const rules = createAuthorityRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "read_file",
-        riskLevel: "safe",
-        category: "vm",
-      });
-      const request = createRequest(tool, {}, undefined);
-
-      const decision = engine.evaluate(request);
+      const engine = new PolicyEngine(db, createAuthorityRules());
+      const decision = engine.evaluate(
+        createRequest(
+          createMockTool({ name: "read_file", riskLevel: "safe", category: "vm" }),
+          {},
+          undefined,
+        ),
+      );
       expect(decision.action).toBe("allow");
     });
   });
 
   describe("authority.self_mod_from_external", () => {
-    it("blocks edit_own_file on protected paths from external input", () => {
-      const rules = createAuthorityRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "edit_own_file",
-        riskLevel: "dangerous",
-        category: "self_mod",
-      });
-      const request = createRequest(tool, { path: "~/.abos/SOUL.md" }, undefined);
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("deny");
-      expect(decision.reasonCode).toBe("EXTERNAL_SELF_MOD");
+    it("blocks protected self-mod paths from external input", () => {
+      const engine = new PolicyEngine(db, createAuthorityRules());
+      const ownFile = engine.evaluate(
+        createRequest(
+          createMockTool({
+            name: "edit_own_file",
+            riskLevel: "dangerous",
+            category: "self_mod",
+          }),
+          { path: "~/.abos/SOUL.md" },
+          undefined,
+        ),
+      );
+      const policyFile = engine.evaluate(
+        createRequest(
+          createMockTool({
+            name: "write_file",
+            riskLevel: "caution",
+            category: "vm",
+          }),
+          { path: "/app/src/agent/policy-rules/financial.ts" },
+          undefined,
+        ),
+      );
+      expect(ownFile.action).toBe("deny");
+      expect(ownFile.reasonCode).toBe("EXTERNAL_SELF_MOD");
+      expect(policyFile.action).toBe("deny");
+      expect(policyFile.reasonCode).toBe("EXTERNAL_SELF_MOD");
     });
 
-    it("blocks write_file targeting policy-rules from external input", () => {
-      const rules = createAuthorityRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "write_file",
-        riskLevel: "caution",
-        category: "vm",
-      });
-      const request = createRequest(tool, { path: "/app/src/agent/policy-rules/financial.ts" }, undefined);
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("deny");
-      expect(decision.reasonCode).toBe("EXTERNAL_SELF_MOD");
-    });
-
-    it("allows write_file on non-protected paths from external input", () => {
-      const rules = createAuthorityRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "write_file",
-        riskLevel: "caution",
-        category: "vm",
-      });
-      const request = createRequest(tool, { path: "/app/src/data/output.txt" }, undefined);
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("allow");
-    });
-
-    it("allows edit_own_file on protected paths from agent input", () => {
-      const rules = createAuthorityRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "edit_own_file",
-        riskLevel: "dangerous",
-        category: "self_mod",
-      });
-      const request = createRequest(tool, { path: "~/.abos/SOUL.md" }, "agent");
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("allow");
+    it("allows non-protected external writes and agent self-mod authority", () => {
+      const engine = new PolicyEngine(db, createAuthorityRules());
+      const dataWrite = engine.evaluate(
+        createRequest(
+          createMockTool({ name: "write_file", riskLevel: "caution", category: "vm" }),
+          { path: "/app/src/data/output.txt" },
+          undefined,
+        ),
+      );
+      const agentSelfMod = engine.evaluate(
+        createRequest(
+          createMockTool({
+            name: "edit_own_file",
+            riskLevel: "dangerous",
+            category: "self_mod",
+          }),
+          { path: "~/.abos/SOUL.md" },
+          "agent",
+        ),
+      );
+      expect(dataWrite.action).toBe("allow");
+      expect(agentSelfMod.action).toBe("allow");
     });
   });
 });
-
-// ─── Rate Limit Rules Tests ─────────────────────────────────────
 
 describe("Rate Limit Rules", () => {
   let db: Database.Database;
@@ -401,181 +269,107 @@ describe("Rate Limit Rules", () => {
     db.close();
   });
 
-  describe("rate.genesis_prompt_daily", () => {
-    it("allows first genesis prompt change", () => {
-      const rules = createRateLimitRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "update_genesis_prompt",
-        riskLevel: "dangerous",
-        category: "self_mod",
-      });
-      const request = createRequest(tool, {}, "agent", db);
-
-      const decision = engine.evaluate(request);
+  it("uses the migrated policy lifecycle schema for first executions", () => {
+    const engine = new PolicyEngine(db, createRateLimitRules());
+    for (const [name, category] of [
+      ["update_genesis_prompt", "self_mod"],
+      ["edit_own_file", "self_mod"],
+      ["spawn_child", "replication"],
+    ] as Array<[string, AbosTool["category"]]>) {
+      const decision = engine.evaluate(
+        createRequest(
+          createMockTool({ name, riskLevel: "dangerous", category }),
+          {},
+          "agent",
+          db,
+        ),
+      );
       expect(decision.action).toBe("allow");
-    });
-
-    it("blocks genesis prompt change after 1/day", () => {
-      // Insert a recent allowed decision for update_genesis_prompt
-      db.prepare(
-        `INSERT INTO policy_decisions (id, tool_name, tool_args_hash, risk_level, decision, reason, created_at)
-         VALUES ('dec1', 'update_genesis_prompt', 'hash1', 'dangerous', 'allow', 'ALLOWED', datetime('now'))`,
-      ).run();
-
-      const rules = createRateLimitRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "update_genesis_prompt",
-        riskLevel: "dangerous",
-        category: "self_mod",
-      });
-      const request = createRequest(tool, {}, "agent", db);
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("deny");
-      expect(decision.reasonCode).toBe("RATE_LIMIT_GENESIS");
-    });
+    }
   });
 
-  describe("rate.self_mod_hourly", () => {
-    it("allows self-mod within rate limit", () => {
-      const rules = createRateLimitRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "edit_own_file",
-        riskLevel: "dangerous",
-        category: "self_mod",
-      });
-      const request = createRequest(tool, {}, "agent", db);
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("allow");
-    });
-
-    it("blocks self-mod after 10/hour", () => {
-      // Insert 10 recent allowed decisions for edit_own_file
-      for (let i = 0; i < 10; i++) {
-        db.prepare(
-          `INSERT INTO policy_decisions (id, tool_name, tool_args_hash, risk_level, decision, reason, created_at)
-           VALUES ('dec_edit_${i}', 'edit_own_file', 'hash${i}', 'dangerous', 'allow', 'ALLOWED', datetime('now'))`,
-        ).run();
-      }
-
-      const rules = createRateLimitRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "edit_own_file",
-        riskLevel: "dangerous",
-        category: "self_mod",
-      });
-      const request = createRequest(tool, {}, "agent", db);
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("deny");
-      expect(decision.reasonCode).toBe("RATE_LIMIT_SELF_MOD");
-    });
+  it("counts legacy successful allows conservatively for genesis guard", () => {
+    insertLegacyAllow(db, "dec-genesis", "update_genesis_prompt");
+    const engine = new PolicyEngine(db, createRateLimitRules());
+    const decision = engine.evaluate(
+      createRequest(
+        createMockTool({
+          name: "update_genesis_prompt",
+          riskLevel: "dangerous",
+          category: "self_mod",
+        }),
+        {},
+        "agent",
+        db,
+      ),
+    );
+    expect(decision.action).toBe("deny");
+    expect(decision.reasonCode).toBe("RATE_LIMIT_GENESIS");
   });
 
-  describe("rate.spawn_daily", () => {
-    it("allows spawn within rate limit", () => {
-      const rules = createRateLimitRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "spawn_child",
-        riskLevel: "dangerous",
-        category: "replication",
-      });
-      const request = createRequest(tool, {}, "agent", db);
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("allow");
-    });
-
-    it("blocks spawn after 3/day", () => {
-      for (let i = 0; i < 3; i++) {
-        db.prepare(
-          `INSERT INTO policy_decisions (id, tool_name, tool_args_hash, risk_level, decision, reason, created_at)
-           VALUES ('dec_spawn_${i}', 'spawn_child', 'hash${i}', 'dangerous', 'allow', 'ALLOWED', datetime('now'))`,
-        ).run();
-      }
-
-      const rules = createRateLimitRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "spawn_child",
-        riskLevel: "dangerous",
-        category: "replication",
-      });
-      const request = createRequest(tool, {}, "agent", db);
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("deny");
-      expect(decision.reasonCode).toBe("RATE_LIMIT_SPAWN");
-    });
+  it("blocks self-mod after the current transitional hourly guard", () => {
+    for (let i = 0; i < 10; i++) {
+      insertLegacyAllow(db, `dec-edit-${i}`, "edit_own_file");
+    }
+    const engine = new PolicyEngine(db, createRateLimitRules());
+    const decision = engine.evaluate(
+      createRequest(
+        createMockTool({
+          name: "edit_own_file",
+          riskLevel: "dangerous",
+          category: "self_mod",
+        }),
+        {},
+        "agent",
+        db,
+      ),
+    );
+    expect(decision.action).toBe("deny");
+    expect(decision.reasonCode).toBe("RATE_LIMIT_SELF_MOD");
   });
 
-  describe("rate limit DB unavailable", () => {
-    it("denies when DB is not accessible (fail-closed)", () => {
-      const rules = createRateLimitRules();
-      const engine = new PolicyEngine(db, rules);
+  it("blocks spawn after the current transitional daily guard", () => {
+    for (let i = 0; i < 3; i++) {
+      insertLegacyAllow(db, `dec-spawn-${i}`, "spawn_child");
+    }
+    const engine = new PolicyEngine(db, createRateLimitRules());
+    const decision = engine.evaluate(
+      createRequest(
+        createMockTool({
+          name: "spawn_child",
+          riskLevel: "dangerous",
+          category: "replication",
+        }),
+        {},
+        "agent",
+        db,
+      ),
+    );
+    expect(decision.action).toBe("deny");
+    expect(decision.reasonCode).toBe("RATE_LIMIT_SPAWN");
+  });
 
-      const tool = createMockTool({
-        name: "update_genesis_prompt",
-        riskLevel: "dangerous",
-        category: "self_mod",
-      });
-      // Pass no DB to simulate DB unavailable
-      const request = createRequest(tool, {}, "agent");
-
-      const decision = engine.evaluate(request);
+  it("fails closed when rate-limit persistence is unavailable", () => {
+    const engine = new PolicyEngine(db, createRateLimitRules());
+    for (const [name, category, code] of [
+      ["update_genesis_prompt", "self_mod", "DB_UNAVAILABLE"],
+      ["edit_own_file", "self_mod", "DB_UNAVAILABLE"],
+      ["spawn_child", "replication", "DB_UNAVAILABLE"],
+    ] as Array<[string, AbosTool["category"], string]>) {
+      const decision = engine.evaluate(
+        createRequest(
+          createMockTool({ name, riskLevel: "dangerous", category }),
+          {},
+          "agent",
+        ),
+      );
       expect(decision.action).toBe("deny");
-      expect(decision.reasonCode).toBe("DB_UNAVAILABLE");
-    });
-
-    it("denies edit_own_file when DB is not accessible", () => {
-      const rules = createRateLimitRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "edit_own_file",
-        riskLevel: "dangerous",
-        category: "self_mod",
-      });
-      const request = createRequest(tool, {}, "agent");
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("deny");
-      expect(decision.reasonCode).toBe("DB_UNAVAILABLE");
-    });
-
-    it("denies spawn_child when DB is not accessible", () => {
-      const rules = createRateLimitRules();
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "spawn_child",
-        riskLevel: "dangerous",
-        category: "replication",
-      });
-      const request = createRequest(tool, {}, "agent");
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("deny");
-      expect(decision.reasonCode).toBe("DB_UNAVAILABLE");
-    });
+      expect(decision.reasonCode).toBe(code);
+    }
   });
 });
 
-// ─── Financial Phase 1 Rules Tests ──────────────────────────────
-
-describe("Financial Phase 1 Rules", () => {
+describe("Financial boundary rules", () => {
   let db: Database.Database;
 
   beforeEach(() => {
@@ -587,78 +381,58 @@ describe("Financial Phase 1 Rules", () => {
   });
 
   it("does not claim main-agent inference authority at the tool-policy layer", () => {
-    const rules = createFinancialRules(DEFAULT_TREASURY_POLICY);
-    const ruleIds = rules.map((rule) => rule.id);
-
-    // Main-agent inference is enforced by InferenceRouter against the
-    // inference_costs ledger. A fake chat/inference tool rule would be a
-    // second, disconnected authority.
+    const ruleIds = createFinancialRules(DEFAULT_TREASURY_POLICY).map((rule) => rule.id);
     expect(ruleIds).not.toContain("financial.inference_daily_cap");
   });
 
-  describe("financial.require_confirmation", () => {
-    it("allows transfers under confirmation threshold", () => {
-      const rules = createFinancialRules(DEFAULT_TREASURY_POLICY);
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "transfer_credits",
-        riskLevel: "dangerous",
-        category: "financial",
-      });
-      const request = createRequest(tool, { amount_cents: 500 }, "agent");
-
-      const decision = engine.evaluate(request);
-      // Should not be quarantined (500 < 1000 threshold)
-      expect(decision.action).not.toBe("quarantine");
+  it("does not convert an amount into creator approval", () => {
+    const rules = createFinancialRules(DEFAULT_TREASURY_POLICY);
+    const engine = new PolicyEngine(db, rules);
+    const tool = createMockTool({
+      name: "transfer_credits",
+      riskLevel: "dangerous",
+      category: "financial",
     });
 
-    it("quarantines transfers above confirmation threshold", () => {
-      const rules = createFinancialRules(DEFAULT_TREASURY_POLICY);
-      const engine = new PolicyEngine(db, rules);
+    const belowFormerThreshold = engine.evaluate(
+      createRequest(tool, { amount_cents: 500 }, "agent"),
+    );
+    const aboveFormerThreshold = engine.evaluate(
+      createRequest(tool, { amount_cents: 2000 }, "agent"),
+    );
 
-      const tool = createMockTool({
-        name: "transfer_credits",
-        riskLevel: "dangerous",
-        category: "financial",
-      });
-      const request = createRequest(tool, { amount_cents: 2000 }, "agent");
+    expect(belowFormerThreshold.action).toBe("allow");
+    expect(aboveFormerThreshold.action).toBe("allow");
+    expect(rules.map((rule) => rule.id)).not.toContain("financial.require_confirmation");
+  });
 
-      const decision = engine.evaluate(request);
-      // Should be quarantined (2000 > 1000 threshold), but may also be denied
-      // by transfer_max_single if over that limit. 2000 < 5000 so it won't be denied.
-      expect(decision.action).toBe("quarantine");
-      expect(decision.reasonCode).toBe("CONFIRMATION_REQUIRED");
-    });
-
-    it("returns quarantine, not deny, for confirmation threshold", () => {
-      // Use a custom policy with very high transfer limits so only confirmation triggers
-      const policy: TreasuryPolicy = {
-        ...DEFAULT_TREASURY_POLICY,
-        maxSingleTransferCents: 100000,
-        requireConfirmationAboveCents: 500,
-      };
-      const rules = createFinancialRules(policy);
-      const engine = new PolicyEngine(db, rules);
-
-      const tool = createMockTool({
-        name: "transfer_credits",
-        riskLevel: "dangerous",
-        category: "financial",
-      });
-      const request = createRequest(tool, { amount_cents: 1000 }, "agent");
-
-      const decision = engine.evaluate(request);
-      expect(decision.action).toBe("quarantine");
-      expect(decision.reasonCode).toBe("CONFIRMATION_REQUIRED");
-    });
+  it("ignores the legacy confirmation threshold as creator-authority policy", () => {
+    const policy: TreasuryPolicy = {
+      ...DEFAULT_TREASURY_POLICY,
+      maxSingleTransferCents: 100_000,
+      maxHourlyTransferCents: 100_000,
+      maxDailyTransferCents: 100_000,
+      requireConfirmationAboveCents: 1,
+    };
+    const engine = new PolicyEngine(db, createFinancialRules(policy));
+    const decision = engine.evaluate(
+      createRequest(
+        createMockTool({
+          name: "transfer_credits",
+          riskLevel: "dangerous",
+          category: "financial",
+        }),
+        { amount_cents: 1000 },
+        "agent",
+      ),
+    );
+    expect(decision.action).toBe("allow");
+    expect(decision.reasonCode).toBe("ALLOWED");
   });
 });
 
-// ─── Treasury Config Tests ──────────────────────────────────────
-
 describe("Treasury Config", () => {
-  it("DEFAULT_TREASURY_POLICY has all required fields", () => {
+  it("retains the complete transitional configuration surface", () => {
     expect(DEFAULT_TREASURY_POLICY.maxSingleTransferCents).toBe(5000);
     expect(DEFAULT_TREASURY_POLICY.maxHourlyTransferCents).toBe(10000);
     expect(DEFAULT_TREASURY_POLICY.maxDailyTransferCents).toBe(25000);
@@ -668,10 +442,12 @@ describe("Treasury Config", () => {
     expect(DEFAULT_TREASURY_POLICY.transferCooldownMs).toBe(0);
     expect(DEFAULT_TREASURY_POLICY.maxTransfersPerTurn).toBe(2);
     expect(DEFAULT_TREASURY_POLICY.maxInferenceDailyCents).toBe(50000);
+    // Kept for config compatibility/manual oversight evolution, but no default
+    // financial rule treats crossing it as creator authority.
     expect(DEFAULT_TREASURY_POLICY.requireConfirmationAboveCents).toBe(1000);
   });
 
-  it("all default values are positive", () => {
+  it("keeps numeric defaults non-negative", () => {
     for (const [key, value] of Object.entries(DEFAULT_TREASURY_POLICY)) {
       if (key === "x402AllowedDomains") continue;
       expect(typeof value).toBe("number");
@@ -680,44 +456,27 @@ describe("Treasury Config", () => {
   });
 });
 
-// ─── createDefaultRules Integration ─────────────────────────────
-
 describe("createDefaultRules", () => {
-  it("includes authority and rate-limit rules", () => {
-    const rules = createDefaultRules();
-    const ruleIds = rules.map((r) => r.id);
-
+  it("includes authority and current transitional rate rules without amount-only confirmation", () => {
+    const ruleIds = createDefaultRules().map((rule) => rule.id);
     expect(ruleIds).toContain("authority.external_tool_restriction");
     expect(ruleIds).toContain("authority.self_mod_from_external");
     expect(ruleIds).toContain("rate.genesis_prompt_daily");
     expect(ruleIds).toContain("rate.self_mod_hourly");
     expect(ruleIds).toContain("rate.spawn_daily");
     expect(ruleIds).not.toContain("financial.inference_daily_cap");
-    expect(ruleIds).toContain("financial.require_confirmation");
+    expect(ruleIds).not.toContain("financial.require_confirmation");
   });
 
-  it("authority rules have priority 400", () => {
+  it("preserves rule priority contracts", () => {
     const rules = createDefaultRules();
-    const authorityRules = rules.filter((r) => r.id.startsWith("authority."));
-    for (const rule of authorityRules) {
+    for (const rule of rules.filter((item) => item.id.startsWith("authority."))) {
       expect(rule.priority).toBe(400);
     }
-  });
-
-  it("rate limit rules have priority 600", () => {
-    const rules = createDefaultRules();
-    const rateRules = rules.filter((r) => r.id.startsWith("rate."));
-    for (const rule of rateRules) {
+    for (const rule of rules.filter((item) => item.id.startsWith("rate."))) {
       expect(rule.priority).toBe(600);
     }
-  });
-
-  it("financial phase 1 rules have priority 500", () => {
-    const rules = createDefaultRules();
-    const financialRules = rules.filter(
-      (r) => r.id === "financial.inference_daily_cap" || r.id === "financial.require_confirmation",
-    );
-    for (const rule of financialRules) {
+    for (const rule of rules.filter((item) => item.id.startsWith("financial."))) {
       expect(rule.priority).toBe(500);
     }
   });
@@ -727,18 +486,11 @@ describe("createDefaultRules", () => {
       ...DEFAULT_TREASURY_POLICY,
       maxSingleTransferCents: 100,
     };
-    const rules = createDefaultRules(customPolicy);
-    expect(rules.length).toBeGreaterThan(0);
+    expect(createDefaultRules(customPolicy).length).toBeGreaterThan(0);
   });
 });
 
-// ─── promptWithDefault Tests ────────────────────────────────────
-
 describe("promptWithDefault", () => {
-  // Note: promptWithDefault is an interactive prompt function.
-  // We test its logic by importing and testing the behavior expectations.
-  // The actual function requires readline, so we verify the exported signature.
-
   it("is exported from prompts module", async () => {
     const prompts = await import("../setup/prompts.js");
     expect(typeof prompts.promptWithDefault).toBe("function");
