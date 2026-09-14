@@ -13,6 +13,7 @@ import type { PolicyEngine } from "./policy-engine.js";
 import { createBuiltinTools, executeTool } from "./tools.js";
 import {
   planAutonomousTopup,
+  setProtectedAutonomousTopupExecutor,
   type AutonomousTopupPlan,
 } from "../conway/topup.js";
 import { getUsdcBalanceDetailed } from "../conway/x402.js";
@@ -47,6 +48,20 @@ export interface AutonomousTopupExecutionOptions {
   requiredCreditsCents?: number;
   cooldownMs?: number;
 }
+
+export type AutonomousTopupRuntimeContext = Pick<
+  AutonomousTopupExecutionOptions,
+  | "identity"
+  | "config"
+  | "db"
+  | "conway"
+  | "inference"
+  | "social"
+  | "policyEngine"
+  | "spendTracker"
+> & {
+  tools?: AbosTool[];
+};
 
 interface UnresolvedPolicyEffectRow {
   id: string;
@@ -251,4 +266,60 @@ export async function executeAutonomousTopup(
     toolResult,
     evidence,
   };
+}
+
+/**
+ * Install process-local wiring so legacy/bootstrap recovery entrypoints can
+ * request autonomous credit recovery without ever receiving direct payment
+ * authority. The callback always re-enters executeAutonomousTopup/PolicyEngine.
+ */
+export function installProtectedAutonomousTopupRuntime(
+  context: AutonomousTopupRuntimeContext,
+): void {
+  setProtectedAutonomousTopupExecutor(async (request) => {
+    const source = request.source === "sandbox_recovery"
+      ? "sandbox_recovery"
+      : "runtime_recovery";
+    const result = await executeAutonomousTopup({
+      ...context,
+      source,
+      targetCreditsCents: request.targetCreditsCents,
+      requiredCreditsCents: request.requiredCreditsCents,
+    });
+
+    if (result.status === "executed" && result.plan.amountUsd !== undefined) {
+      return {
+        success: true,
+        amountUsd: result.plan.amountUsd,
+      };
+    }
+
+    if (
+      request.source === "sandbox_recovery" &&
+      result.status === "no_action" &&
+      result.plan.reasonCode === "SUFFICIENT_CREDITS"
+    ) {
+      // The credit condition changed between the original 402 and recovery
+      // observation; retrying the sandbox operation is now justified without
+      // inventing a payment that did not occur.
+      return {
+        success: true,
+        amountUsd: 0,
+      };
+    }
+
+    if (
+      request.source === "bootstrap" &&
+      result.status === "no_action" &&
+      result.plan.reasonCode === "SUFFICIENT_CREDITS"
+    ) {
+      return null;
+    }
+
+    return {
+      success: false,
+      amountUsd: result.plan.amountUsd ?? 0,
+      error: `${result.status}: ${result.evidence.join(" ")}`,
+    };
+  });
 }
