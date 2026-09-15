@@ -13,6 +13,15 @@ import type { ChildLifecycle } from "./lifecycle.js";
 
 export { DEFAULT_CHILD_HEALTH_CONFIG };
 
+interface HealthCandidate {
+  id: string;
+  name: string;
+  sandboxId: string;
+  status: string;
+  createdAt: string;
+  lastChecked: string | null;
+}
+
 export class ChildHealthMonitor {
   private config: ChildHealthConfig;
 
@@ -64,12 +73,14 @@ export class ChildHealthMonitor {
           `runtime probe failed: ${result.stderr || result.stdout || `exit ${result.exitCode}`}`,
         );
       } else {
-        const observed = result.stdout.trim().split(/\\s+/);
+        const observed = result.stdout.trim().split(/\s+/);
         if (observed.includes("running")) {
           healthy = true;
           lastSeen = new Date().toISOString();
-        } else {
+        } else if (observed.includes("stopped")) {
           issues.push("runtime process not running");
+        } else {
+          issues.push("runtime probe returned unknown state");
         }
       }
 
@@ -82,7 +93,8 @@ export class ChildHealthMonitor {
       issues.push(`health check error: ${error instanceof Error ? error.message : String(error)}`);
     }
 
-    // Update last_checked timestamp
+    // Update last_checked timestamp. This remains parent observation metadata;
+    // it is never promoted into child-emitted heartbeat evidence.
     try {
       this.db.prepare("UPDATE children SET last_checked = datetime('now') WHERE id = ?").run(childId);
     } catch {
@@ -93,13 +105,36 @@ export class ChildHealthMonitor {
   }
 
   /**
-   * Check health of all active children (healthy + unhealthy).
-   * Respects concurrency limits. Transitions children based on results.
+   * Check health of all active lifecycle children plus safely adoptable legacy
+   * running/sleeping rows that predate child_lifecycle_events.
+   *
+   * Legacy labels are candidates only. Adoption requires fresh child-scoped
+   * runtime evidence; UNKNOWN/errors leave the row untouched.
    */
   async checkAllChildren(): Promise<HealthCheckResult[]> {
     const healthyChildren = this.lifecycle.getChildrenInState("healthy");
     const unhealthyChildren = this.lifecycle.getChildrenInState("unhealthy");
-    const allChildren = [...healthyChildren, ...unhealthyChildren];
+    const legacyChildren = this.db
+      .prepare(
+        `SELECT
+           c.id,
+           c.name,
+           c.sandbox_id AS sandboxId,
+           c.status,
+           c.created_at AS createdAt,
+           c.last_checked AS lastChecked
+         FROM children c
+         WHERE c.status IN ('running', 'sleeping')
+           AND NOT EXISTS (
+             SELECT 1 FROM child_lifecycle_events e WHERE e.child_id = c.id
+           )`,
+      )
+      .all() as HealthCandidate[];
+    const allChildren: HealthCandidate[] = [
+      ...healthyChildren,
+      ...unhealthyChildren,
+      ...legacyChildren,
+    ];
 
     if (allChildren.length === 0) return [];
 
@@ -118,13 +153,29 @@ export class ChildHealthMonitor {
         if (!child) continue;
 
         try {
-          if (!result.healthy && child.status === "healthy") {
+          if (child.status === "running" || child.status === "sleeping") {
+            if (result.healthy) {
+              this.lifecycle.adoptObservedLegacyState(
+                result.childId,
+                "healthy",
+                "legacy child adopted from health probe observing runtime running",
+                { evidence: result.issues, lastSeen: result.lastSeen },
+              );
+            } else if (result.issues.includes("runtime process not running")) {
+              this.lifecycle.adoptObservedLegacyState(
+                result.childId,
+                "unhealthy",
+                "legacy child adopted from health probe observing runtime absence",
+                { evidence: result.issues },
+              );
+            }
+          } else if (!result.healthy && child.status === "healthy") {
             this.lifecycle.transition(result.childId, "unhealthy", result.issues.join("; "));
           } else if (result.healthy && child.status === "unhealthy") {
             this.lifecycle.transition(result.childId, "healthy", "recovered");
           }
         } catch {
-          // Transition may fail if state changed concurrently; non-fatal
+          // Transition/adoption may fail if state changed concurrently; non-fatal.
         }
 
         results.push(result);
