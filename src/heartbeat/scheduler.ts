@@ -30,6 +30,13 @@ import {
   insertWakeEvent,
 } from "../state/database.js";
 import { createLogger } from "../observability/logger.js";
+import {
+  appendEvidenceEvent,
+  correlationIdFor,
+  getEvidenceByAuthority,
+  getEvidenceByCorrelation,
+  type EvidenceEventRecord,
+} from "../observability/evidence.js";
 
 type DatabaseType = BetterSqlite3.Database;
 const logger = createLogger("heartbeat.scheduler");
@@ -80,6 +87,31 @@ const TIER_ORDER: Record<string, number> = {
 
 function tierMeetsMinimum(currentTier: string, minimumTier: string): boolean {
   return (TIER_ORDER[currentTier] ?? 0) >= (TIER_ORDER[minimumTier] ?? 0);
+}
+
+const HEARTBEAT_SETTLEMENT_EVENTS = new Set([
+  "heartbeat.succeeded",
+  "heartbeat.failed",
+  "heartbeat.timed_out",
+  "heartbeat.late_succeeded",
+  "heartbeat.late_failed",
+]);
+
+function latestUnsettledHeartbeatAttempt(
+  db: DatabaseType,
+  taskName: string,
+): EvidenceEventRecord | undefined {
+  const attempts = getEvidenceByAuthority(db, "heartbeat_schedule", taskName)
+    .filter((event) => event.eventType === "heartbeat.attempt_started");
+
+  for (let index = attempts.length - 1; index >= 0; index--) {
+    const attempt = attempts[index]!;
+    const chain = getEvidenceByCorrelation(db, attempt.correlationId);
+    if (!chain.some((event) => HEARTBEAT_SETTLEMENT_EVENTS.has(event.eventType))) {
+      return attempt;
+    }
+  }
+  return undefined;
 }
 
 export class DurableScheduler {
@@ -142,6 +174,30 @@ export class DurableScheduler {
     return schedule.filter((row) => {
       // Skip disabled tasks
       if (!row.enabled) return false;
+
+      // A durable start intent without any settlement means the process may
+      // have died after beginning an external effect but before writing its
+      // heartbeat_history outcome. Never redispatch that work automatically.
+      const unsettledAttempt = latestUnsettledHeartbeatAttempt(this.db, row.taskName);
+      if (unsettledAttempt) {
+        if (!row.leaseOwner) {
+          const dedupKey = `heartbeat-attempt-in-doubt:${row.taskName}:${unsettledAttempt.id}`;
+          if (insertDedupKey(this.db, dedupKey, row.taskName, 24 * 60 * 60 * 1000)) {
+            insertWakeEvent(
+              this.db,
+              "heartbeat_recovery",
+              `Heartbeat task '${row.taskName}' has an unsettled durable attempt; automatic redispatch is blocked pending reconciliation.`,
+              {
+                taskName: row.taskName,
+                correlationId: unsettledAttempt.correlationId,
+                attemptEventId: unsettledAttempt.id,
+                state: "attempt_in_doubt",
+              },
+            );
+          }
+        }
+        return false;
+      }
 
       // Skip tasks that require a higher survival tier
       if (!tierMeetsMinimum(context.survivalTier, row.tierMinimum)) return false;
@@ -217,71 +273,113 @@ export class DurableScheduler {
     );
     const timeoutMs = schedule?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS;
 
-    // Acquire lease
+    // Acquire lease before publishing an attempt. A failed evidence write must
+    // release this lease and must never reach the effecting task function.
     if (!this.acquireLease(taskName)) return;
-
-    // A persisted nextRunAt represents one pending retry slot. Consume it at
-    // attempt start; only a subsequent eligible failure may schedule another.
-    if (schedule?.nextRunAt) {
-      updateHeartbeatSchedule(this.db, taskName, { nextRunAt: null });
-    }
 
     const startedAt = new Date().toISOString();
     const startMs = Date.now();
+    const historyId = generateId();
+    const correlationId = correlationIdFor("heartbeat_history", historyId);
+    let attemptEvidence: EvidenceEventRecord;
+
+    try {
+      attemptEvidence = this.db.transaction(() => {
+        // A persisted nextRunAt represents one pending retry slot. Consume it
+        // atomically with the next durable attempt intent.
+        if (schedule?.nextRunAt) {
+          updateHeartbeatSchedule(this.db, taskName, { nextRunAt: null });
+        }
+        return appendEvidenceEvent(this.db, {
+          correlationId,
+          eventType: "heartbeat.attempt_started",
+          domain: "heartbeat",
+          authorityType: "heartbeat_schedule",
+          authorityId: taskName,
+          epistemicStatus: "observation",
+          payload: { startedAt, timeoutMs },
+        });
+      })();
+    } catch (error) {
+      this.releaseLease(taskName);
+      throw error;
+    }
+
     const abortController = new AbortController();
     const taskContext: TickContext = {
       ...ctx,
       abortSignal: abortController.signal,
     };
+    // No external/task effect is started until the intent above is durable.
     const executionPromise = Promise.resolve().then(() =>
       taskFn(taskContext, this.legacyContext),
     );
     const timeout = timeoutPromise(timeoutMs, () => abortController.abort());
     let timedOut = false;
-    let timeoutHistoryId: string | null = null;
+    let timeoutHistoryPersisted = false;
 
     try {
-      const result = await Promise.race([
-        executionPromise,
-        timeout.promise,
-      ]);
+      let rejected = false;
+      let executionError: unknown;
+      let result: Awaited<ReturnType<HeartbeatTaskFn>> | undefined;
+      try {
+        result = await Promise.race([executionPromise, timeout.promise]);
+      } catch (error) {
+        rejected = true;
+        executionError = error;
+      }
 
       const durationMs = Date.now() - startMs;
-      this.recordSuccess(taskName, durationMs, startedAt);
+      if (rejected) {
+        const error = executionError instanceof Error
+          ? executionError
+          : new Error(String(executionError));
+        timedOut = error instanceof HeartbeatTaskTimeoutError;
+        this.recordFailure(
+          taskName,
+          error,
+          durationMs,
+          startedAt,
+          timedOut ? "timeout" : "failure",
+          historyId,
+          attemptEvidence.id,
+        );
+        timeoutHistoryPersisted = timedOut;
 
-      // Persist wake intent regardless of whether a host callback is attached.
-      if (result.shouldWake) {
+        // maxRetries means retries AFTER the initial attempt. Since history
+        // includes the current failure, <= preserves exactly that semantic.
+        if (schedule && schedule.maxRetries > 0) {
+          const history = this.getRecentFailures(taskName);
+          if (history <= schedule.maxRetries) {
+            this.scheduleRetry(taskName);
+          }
+        }
+        return;
+      }
+
+      // Outcome persistence is deliberately outside the execution catch path.
+      // If durable evidence fails after an external success, preserve the
+      // unresolved start intent instead of fabricating a task failure.
+      this.recordSuccess(
+        taskName,
+        durationMs,
+        startedAt,
+        historyId,
+        attemptEvidence.id,
+      );
+
+      if (result?.shouldWake) {
         const reason = result.message || `Heartbeat task '${taskName}' requested wake`;
         this.onWakeRequest?.(reason);
         insertWakeEvent(this.db, "heartbeat", reason, { taskName });
       }
-    } catch (err: any) {
-      const durationMs = Date.now() - startMs;
-      timedOut = err instanceof HeartbeatTaskTimeoutError;
-      const failureHistoryId = this.recordFailure(
-        taskName,
-        err,
-        durationMs,
-        startedAt,
-        timedOut ? "timeout" : "failure",
-      );
-      if (timedOut) timeoutHistoryId = failureHistoryId;
-
-      // maxRetries means retries AFTER the initial attempt. Since history
-      // includes the current failure, <= preserves exactly that semantic.
-      if (schedule && schedule.maxRetries > 0) {
-        const history = this.getRecentFailures(taskName);
-        if (history <= schedule.maxRetries) {
-          this.scheduleRetry(taskName);
-        }
-      }
     } finally {
       timeout.clear();
-      if (timedOut) {
+      if (timedOut && timeoutHistoryPersisted) {
         this.holdLeaseUntilTaskSettles(
           taskName,
           executionPromise,
-          timeoutHistoryId!,
+          historyId,
           startMs,
         );
       } else {
@@ -307,27 +405,47 @@ export class DurableScheduler {
   /**
    * Record a successful task execution.
    */
-  recordSuccess(taskName: string, durationMs: number, startedAt: string): void {
+  recordSuccess(
+    taskName: string,
+    durationMs: number,
+    startedAt: string,
+    historyId = generateId(),
+    causationId: string | null = null,
+  ): void {
     const now = new Date().toISOString();
+    const correlationId = correlationIdFor("heartbeat_history", historyId);
 
-    insertHeartbeatHistory(this.db, {
-      id: generateId(),
-      taskName,
-      startedAt,
-      completedAt: now,
-      result: "success",
-      durationMs,
-      error: null,
-      idempotencyKey: null,
-    });
+    this.db.transaction(() => {
+      insertHeartbeatHistory(this.db, {
+        id: historyId,
+        taskName,
+        startedAt,
+        completedAt: now,
+        result: "success",
+        durationMs,
+        error: null,
+        idempotencyKey: null,
+      });
 
-    updateHeartbeatSchedule(this.db, taskName, {
-      lastRunAt: now,
-      nextRunAt: null, // Clear any pending retry
-      lastResult: "success",
-      lastError: null,
-      runCount: (this.getRunCount(taskName) ?? 0) + 1,
-    });
+      updateHeartbeatSchedule(this.db, taskName, {
+        lastRunAt: now,
+        nextRunAt: null,
+        lastResult: "success",
+        lastError: null,
+        runCount: (this.getRunCount(taskName) ?? 0) + 1,
+      });
+
+      appendEvidenceEvent(this.db, {
+        correlationId,
+        causationId,
+        eventType: "heartbeat.succeeded",
+        domain: "heartbeat",
+        authorityType: "heartbeat_history",
+        authorityId: historyId,
+        epistemicStatus: "observation",
+        payload: { result: "success", durationMs, externalSettlement: "settled" },
+      });
+    })();
   }
 
   /**
@@ -339,29 +457,48 @@ export class DurableScheduler {
     durationMs: number,
     startedAt: string,
     result: "failure" | "timeout" = "failure",
+    historyId = generateId(),
+    causationId: string | null = null,
   ): string {
     const now = new Date().toISOString();
     const errorMessage = error.message || String(error);
-    const historyId = generateId();
+    const correlationId = correlationIdFor("heartbeat_history", historyId);
 
-    insertHeartbeatHistory(this.db, {
-      id: historyId,
-      taskName,
-      startedAt,
-      completedAt: now,
-      result,
-      durationMs,
-      error: errorMessage,
-      idempotencyKey: null,
-    });
+    this.db.transaction(() => {
+      insertHeartbeatHistory(this.db, {
+        id: historyId,
+        taskName,
+        startedAt,
+        completedAt: now,
+        result,
+        durationMs,
+        error: errorMessage,
+        idempotencyKey: null,
+      });
 
-    updateHeartbeatSchedule(this.db, taskName, {
-      lastRunAt: now,
-      lastResult: result,
-      lastError: errorMessage,
-      failCount: (this.getFailCount(taskName) ?? 0) + 1,
-      runCount: (this.getRunCount(taskName) ?? 0) + 1,
-    });
+      updateHeartbeatSchedule(this.db, taskName, {
+        lastRunAt: now,
+        lastResult: result,
+        lastError: errorMessage,
+        failCount: (this.getFailCount(taskName) ?? 0) + 1,
+        runCount: (this.getRunCount(taskName) ?? 0) + 1,
+      });
+
+      appendEvidenceEvent(this.db, {
+        correlationId,
+        causationId,
+        eventType: result === "timeout" ? "heartbeat.timed_out" : "heartbeat.failed",
+        domain: "heartbeat",
+        authorityType: "heartbeat_history",
+        authorityId: historyId,
+        epistemicStatus: "observation",
+        payload: {
+          result,
+          durationMs,
+          externalSettlement: result === "timeout" ? "unknown" : "settled",
+        },
+      });
+    })();
 
     logger.error(`Task '${taskName}' ${result}: ${errorMessage}`);
     return historyId;
@@ -393,8 +530,6 @@ export class DurableScheduler {
     timeoutHistoryId: string,
     startMs: number,
   ): void {
-    // Refresh immediately, then periodically, so an attempt that ignored or
-    // cannot honor AbortSignal cannot overlap with another scheduler attempt.
     const renew = () => {
       try {
         return renewTaskLease(
@@ -414,9 +549,7 @@ export class DurableScheduler {
 
     renew();
     const renewalTimer = setInterval(() => {
-      if (!renew()) {
-        clearInterval(renewalTimer);
-      }
+      if (!renew()) clearInterval(renewalTimer);
     }, LEASE_RENEW_INTERVAL_MS);
     (renewalTimer as unknown as { unref?: () => void }).unref?.();
 
@@ -424,43 +557,79 @@ export class DurableScheduler {
       clearInterval(renewalTimer);
       const now = new Date().toISOString();
       const durationMs = Date.now() - startMs;
+      const correlationId = correlationIdFor("heartbeat_history", timeoutHistoryId);
+      const chain = getEvidenceByCorrelation(this.db, correlationId);
+      const causationId = chain.at(-1)?.id ?? null;
 
-      if (completedLate) {
-        // Reconcile the durable in-doubt row to the final observed settlement.
-        // This is not a second attempt: it is the original promise resolving.
-        this.db.prepare(
-          `UPDATE heartbeat_history
-           SET result = 'success', completed_at = ?, duration_ms = ?, error = NULL
-           WHERE id = ? AND result = 'timeout'`,
-        ).run(now, durationMs, timeoutHistoryId);
-        updateHeartbeatSchedule(this.db, taskName, {
-          lastRunAt: now,
-          nextRunAt: null,
-          lastResult: "success",
-          lastError: null,
-        });
-        logger.warn(
-          `Task '${taskName}' completed after its timeout; durable timeout reconciled to success and pending retry suppressed`,
+      try {
+        this.db.transaction(() => {
+          if (completedLate) {
+            this.db.prepare(
+              `UPDATE heartbeat_history
+               SET result = 'success', completed_at = ?, duration_ms = ?, error = NULL
+               WHERE id = ? AND result = 'timeout'`,
+            ).run(now, durationMs, timeoutHistoryId);
+            updateHeartbeatSchedule(this.db, taskName, {
+              lastRunAt: now,
+              nextRunAt: null,
+              lastResult: "success",
+              lastError: null,
+            });
+            appendEvidenceEvent(this.db, {
+              correlationId,
+              causationId,
+              eventType: "heartbeat.late_succeeded",
+              domain: "heartbeat",
+              authorityType: "heartbeat_history",
+              authorityId: timeoutHistoryId,
+              epistemicStatus: "observation",
+              payload: { result: "success", durationMs, externalSettlement: "settled_late" },
+            });
+          } else {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.db.prepare(
+              `UPDATE heartbeat_history
+               SET result = 'failure', completed_at = ?, duration_ms = ?, error = ?
+               WHERE id = ? AND result = 'timeout'`,
+            ).run(now, durationMs, errorMessage, timeoutHistoryId);
+            updateHeartbeatSchedule(this.db, taskName, {
+              lastRunAt: now,
+              lastResult: "failure",
+              lastError: errorMessage,
+            });
+            appendEvidenceEvent(this.db, {
+              correlationId,
+              causationId,
+              eventType: "heartbeat.late_failed",
+              domain: "heartbeat",
+              authorityType: "heartbeat_history",
+              authorityId: timeoutHistoryId,
+              epistemicStatus: "observation",
+              payload: { result: "failure", durationMs, externalSettlement: "settled_late" },
+            });
+          }
+        })();
+
+        if (completedLate) {
+          logger.warn(
+            `Task '${taskName}' completed after its timeout; durable timeout reconciled to success and pending retry suppressed`,
+          );
+        } else {
+          logger.warn(
+            `Task '${taskName}' settled with an error after its timeout; durable timeout reconciled to failure`,
+            { error: error instanceof Error ? error.message : String(error) },
+          );
+        }
+      } catch (persistError) {
+        // Keep the timeout/in-doubt authority unchanged if reconciliation cannot
+        // be persisted atomically. A later scheduler will surface recovery.
+        logger.error(
+          `Failed to persist late settlement for '${taskName}'`,
+          persistError instanceof Error ? persistError : undefined,
         );
-      } else {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        this.db.prepare(
-          `UPDATE heartbeat_history
-           SET result = 'failure', completed_at = ?, duration_ms = ?, error = ?
-           WHERE id = ? AND result = 'timeout'`,
-        ).run(now, durationMs, errorMessage, timeoutHistoryId);
-        updateHeartbeatSchedule(this.db, taskName, {
-          lastRunAt: now,
-          lastResult: "failure",
-          lastError: errorMessage,
-        });
-        logger.warn(
-          `Task '${taskName}' settled with an error after its timeout; durable timeout reconciled to failure`,
-          { error: errorMessage },
-        );
+      } finally {
+        this.releaseLease(taskName);
       }
-
-      this.releaseLease(taskName);
     };
 
     executionPromise.then(
