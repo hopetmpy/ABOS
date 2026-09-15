@@ -96,6 +96,26 @@ function deserializeLease(row: any): SelfModLeaseRecord {
   };
 }
 
+function gitOutput(cwd: string, args: string[]): string {
+  return execFileSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  }).trim();
+}
+
+function normalizeGitPath(value: string): string {
+  return value.replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+function gitLines(cwd: string, args: string[]): string[] {
+  const output = gitOutput(cwd, args);
+  return output
+    ? output.split(/\r?\n/).map((entry) => normalizeGitPath(entry.trim())).filter(Boolean)
+    : [];
+}
+
 export function createSelfModTransaction(
   db: Database.Database,
   input: {
@@ -244,11 +264,28 @@ export function releaseSelfModLease(
 }
 
 export function getGitHead(runtimeRoot = RUNTIME_ROOT): string {
-  return execFileSync("git", ["rev-parse", "HEAD"], {
-    cwd: runtimeRoot,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
+  return gitOutput(runtimeRoot, ["rev-parse", "HEAD"]);
+}
+
+/**
+ * Exact active-checkout dirtiness used by compare-and-swap activation.
+ * Ignored runtime artifacts are intentionally excluded by Git itself.
+ */
+export function getGitStatus(runtimeRoot = RUNTIME_ROOT): string {
+  return gitOutput(runtimeRoot, ["status", "--porcelain=v1", "--untracked-files=all"]);
+}
+
+/**
+ * Return every tracked/staged/untracked non-ignored candidate path.
+ * This lets an edit transaction prove verification did not create an
+ * unexpected source change before committing the candidate.
+ */
+export function getGitChangedPaths(runtimeRoot = RUNTIME_ROOT): string[] {
+  const values = new Set<string>();
+  for (const entry of gitLines(runtimeRoot, ["diff", "--name-only"])) values.add(entry);
+  for (const entry of gitLines(runtimeRoot, ["diff", "--cached", "--name-only"])) values.add(entry);
+  for (const entry of gitLines(runtimeRoot, ["ls-files", "--others", "--exclude-standard"])) values.add(entry);
+  return [...values].sort();
 }
 
 export function createCandidateWorktree(
@@ -273,10 +310,12 @@ export function createCandidateWorktree(
   execFileSync("git", ["cat-file", "-e", `${baseSha}^{commit}`], {
     cwd: runtimeRoot,
     stdio: "pipe",
+    windowsHide: true,
   });
   execFileSync("git", ["worktree", "add", "--detach", workspace, baseSha], {
     cwd: runtimeRoot,
     stdio: "pipe",
+    windowsHide: true,
   });
   return workspace;
 }
@@ -294,6 +333,7 @@ export function removeCandidateWorktree(
   execFileSync("git", ["worktree", "remove", "--force", workspace], {
     cwd: runtimeRoot,
     stdio: "pipe",
+    windowsHide: true,
   });
 }
 
@@ -328,14 +368,130 @@ export function writeCandidateFile(
   return target;
 }
 
-export function commitCandidate(workspacePath: string, message: string): string {
-  execFileSync("git", ["add", "-A"], { cwd: workspacePath, stdio: "pipe" });
-  const staged = execFileSync("git", ["diff", "--cached", "--name-only"], {
-    cwd: workspacePath,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
-  if (!staged) throw new Error("Candidate has no staged changes");
-  execFileSync("git", ["commit", "-m", message], { cwd: workspacePath, stdio: "pipe" });
+/**
+ * Commit a verified candidate. When expectedPaths is supplied, only those
+ * paths may enter the commit; this prevents verification/build artifacts from
+ * being silently swept into the self-modification.
+ */
+export function commitCandidate(
+  workspacePath: string,
+  message: string,
+  expectedPaths?: readonly string[],
+): string {
+  if (expectedPaths && expectedPaths.length === 0) {
+    throw new Error("Candidate expectedPaths cannot be empty");
+  }
+
+  if (expectedPaths) {
+    execFileSync("git", ["add", "--", ...expectedPaths], {
+      cwd: workspacePath,
+      stdio: "pipe",
+      windowsHide: true,
+    });
+  } else {
+    execFileSync("git", ["add", "-A"], {
+      cwd: workspacePath,
+      stdio: "pipe",
+      windowsHide: true,
+    });
+  }
+
+  const stagedPaths = gitLines(workspacePath, ["diff", "--cached", "--name-only"]);
+  if (stagedPaths.length === 0) throw new Error("Candidate has no staged changes");
+
+  if (expectedPaths) {
+    const expected = [...new Set(expectedPaths.map(normalizeGitPath))].sort();
+    if (
+      stagedPaths.length !== expected.length
+      || stagedPaths.some((entry, index) => entry !== expected[index])
+    ) {
+      throw new Error(
+        `Candidate staged paths differ from request: expected ${expected.join(", ")}; got ${stagedPaths.join(", ")}`,
+      );
+    }
+  }
+
+  execFileSync(
+    "git",
+    [
+      "-c", "user.name=ABOS Self-Modification",
+      "-c", "user.email=abos-self-mod@localhost",
+      "-c", "commit.gpgsign=false",
+      "commit", "-m", message,
+    ],
+    { cwd: workspacePath, stdio: "pipe", windowsHide: true },
+  );
   return getGitHead(workspacePath);
+}
+
+/**
+ * Activate exactly candidateSha iff the active checkout still equals baseSha
+ * and is clean. Fast-forward only: no merge commit, no hard reset, no discard.
+ */
+export function activateCandidateCommit(
+  baseSha: string,
+  candidateSha: string,
+  options: { runtimeRoot?: string } = {},
+): string {
+  const runtimeRoot = path.resolve(options.runtimeRoot ?? RUNTIME_ROOT);
+  const currentHead = getGitHead(runtimeRoot);
+  if (currentHead !== baseSha) {
+    throw new Error(`STALE_BASE: expected active HEAD ${baseSha}, found ${currentHead}`);
+  }
+  const dirty = getGitStatus(runtimeRoot);
+  if (dirty) {
+    throw new Error(`DIRTY_ACTIVE_CHECKOUT: ${dirty}`);
+  }
+
+  execFileSync("git", ["merge-base", "--is-ancestor", baseSha, candidateSha], {
+    cwd: runtimeRoot,
+    stdio: "pipe",
+    windowsHide: true,
+  });
+  execFileSync("git", ["merge", "--ff-only", candidateSha], {
+    cwd: runtimeRoot,
+    stdio: "pipe",
+    windowsHide: true,
+  });
+
+  const activatedHead = getGitHead(runtimeRoot);
+  if (activatedHead !== candidateSha) {
+    throw new Error(
+      `ACTIVATION_MISMATCH: expected ${candidateSha}, found ${activatedHead}`,
+    );
+  }
+  return activatedHead;
+}
+
+/**
+ * Causal rollback is deliberately narrow: only the exact candidate commit may
+ * be rolled back, and only while no later tracked/untracked drift exists.
+ */
+export function rollbackActivatedCandidate(
+  baseSha: string,
+  candidateSha: string,
+  options: { runtimeRoot?: string } = {},
+): string {
+  const runtimeRoot = path.resolve(options.runtimeRoot ?? RUNTIME_ROOT);
+  const currentHead = getGitHead(runtimeRoot);
+  if (currentHead !== candidateSha) {
+    throw new Error(
+      `ROLLBACK_OWNERSHIP_MISMATCH: expected active HEAD ${candidateSha}, found ${currentHead}`,
+    );
+  }
+  const dirty = getGitStatus(runtimeRoot);
+  if (dirty) {
+    throw new Error(`ROLLBACK_REFUSED_DIRTY_ACTIVE_CHECKOUT: ${dirty}`);
+  }
+
+  execFileSync("git", ["reset", "--hard", baseSha], {
+    cwd: runtimeRoot,
+    stdio: "pipe",
+    windowsHide: true,
+  });
+  const restoredHead = getGitHead(runtimeRoot);
+  if (restoredHead !== baseSha) {
+    throw new Error(`ROLLBACK_MISMATCH: expected ${baseSha}, found ${restoredHead}`);
+  }
+  return restoredHead;
 }
