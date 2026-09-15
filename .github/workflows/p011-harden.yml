@@ -1,0 +1,35 @@
+name: P011 Apply Lifecycle Hardening
+
+on:
+  push:
+    branches:
+      - abos/p011-lifecycle-recovery-v1
+    paths:
+      - scripts/p011_harden.py
+      - .github/workflows/p011-harden.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[p011-hardened]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: abos/p011-lifecycle-recovery-v1
+          fetch-depth: 0
+      - name: Apply exact hardening patches
+        run: python3 scripts/p011_harden.py
+      - name: Commit hardened source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/replication/runtime-control.ts src/orchestration/health-monitor.ts
+          git diff --cached --check
+          git diff --cached --quiet && { echo "No hardening changes produced"; exit 1; }
+          git commit -m "P-011 harden lifecycle postconditions [p011-hardened]"
+          git push origin HEAD:abos/p011-lifecycle-recovery-v1
