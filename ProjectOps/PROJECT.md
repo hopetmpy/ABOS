@@ -204,9 +204,9 @@ E3 nunca se promociona a E5/E6 por narrativa.
 
 Codex OAuth humano, AWS billable, providers externos, saldos/revenue atribuibles y otras fronteras E5/E6 requieren evidencia real; CI/source no las autocertifican.
 
-### 7.4 P-011 activo
+### 7.4 P-012 activo
 
-P-010 Policy/Authorization/Approval/Quarantine está HECHO / INTEGRATION_VERIFIED. P-011 Lifecycle/Health/Restart/Recovery es la intervención activa: estados críticos deben reflejar observación del runtime; timeout conserva incertidumbre hasta reconciliación y recovery no puede redispatchar a ciegas un efecto que pudo ocurrir.
+P-011 Lifecycle/Health/Restart/Recovery está HECHO / INTEGRATION_VERIFIED sobre `main cc26ee0c...`. P-012 transactional self-modification es la intervención activa: el source activo no debe quedar roto por write-before-verify, failure no puede convertirse en success y cualquier guard fijo de frecuencia debe justificarse como control provisional/configurable, no como sustituto universal de juicio transaccional.
 
 ## 8. Anti-contaminación entre proyectos
 
