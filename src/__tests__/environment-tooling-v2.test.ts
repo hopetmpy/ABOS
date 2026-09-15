@@ -15,6 +15,7 @@ import {
   MIGRATION_V12,
   MIGRATION_V13,
   MIGRATION_V14,
+  MIGRATION_V18_EVIDENCE_FABRIC,
 } from "../state/schema.js";
 
 function createDb() {
@@ -26,6 +27,7 @@ function createDb() {
   db.exec(MIGRATION_V12);
   db.exec(MIGRATION_V13);
   db.exec(MIGRATION_V14);
+  db.exec(MIGRATION_V18_EVIDENCE_FABRIC);
   return db;
 }
 

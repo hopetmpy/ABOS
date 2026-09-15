@@ -5,6 +5,7 @@ import type {
   EnvironmentResourceStatus,
   EnvironmentRetentionPolicy,
 } from "./types.js";
+import { appendEvidenceEvent, correlationIdFor } from "../observability/evidence.js";
 
 export interface EnvironmentResourceEvent {
   id: string;
@@ -56,47 +57,49 @@ export class EnvironmentResourceStore {
     const id = input.id ?? ulid();
     const status = input.status ?? "requested";
 
-    this.db.prepare(
-      `INSERT INTO environment_resources (
-        id, provider, external_id, type, goal_id, path_id, task_id, status,
-        region, capabilities, estimated_cost_cents, actual_cost_cents,
-        credentials_reference, retention_policy, provider_state, evidence,
-        metadata, created_at, updated_at, last_health_check
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
-    ).run(
-      id,
-      input.provider,
-      input.externalId ?? null,
-      input.type,
-      input.goalId ?? null,
-      input.pathId ?? null,
-      input.taskId ?? null,
-      status,
-      input.region ?? null,
-      JSON.stringify(input.capabilities ?? []),
-      input.estimatedCostCents ?? null,
-      Math.max(0, input.actualCostCents ?? 0),
-      input.credentialsReference ?? null,
-      input.retentionPolicy ?? "until_goal_complete",
-      input.providerState ?? null,
-      JSON.stringify(input.evidence ?? []),
-      JSON.stringify(input.metadata ?? {}),
-      now,
-      now,
-    );
+    return this.db.transaction(() => {
+      this.db.prepare(
+        `INSERT INTO environment_resources (
+          id, provider, external_id, type, goal_id, path_id, task_id, status,
+          region, capabilities, estimated_cost_cents, actual_cost_cents,
+          credentials_reference, retention_policy, provider_state, evidence,
+          metadata, created_at, updated_at, last_health_check
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+      ).run(
+        id,
+        input.provider,
+        input.externalId ?? null,
+        input.type,
+        input.goalId ?? null,
+        input.pathId ?? null,
+        input.taskId ?? null,
+        status,
+        input.region ?? null,
+        JSON.stringify(input.capabilities ?? []),
+        input.estimatedCostCents ?? null,
+        Math.max(0, input.actualCostCents ?? 0),
+        input.credentialsReference ?? null,
+        input.retentionPolicy ?? "until_goal_complete",
+        input.providerState ?? null,
+        JSON.stringify(input.evidence ?? []),
+        JSON.stringify(input.metadata ?? {}),
+        now,
+        now,
+      );
 
-    this.recordEvent({
-      resourceId: id,
-      provider: input.provider,
-      operation: "create",
-      fromStatus: null,
-      toStatus: status,
-      reason: "Resource ownership registered before lifecycle execution.",
-      evidence: input.evidence ?? [],
-      metadata: input.metadata ?? {},
-    });
+      this.recordEvent({
+        resourceId: id,
+        provider: input.provider,
+        operation: "create",
+        fromStatus: null,
+        toStatus: status,
+        reason: "Resource ownership registered before lifecycle execution.",
+        evidence: input.evidence ?? [],
+        metadata: input.metadata ?? {},
+      });
 
-    return this.get(id)!;
+      return this.get(id)!;
+    })();
   }
 
   upsert(resource: EnvironmentResource): EnvironmentResource {
@@ -223,32 +226,34 @@ export class EnvironmentResourceStore {
     const evidence = mergeUnique(current.evidence, options.evidence ?? []);
     const metadata = { ...current.metadata, ...(options.metadata ?? {}) };
 
-    this.db.prepare(
-      `UPDATE environment_resources
-       SET status = ?, provider_state = COALESCE(?, provider_state),
-           evidence = ?, metadata = ?, updated_at = ?
-       WHERE id = ?`,
-    ).run(
-      toStatus,
-      options.providerState ?? null,
-      JSON.stringify(evidence),
-      JSON.stringify(metadata),
-      now,
-      id,
-    );
+    return this.db.transaction(() => {
+      this.db.prepare(
+        `UPDATE environment_resources
+         SET status = ?, provider_state = COALESCE(?, provider_state),
+             evidence = ?, metadata = ?, updated_at = ?
+         WHERE id = ?`,
+      ).run(
+        toStatus,
+        options.providerState ?? null,
+        JSON.stringify(evidence),
+        JSON.stringify(metadata),
+        now,
+        id,
+      );
 
-    this.recordEvent({
-      resourceId: id,
-      provider: current.provider,
-      operation: options.operation ?? "transition",
-      fromStatus: current.status,
-      toStatus,
-      reason: options.reason ?? null,
-      evidence: options.evidence ?? [],
-      metadata: options.metadata ?? {},
-    });
+      this.recordEvent({
+        resourceId: id,
+        provider: current.provider,
+        operation: options.operation ?? "transition",
+        fromStatus: current.status,
+        toStatus,
+        reason: options.reason ?? null,
+        evidence: options.evidence ?? [],
+        metadata: options.metadata ?? {},
+      });
 
-    return this.get(id)!;
+      return this.get(id)!;
+    })();
   }
 
   applyMutation(
@@ -312,18 +317,20 @@ export class EnvironmentResourceStore {
           : current.lastHealthCheck,
     };
 
-    this.upsert(next);
-    this.recordEvent({
-      resourceId: id,
-      provider: current.provider,
-      operation,
-      fromStatus: current.status,
-      toStatus: nextStatus,
-      reason: reason ?? null,
-      evidence: patch.evidence ?? [],
-      metadata: patch.metadata ?? {},
-    });
-    return this.get(id)!;
+    return this.db.transaction(() => {
+      this.upsert(next);
+      this.recordEvent({
+        resourceId: id,
+        provider: current.provider,
+        operation,
+        fromStatus: current.status,
+        toStatus: nextStatus,
+        reason: reason ?? null,
+        evidence: patch.evidence ?? [],
+        metadata: patch.metadata ?? {},
+      });
+      return this.get(id)!;
+    })();
   }
 
   recordHealth(
@@ -376,14 +383,15 @@ export class EnvironmentResourceStore {
     reason: string | null;
     evidence: string[];
     metadata: Record<string, unknown>;
-  }): void {
+  }): string {
+    const eventId = ulid();
     this.db.prepare(
       `INSERT INTO environment_resource_events (
         id, resource_id, provider, operation, from_status, to_status,
         reason, evidence, metadata, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
-      ulid(),
+      eventId,
       input.resourceId,
       input.provider,
       input.operation,
@@ -394,6 +402,33 @@ export class EnvironmentResourceStore {
       JSON.stringify(input.metadata),
       new Date().toISOString(),
     );
+
+    const resource = this.get(input.resourceId);
+    const correlationId = resource?.goalId
+      ? correlationIdFor("goal", resource.goalId)
+      : correlationIdFor("environment_resource", input.resourceId);
+    appendEvidenceEvent(this.db, {
+      correlationId,
+      causationId: resource?.pathId
+        ? correlationIdFor("adaptive_path", resource.pathId)
+        : null,
+      eventType: "environment.resource_event",
+      domain: "environment",
+      authorityType: "environment_resource_event",
+      authorityId: eventId,
+      goalId: resource?.goalId ?? null,
+      taskId: resource?.taskId ?? null,
+      epistemicStatus: "observation",
+      payload: {
+        resourceId: input.resourceId,
+        provider: input.provider,
+        operation: input.operation,
+        fromStatus: input.fromStatus,
+        toStatus: input.toStatus,
+      },
+      provenance: { source: "environment_resource_events" },
+    });
+    return eventId;
   }
 }
 
