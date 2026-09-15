@@ -48,7 +48,7 @@ jobs:
       - name: Reconcile P-011 canonical ProjectOps
         run: python scripts/p011_projectops_reconcile.py
       - name: Remove temporary reconciliation machinery
-        run: git rm scripts/p011_projectops_reconcile.py .github/workflows/p011-projectops-reconcile.yml
+        run: git rm -f scripts/p011_projectops_reconcile.py .github/workflows/p011-projectops-reconcile.yml
       - name: Commit reconciliation
         shell: bash
         run: |
