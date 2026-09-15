@@ -4,6 +4,7 @@ import type Database from "better-sqlite3";
 import { insertPolicyDecision, type PolicyDecisionRow } from "../state/database.js";
 import { detectChainType, normalizeAddress, verifySignedMessage } from "../identity/chain.js";
 import type { PolicyDecision, PolicyRequest } from "../types.js";
+import { appendEvidenceEvent, currentEvidenceContext } from "../observability/evidence.js";
 
 export type PolicyLifecycleState =
   | "legacy"
@@ -65,6 +66,31 @@ interface PolicyAuthorizationRow {
   scope_hash: string | null;
   lifecycle_state: string;
   authorization_json: string | null;
+}
+
+function appendPolicyCorrelationEvent(
+  db: Database.Database,
+  decisionId: string,
+  eventType: string,
+  payload: Record<string, unknown>,
+): void {
+  const context = currentEvidenceContext();
+  if (!context) return;
+  appendEvidenceEvent(db, {
+    correlationId: context.correlationId,
+    causationId: context.causationId ?? null,
+    eventType,
+    domain: "policy",
+    authorityType: "policy_decision",
+    authorityId: decisionId,
+    goalId: context.goalId ?? null,
+    taskId: context.taskId ?? null,
+    turnId: context.turnId ?? null,
+    toolCallId: context.toolCallId ?? null,
+    epistemicStatus: "observation",
+    payload,
+    provenance: { source: "policy_decisions" },
+  });
 }
 
 export function canonicalPolicyJson(value: unknown): string {
@@ -220,6 +246,12 @@ export function persistPolicyDecisionLifecycle(
     if (result.changes !== 1) {
       throw new Error(`Failed to materialize policy lifecycle for ${decision.id}`);
     }
+    appendPolicyCorrelationEvent(db, decision.id!, "policy.decision_persisted", {
+      action: decision.action,
+      lifecycleState,
+      toolName: decision.toolName,
+      reasonCode: decision.reasonCode,
+    });
   })();
 }
 
@@ -441,20 +473,26 @@ export function recordPolicyExecutionOutcome(
   state: Exclude<PolicyExecutionState, "not_started">,
   details?: Record<string, unknown>,
 ): void {
-  const completedAt = state === "running" ? null : new Date().toISOString();
-  const result = db.prepare(
-    `UPDATE policy_decisions
-     SET execution_state = ?, execution_json = COALESCE(?, execution_json), completed_at = ?
-     WHERE id = ?`,
-  ).run(
-    state,
-    details ? canonicalPolicyJson(details) : null,
-    completedAt,
-    decisionId,
-  );
-  if (result.changes !== 1) {
-    throw new Error(`Failed to persist policy execution state ${state} for ${decisionId}`);
-  }
+  db.transaction(() => {
+    const completedAt = state === "running" ? null : new Date().toISOString();
+    const result = db.prepare(
+      `UPDATE policy_decisions
+       SET execution_state = ?, execution_json = COALESCE(?, execution_json), completed_at = ?
+       WHERE id = ?`,
+    ).run(
+      state,
+      details ? canonicalPolicyJson(details) : null,
+      completedAt,
+      decisionId,
+    );
+    if (result.changes !== 1) {
+      throw new Error(`Failed to persist policy execution state ${state} for ${decisionId}`);
+    }
+    appendPolicyCorrelationEvent(db, decisionId, `policy.execution_${state}`, {
+      state,
+      details: details ?? null,
+    });
+  })();
 }
 
 export function listPendingPolicyAuthorizations(

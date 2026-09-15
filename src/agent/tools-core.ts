@@ -22,6 +22,7 @@ import type {
 import type { PolicyEngine } from "./policy-engine.js";
 import { sanitizeToolResult, sanitizeInput } from "./injection-defense.js";
 import { createLogger } from "../observability/logger.js";
+import { correlationIdFor, runWithEvidenceContext } from "../observability/evidence.js";
 import { isCreditTransferAccepted } from "../conway/credits.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
 import { expandHomePath, getHomeDir, toPosixShellPath } from "../platform/home.js";
@@ -3398,13 +3399,36 @@ export async function executeTool(
   tools: AbosTool[],
   context: ToolContext,
   policyEngine?: PolicyEngine,
-  turnContext?: {
-    inputSource: InputSource | undefined;
-    inputProvenance?: import("../types.js").TurnInputProvenance;
-    actorAddress?: string;
-    turnToolCallCount: number;
-    sessionSpend?: SpendTrackerInterface;
-  },
+  turnContext?: PolicyRequest["turnContext"],
+): Promise<ToolCallResult> {
+  const correlationId =
+    turnContext?.correlationId ??
+    (turnContext?.turnId ? correlationIdFor("turn", turnContext.turnId) : undefined);
+
+  if (!correlationId) {
+    return executeToolProtected(toolName, args, tools, context, policyEngine, turnContext);
+  }
+
+  return runWithEvidenceContext(
+    {
+      correlationId,
+      causationId: turnContext?.causationId ?? turnContext?.toolCallId ?? null,
+      goalId: turnContext?.goalId ?? null,
+      taskId: turnContext?.taskId ?? null,
+      turnId: turnContext?.turnId ?? null,
+      toolCallId: turnContext?.toolCallId ?? null,
+    },
+    () => executeToolProtected(toolName, args, tools, context, policyEngine, turnContext),
+  );
+}
+
+async function executeToolProtected(
+  toolName: string,
+  args: Record<string, unknown>,
+  tools: AbosTool[],
+  context: ToolContext,
+  policyEngine?: PolicyEngine,
+  turnContext?: PolicyRequest["turnContext"],
 ): Promise<ToolCallResult> {
   const tool = tools.find((t) => t.name === toolName);
   const startTime = Date.now();
@@ -3446,7 +3470,7 @@ export async function executeTool(
   }
 
   try {
-    policyEngine.persistDecision(decision, request);
+    policyEngine.persistDecision(decision, request, turnContext.turnId ?? undefined);
   } catch (error) {
     return {
       id: ulid(),
