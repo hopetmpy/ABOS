@@ -1,0 +1,50 @@
+name: P012 Autonomy Correction Apply
+
+on:
+  push:
+    branches:
+      - abos/p012-transactional-self-modification
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'P-012 stage autonomy correction applicator'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - uses: pnpm/action-setup@v4
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Apply P-012 autonomy correction
+        run: python .github/p012_autonomy_apply.py
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Targeted P-012 validation
+        run: >-
+          pnpm exec vitest run
+          src/__tests__/p012-autonomy-self-mod.test.ts
+          src/__tests__/p012-tool-routing.test.ts
+          src/__tests__/p012-self-mod-transaction.test.ts
+          src/__tests__/path-protection.test.ts
+          src/__tests__/tools-security.test.ts
+      - name: Verify ProjectOps
+        run: node scripts/projectops-integrity-verify.mjs
+      - name: Verify clean diff syntax
+        run: git diff --check
+      - name: Commit source and remove applicator
+        shell: bash
+        run: |
+          git config user.name "ABOS P-012 Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/self-mod/code.ts src/agent/tools-p012-adapter.ts src/agent/policy-rules/path-protection.ts src/__tests__/path-protection.test.ts src/__tests__/p012-tool-routing.test.ts src/__tests__/p012-autonomy-self-mod.test.ts
+          git rm .github/p012_autonomy_apply.py .github/workflows/p012-autonomy-apply.yml
+          git commit -m "P-012 preserve transactional autonomy for critical multi-file self-mod"
+          git push origin HEAD:${GITHUB_REF_NAME}
