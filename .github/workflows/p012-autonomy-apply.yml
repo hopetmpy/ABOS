@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   apply:
-    if: github.event.head_commit.message == 'P-012 fix autonomy applicator setup order'
+    if: github.event.head_commit.message == 'P-012 reconcile autonomy boundary test wording'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,6 +25,19 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Apply P-012 autonomy correction
         run: python .github/p012_autonomy_apply.py
+      - name: Reconcile exact immutable-boundary test wording
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/__tests__/p012-autonomy-self-mod.test.ts')
+          text = p.read_text(encoding='utf-8')
+          old = 'expect(result.error).toContain("immutable");'
+          new = 'expect(result.error).toContain("constitutional immutability boundary");'
+          if old not in text:
+              raise SystemExit('expected autonomy assertion not found')
+          p.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
       - name: Typecheck
         run: pnpm run typecheck
       - name: Targeted P-012 validation
