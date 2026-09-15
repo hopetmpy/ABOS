@@ -1,0 +1,47 @@
+name: P013 Unified Inference Apply
+
+on:
+  push:
+    branches:
+      - abos/p013-observability-evidence-fabric
+    paths:
+      - .github/workflows/p013-unified-inference-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply unified inference evidence correlation
+        run: python .github/p013_unified_inference_apply.py
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Targeted unified inference and P-013 regressions
+        run: pnpm exec vitest run src/__tests__/p013-unified-inference-correlation.test.ts src/__tests__/inference/inference-client.test.ts src/__tests__/orchestration/planner.test.ts src/__tests__/orchestration/orchestrator.test.ts src/__tests__/p013-inference-correlation.test.ts src/__tests__/p013-heartbeat-correlation.test.ts src/__tests__/p013-evidence-fabric.test.ts src/__tests__/p013-environment-correlation.test.ts src/__tests__/p013-adaptive-correlation.test.ts src/__tests__/p013-policy-selfmod-correlation.test.ts
+      - name: ProjectOps integrity
+        run: node scripts/projectops-integrity-verify.mjs
+      - name: Diff check
+        run: git diff --check
+      - name: Commit clean product source
+        env:
+          BRANCH: abos/p013-observability-evidence-fabric
+        run: |
+          rm -f .github/p013_unified_inference_apply.py .github/workflows/p013-unified-inference-apply.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git diff --cached --quiet && { echo "No source changes to commit"; exit 1; }
+          git commit -m "P-013: correlate unified inference attempts and costs"
+          git push origin "HEAD:${BRANCH}"
