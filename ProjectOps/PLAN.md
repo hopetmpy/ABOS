@@ -20,8 +20,8 @@ Master-Transformation-Plan: P-007
 | P-008 | Alinear Runtime Truth y capability claims con evidencia real | HECHO | integrado por PR #34; main `1a2a5482...` CI + ProjectOps Integrity green | plan/P-008.md |
 | P-009 | Corregir Authority, Provenance y trust boundaries end-to-end | HECHO | integrado por PR #35; main `b9dbf144...` CI `34800425589` + ProjectOps `34800425594` green | plan/P-009.md |
 | P-010 | Hacer real Policy, Authorization, Approval y Quarantine lifecycle | HECHO | integrado por PR #36; main `f42c9bd1...` CI `34909182700` + ProjectOps `34909182692` green | plan/P-010.md |
-| P-011 | Hacer reales Lifecycle, Health, Restart y Recovery | HECHO | integrado por PR #38; main `cc26ee0c...` CI `34915463559` + ProjectOps `34915463657` green | plan/P-011.md |
-| P-012 | Convertir self-modification en transacción segura y recuperable | EN_EJECUCIÓN | P-009 + P-010 + P-011 HECHO; C0008 activa; evidence P-013 antes de cierre completo | plan/P-012.md |
+| P-011 | Hacer reales Lifecycle, Health, Restart y Recovery | HECHO | integrado por PR #38; cierre documental PR #39; baseline P-012 `main 1f1e93f4...` revalidado | plan/P-011.md |
+| P-012 | Convertir self-modification en transacción segura y recuperable | EN_EJECUCIÓN | source E3 green final en rama `991650ce...` (tree `84399f49...`); integrar/revalidar `main`; evidence P-013 antes de cierre completo | plan/P-012.md |
 | P-013 | Unificar Observability, Audit y Evidence Fabric | PLANIFICADO | P-008 + P-009; se extiende durante la campaña | plan/P-013.md |
 | P-014 | Consolidar Capability Fabric canónico y lifecycle de capacidades | PLANIFICADO | P-008 + P-009 + P-010 + P-013 | plan/P-014.md |
 | P-015 | Sustituir MCP nominal por un runtime MCP real y verificable | PLANIFICADO | P-014 + P-009 + P-010 + P-013 | plan/P-015.md |
@@ -121,7 +121,7 @@ P-033 E2E; P-034 fault/sustained; P-035 cleanup/authority retirement; P-004 docs
 8. **Money is causal**: unit/source/scope/timestamp/actor y realized vs estimated explícitos.
 9. **Durable effects are recoverable**: idempotency/lease/compensation/late-success handling proporcional al side effect.
 10. **Source state != runtime state**: repo, `~/.abos`, remote environment y child state son dominios distintos.
-11. **Broad knowledge != broad prompt**: persistent universe amplio; working set activado por relevancia/causalidad/uncertainty/value-of-information.
+11. **Broad knowledge != broad prompt**: persistent universe amplio; working set activado por relevancia/causalidad/uncertainty/value-of-information/context cost.
 12. **Install != capability**: acquisition no se promueve hasta probe/evidence.
 13. **CI != LIVE**: evidence ladder exacta.
 14. **Judgment before restriction**: antes de eliminar, desactivar o human-gate una capability legítima por riesgo, demostrar si el problema puede gobernarse con contexto, razonamiento, planning, verificación, observabilidad, adaptación o aprendizaje.
@@ -225,13 +225,13 @@ P-004 puede corregir drift puntual antes, pero su cierre final ocurre después d
 
 P-005 es un track incremental: Codex OAuth real, AWS billable, MCP/provider externo, economic/child/resource claims y futuras fronteras que requieran E5/E6. No toda capability local requiere E5: una computer/browser E4 realista puede cerrar integración local. Si falta autorización/credencial/dinero, registrar `LIVE_BLOCKED_EXTERNAL` y continuar source.
 
-## 16. Ola 0 cerrada; P-011 activo
+## 16. Ola 0 cerrada; P-012 activo
 
-P-006 y P-003 están HECHO e integrados con revalidación de `main`. P-007 permanece HECHO únicamente como planificación maestra. P-008 Runtime Truth está HECHO e integrado/revalidado. P-009 Authority/Provenance está HECHO e integrado por PR #35. P-010 Policy/Authorization/Approval/Quarantine está HECHO, integrado por PR #36 y revalidado en `main` `f42c9bd1d884c74a59d505ddd4c711e93b1aca8e` con CI `34909182700` y ProjectOps `34909182692` SUCCESS. La siguiente frontera activa es P-011 Lifecycle/Health/Restart/Recovery.
+P-006 y P-003 están HECHO e integrados con revalidación de `main`. P-007 permanece HECHO únicamente como planificación maestra. P-008 Runtime Truth está HECHO e integrado/revalidado. P-009 Authority/Provenance está HECHO e integrado por PR #35. P-010 Policy/Authorization/Approval/Quarantine está HECHO e integrado. P-011 Lifecycle/Health/Restart/Recovery está HECHO, integrado por PR #38 y cerrado documentalmente por PR #39. El baseline canónico P-012 es `main 1f1e93f48c95265dba52b6a99a900bde6cdcb27c`, revalidado por CI `34916918807` y ProjectOps `34916918658` SUCCESS.
 
 P-010 cerró una revisión adversarial material: creator-signed authorization sigue siendo una capability válida para fronteras reales, pero no es diseño general de gasto autónomo por threshold. La frontera integrada preserva una ruta explícita/auditable para autonomía económica futura sin hidden auto-spend.
 
-P-011 inicia en `AUDIT_REQUIRED`: antes de source debe reconstruir producers/consumers de lifecycle, health, restart y recovery, preservar `execution_state=unknown` de P-010 y alcanzar DECISION_READY en C0007.
+P-012 ya implementó y branch-gateó su source transaccional final: journal/lease SQLite v17, candidate Git worktree aislado, verification previa, candidate commit exacto, activation compare-and-swap, post-probe/rollback/recovery causal y convergencia de edit/revert/reset/pull/write-to-runtime. La reauditoría final separó direct-write protection de verdadera immutability: código crítico y dependencias pueden evolucionar en candidate verificado, `edit_own_file` soporta cambios multiarchivo atómicos y se retiró el threshold arbitrario de 100 KB además de `10/hour`/`20/hour` como falsas safety authorities. Source limpio `84399f491856ca8a6195bbb8c08940ab8201f5d8`; exact-head con el mismo tree `991650ce5deb7e170a99647bf5246982bc7cd37a`: CI `34925701691` + ProjectOps `34925701696` SUCCESS. Todavía no es `HECHO`: falta integración/revalidación de `main` y evidence/correlation P-013 exigida por su Definition of Done.
 
 ## 17. Cierre de campaña
 
@@ -239,4 +239,4 @@ P-036 no significa “todo el universo futuro de ABOS está terminado”. Signif
 
 ## 18. Siguiente trabajo recuperable
 
-`P-011 — Hacer reales Lifecycle, Health, Restart y Recovery`.
+`P-012 — gatear documentación, integrar por squash y revalidar main; después activar P-013 evidence/correlation antes del cierre completo P-012`.

@@ -1,7 +1,10 @@
 /**
  * Rate Limit Policy Rules
  *
- * Enforces rate limits on sensitive operations to prevent abuse.
+ * Enforces rate limits on sensitive operations where frequency itself is part
+ * of the policy. Self-modification is intentionally absent: P-012 makes
+ * isolation, verification, exact activation and causal recovery its safety
+ * authority instead of an arbitrary call counter.
  * Counts causal execution evidence rather than pre-effect allow decisions.
  */
 
@@ -22,7 +25,7 @@ function deny(
 /**
  * Count recent operations with evidence that an effect ran or may have run.
  *
- * v16 rows count running/succeeded/unknown execution states. A known failed
+ * v16+ rows count running/succeeded/unknown execution states. A known failed
  * execution is not counted because the effect is known not to have succeeded.
  * Migrated legacy rows have no execution evidence, so their historical
  * decision='allow' semantics are preserved conservatively.
@@ -82,35 +85,6 @@ function createGenesisPromptDailyRule(): PolicyRule {
 }
 
 /**
- * Maximum 10 self-mod operations per hour.
- */
-function createSelfModHourlyRule(): PolicyRule {
-  return {
-    id: "rate.self_mod_hourly",
-    description: "Maximum 10 edit_own_file calls per hour",
-    priority: 600,
-    appliesTo: { by: "name", names: ["edit_own_file"] },
-    evaluate(request: PolicyRequest): PolicyRuleResult | null {
-      const db = (request.context.db as any)?.raw ?? (request.context as any).rawDb;
-      if (!db) return deny(this.id, "DB_UNAVAILABLE", "Rate limit check failed: database not accessible");
-
-      const oneHourMs = 60 * 60 * 1000;
-      const recentCount = countRecentExecutions(db, "edit_own_file", oneHourMs);
-
-      if (recentCount >= 10) {
-        return deny(
-          "rate.self_mod_hourly",
-          "RATE_LIMIT_SELF_MOD",
-          `Self-modification rate exceeded: ${recentCount} edits in the last hour (max 10/hour)`,
-        );
-      }
-
-      return null;
-    },
-  };
-}
-
-/**
  * Maximum 3 child spawns per day.
  */
 function createSpawnDailyRule(): PolicyRule {
@@ -140,12 +114,15 @@ function createSpawnDailyRule(): PolicyRule {
 }
 
 /**
- * Create all rate limit policy rules.
+ * Create all remaining frequency-based policy rules.
+ *
+ * edit_own_file is deliberately not present. Every source activation is gated
+ * by the P-012 transaction authority regardless of whether it is the first or
+ * fiftieth valid change in a time window.
  */
 export function createRateLimitRules(): PolicyRule[] {
   return [
     createGenesisPromptDailyRule(),
-    createSelfModHourlyRule(),
     createSpawnDailyRule(),
   ];
 }

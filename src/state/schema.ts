@@ -5,7 +5,7 @@
  * The database IS the abos's memory.
  */
 
-export const SCHEMA_VERSION = 16;
+export const SCHEMA_VERSION = 17;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -1004,3 +1004,41 @@ export const MIGRATION_V16_POLICY_LIFECYCLE: readonly string[] = [
   `CREATE INDEX IF NOT EXISTS idx_policy_scope_hash ON policy_decisions(scope_hash, lifecycle_state)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_policy_claim_token ON policy_decisions(claim_token) WHERE claim_token IS NOT NULL`,
 ];
+
+
+// === Transactional Self-Modification v1 (P-012) ===
+// Durable journal + singleton source lease. Status strings are intentionally
+// application-validated so recovery can evolve without a destructive schema rewrite.
+export const MIGRATION_V17_SELF_MOD_TRANSACTION = `
+  CREATE TABLE IF NOT EXISTS self_mod_transactions (
+    id TEXT PRIMARY KEY,
+    operation TEXT NOT NULL,
+    status TEXT NOT NULL,
+    base_sha TEXT NOT NULL,
+    candidate_sha TEXT,
+    workspace_path TEXT,
+    request_json TEXT NOT NULL DEFAULT '{}',
+    evidence_json TEXT NOT NULL DEFAULT '[]',
+    error TEXT,
+    rollback_json TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    completed_at TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_self_mod_transactions_status
+    ON self_mod_transactions(status, updated_at);
+  CREATE INDEX IF NOT EXISTS idx_self_mod_transactions_base
+    ON self_mod_transactions(base_sha, created_at);
+
+  CREATE TABLE IF NOT EXISTS self_mod_leases (
+    lease_key TEXT PRIMARY KEY,
+    transaction_id TEXT NOT NULL REFERENCES self_mod_transactions(id),
+    owner TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_self_mod_leases_expiry
+    ON self_mod_leases(expires_at);
+`;

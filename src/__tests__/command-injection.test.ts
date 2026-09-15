@@ -7,7 +7,7 @@
  * - Input validation rules (package names, skill names, git hashes, etc.)
  * - Registry functions use safe alternatives (no shell interpolation)
  * - Loader uses safe binary check
- * - pull_upstream uses conway.exec() not host execSync
+ * - pull_upstream routes through the P-012 transaction authority
  * - upstream.ts uses execFileSync with argument arrays
  */
 
@@ -110,6 +110,7 @@ describe("command.shell_injection rule", () => {
       const result = injectionRule.evaluate(request);
       expect(result).not.toBeNull();
       expect(result!.action).toBe("deny");
+      expect(result!.reasonCode).toBe("SHELL_INJECTION_DETECTED");
     });
 
     it(`blocks '${charName}' in install_skill name arg`, () => {
@@ -120,6 +121,7 @@ describe("command.shell_injection rule", () => {
       const result = injectionRule.evaluate(request);
       expect(result).not.toBeNull();
       expect(result!.action).toBe("deny");
+      expect(result!.reasonCode).toBe("SHELL_INJECTION_DETECTED");
     });
   }
 
@@ -593,25 +595,26 @@ describe("Source code injection safety", () => {
     expect(source).toMatch(/execFileSync\s*\(\s*locator\s*,\s*\[bin\]/);
   });
 
-  it("tools.ts pull_upstream uses conway.exec not host execSync", async () => {
+  it("tools.ts routes pull_upstream through the P-012 transaction authority", async () => {
     const fs = await import("fs");
-    const source = fs.readFileSync(
+    const wrapper = fs.readFileSync(
       fileURLToPath(new URL("../agent/tools.ts", import.meta.url)),
       "utf-8",
     );
-    // Find the pull_upstream section and check it doesn't import child_process
-    const pullSection = source.slice(
-      source.indexOf("name: \"pull_upstream\""),
-      source.indexOf("name: \"modify_heartbeat\""),
+    const adapter = fs.readFileSync(
+      fileURLToPath(new URL("../agent/tools-p012-adapter.ts", import.meta.url)),
+      "utf-8",
     );
-    expect(pullSection).not.toMatch(/import\s*\(\s*"child_process"\s*\)/);
-    expect(pullSection).toMatch(/ctx\.conway\.exec\(/);
+    expect(wrapper).toMatch(/applyP012ToolRouting\s*\(/);
+    expect(adapter).toMatch(/pullUpstreamTransactional/);
+    expect(adapter).toMatch(/await\s+pullUpstreamTransactional\(/);
+    expect(adapter).not.toMatch(/ctx\.conway\.exec\(/);
   });
 
-  it("tools.ts has defense-in-depth comment on FORBIDDEN_COMMAND_PATTERNS", async () => {
+  it("tools-core.ts has defense-in-depth comment on FORBIDDEN_COMMAND_PATTERNS", async () => {
     const fs = await import("fs");
     const source = fs.readFileSync(
-      fileURLToPath(new URL("../agent/tools.ts", import.meta.url)),
+      fileURLToPath(new URL("../agent/tools-core.ts", import.meta.url)),
       "utf-8",
     );
     expect(source).toMatch(/[Dd]efense.in.depth.*policy engine/i);

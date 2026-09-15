@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createDatabase } from "../state/database.js";
+import { SCHEMA_VERSION } from "../state/schema.js";
 import { PolicyEngine } from "../agent/policy-engine.js";
 import {
   claimApprovedPolicyAuthorization,
@@ -52,10 +53,10 @@ function requestFor(tool: AbosTool, context: ToolContext): PolicyRequest {
 }
 
 describe("P-010 durable policy lifecycle", () => {
-  it("migrates policy_decisions to schema v16 additively", () => {
+  it("preserves P-010 policy lifecycle columns through the current schema", () => {
     const db = createDatabase(fixturePath());
     const version = db.raw.prepare("SELECT MAX(version) AS version FROM schema_version").get() as { version: number };
-    expect(version.version).toBe(16);
+    expect(version.version).toBe(SCHEMA_VERSION);
     const columns = db.raw.prepare("PRAGMA table_info(policy_decisions)").all() as Array<{ name: string }>;
     const names = new Set(columns.map((entry) => entry.name));
     for (const required of [

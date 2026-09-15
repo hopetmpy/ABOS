@@ -1,14 +1,14 @@
 /**
  * File Path Protection Policy Rules
  *
- * Prevents writes to protected files, reads of sensitive files,
- * and path traversal attacks. Fixes the parallel file mutation
- * paths (edit_own_file vs write_file) by unifying protection.
+ * Separates true immutable/sensitive boundaries from code that is merely
+ * protected against direct writes. Verified P-012 transactions may evolve
+ * critical source; raw write paths may not bypass that transaction authority.
  */
 
 import path from "path";
 import type { PolicyRule, PolicyRequest, PolicyRuleResult } from "../../types.js";
-import { isProtectedFile } from "../../self-mod/code.js";
+import { isImmutableFile, isProtectedFile } from "../../self-mod/code.js";
 import { RUNTIME_ROOT } from "../../runtime-root.js";
 
 /** Sensitive files that must not be read by the agent */
@@ -34,64 +34,78 @@ function deny(rule: string, reasonCode: string, humanMessage: string): PolicyRul
   return { rule, action: "deny", reasonCode, humanMessage };
 }
 
-/**
- * Check if a file path matches a sensitive read pattern.
- */
+function requestedPaths(request: PolicyRequest): string[] {
+  const paths: string[] = [];
+  if (typeof request.args.path === "string") paths.push(request.args.path);
+  if (Array.isArray(request.args.edits)) {
+    for (const value of request.args.edits) {
+      if (value && typeof value === "object" && typeof (value as Record<string, unknown>).path === "string") {
+        paths.push((value as Record<string, unknown>).path as string);
+      }
+    }
+  }
+  return paths;
+}
+
+/** Check if a file path matches a sensitive read pattern. */
 export function isSensitiveFile(filePath: string): boolean {
   const resolved = path.resolve(filePath);
   const basename = path.basename(resolved);
 
-  // Exact file name matches
   for (const pattern of SENSITIVE_READ_PATTERNS) {
     if (basename === pattern) return true;
   }
-
-  // Suffix matches (.key, .pem)
   for (const suffix of SENSITIVE_SUFFIX_PATTERNS) {
     if (basename.endsWith(suffix)) return true;
   }
-
-  // Prefix matches (private-key*)
   for (const prefix of SENSITIVE_PREFIX_PATTERNS) {
     if (basename.startsWith(prefix)) return true;
   }
-
   return false;
 }
 
 /**
- * Deny writes to protected files.
- * Applies to: write_file, edit_own_file
+ * Deny true immutable boundaries for transactional self-edit/local source
+ * routing. Remote/raw write_file retains the broader direct-write protection
+ * because it does not possess P-012 candidate verification.
  */
 function createProtectedFilesRule(): PolicyRule {
   return {
     id: "path.protected_files",
-    description: "Deny writes to protected files",
+    description: "Deny immutable writes and direct-write bypasses",
     priority: 200,
     appliesTo: {
       by: "name",
       names: ["write_file", "edit_own_file"],
     },
     evaluate(request: PolicyRequest): PolicyRuleResult | null {
-      const filePath = (request.args.path as string | undefined);
-      if (!filePath) return null;
+      const paths = requestedPaths(request);
+      if (paths.length === 0) return null;
 
-      if (isProtectedFile(filePath)) {
-        return deny(
-          "path.protected_files",
-          "PROTECTED_FILE",
-          `Cannot write to protected file: ${filePath}`,
-        );
+      const toolName = request.tool.name;
+      const localWrite = toolName === "write_file" && request.context?.identity?.sandboxId === "";
+      const transactionalBoundary = toolName === "edit_own_file" || localWrite;
+
+      for (const filePath of paths) {
+        const blocked = transactionalBoundary
+          ? isImmutableFile(filePath)
+          : isProtectedFile(filePath);
+        if (blocked) {
+          return deny(
+            "path.protected_files",
+            "PROTECTED_FILE",
+            transactionalBoundary
+              ? `Cannot transactionally overwrite immutable boundary: ${filePath}`
+              : `Cannot directly write protected file: ${filePath}`,
+          );
+        }
       }
       return null;
     },
   };
 }
 
-/**
- * Deny reads of sensitive files (wallet, env, config secrets).
- * Applies to: read_file
- */
+/** Deny reads of sensitive files (wallet, env, config secrets). */
 function createReadSensitiveRule(): PolicyRule {
   return {
     id: "path.read_sensitive",
@@ -102,7 +116,7 @@ function createReadSensitiveRule(): PolicyRule {
       names: ["read_file"],
     },
     evaluate(request: PolicyRequest): PolicyRuleResult | null {
-      const filePath = (request.args.path as string | undefined);
+      const filePath = request.args.path as string | undefined;
       if (!filePath) return null;
 
       if (isSensitiveFile(filePath)) {
@@ -118,50 +132,41 @@ function createReadSensitiveRule(): PolicyRule {
 }
 
 /**
- * Deny paths containing traversal sequences after resolution.
- *
- * Only applies to edit_own_file, which modifies local agent source code.
- * write_file and read_file operate on the remote Conway sandbox via API,
- * so local cwd-based traversal checks are not meaningful for them and
- * will false-positive on every absolute sandbox path (e.g. /home/conway/app.py).
+ * Deny paths escaping active source. Applies to both backward-compatible
+ * single-file and multi-file edit_own_file requests.
  */
 function createTraversalDetectionRule(): PolicyRule {
   return {
     id: "path.traversal_detection",
-    description: "Deny paths containing traversal sequences after resolution",
+    description: "Deny source-edit paths that resolve outside active source",
     priority: 200,
     appliesTo: {
       by: "name",
       names: ["edit_own_file"],
     },
     evaluate(request: PolicyRequest): PolicyRuleResult | null {
-      const filePath = (request.args.path as string | undefined);
-      if (!filePath) return null;
+      const paths = requestedPaths(request);
+      if (paths.length === 0) return null;
 
-      // Resolve the path first
-      const resolved = path.resolve(filePath);
-
-      // Always verify the resolved path stays within the working directory,
-      // regardless of whether ".." is present — absolute paths like
-      // "/etc/passwd" can escape without using traversal sequences.
-      const runtimeRoot = RUNTIME_ROOT;
-      if (!resolved.startsWith(runtimeRoot + path.sep) && resolved !== runtimeRoot) {
-        return deny(
-          "path.traversal_detection",
-          "PATH_TRAVERSAL",
-          `Path resolves outside working directory: "${filePath}"`,
-        );
+      for (const filePath of paths) {
+        const resolved = path.isAbsolute(filePath)
+          ? path.resolve(filePath)
+          : path.resolve(RUNTIME_ROOT, filePath);
+        if (!resolved.startsWith(RUNTIME_ROOT + path.sep) && resolved !== RUNTIME_ROOT) {
+          return deny(
+            "path.traversal_detection",
+            "PATH_TRAVERSAL",
+            `Path resolves outside working directory: "${filePath}"`,
+          );
+        }
+        if (filePath.includes("//")) {
+          return deny(
+            "path.traversal_detection",
+            "PATH_TRAVERSAL",
+            `Suspicious path pattern detected: "${filePath}"`,
+          );
+        }
       }
-
-      // Also check for double-slash tricks
-      if (filePath.includes("//")) {
-        return deny(
-          "path.traversal_detection",
-          "PATH_TRAVERSAL",
-          `Suspicious path pattern detected: "${filePath}"`,
-        );
-      }
-
       return null;
     },
   };

@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import os from "node:os";
 import path from "node:path";
 import { createBuiltinTools, loadInstalledTools, executeTool } from "../agent/tools.js";
 import {
@@ -205,7 +206,9 @@ describe("write_file / edit_own_file protection parity", () => {
 
   it("write_file uses the actual host home in local execution mode", async () => {
     const previousHome = process.env.HOME;
-    const localHome = path.join(process.cwd(), ".tmp-abos-local-home");
+    // Keep this fixture outside RUNTIME_ROOT: source-targeting local writes are
+    // intentionally routed through the P-012 transaction authority.
+    const localHome = path.join(os.tmpdir(), `abos-local-home-${process.pid}`);
     process.env.HOME = localHome;
 
     try {

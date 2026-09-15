@@ -54,6 +54,7 @@ import {
   MIGRATION_V15_ALTER_INBOX_TRANSPORT_SENDER,
   MIGRATION_V15_ALTER_TURNS_INPUT_PROVENANCE,
   MIGRATION_V16_POLICY_LIFECYCLE,
+  MIGRATION_V17_SELF_MOD_TRANSACTION,
 } from "./schema.js";
 import type {
   RiskLevel,
@@ -677,6 +678,10 @@ function applyMigrations(db: DatabaseType): void {
           db.exec(statement);
         }
       },
+    },
+    {
+      version: 17,
+      apply: () => db.exec(MIGRATION_V17_SELF_MOD_TRANSACTION),
     },
   ];
 

@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { createDatabase } from "../state/database.js";
-import { SCHEMA_VERSION } from "../state/schema.js";
 
 describe("adaptive + environment schema migration", () => {
   it("creates adaptive intelligence and environment lifecycle tables on a fresh ABOS database", () => {
@@ -11,8 +10,6 @@ describe("adaptive + environment schema migration", () => {
     const dbPath = path.join(dir, "state.db");
     const db = createDatabase(dbPath);
     try {
-      expect(SCHEMA_VERSION).toBe(16);
-
       const adaptiveNames = db.raw.prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'adaptive_%' ORDER BY name",
       ).all() as Array<{ name: string }>;

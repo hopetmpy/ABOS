@@ -307,8 +307,8 @@ describe("Rate Limit Rules", () => {
     expect(decision.reasonCode).toBe("RATE_LIMIT_GENESIS");
   });
 
-  it("blocks self-mod after the current transitional hourly guard", () => {
-    for (let i = 0; i < 10; i++) {
+  it("does not convert self-modification frequency into safety authority", () => {
+    for (let i = 0; i < 50; i++) {
       insertLegacyAllow(db, `dec-edit-${i}`, "edit_own_file");
     }
     const engine = new PolicyEngine(db, createRateLimitRules());
@@ -324,8 +324,8 @@ describe("Rate Limit Rules", () => {
         db,
       ),
     );
-    expect(decision.action).toBe("deny");
-    expect(decision.reasonCode).toBe("RATE_LIMIT_SELF_MOD");
+    expect(decision.action).toBe("allow");
+    expect(decision.reasonCode).toBe("ALLOWED");
   });
 
   it("blocks spawn after the current transitional daily guard", () => {
@@ -349,11 +349,10 @@ describe("Rate Limit Rules", () => {
     expect(decision.reasonCode).toBe("RATE_LIMIT_SPAWN");
   });
 
-  it("fails closed when rate-limit persistence is unavailable", () => {
+  it("fails closed when active rate-limit persistence is unavailable", () => {
     const engine = new PolicyEngine(db, createRateLimitRules());
     for (const [name, category, code] of [
       ["update_genesis_prompt", "self_mod", "DB_UNAVAILABLE"],
-      ["edit_own_file", "self_mod", "DB_UNAVAILABLE"],
       ["spawn_child", "replication", "DB_UNAVAILABLE"],
     ] as Array<[string, AbosTool["category"], string]>) {
       const decision = engine.evaluate(
@@ -457,12 +456,12 @@ describe("Treasury Config", () => {
 });
 
 describe("createDefaultRules", () => {
-  it("includes authority and current transitional rate rules without amount-only confirmation", () => {
+  it("includes authority and active rate rules without amount-only confirmation", () => {
     const ruleIds = createDefaultRules().map((rule) => rule.id);
     expect(ruleIds).toContain("authority.external_tool_restriction");
     expect(ruleIds).toContain("authority.self_mod_from_external");
     expect(ruleIds).toContain("rate.genesis_prompt_daily");
-    expect(ruleIds).toContain("rate.self_mod_hourly");
+    expect(ruleIds).not.toContain("rate.self_mod_hourly");
     expect(ruleIds).toContain("rate.spawn_daily");
     expect(ruleIds).not.toContain("financial.inference_daily_cap");
     expect(ruleIds).not.toContain("financial.require_confirmation");
