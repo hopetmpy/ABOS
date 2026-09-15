@@ -1,0 +1,35 @@
+name: P013 Core Reconcile
+
+on:
+  push:
+    branches:
+      - abos/p013-observability-evidence-fabric
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    if: ${{ !contains(github.event.head_commit.message, '[p013-core-reconciled]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reconcile Core v18 ProjectOps evidence
+        run: python .github/p013_core_reconcile.py
+      - name: Verify ProjectOps integrity
+        run: node scripts/projectops-integrity-verify.mjs
+      - name: Diff check
+        run: git diff --check
+      - name: Commit clean reconciliation and remove helpers
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/p013_core_reconcile.py .github/workflows/p013-core-reconcile.yml
+          git config user.name "hopetmpy"
+          git config user.email "hope.tmpy@gmail.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "P-013 reconcile Core v18 evidence [p013-core-reconciled]"
+          git push origin HEAD:abos/p013-observability-evidence-fabric
