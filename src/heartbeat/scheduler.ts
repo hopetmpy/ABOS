@@ -26,6 +26,7 @@ import {
   releaseTaskLease,
   clearExpiredLeases,
   pruneExpiredDedupKeys,
+  insertDedupKey,
   insertWakeEvent,
 } from "../state/database.js";
 import { createLogger } from "../observability/logger.js";
@@ -145,6 +146,25 @@ export class DurableScheduler {
       // Skip tasks that require a higher survival tier
       if (!tierMeetsMinimum(context.survivalTier, row.tierMinimum)) return false;
 
+      // A timeout is an in-doubt effect, not proof that the task stopped.
+      // While the original process is alive the lease remains held. If that
+      // supervisor crashes, the durable timeout survives lease expiry and
+      // still blocks redispatch until some new evidence reconciles the outcome.
+      if (row.lastResult === "timeout") {
+        if (!row.leaseOwner) {
+          const dedupKey = `heartbeat-timeout-in-doubt:${row.taskName}:${row.lastRunAt ?? "unknown"}`;
+          if (insertDedupKey(this.db, dedupKey, row.taskName, 24 * 60 * 60 * 1000)) {
+            insertWakeEvent(
+              this.db,
+              "heartbeat_recovery",
+              `Heartbeat task '${row.taskName}' remains in-doubt after timeout; automatic redispatch is blocked pending reconciliation.`,
+              { taskName: row.taskName, lastRunAt: row.lastRunAt, state: "timeout_in_doubt" },
+            );
+          }
+        }
+        return false;
+      }
+
       // Skip if lease is held by someone else
       if (row.leaseOwner && row.leaseOwner !== this.ownerId) {
         if (row.leaseExpiresAt && new Date(row.leaseExpiresAt) > now) {
@@ -218,6 +238,7 @@ export class DurableScheduler {
     );
     const timeout = timeoutPromise(timeoutMs, () => abortController.abort());
     let timedOut = false;
+    let timeoutHistoryId: string | null = null;
 
     try {
       const result = await Promise.race([
@@ -237,13 +258,14 @@ export class DurableScheduler {
     } catch (err: any) {
       const durationMs = Date.now() - startMs;
       timedOut = err instanceof HeartbeatTaskTimeoutError;
-      this.recordFailure(
+      const failureHistoryId = this.recordFailure(
         taskName,
         err,
         durationMs,
         startedAt,
         timedOut ? "timeout" : "failure",
       );
+      if (timedOut) timeoutHistoryId = failureHistoryId;
 
       // maxRetries means retries AFTER the initial attempt. Since history
       // includes the current failure, <= preserves exactly that semantic.
@@ -259,6 +281,8 @@ export class DurableScheduler {
         this.holdLeaseUntilTaskSettles(
           taskName,
           executionPromise,
+          timeoutHistoryId!,
+          startMs,
         );
       } else {
         this.releaseLease(taskName);
@@ -315,12 +339,13 @@ export class DurableScheduler {
     durationMs: number,
     startedAt: string,
     result: "failure" | "timeout" = "failure",
-  ): void {
+  ): string {
     const now = new Date().toISOString();
     const errorMessage = error.message || String(error);
+    const historyId = generateId();
 
     insertHeartbeatHistory(this.db, {
-      id: generateId(),
+      id: historyId,
       taskName,
       startedAt,
       completedAt: now,
@@ -339,6 +364,7 @@ export class DurableScheduler {
     });
 
     logger.error(`Task '${taskName}' ${result}: ${errorMessage}`);
+    return historyId;
   }
 
   /**
@@ -364,6 +390,8 @@ export class DurableScheduler {
   private holdLeaseUntilTaskSettles(
     taskName: string,
     executionPromise: Promise<{ shouldWake: boolean; message?: string }>,
+    timeoutHistoryId: string,
+    startMs: number,
   ): void {
     // Refresh immediately, then periodically, so an attempt that ignored or
     // cannot honor AbortSignal cannot overlap with another scheduler attempt.
@@ -394,19 +422,41 @@ export class DurableScheduler {
 
     const settle = (completedLate: boolean, error?: unknown) => {
       clearInterval(renewalTimer);
+      const now = new Date().toISOString();
+      const durationMs = Date.now() - startMs;
 
       if (completedLate) {
-        // The operation did finish, so a timeout retry would duplicate work.
-        updateHeartbeatSchedule(this.db, taskName, { nextRunAt: null });
+        // Reconcile the durable in-doubt row to the final observed settlement.
+        // This is not a second attempt: it is the original promise resolving.
+        this.db.prepare(
+          `UPDATE heartbeat_history
+           SET result = 'success', completed_at = ?, duration_ms = ?, error = NULL
+           WHERE id = ? AND result = 'timeout'`,
+        ).run(now, durationMs, timeoutHistoryId);
+        updateHeartbeatSchedule(this.db, taskName, {
+          lastRunAt: now,
+          nextRunAt: null,
+          lastResult: "success",
+          lastError: null,
+        });
         logger.warn(
-          `Task '${taskName}' completed after its timeout; pending retry suppressed to avoid duplicate effects`,
+          `Task '${taskName}' completed after its timeout; durable timeout reconciled to success and pending retry suppressed`,
         );
       } else {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        this.db.prepare(
+          `UPDATE heartbeat_history
+           SET result = 'failure', completed_at = ?, duration_ms = ?, error = ?
+           WHERE id = ? AND result = 'timeout'`,
+        ).run(now, durationMs, errorMessage, timeoutHistoryId);
+        updateHeartbeatSchedule(this.db, taskName, {
+          lastRunAt: now,
+          lastResult: "failure",
+          lastError: errorMessage,
+        });
         logger.warn(
-          `Task '${taskName}' settled with an error after its timeout`,
-          {
-            error: error instanceof Error ? error.message : String(error),
-          },
+          `Task '${taskName}' settled with an error after its timeout; durable timeout reconciled to failure`,
+          { error: errorMessage },
         );
       }
 
