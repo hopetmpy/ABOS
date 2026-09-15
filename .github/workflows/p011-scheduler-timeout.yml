@@ -1,0 +1,38 @@
+name: P011 Scheduler Timeout Hardening
+
+on:
+  push:
+    branches:
+      - abos/p011-lifecycle-recovery-v1
+    paths:
+      - scripts/p011_scheduler_timeout_patch.py
+      - .github/workflows/p011-scheduler-timeout.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: abos/p011-lifecycle-recovery-v1
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Apply exact scheduler patch
+        run: python scripts/p011_scheduler_timeout_patch.py
+      - name: Remove temporary patch machinery
+        run: git rm scripts/p011_scheduler_timeout_patch.py .github/workflows/p011-scheduler-timeout.yml
+      - name: Commit exact patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/heartbeat/scheduler.ts
+          git diff --cached --check
+          git commit -m "P-011 make heartbeat timeout crash-safe"
+          git push origin HEAD:abos/p011-lifecycle-recovery-v1
