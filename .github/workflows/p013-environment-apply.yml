@@ -6,6 +6,7 @@ on:
       - abos/p013-observability-evidence-fabric
     paths:
       - .github/workflows/p013-environment-apply.yml
+      - .github/p013_environment_fixture_fix.py
 
 permissions:
   contents: write
@@ -25,6 +26,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Apply environment evidence correlation
         run: python .github/p013_environment_apply.py
+      - name: Align environment fixtures with schema v18
+        run: python .github/p013_environment_fixture_fix.py
       - name: Typecheck
         run: pnpm run typecheck
       - name: Targeted P-013 environment and regression tests
@@ -37,7 +40,7 @@ jobs:
         env:
           BRANCH: abos/p013-observability-evidence-fabric
         run: |
-          rm -f .github/p013_environment_apply.py .github/workflows/p013-environment-apply.yml
+          rm -f .github/p013_environment_apply.py .github/p013_environment_fixture_fix.py .github/workflows/p013-environment-apply.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
