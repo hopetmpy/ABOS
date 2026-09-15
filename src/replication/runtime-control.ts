@@ -130,12 +130,70 @@ async function stopObservedProcess(
     };
   }
 
-  // A command acknowledgement is not the post-condition. Re-observe.
-  const after = await observeChildRuntime(conway, db, childId);
-  return {
-    ...after,
-    evidence: [...evidence, ...after.evidence],
-  };
+  // A command acknowledgement is not the post-condition. Give SIGTERM a
+  // bounded window to settle, then classify from a child-scoped process probe.
+  // This is observation, not a blind retry of the side effect.
+  try {
+    const settle = await scoped.exec(
+      `for i in 1 2 3 4 5; do if ! pgrep -af '${RUNTIME_PATTERN}' >/dev/null 2>&1; then echo stopped; exit 0; fi; sleep 1; done; echo running`,
+      10_000,
+    );
+    if (settle.exitCode !== 0) {
+      return {
+        childId,
+        sandboxId: child.sandboxId,
+        state: "unknown",
+        evidence: [
+          ...evidence,
+          `Child runtime post-stop probe failed with exit=${settle.exitCode}: ${settle.stderr || settle.stdout || "no output"}`,
+        ],
+      };
+    }
+
+    const tokens = settle.stdout.trim().split(/\s+/);
+    if (tokens.includes("stopped")) {
+      return {
+        childId,
+        sandboxId: child.sandboxId,
+        state: "stopped",
+        evidence: [
+          ...evidence,
+          `Child ${childId} runtime process absence observed after bounded TERM wait.`,
+        ],
+      };
+    }
+    if (tokens.includes("running")) {
+      return {
+        childId,
+        sandboxId: child.sandboxId,
+        state: "running",
+        evidence: [
+          ...evidence,
+          `Child ${childId} runtime still observed running after bounded TERM wait.`,
+        ],
+      };
+    }
+
+    return {
+      childId,
+      sandboxId: child.sandboxId,
+      state: "unknown",
+      evidence: [
+        ...evidence,
+        `Child runtime post-stop probe returned an unclassified response: ${settle.stdout || "<empty>"}`,
+      ],
+    };
+  } catch (error) {
+    return {
+      childId,
+      sandboxId: child.sandboxId,
+      state: "unknown",
+      evidence: [
+        ...evidence,
+        `Child runtime post-stop observation unavailable: ${error instanceof Error ? error.message : String(error)}`,
+      ],
+    };
+  }
 }
 
 /**

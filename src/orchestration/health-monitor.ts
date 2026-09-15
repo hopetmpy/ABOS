@@ -155,6 +155,13 @@ export class HealthMonitor {
     const issues = new Set<string>();
     let observedRuntimeState: "running" | "stopped" | "unknown" | null = null;
 
+    // A terminal lifecycle state is not healthy merely because some telemetry
+    // is recent. Preserve terminal semantics without pretending it proves a
+    // fresh process crash.
+    if (isDeadStatus(child.status)) {
+      issues.add("terminal_state");
+    }
+
     // Persisted status and parent-side observation timestamps are not process
     // evidence. Only a child-bound runtime probe may classify process_crashed.
     if (this.runtimeActions && !isDeadStatus(child.status)) {
