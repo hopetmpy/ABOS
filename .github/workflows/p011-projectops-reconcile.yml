@@ -22,18 +22,28 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - name: Normalize exact EOF anchor
+      - name: Normalize exact EOF anchors
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
           p = Path('scripts/p011_projectops_reconcile.py')
           s = p.read_text()
-          old = 'registrar hallazgos/decisión en C0007.\\n""",'
-          new = 'registrar hallazgos/decisión en C0007.""",'
-          if s.count(old) != 1:
-              raise SystemExit(f'expected one EOF anchor, found {s.count(old)}')
-          p.write_text(s.replace(old, new, 1))
+          replacements = [
+              (
+                  'registrar hallazgos/decisión en C0007.\\n""",',
+                  'registrar hallazgos/decisión en C0007.""",',
+              ),
+              (
+                  'ejecutar validación dirigida antes de continuar con heartbeat crash recovery.\\n""",',
+                  'ejecutar validación dirigida antes de continuar con heartbeat crash recovery.""",',
+              ),
+          ]
+          for old, new in replacements:
+              if s.count(old) != 1:
+                  raise SystemExit(f'expected one EOF anchor, found {s.count(old)}: {old[:80]}')
+              s = s.replace(old, new, 1)
+          p.write_text(s)
           PY
       - name: Reconcile P-011 canonical ProjectOps
         run: python scripts/p011_projectops_reconcile.py
