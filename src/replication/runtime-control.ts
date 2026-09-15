@@ -369,6 +369,89 @@ export async function ensureChildRuntimeStopped(
 }
 
 /**
+ * Recover/ensure a child runtime after health failure or supervisor restart.
+ *
+ * Unlike an explicit restart, recovery is idempotent: if a late-success has
+ * already left the child process running, the existing start primitive only
+ * reconciles lifecycle state and does not terminate or launch another process.
+ */
+export async function recoverChildRuntime(
+  conway: ConwayClient,
+  db: AbosDatabase,
+  childId: string,
+  lifecycle: ChildLifecycle,
+): Promise<ChildRuntimeMutationResult> {
+  const resolution = await resolveLifecycleForRuntimeEffect(
+    conway,
+    db,
+    childId,
+    lifecycle,
+  );
+  const lifecycleState = resolution.state;
+  let lifecycleUpdated = resolution.lifecycleUpdated;
+
+  if (!lifecycleState) {
+    const child = childOrThrow(db, childId);
+    return {
+      childId,
+      sandboxId: child.sandboxId,
+      state: resolution.observation?.state ?? "unknown",
+      success: false,
+      lifecycleUpdated,
+      evidence: resolution.evidence,
+    };
+  }
+
+  if (!["funded", "starting", "healthy", "unhealthy"].includes(lifecycleState)) {
+    const child = childOrThrow(db, childId);
+    return {
+      childId,
+      sandboxId: child.sandboxId,
+      state: "unknown",
+      success: false,
+      lifecycleUpdated,
+      evidence: [
+        ...resolution.evidence,
+        `Recovery refused from lifecycle state ${lifecycleState}; no process effect was attempted.`,
+      ],
+    };
+  }
+
+  const evidence = [...resolution.evidence];
+  try {
+    const started = await ensureChildRuntimeRunning(conway, db, childId, lifecycle);
+    evidence.push(...started.evidence);
+    const finalObservation = await observeChildRuntime(conway, db, childId);
+    evidence.push(...finalObservation.evidence);
+    const finalLifecycleState = lifecycle.getCurrentState(childId);
+    lifecycleUpdated =
+      lifecycleUpdated ||
+      finalLifecycleState !== lifecycleState ||
+      !started.alreadyRunning;
+
+    return {
+      ...finalObservation,
+      success: started.healthy && finalObservation.state === "running",
+      lifecycleUpdated,
+      evidence,
+    };
+  } catch (error) {
+    const child = childOrThrow(db, childId);
+    return {
+      childId,
+      sandboxId: child.sandboxId,
+      state: "unknown",
+      success: false,
+      lifecycleUpdated,
+      evidence: [
+        ...evidence,
+        `Child runtime recovery failed: ${error instanceof Error ? error.message : String(error)}`,
+      ],
+    };
+  }
+}
+
+/**
  * Restart a lifecycle-managed child without using terminal `stopped` as an
  * intermediate state.
  *

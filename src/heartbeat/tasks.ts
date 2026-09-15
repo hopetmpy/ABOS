@@ -807,7 +807,7 @@ async function createHealthMonitor(taskCtx: HeartbeatLegacyContext): Promise<Col
   const { ChildLifecycle } = await import("../replication/lifecycle.js");
   const {
     observeChildRuntime,
-    restartChildRuntime,
+    recoverChildRuntime,
     ensureChildRuntimeStopped,
   } = await import("../replication/runtime-control.js");
   const lifecycle = new ChildLifecycle(taskCtx.db.raw);
@@ -829,7 +829,9 @@ async function createHealthMonitor(taskCtx: HeartbeatLegacyContext): Promise<Col
     restart: async (address: string) => {
       const childId = childIdFor(address);
       if (!childId) return { success: false, evidence: [`Child ${address} not found.`] };
-      return restartChildRuntime(taskCtx.conway, taskCtx.db, childId, lifecycle);
+      // Auto-heal is an idempotent recovery request, not a force restart.
+      // A late-success observed running is reused instead of terminated.
+      return recoverChildRuntime(taskCtx.conway, taskCtx.db, childId, lifecycle);
     },
     stop: async (address: string) => {
       const childId = childIdFor(address);
