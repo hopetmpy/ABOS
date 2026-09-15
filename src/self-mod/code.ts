@@ -168,8 +168,8 @@ export interface EditFileResult {
 
 /**
  * Resolve a source path against the active runtime root, following an existing
- * target symlink and rejecting escape. Relative paths are source-relative, not
- * process.cwd()-relative.
+ * target symlink and rejecting escape. Relative paths are source-relative and
+ * independent of the caller working directory.
  */
 function resolveAndValidatePath(
   filePath: string,
