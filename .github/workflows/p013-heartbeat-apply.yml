@@ -1,0 +1,47 @@
+name: P013 Heartbeat Apply
+
+on:
+  push:
+    branches:
+      - abos/p013-observability-evidence-fabric
+    paths:
+      - .github/workflows/p013-heartbeat-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply heartbeat causal evidence
+        run: python .github/p013_heartbeat_apply.py
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Targeted heartbeat and P-013 regressions
+        run: pnpm exec vitest run src/__tests__/p013-heartbeat-correlation.test.ts src/__tests__/heartbeat-scheduler.test.ts src/__tests__/p011-heartbeat-timeout-recovery.test.ts src/__tests__/heartbeat.test.ts src/__tests__/p013-evidence-fabric.test.ts src/__tests__/p013-environment-correlation.test.ts src/__tests__/p013-adaptive-correlation.test.ts src/__tests__/p013-inference-correlation.test.ts src/__tests__/p013-policy-selfmod-correlation.test.ts
+      - name: ProjectOps integrity
+        run: node scripts/projectops-integrity-verify.mjs
+      - name: Diff check
+        run: git diff --check
+      - name: Commit clean product source
+        env:
+          BRANCH: abos/p013-observability-evidence-fabric
+        run: |
+          rm -f .github/p013_heartbeat_apply.py .github/workflows/p013-heartbeat-apply.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git diff --cached --quiet && { echo "No source changes to commit"; exit 1; }
+          git commit -m "P-013: correlate heartbeat attempts and settlements"
+          git push origin "HEAD:${BRANCH}"
