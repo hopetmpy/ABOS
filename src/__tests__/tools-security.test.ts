@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import os from "node:os";
 import path from "node:path";
 import { createBuiltinTools, loadInstalledTools, executeTool } from "../agent/tools.js";
 import {
@@ -37,7 +38,6 @@ describe("Tool Risk Level Classification", () => {
 
   // Expected risk classifications
   const EXPECTED_RISK_LEVELS: Record<string, RiskLevel> = {
-    // Safe tools (read-only, no side effects)
     check_credits: "safe",
     check_usdc_balance: "safe",
     list_sandboxes: "safe",
@@ -54,8 +54,6 @@ describe("Tool Risk Level Classification", () => {
     check_child_status: "safe",
     verify_child_constitution: "safe",
     list_models: "safe",
-
-    // Caution tools (side effects but generally safe)
     exec: "caution",
     write_file: "caution",
     expose_port: "caution",
@@ -75,8 +73,6 @@ describe("Tool Risk Level Classification", () => {
     start_child: "caution",
     message_child: "caution",
     prune_dead_children: "caution",
-
-    // Dangerous tools (significant side effects)
     delete_sandbox: "dangerous",
     edit_own_file: "dangerous",
     install_npm_package: "dangerous",
@@ -98,9 +94,7 @@ describe("Tool Risk Level Classification", () => {
     for (const [name, expectedLevel] of Object.entries(EXPECTED_RISK_LEVELS)) {
       if (expectedLevel !== "safe") continue;
       const tool = tools.find((t) => t.name === name);
-      if (tool) {
-        expect(tool.riskLevel, `${name} should be safe`).toBe("safe");
-      }
+      if (tool) expect(tool.riskLevel, `${name} should be safe`).toBe("safe");
     }
   });
 
@@ -108,9 +102,7 @@ describe("Tool Risk Level Classification", () => {
     for (const [name, expectedLevel] of Object.entries(EXPECTED_RISK_LEVELS)) {
       if (expectedLevel !== "caution") continue;
       const tool = tools.find((t) => t.name === name);
-      if (tool) {
-        expect(tool.riskLevel, `${name} should be caution`).toBe("caution");
-      }
+      if (tool) expect(tool.riskLevel, `${name} should be caution`).toBe("caution");
     }
   });
 
@@ -118,9 +110,7 @@ describe("Tool Risk Level Classification", () => {
     for (const [name, expectedLevel] of Object.entries(EXPECTED_RISK_LEVELS)) {
       if (expectedLevel !== "dangerous") continue;
       const tool = tools.find((t) => t.name === name);
-      if (tool) {
-        expect(tool.riskLevel, `${name} should be dangerous`).toBe("dangerous");
-      }
+      if (tool) expect(tool.riskLevel, `${name} should be dangerous`).toBe("dangerous");
     }
   });
 
@@ -139,12 +129,9 @@ describe("Tool Risk Level Classification", () => {
 
   it("has no duplicate tool names", () => {
     const names = tools.map((t) => t.name);
-    const unique = new Set(names);
-    expect(names.length).toBe(unique.size);
+    expect(names.length).toBe(new Set(names).size);
   });
 });
-
-// ─── write_file / edit_own_file Parity ──────────────────────────
 
 describe("write_file / edit_own_file protection parity", () => {
   let tools: AbosTool[];
@@ -165,9 +152,7 @@ describe("write_file / edit_own_file protection parity", () => {
     };
   });
 
-  afterEach(() => {
-    db.close();
-  });
+  afterEach(() => db.close());
 
   const PROTECTED_FILES = [
     "wallet.json",
@@ -184,7 +169,6 @@ describe("write_file / edit_own_file protection parity", () => {
   it("write_file blocks all protected files", async () => {
     const writeTool = tools.find((t) => t.name === "write_file")!;
     expect(writeTool).toBeDefined();
-
     for (const file of PROTECTED_FILES) {
       const result = await writeTool.execute(
         { path: `/root/.abos/${file}`, content: "malicious" },
@@ -205,7 +189,10 @@ describe("write_file / edit_own_file protection parity", () => {
 
   it("write_file uses the actual host home in local execution mode", async () => {
     const previousHome = process.env.HOME;
-    const localHome = path.join(process.cwd(), ".tmp-abos-local-home");
+    // P-012 routes writes inside RUNTIME_ROOT through the source transaction.
+    // This fixture tests ordinary local-home behavior, so its HOME must be
+    // outside the active source checkout.
+    const localHome = path.join(os.tmpdir(), `abos-local-home-${process.pid}`);
     process.env.HOME = localHome;
 
     try {
@@ -219,7 +206,6 @@ describe("write_file / edit_own_file protection parity", () => {
         inference: new MockInferenceClient(),
       };
       const writeTool = localTools.find((t) => t.name === "write_file")!;
-
       const result = await writeTool.execute(
         { path: "project/file.txt", content: "safe local content" },
         localCtx,
@@ -250,10 +236,7 @@ describe("write_file / edit_own_file protection parity", () => {
       "../../etc/shadow",
     ];
     for (const p of outsidePaths) {
-      const result = await writeTool.execute(
-        { path: p, content: "malicious" },
-        ctx,
-      );
+      const result = await writeTool.execute({ path: p, content: "malicious" }, ctx);
       expect(result, `write_file should block ${p}`).toContain("Blocked");
     }
   });
@@ -264,7 +247,6 @@ describe("write_file / edit_own_file protection parity", () => {
       { path: "project/file.txt", content: "safe content" },
       ctx,
     );
-    // Relative paths resolve against /root, so "project/file.txt" -> "/root/project/file.txt"
     expect(result).toContain("File written");
     expect(result).toContain("/root/project/file.txt");
   });
@@ -279,8 +261,6 @@ describe("write_file / edit_own_file protection parity", () => {
     expect(result).toContain("/root/.abos/skills/test/SKILL.md");
   });
 });
-
-// ─── read_file Sensitive File Blocking ──────────────────────────
 
 describe("read_file sensitive file blocking", () => {
   let tools: AbosTool[];
@@ -300,56 +280,28 @@ describe("read_file sensitive file blocking", () => {
       inference: new MockInferenceClient(),
     };
   });
+  afterEach(() => db.close());
 
-  afterEach(() => {
-    db.close();
-  });
-
-  it("blocks reading wallet.json", async () => {
-    const readTool = tools.find((t) => t.name === "read_file")!;
-    const result = await readTool.execute({ path: "/home/abos/.abos/wallet.json" }, ctx);
-    expect(result).toContain("Blocked");
-  });
-
-  it("blocks reading .env", async () => {
-    const readTool = tools.find((t) => t.name === "read_file")!;
-    const result = await readTool.execute({ path: "/home/abos/.env" }, ctx);
-    expect(result).toContain("Blocked");
-  });
-
-  it("blocks reading abos.json", async () => {
-    const readTool = tools.find((t) => t.name === "read_file")!;
-    const result = await readTool.execute({ path: "/home/abos/.abos/abos.json" }, ctx);
-    expect(result).toContain("Blocked");
-  });
-
-  it("blocks reading .key files", async () => {
-    const readTool = tools.find((t) => t.name === "read_file")!;
-    const result = await readTool.execute({ path: "/home/abos/server.key" }, ctx);
-    expect(result).toContain("Blocked");
-  });
-
-  it("blocks reading .pem files", async () => {
-    const readTool = tools.find((t) => t.name === "read_file")!;
-    const result = await readTool.execute({ path: "/home/abos/cert.pem" }, ctx);
-    expect(result).toContain("Blocked");
-  });
-
-  it("blocks reading private-key* files", async () => {
-    const readTool = tools.find((t) => t.name === "read_file")!;
-    const result = await readTool.execute({ path: "/home/abos/private-key-hex.txt" }, ctx);
-    expect(result).toContain("Blocked");
-  });
+  for (const [name, file] of [
+    ["wallet.json", "/home/abos/.abos/wallet.json"],
+    [".env", "/home/abos/.env"],
+    ["abos.json", "/home/abos/.abos/abos.json"],
+    [".key files", "/home/abos/server.key"],
+    [".pem files", "/home/abos/cert.pem"],
+    ["private-key* files", "/home/abos/private-key-hex.txt"],
+  ] as const) {
+    it(`blocks reading ${name}`, async () => {
+      const readTool = tools.find((t) => t.name === "read_file")!;
+      expect(await readTool.execute({ path: file }, ctx)).toContain("Blocked");
+    });
+  }
 
   it("allows reading safe files", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
     conway.files["/home/abos/README.md"] = "# Hello";
-    const result = await readTool.execute({ path: "/home/abos/README.md" }, ctx);
-    expect(result).not.toContain("Blocked");
+    expect(await readTool.execute({ path: "/home/abos/README.md" }, ctx)).not.toContain("Blocked");
   });
 });
-
-// ─── read_file Fallback Shell Injection Prevention ───────────────
 
 describe("read_file fallback shell escaping", () => {
   let tools: AbosTool[];
@@ -369,58 +321,36 @@ describe("read_file fallback shell escaping", () => {
       inference: new MockInferenceClient(),
     };
   });
-
-  afterEach(() => {
-    db.close();
-  });
+  afterEach(() => db.close());
 
   it("escapes shell metacharacters in fallback cat command", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
-    // Make readFile throw so the fallback exec(cat) path is triggered
     vi.spyOn(conway, "readFile").mockRejectedValue(new Error("API broken"));
-
     await readTool.execute({ path: "/home/user/my file.txt" }, ctx);
-
-    expect(conway.execCalls.length).toBe(1);
-    // The path should be wrapped in single quotes by escapeShellArg
     expect(conway.execCalls[0].command).toBe("cat '/home/user/my file.txt'");
   });
 
   it("prevents command injection via semicolons in fallback path", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
     vi.spyOn(conway, "readFile").mockRejectedValue(new Error("API broken"));
-
     await readTool.execute({ path: "foo; cat /etc/passwd" }, ctx);
-
-    expect(conway.execCalls.length).toBe(1);
-    // Semicolons inside single quotes are treated as literal characters
     expect(conway.execCalls[0].command).toBe("cat 'foo; cat /etc/passwd'");
   });
 
   it("escapes single quotes in file path in fallback", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
     vi.spyOn(conway, "readFile").mockRejectedValue(new Error("API broken"));
-
     await readTool.execute({ path: "it's a file.txt" }, ctx);
-
-    expect(conway.execCalls.length).toBe(1);
-    // Single quotes are escaped using the '\'' technique
     expect(conway.execCalls[0].command).toBe("cat 'it'\\''s a file.txt'");
   });
 
   it("prevents subshell injection via $() in fallback path", async () => {
     const readTool = tools.find((t) => t.name === "read_file")!;
     vi.spyOn(conway, "readFile").mockRejectedValue(new Error("API broken"));
-
     await readTool.execute({ path: "$(whoami).txt" }, ctx);
-
-    expect(conway.execCalls.length).toBe(1);
-    // $() inside single quotes is treated as literal text
     expect(conway.execCalls[0].command).toBe("cat '$(whoami).txt'");
   });
 });
-
-// ─── exec Tool Self-Harm Patterns ───────────────────────────────
 
 describe("exec tool forbidden command patterns", () => {
   let tools: AbosTool[];
@@ -440,10 +370,7 @@ describe("exec tool forbidden command patterns", () => {
       inference: new MockInferenceClient(),
     };
   });
-
-  afterEach(() => {
-    db.close();
-  });
+  afterEach(() => db.close());
 
   const FORBIDDEN_COMMANDS = [
     "rm -rf ~/.abos",
@@ -483,22 +410,15 @@ describe("exec tool forbidden command patterns", () => {
 
   it("blocks deleting own sandbox", async () => {
     const execTool = tools.find((t) => t.name === "exec")!;
-    const result = await execTool.execute(
-      { command: `sandbox_delete ${ctx.identity.sandboxId}` },
-      ctx,
-    );
-    expect(result).toContain("Blocked");
+    expect(await execTool.execute({ command: `sandbox_delete ${ctx.identity.sandboxId}` }, ctx)).toContain("Blocked");
   });
 
   it("allows safe commands", async () => {
     const execTool = tools.find((t) => t.name === "exec")!;
-    const result = await execTool.execute({ command: "echo hello" }, ctx);
-    expect(result).toContain("stdout: ok");
+    expect(await execTool.execute({ command: "echo hello" }, ctx)).toContain("stdout: ok");
     expect(conway.execCalls.length).toBe(1);
   });
 });
-
-// ─── delete_sandbox Self-Preservation ───────────────────────────
 
 describe("delete_sandbox self-preservation", () => {
   let tools: AbosTool[];
@@ -516,31 +436,18 @@ describe("delete_sandbox self-preservation", () => {
       inference: new MockInferenceClient(),
     };
   });
-
-  afterEach(() => {
-    db.close();
-  });
+  afterEach(() => db.close());
 
   it("reports sandbox deletion is disabled for own sandbox", async () => {
-    const deleteTool = tools.find((t) => t.name === "delete_sandbox")!;
-    const result = await deleteTool.execute(
-      { sandbox_id: ctx.identity.sandboxId },
-      ctx,
-    );
-    expect(result).toContain("disabled");
+    const tool = tools.find((t) => t.name === "delete_sandbox")!;
+    expect(await tool.execute({ sandbox_id: ctx.identity.sandboxId }, ctx)).toContain("disabled");
   });
 
   it("reports sandbox deletion is disabled for other sandboxes", async () => {
-    const deleteTool = tools.find((t) => t.name === "delete_sandbox")!;
-    const result = await deleteTool.execute(
-      { sandbox_id: "different-sandbox-id" },
-      ctx,
-    );
-    expect(result).toContain("disabled");
+    const tool = tools.find((t) => t.name === "delete_sandbox")!;
+    expect(await tool.execute({ sandbox_id: "different-sandbox-id" }, ctx)).toContain("disabled");
   });
 });
-
-// ─── transfer_credits Self-Preservation ─────────────────────────
 
 describe("transfer_credits self-preservation", () => {
   let tools: AbosTool[];
@@ -552,7 +459,7 @@ describe("transfer_credits self-preservation", () => {
     tools = createBuiltinTools("test-sandbox-id");
     db = createTestDb();
     conway = new MockConwayClient();
-    conway.creditsCents = 10_000; // $100
+    conway.creditsCents = 10_000;
     ctx = {
       identity: createTestIdentity(),
       config: createTestConfig(),
@@ -561,56 +468,32 @@ describe("transfer_credits self-preservation", () => {
       inference: new MockInferenceClient(),
     };
   });
-
-  afterEach(() => {
-    db.close();
-  });
+  afterEach(() => db.close());
 
   it("blocks transfer of more than half balance", async () => {
-    const transferTool = tools.find((t) => t.name === "transfer_credits")!;
-    const result = await transferTool.execute(
-      { to_address: "0xrecipient", amount_cents: 6000 },
-      ctx,
-    );
+    const tool = tools.find((t) => t.name === "transfer_credits")!;
+    const result = await tool.execute({ to_address: "0xrecipient", amount_cents: 6000 }, ctx);
     expect(result).toContain("Blocked");
     expect(result).toContain("Self-preservation");
   });
 
   it("allows transfer of less than half balance", async () => {
-    const transferTool = tools.find((t) => t.name === "transfer_credits")!;
-    const result = await transferTool.execute(
-      { to_address: "0xrecipient", amount_cents: 4000 },
-      ctx,
-    );
-    expect(result).toContain("transfer submitted");
+    const tool = tools.find((t) => t.name === "transfer_credits")!;
+    expect(await tool.execute({ to_address: "0xrecipient", amount_cents: 4000 }, ctx)).toContain("transfer submitted");
   });
 
-  it("blocks negative amount", async () => {
-    const transferTool = tools.find((t) => t.name === "transfer_credits")!;
-    const result = await transferTool.execute(
-      { to_address: "0xrecipient", amount_cents: -500 },
-      ctx,
-    );
-    expect(result).toContain("Blocked");
-    expect(result).toContain("positive number");
-  });
-
-  it("blocks zero amount", async () => {
-    const transferTool = tools.find((t) => t.name === "transfer_credits")!;
-    const result = await transferTool.execute(
-      { to_address: "0xrecipient", amount_cents: 0 },
-      ctx,
-    );
-    expect(result).toContain("Blocked");
-    expect(result).toContain("positive number");
-  });
+  for (const amount of [-500, 0]) {
+    it(`blocks non-positive amount ${amount}`, async () => {
+      const tool = tools.find((t) => t.name === "transfer_credits")!;
+      const result = await tool.execute({ to_address: "0xrecipient", amount_cents: amount }, ctx);
+      expect(result).toContain("Blocked");
+      expect(result).toContain("positive number");
+    });
+  }
 });
-
-// ─── Tool Category Checks ───────────────────────────────────────
 
 describe("Tool category assignments", () => {
   let tools: AbosTool[];
-
   beforeEach(() => {
     tools = createBuiltinTools("test-sandbox-id");
   });
@@ -638,8 +521,6 @@ describe("Tool category assignments", () => {
   });
 });
 
-// ─── install_npm_package / install_mcp_server Inline Validation ──
-
 describe("package install inline validation", () => {
   let tools: AbosTool[];
   let ctx: ToolContext;
@@ -658,10 +539,7 @@ describe("package install inline validation", () => {
       inference: new MockInferenceClient(),
     };
   });
-
-  afterEach(() => {
-    db.close();
-  });
+  afterEach(() => db.close());
 
   const MALICIOUS_PACKAGES = [
     "axios; rm -rf /",
@@ -675,15 +553,13 @@ describe("package install inline validation", () => {
   for (const pkg of MALICIOUS_PACKAGES) {
     it(`install_npm_package blocks: ${pkg.slice(0, 40)}`, async () => {
       const tool = tools.find((t) => t.name === "install_npm_package")!;
-      const result = await tool.execute({ package: pkg }, ctx);
-      expect(result).toContain("Blocked");
+      expect(await tool.execute({ package: pkg }, ctx)).toContain("Blocked");
       expect(conway.execCalls.length).toBe(0);
     });
 
     it(`install_mcp_server blocks: ${pkg.slice(0, 40)}`, async () => {
       const tool = tools.find((t) => t.name === "install_mcp_server")!;
-      const result = await tool.execute({ package: pkg, name: "test" }, ctx);
-      expect(result).toContain("Blocked");
+      expect(await tool.execute({ package: pkg, name: "test" }, ctx)).toContain("Blocked");
       expect(conway.execCalls.length).toBe(0);
     });
   }
