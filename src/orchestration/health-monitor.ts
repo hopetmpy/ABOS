@@ -22,14 +22,6 @@ const DEAD_STATUSES = new Set<ChildStatus>([
   "cleaned_up",
 ]);
 
-const CRASHED_STATUSES = new Set<ChildStatus>([
-  "dead",
-  "failed",
-  "stopped",
-  "unknown",
-  "unhealthy",
-]);
-
 interface ActiveTaskRow {
   id: string;
   status: "assigned" | "running";
@@ -74,12 +66,28 @@ export interface HealAction {
   success: boolean;
 }
 
+export interface ChildRuntimeLifecycleActions {
+  observe(address: string): Promise<{
+    state: "running" | "stopped" | "unknown";
+    evidence?: string[];
+  }>;
+  restart(address: string): Promise<{
+    success: boolean;
+    evidence?: string[];
+  }>;
+  stop(address: string): Promise<{
+    success: boolean;
+    evidence?: string[];
+  }>;
+}
+
 export class HealthMonitor {
   constructor(
     private readonly db: AbosDatabase,
     private readonly agentTracker: AgentTracker,
     private readonly funding: FundingProtocol,
-    private readonly messaging: ColonyMessaging,
+    _messaging: ColonyMessaging,
+    private readonly runtimeActions?: ChildRuntimeLifecycleActions,
   ) {}
 
   async checkAll(): Promise<HealthReport> {
@@ -107,7 +115,7 @@ export class HealthMonitor {
     const actions: HealAction[] = [];
 
     for (const agent of report.agents) {
-      if (agent.healthy) {
+      if (agent.healthy || isDeadStatus(agent.status)) {
         continue;
       }
 
@@ -146,8 +154,23 @@ export class HealthMonitor {
 
     const issues = new Set<string>();
 
-    if (CRASHED_STATUSES.has(child.status)) {
-      issues.add("process_crashed");
+    // Persisted status and parent-side observation timestamps are not process
+    // evidence. Only a child-bound runtime probe may classify process_crashed.
+    if (this.runtimeActions && !isDeadStatus(child.status)) {
+      try {
+        const observed = await this.runtimeActions.observe(child.address);
+        if (observed.state === "stopped") {
+          issues.add("process_crashed");
+        } else if (observed.state === "unknown") {
+          issues.add("runtime_unknown");
+        }
+      } catch (error) {
+        logger.warn("Child runtime observation failed", {
+          address: child.address,
+          error: normalizeError(error).message,
+        });
+        issues.add("runtime_unknown");
+      }
     }
 
     if (!lastHeartbeat) {
@@ -157,8 +180,10 @@ export class HealthMonitor {
       if (!Number.isNaN(lastHeartbeatMs)) {
         const ageMs = Math.max(0, nowMs - lastHeartbeatMs);
         if (ageMs >= PROCESS_CRASH_MS) {
-          issues.add("process_crashed");
-        } else if (ageMs >= HEARTBEAT_STALE_MS && currentTask) {
+          // Stale telemetry is evidence of staleness, not proof the process died.
+          issues.add("heartbeat_stale");
+        }
+        if (ageMs >= HEARTBEAT_STALE_MS && currentTask) {
           issues.add("stuck_on_task");
         }
       }
@@ -209,8 +234,9 @@ export class HealthMonitor {
       )
       .get(child.address) as { ts: string | null } | undefined;
 
+    // children.last_checked is a parent observation timestamp and must not be
+    // promoted into child-emitted liveness evidence.
     return latestIso([
-      child.lastChecked ?? null,
       eventRow?.ts ?? null,
       inboxRow?.ts ?? null,
     ]);
@@ -359,19 +385,32 @@ export class HealthMonitor {
   }
 
   private async restartAgent(agent: AgentHealthStatus): Promise<HealAction> {
-    const reason = "process appears crashed or non-responsive";
-    const success = await this.sendShutdownRequest(agent.address, reason);
-
-    if (success) {
-      this.agentTracker.updateStatus(agent.address, "starting");
+    const reason = "child runtime process was observed stopped";
+    if (!this.runtimeActions) {
+      return {
+        type: "restart",
+        agentAddress: agent.address,
+        reason: `${reason}; observed lifecycle executor unavailable`,
+        success: false,
+      };
     }
 
-    return {
-      type: "restart",
-      agentAddress: agent.address,
-      reason,
-      success,
-    };
+    try {
+      const result = await this.runtimeActions.restart(agent.address);
+      return {
+        type: "restart",
+        agentAddress: agent.address,
+        reason: result.evidence?.join("; ") || reason,
+        success: result.success,
+      };
+    } catch (error) {
+      return {
+        type: "restart",
+        agentAddress: agent.address,
+        reason: `${reason}; ${normalizeError(error).message}`,
+        success: false,
+      };
+    }
   }
 
   private async reassignTask(
@@ -464,34 +503,30 @@ export class HealthMonitor {
     agent: AgentHealthStatus,
     reason: string,
   ): Promise<HealAction> {
-    const success = await this.sendShutdownRequest(agent.address, reason);
-    this.agentTracker.updateStatus(agent.address, "stopped");
+    if (!this.runtimeActions) {
+      return {
+        type: "stop",
+        agentAddress: agent.address,
+        reason: `${reason}; observed lifecycle executor unavailable`,
+        success: false,
+      };
+    }
 
-    return {
-      type: "stop",
-      agentAddress: agent.address,
-      reason,
-      success,
-    };
-  }
-
-  private async sendShutdownRequest(address: string, reason: string): Promise<boolean> {
     try {
-      const message = this.messaging.createMessage({
-        type: "shutdown_request",
-        to: address,
-        content: `[health-monitor] ${reason}`,
-        priority: "high",
-      });
-
-      await this.messaging.send(message);
-      return true;
+      const result = await this.runtimeActions.stop(agent.address);
+      return {
+        type: "stop",
+        agentAddress: agent.address,
+        reason: result.evidence?.join("; ") || reason,
+        success: result.success,
+      };
     } catch (error) {
-      logger.warn("Failed to send shutdown request", {
-        address,
-        error: normalizeError(error).message,
-      });
-      return false;
+      return {
+        type: "stop",
+        agentAddress: agent.address,
+        reason: `${reason}; ${normalizeError(error).message}`,
+        success: false,
+      };
     }
   }
 
