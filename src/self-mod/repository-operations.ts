@@ -205,7 +205,7 @@ export async function resetToUpstreamTransactional(
       if (observedBase !== baseSha) {
         throw new Error(`STALE_BASE: expected ${baseSha}, transaction observed ${observedBase}`);
       }
-      git(workspacePath, ["read-tree", "--reset", "-u", targetSha]);
+      git(workspacePath, ["restore", `--source=${targetSha}`, "--worktree", "--", "."]);
       return {
         commitMessage: `self-mod: reset source tree to upstream ${targetSha.slice(0, 12)}`,
         evidence: [
