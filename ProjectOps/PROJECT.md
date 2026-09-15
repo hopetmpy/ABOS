@@ -204,9 +204,9 @@ E3 nunca se promociona a E5/E6 por narrativa.
 
 Codex OAuth humano, AWS billable, providers externos, saldos/revenue atribuibles y otras fronteras E5/E6 requieren evidencia real; CI/source no las autocertifican.
 
-### 7.4 P-010 activo
+### 7.4 P-011 activo
 
-Policy/Authorization/Approval/Quarantine lifecycle está EN_EJECUCIÓN como auditoría. No se considera resuelto hasta demostrar allow/deny/approval/quarantine/continuation/restart semantics sin side effects prematuros ni bypass.
+P-010 Policy/Authorization/Approval/Quarantine está HECHO / INTEGRATION_VERIFIED. P-011 Lifecycle/Health/Restart/Recovery es la intervención activa: estados críticos deben reflejar observación del runtime; timeout conserva incertidumbre hasta reconciliación y recovery no puede redispatchar a ciegas un efecto que pudo ocurrir.
 
 ## 8. Anti-contaminación entre proyectos
 
