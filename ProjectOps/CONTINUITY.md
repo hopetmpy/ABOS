@@ -4,17 +4,17 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-012
 Active-Segment: continuity/C0008.md
-Active-Intervention: P012_TRANSACTIONAL_SELF_MODIFICATION — AUDIT_REQUIRED
+Active-Intervention: P012_TRANSACTIONAL_SELF_MODIFICATION — DECISION_READY
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p011-close-p012-activate
-Host-Head-At-Audit-Open: cc26ee0c68f699fe9c2621d896ec98a3ec32bd5a
-Last-Reconciled-Host-Head: cc26ee0c68f699fe9c2621d896ec98a3ec32bd5a
-Last-Reconciled-Head-Semantics: P011_INTEGRATION_VERIFIED_P012_AUDIT_BASELINE
+Current-Host-Branch: abos/p012-transactional-self-modification
+Host-Head-At-Audit-Open: 1f1e93f48c95265dba52b6a99a900bde6cdcb27c
+Last-Reconciled-Host-Head: 1f1e93f48c95265dba52b6a99a900bde6cdcb27c
+Last-Reconciled-Head-Semantics: P012_AUDIT_COMPLETE_DECISION_READY_BASELINE
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -78,10 +78,17 @@ P011-PR: 38
 P011-Merge: cc26ee0c68f699fe9c2621d896ec98a3ec32bd5a
 P011-Main-CI: 34915463559 SUCCESS
 P011-Main-ProjectOps: 34915463657 SUCCESS
+P011-P012-Transition-PR: 39
+P011-P012-Transition-Head: 05d851a5204675eb77aaeb90ae4acc4665169533
+P011-P012-Transition-CI: 34916556315 SUCCESS
+P011-P012-Transition-ProjectOps: 34916556358 SUCCESS
+P012-Canonical-Baseline: 1f1e93f48c95265dba52b6a99a900bde6cdcb27c
+P012-Baseline-CI: 34916918807 SUCCESS
+P012-Baseline-ProjectOps: 34916918658 SUCCESS
 
 ## Semántica del HEAD reconciliado
 
-`Last-Reconciled-Host-Head` es `main cc26ee0c68f699fe9c2621d896ec98a3ec32bd5a`, donde P-011 fue squash-merged por PR #38 y revalidado por CI + ProjectOps. Ese SHA es el baseline exacto de activación P-012; la transición documental no eleva ningún claim a E5/E6.
+`Last-Reconciled-Host-Head` es `main 1f1e93f48c95265dba52b6a99a900bde6cdcb27c`, donde PR #39 cerró formalmente P-011 y activó P-012; ese SHA fue revalidado por CI `34916918807` y ProjectOps `34916918658`. La auditoría P-012 se ejecutó desde ese baseline sin modificar product source antes de DECISION_READY.
 
 P-009 permanece HECHO únicamente para su objetivo exacto: authority/provenance/trust boundaries. No eleva Social inbound a autenticación criptográfica LIVE; `relay_asserted` sigue siendo el máximo claim demostrado en esa frontera.
 
@@ -101,8 +108,8 @@ P-011 hereda específicamente `execution_state=running/unknown` como estados que
 - P-008: HECHO — Runtime Truth integrado y revalidado.
 - P-009: HECHO — Authority/Provenance/trust boundaries integrados por PR #35 y revalidados sobre `main` `b9dbf144...`.
 - P-010: HECHO — Policy/Authorization/Approval/Quarantine integrado por PR #36 y cerrado canónicamente por PR #37 sobre `main` `33e4865b...`.
-- P-011: HECHO / INTEGRATION_VERIFIED — integrado por PR #38 en `main cc26ee0c...`; main CI `34915463559` + ProjectOps `34915463657` green; C0007 cerrado.
-- P-012: EN_EJECUCIÓN / AUDIT_REQUIRED — C0008 activo; baseline `main cc26ee0c...`; source P-012 todavía no autorizado.
+- P-011: HECHO / INTEGRATION_VERIFIED — integrado por PR #38; cierre documental PR #39; C0007 cerrado.
+- P-012: EN_EJECUCIÓN / DECISION_READY — C0008 activo; baseline `main 1f1e93f4...`; architecture transaction authority elegida y source queda autorizado sólo tras gatear este registro.
 - P-013..P-036: ver `ProjectOps/PLAN.md`; permanecen en su estado explícito.
 
 ## P-009 — cierre verificable
@@ -170,28 +177,33 @@ Claims no demostrados por P-010:
 
 Resultado integrado: lifecycle/restart/stop/health child usa post-condiciones observadas; legacy pre-V7 se adopta sólo desde child evidence; auto-heal es recover idempotente; heartbeat timeout queda durable in-doubt y no se redispatchea tras crash hasta reconciliación. No se creó segundo supervisor/lifecycle store ni se reabrió P-010.
 
-Evidencia: source `af2d19fd...` con CI `34914283215` + ProjectOps `34914283237`; exact-head `5c8b9039...`; PR #38; squash merge `cc26ee0c...`; main CI `34915463559` + ProjectOps `34915463657` SUCCESS. Estado: `HECHO / INTEGRATION_VERIFIED` en E3. No acredita E5/E6 provider LIVE.
+Evidencia: source `af2d19fd...` con CI `34914283215` + ProjectOps `34914283237`; exact-head `5c8b9039...`; PR #38; squash merge `cc26ee0c...`; main CI `34915463559` + ProjectOps `34915463657` SUCCESS; transición/cierre PR #39 exact-head `05d851a5...`; merge `1f1e93f4...`; main CI `34916918807` + ProjectOps `34916918658` SUCCESS. Estado: `HECHO / INTEGRATION_VERIFIED` en E3. No acredita E5/E6 provider LIVE.
 
-## P-012 — auditoría activa
+## P-012 — auditoría y decisión activa
 
-Baseline: `main cc26ee0c68f699fe9c2621d896ec98a3ec32bd5a`, con P-011 integrado y main CI `34915463559` + ProjectOps `34915463657` SUCCESS.
+Baseline exacto: `main 1f1e93f48c95265dba52b6a99a900bde6cdcb27c`, CI `34916918807` + ProjectOps `34916918658` SUCCESS.
 
-Estado: `EN_EJECUCIÓN / AUDIT_REQUIRED`. Debe reconstruir `src/self-mod/`, policy rate guard, persistence/capabilities y entrypoints reales; reproducir write-before-verify/rollback best-effort; mapear transaction boundaries y alcanzar `DECISION_READY` antes de source. P-013 evidence sigue requerida antes del cierre completo.
+Estado: `EN_EJECUCIÓN / DECISION_READY`.
+
+Hallazgos materiales: write-before-verify confirmado; pre-snapshot Git best-effort y `git add -A`; `modifications` no es journal; upstream/revert/reset mutan active checkout antes de verify; local exec/write_file pueden representar bypass de source scope; intra-turn es secuencial pero no existe self-mod lease multiproceso; rate limits 10/hour y 20/hour están duplicados y no pueden ser safety authority.
+
+Decisión: una sola transaction authority en `src/self-mod/` basada en Git worktree aislado + journal/lease SQLite + candidate commit verificado + activation compare-and-swap contra base SHA + post-probe/recovery causal. Reutilizar Git/SQLite/Policy/CI existentes; no crear segunda authority ni invadir P-013/P-014/P-017. C0008 contiene alternatives, failure matrix, impacts y evidence ladder completos.
 
 ## Límites / bloqueos actuales
 
-- clone/container local: NO DISPONIBLE por resolución DNS, reconfirmado tras P-010; no se repite ciegamente.
+- clone/container local: NO DISPONIBLE por resolución DNS previamente reproducida; no se repite ciegamente sin cambio de entorno.
 - GitHub connector + GitHub Actions: DISPONIBLE / AUTORIZADO.
 - CI/E3 no acredita LIVE/E5/E6.
-- El baseline schema v16 acompaña P-010; P-004 permanece PLANIFICADO y no se declara cerrado.
+- El baseline schema v16 acompaña P-010; P-012 podrá migrar aditivamente a v17 si la implementación del journal lo requiere.
+- P-004 permanece PLANIFICADO; el drift puntual P-011→P-012 en PLAN se reconcilia dentro de esta intervención según su propia regla.
 
 ## Siguiente punto verificable
 
-1. Integrar esta transición documental exact-head y revalidar CI + ProjectOps en `main`.
-2. Con P-012 ya canónicamente activo, leer su Required-Context completo antes de source.
-3. Auditar todos los entrypoints de self-modification, protected scope, snapshot/rollback, build/test, activation, audit trail y rate guard.
-4. Registrar hipótesis competidoras, failure matrix, rollback/evidence ladder y `DECISION_READY` en C0008.
-5. Sólo entonces autorizar la primera unidad source P-012.
+1. Gatear el commit documental P-012 `DECISION_READY` con ProjectOps Integrity.
+2. Implementar journal/lease/worktree transaction authority y unit/fault tests.
+3. Integrar `edit_own_file` y luego upstream/revert/reset + source-scope bypass local sobre la misma authority, sin hard reset de drift ajeno.
+4. Ejecutar targeted tests, typecheck/build y full CI Node/Windows.
+5. Mantener P-013 como dependencia de evidence/correlation antes de cierre completo P-012.
 
 ## Política de rotación
 
