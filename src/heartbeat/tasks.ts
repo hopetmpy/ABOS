@@ -633,6 +633,10 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
           .filter((value): value is string => typeof value === "string" && value.length > 0),
       );
 
+      const { ChildLifecycle } = await import("../replication/lifecycle.js");
+      const { ensureChildRuntimeStopped } = await import("../replication/runtime-control.js");
+      const lifecycle = new ChildLifecycle(taskCtx.db.raw);
+
       let culled = 0;
       for (const child of children) {
         if (!["running", "healthy", "sleeping"].includes(child.status)) continue;
@@ -643,8 +647,19 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
         if (Number.isNaN(lastSeenMs)) continue;
         if (now - lastSeenMs < IDLE_CULL_MS) continue;
 
-        taskCtx.db.updateChildStatus(child.id, "stopped");
-        culled += 1;
+        const stopped = await ensureChildRuntimeStopped(
+          taskCtx.conway,
+          taskCtx.db,
+          child.id,
+          lifecycle,
+        );
+        if (stopped.success) {
+          culled += 1;
+        } else {
+          logger.warn(`Agent pool could not verify stop for child ${child.id}`, {
+            evidence: stopped.evidence,
+          });
+        }
       }
 
       const pendingUnassignedRow = taskCtx.db.raw
@@ -789,5 +804,39 @@ async function createHealthMonitor(taskCtx: HeartbeatLegacyContext): Promise<Col
   const transport = new LocalDBTransport(taskCtx.db);
   const messaging = new ColonyMessaging(transport, taskCtx.db);
 
-  return new HealthMonitor(taskCtx.db, tracker, funding, messaging);
+  const { ChildLifecycle } = await import("../replication/lifecycle.js");
+  const {
+    observeChildRuntime,
+    restartChildRuntime,
+    ensureChildRuntimeStopped,
+  } = await import("../replication/runtime-control.js");
+  const lifecycle = new ChildLifecycle(taskCtx.db.raw);
+
+  const childIdFor = (address: string) =>
+    taskCtx.db.getChildren().find((child) => child.address === address)?.id ?? null;
+
+  const runtimeActions = {
+    observe: async (address: string) => {
+      const childId = childIdFor(address);
+      if (!childId) {
+        return {
+          state: "unknown" as const,
+          evidence: [`Child ${address} not found in canonical children state.`],
+        };
+      }
+      return observeChildRuntime(taskCtx.conway, taskCtx.db, childId);
+    },
+    restart: async (address: string) => {
+      const childId = childIdFor(address);
+      if (!childId) return { success: false, evidence: [`Child ${address} not found.`] };
+      return restartChildRuntime(taskCtx.conway, taskCtx.db, childId, lifecycle);
+    },
+    stop: async (address: string) => {
+      const childId = childIdFor(address);
+      if (!childId) return { success: false, evidence: [`Child ${address} not found.`] };
+      return ensureChildRuntimeStopped(taskCtx.conway, taskCtx.db, childId, lifecycle);
+    },
+  };
+
+  return new HealthMonitor(taskCtx.db, tracker, funding, messaging, runtimeActions);
 }

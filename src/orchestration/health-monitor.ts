@@ -153,12 +153,14 @@ export class HealthMonitor {
     const errorStats = this.getErrorStats(child.address);
 
     const issues = new Set<string>();
+    let observedRuntimeState: "running" | "stopped" | "unknown" | null = null;
 
     // Persisted status and parent-side observation timestamps are not process
     // evidence. Only a child-bound runtime probe may classify process_crashed.
     if (this.runtimeActions && !isDeadStatus(child.status)) {
       try {
         const observed = await this.runtimeActions.observe(child.address);
+        observedRuntimeState = observed.state;
         if (observed.state === "stopped") {
           issues.add("process_crashed");
         } else if (observed.state === "unknown") {
@@ -169,12 +171,17 @@ export class HealthMonitor {
           address: child.address,
           error: normalizeError(error).message,
         });
+        observedRuntimeState = "unknown";
         issues.add("runtime_unknown");
       }
     }
 
     if (!lastHeartbeat) {
-      issues.add("heartbeat_missing");
+      // Direct process observation is fresh liveness evidence. A parent-side
+      // last_checked timestamp is deliberately not promoted into child health.
+      if (observedRuntimeState !== "running") {
+        issues.add("heartbeat_missing");
+      }
     } else {
       const lastHeartbeatMs = Date.parse(lastHeartbeat);
       if (!Number.isNaN(lastHeartbeatMs)) {
