@@ -27,6 +27,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Apply P-013 adaptive evidence
         run: python .github/p013_adaptive_apply.py
+      - name: Apply precise adaptive no-duplication assertion
+        run: python .github/p013_adaptive_testfix.py
       - name: Typecheck
         run: pnpm run typecheck
       - name: Run targeted adaptive and P-013 tests
@@ -39,7 +41,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f .github/p013_adaptive_apply.py .github/workflows/p013-adaptive-apply.yml
+          rm -f .github/p013_adaptive_apply.py .github/p013_adaptive_testfix.py .github/workflows/p013-adaptive-apply.yml
           git config user.name "hopetmpy"
           git config user.email "hope.tmpy@gmail.com"
           git add -A
