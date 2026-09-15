@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import nodePath from "node:path";
 import type { AbosTool } from "../types.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
@@ -46,14 +47,64 @@ function isInsideHome(filePath: string): boolean {
   return resolved === home || resolved.startsWith(home + nodePath.sep);
 }
 
+/**
+ * Resolve a local path through the nearest existing ancestor. This preserves
+ * the real filesystem identity for new descendants below directory symlinks
+ * instead of trusting only the lexical spelling supplied by a tool call.
+ */
+function canonicalizeLocalPath(filePath: string): string | null {
+  try {
+    const absolute = nodePath.resolve(filePath);
+    let cursor = absolute;
+    const suffix: string[] = [];
+
+    while (!fs.existsSync(cursor)) {
+      const parent = nodePath.dirname(cursor);
+      if (parent === cursor) return null;
+      suffix.unshift(nodePath.basename(cursor));
+      cursor = parent;
+    }
+
+    return nodePath.resolve(fs.realpathSync(cursor), ...suffix);
+  } catch {
+    return null;
+  }
+}
+
+function canonicalRuntimePath(filePath: string): string | null {
+  const canonical = canonicalizeLocalPath(filePath);
+  return canonical && isRuntimeSourcePath(canonical) ? canonical : null;
+}
+
 function regexpEscape(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function shellTokenCandidates(command: string): string[] {
+  const home = nodePath.resolve(getHomeDir());
+  const tokens = command.match(/(?:'[^']*'|"[^"]*"|[^\s;|&><()]+)/g) ?? [];
+  const candidates: string[] = [];
+
+  for (const rawToken of tokens) {
+    let token = rawToken.replace(/^['"]|['"]$/g, "");
+    const assignment = token.match(/^[A-Za-z_][A-Za-z0-9_]*=(.+)$/);
+    if (assignment) token = assignment[1];
+    token = token
+      .replace(/^\$\{HOME\}/, home)
+      .replace(/^\$HOME/, home);
+    if (!token || token.startsWith("-")) continue;
+
+    const resolved = localPathLikeConway(token);
+    candidates.push(resolved);
+  }
+
+  return candidates;
+}
+
 /**
- * Local exec starts from HOME, not RUNTIME_ROOT. Block only commands that
- * explicitly address the active source checkout. General shell capability is
- * otherwise unchanged; source mutations must use the transactional tools.
+ * Local exec starts from HOME, not RUNTIME_ROOT. Detect direct and filesystem-
+ * aliased references to the active source checkout. General shell capability
+ * remains unchanged outside that checkout; source mutations use P-012.
  */
 export function commandReferencesRuntimeSource(command: string): boolean {
   const normalized = command.replace(/\\/g, "/");
@@ -71,17 +122,21 @@ export function commandReferencesRuntimeSource(command: string): boolean {
   if (rootNative === homeNative) return true;
 
   const relative = nodePath.relative(homeNative, rootNative).replace(/\\/g, "/");
-  if (!relative || relative === "." || relative.startsWith("../")) return false;
+  if (relative && relative !== "." && !relative.startsWith("../")) {
+    const tilde = `~/${relative}`;
+    if (normalized.toLowerCase().includes(tilde.toLowerCase())) return true;
 
-  const tilde = `~/${relative}`;
-  if (normalized.toLowerCase().includes(tilde.toLowerCase())) return true;
+    const rel = regexpEscape(relative);
+    const pathish = new RegExp(
+      `(?:^|[\\s'\"=;|&>(])(?:\\./)?${rel}(?:/|[\\s'\";|&<)]|$)`,
+      process.platform === "win32" ? "i" : "",
+    );
+    if (pathish.test(normalized)) return true;
+  }
 
-  const rel = regexpEscape(relative);
-  const pathish = new RegExp(
-    `(?:^|[\\s'\"=;|&>(])(?:\\./)?${rel}(?:/|[\\s'\";|&<)]|$)`,
-    process.platform === "win32" ? "i" : "",
+  return shellTokenCandidates(command).some((candidate) =>
+    canonicalRuntimePath(candidate) !== null
   );
-  return pathish.test(normalized);
 }
 
 function formatRepositoryResult(result: RepositoryOperationResult): string {
@@ -159,16 +214,16 @@ export function applyP012ToolRouting(
     if (!sandboxId && !ctx.identity.sandboxId) {
       const requestedPath = args.path as string;
       const resolved = localPathLikeConway(requestedPath);
-      if (
-        isInsideHome(resolved)
-        && isRuntimeSourcePath(resolved)
-      ) {
+      const runtimePath = isInsideHome(resolved)
+        ? canonicalRuntimePath(resolved)
+        : null;
+      if (runtimePath) {
         const result = await editFile(
           ctx.conway,
           ctx.db,
-          resolved,
+          runtimePath,
           args.content as string,
-          `write_file routed through P-012 transaction for ${nodePath.relative(RUNTIME_ROOT, resolved).replace(/\\/g, "/")}`,
+          `write_file routed through P-012 transaction for ${nodePath.relative(RUNTIME_ROOT, runtimePath).replace(/\\/g, "/")}`,
         );
         if (!result.success) {
           const recovery = result.recoveryRequired
@@ -176,8 +231,8 @@ export function applyP012ToolRouting(
             : "";
           return `${result.error || "Transactional local source write failed."}${recovery}`;
         }
-        if (result.noChange) return `No source change required: ${resolved}.`;
-        return `Local source write activated transactionally: ${resolved}${result.candidateSha ? ` (candidate ${result.candidateSha})` : ""}`;
+        if (result.noChange) return `No source change required: ${runtimePath}.`;
+        return `Local source write activated transactionally: ${runtimePath}${result.candidateSha ? ` (candidate ${result.candidateSha})` : ""}`;
       }
     }
     return originalWrite(args, ctx);
@@ -202,7 +257,7 @@ export function applyP012ToolRouting(
   gitCommitTool.execute = async (args, ctx) => {
     if (!sandboxId && !ctx.identity.sandboxId) {
       const repoPath = localPathLikeConway((args.path as string) || "~/.abos");
-      if (isRuntimeSourcePath(repoPath)) {
+      if (canonicalRuntimePath(repoPath)) {
         return "Blocked: git_commit cannot mutate active ABOS source history outside the P-012 transaction authority.";
       }
     }
@@ -218,7 +273,7 @@ export function applyP012ToolRouting(
       && (args.action as string) !== "list"
     ) {
       const repoPath = localPathLikeConway(args.path as string);
-      if (isRuntimeSourcePath(repoPath)) {
+      if (canonicalRuntimePath(repoPath)) {
         return "Blocked: mutating git_branch actions cannot change the active ABOS checkout outside the P-012 transaction authority.";
       }
     }
@@ -230,7 +285,7 @@ export function applyP012ToolRouting(
   gitCloneTool.execute = async (args, ctx) => {
     if (!sandboxId && !ctx.identity.sandboxId) {
       const targetPath = localPathLikeConway(args.path as string);
-      if (isRuntimeSourcePath(targetPath)) {
+      if (canonicalRuntimePath(targetPath)) {
         return "Blocked: git_clone cannot write into the active ABOS source checkout outside the P-012 transaction authority.";
       }
     }
