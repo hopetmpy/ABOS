@@ -5,7 +5,7 @@ on:
     branches:
       - abos/p011-lifecycle-recovery-v1
     paths:
-      - scripts/p011-apply-patches.mjs
+      - scripts/p011_apply_patches.py
       - .github/workflows/p011-apply.yml
 
 permissions:
@@ -20,11 +20,8 @@ jobs:
         with:
           ref: abos/p011-lifecycle-recovery-v1
           fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
       - name: Apply exact source/test patches
-        run: node scripts/p011-apply-patches.mjs
+        run: python3 scripts/p011_apply_patches.py
       - name: Commit patched files
         shell: bash
         run: |
