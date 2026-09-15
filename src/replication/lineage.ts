@@ -15,8 +15,8 @@ import type {
   AbosConfig,
   ConwayClient,
 } from "../types.js";
-import type { ChildLifecycle } from "./lifecycle.js";
-import type { ChildHealthMonitor } from "./health.js";
+import { ChildLifecycle } from "./lifecycle.js";
+import { ChildHealthMonitor } from "./health.js";
 import type { SandboxCleanup } from "./cleanup.js";
 import { deleteChild } from "../state/database.js";
 import { createLogger } from "../observability/logger.js";
@@ -129,37 +129,25 @@ export async function pruneDeadChildren(
 }
 
 /**
- * Refresh status of all children using health monitor.
- * Concurrency limited to 3 simultaneous checks.
+ * Refresh lifecycle-managed child status using the canonical child-scoped
+ * health monitor.
+ *
+ * The old fallback executed `echo alive` through the parent Conway boundary
+ * and wrote `unknown` directly into children.status. That could neither prove
+ * child liveness nor preserve ChildLifecycle event authority. If a monitor is
+ * not injected, construct the canonical monitor from the existing authorities
+ * instead of inventing a second health path.
  */
 export async function refreshChildrenStatus(
   conway: ConwayClient,
   db: AbosDatabase,
   healthMonitor?: ChildHealthMonitor,
 ): Promise<void> {
-  if (healthMonitor) {
-    // Use the health monitor with built-in concurrency limiting
-    await healthMonitor.checkAllChildren();
-    return;
-  }
+  const monitor = healthMonitor ?? new ChildHealthMonitor(
+    db.raw,
+    conway,
+    new ChildLifecycle(db.raw),
+  );
 
-  // Legacy path: sequential checks with concurrency limit of 3
-  const children = db.getChildren().filter((c) => c.status !== "dead" && c.status !== "cleaned_up");
-  const maxConcurrent = 3;
-
-  for (let i = 0; i < children.length; i += maxConcurrent) {
-    const batch = children.slice(i, i + maxConcurrent);
-    await Promise.all(
-      batch.map(async (child) => {
-        try {
-          const result = await conway.exec("echo alive", 10_000);
-          if (result.exitCode !== 0) {
-            db.updateChildStatus(child.id, "unknown" as any);
-          }
-        } catch {
-          db.updateChildStatus(child.id, "unknown" as any);
-        }
-      }),
-    );
-  }
+  await monitor.checkAllChildren();
 }
