@@ -4,24 +4,39 @@
  * Allows the abos to edit its own code and configuration.
  * All changes are audited, rate-limited, and some paths are protected.
  *
- * Safety model inspired by nanoclaw's trust boundary architecture:
- * - Hard-coded invariants that can NEVER be modified by the agent
- * - The safety enforcement code is immutable from the agent's perspective
- * - Pre-modification snapshots via git
- * - Rate limiting on modification frequency
- * - Symlink resolution before path validation
- * - Maximum diff size enforcement
+ * P-012 invariant: proposed edits are staged and verified in an isolated Git
+ * worktree. The active runtime source changes only through exact, journaled
+ * activation of a verified candidate commit.
  */
 
 import fs from "fs";
+import os from "os";
 import path from "path";
+import { execFileSync } from "child_process";
+import { randomUUID } from "crypto";
 import type {
   ConwayClient,
   AbosDatabase,
 } from "../types.js";
 import { logModification } from "./audit-log.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
-import { expandHomePath, toPosixShellPath } from "../platform/home.js";
+import { expandHomePath } from "../platform/home.js";
+import {
+  acquireSelfModLease,
+  activateCandidateCommit,
+  commitCandidate,
+  createCandidateWorktree,
+  createSelfModTransaction,
+  getGitChangedPaths,
+  getGitHead,
+  getGitStatus,
+  getSelfModTransaction,
+  releaseSelfModLease,
+  removeCandidateWorktree,
+  rollbackActivatedCandidate,
+  transitionSelfModTransaction,
+  writeCandidateFile,
+} from "./transaction.js";
 
 // ─── IMMUTABLE SAFETY INVARIANTS ─────────────────────────────
 // These are hard-coded and CANNOT be changed by the agent.
@@ -32,7 +47,7 @@ import { expandHomePath, toPosixShellPath } from "../platform/home.js";
  * Files that the abos cannot modify under any circumstances.
  * This list protects:
  * - Identity (wallet, config)
- * - Defense systems (injection defense, this file)
+ * - Defense systems (injection defense, self-modification authority)
  * - State database
  * - The audit log itself
  */
@@ -50,10 +65,13 @@ const PROTECTED_FILES: readonly string[] = Object.freeze([
   "injection-defense.ts",
   "injection-defense.js",
   "injection-defense.d.ts",
-  // Self-modification safety (this file and its compiled output)
+  // Self-modification safety (engine, durable transaction authority, audit)
   "self-mod/code.ts",
   "self-mod/code.js",
   "self-mod/code.d.ts",
+  "self-mod/transaction.ts",
+  "self-mod/transaction.js",
+  "self-mod/transaction.d.ts",
   "self-mod/audit-log.ts",
   "self-mod/audit-log.js",
   // Tool guard definitions
@@ -101,42 +119,73 @@ const BLOCKED_DIRECTORY_PATTERNS: readonly string[] = Object.freeze([
 ]);
 
 /**
- * Maximum number of self-modifications per hour.
- * Prevents runaway modification loops.
+ * Legacy frequency guard. P-012 later reconciles this with the separate policy
+ * threshold; transactional isolation/verification is the safety authority.
  */
 const MAX_MODIFICATIONS_PER_HOUR = 20;
 
-/**
- * Maximum size of a single file modification (bytes).
- */
+/** Maximum size of a single file modification (bytes). */
 const MAX_MODIFICATION_SIZE = 100_000; // 100KB
 
-/**
- * Maximum diff size stored in the audit log (characters).
- */
+/** Maximum diff size stored in the audit log (characters). */
 const MAX_DIFF_SIZE = 10_000;
+
+const DEFAULT_LEASE_TTL_MS = 10 * 60 * 1000;
+const MAX_GATE_DETAIL = 4_000;
+
+export interface SelfModGateResult {
+  success: boolean;
+  evidence: unknown[];
+  error?: string;
+}
+
+export interface EditFileOptions {
+  runtimeRoot?: string;
+  tempRoot?: string;
+  leaseTtlMs?: number;
+  owner?: string;
+  /** Test/fault-injection seam. Production defaults run install/typecheck/build/tests. */
+  verifyCandidate?: (
+    workspacePath: string,
+    relativePath: string,
+  ) => Promise<SelfModGateResult>;
+  /** Test/fault-injection seam. Production default rebuilds the activated checkout. */
+  postActivationProbe?: (runtimeRoot: string) => Promise<SelfModGateResult>;
+  /** Separate rollback probe so an injected activation failure need not poison rollback. */
+  postRollbackProbe?: (runtimeRoot: string) => Promise<SelfModGateResult>;
+}
+
+export interface EditFileResult {
+  success: boolean;
+  error?: string;
+  transactionId?: string;
+  candidateSha?: string;
+  noChange?: boolean;
+  recoveryRequired?: boolean;
+}
 
 // ─── Path Validation ─────────────────────────────────────────
 
 /**
- * Resolve a file path, following symlinks, to prevent traversal attacks.
- * Returns null if the path cannot be resolved or is suspicious.
+ * Resolve a source path against the active runtime root, following an existing
+ * target symlink and rejecting escape. Relative paths are source-relative, not
+ * process.cwd()-relative.
  */
-function resolveAndValidatePath(filePath: string): string | null {
+function resolveAndValidatePath(
+  filePath: string,
+  runtimeRoot = RUNTIME_ROOT,
+): string | null {
   try {
-    // Step 1: Resolve ~ to home
-    let resolved = expandHomePath(filePath);
+    const baseDir = fs.realpathSync(path.resolve(runtimeRoot));
+    const expanded = expandHomePath(filePath);
+    let resolved = path.isAbsolute(expanded)
+      ? path.resolve(expanded)
+      : path.resolve(baseDir, expanded);
 
-    // Step 2: Resolve to absolute path (handles .. and relative paths)
-    resolved = path.resolve(resolved);
-
-    // Step 3: Check resolved path is within the base directory (cwd)
-    const baseDir = RUNTIME_ROOT;
     if (!resolved.startsWith(baseDir + path.sep) && resolved !== baseDir) {
       return null;
     }
 
-    // Step 4: If the path exists, resolve symlinks and re-check
     if (fs.existsSync(resolved)) {
       const realPath = fs.realpathSync(resolved);
       if (!realPath.startsWith(baseDir + path.sep) && realPath !== baseDir) {
@@ -151,12 +200,8 @@ function resolveAndValidatePath(filePath: string): string | null {
   }
 }
 
-/**
- * Check if a file path is protected from modification.
- */
+/** Check if a file path is protected from modification. */
 export function isProtectedFile(filePath: string): boolean {
-  // Security matching must understand both POSIX sandbox paths and native host
-  // paths. Normalize separators explicitly instead of depending on path.sep.
   const normalized = path.posix.normalize(filePath.replace(/\\/g, "/"));
 
   for (const pattern of PROTECTED_FILES) {
@@ -191,14 +236,11 @@ export function isProtectedFile(filePath: string): boolean {
   return false;
 }
 
-/**
- * Check if the modification rate limit has been exceeded.
- */
+/** Check if the legacy modification rate guard has been exceeded. */
 function isRateLimited(db: AbosDatabase): boolean {
   const recentMods = db.getRecentModifications(MAX_MODIFICATIONS_PER_HOUR);
   if (recentMods.length < MAX_MODIFICATIONS_PER_HOUR) return false;
 
-  // Check if the oldest is within the last hour
   const oldest = recentMods[0];
   if (!oldest) return false;
 
@@ -206,126 +248,488 @@ function isRateLimited(db: AbosDatabase): boolean {
   return new Date(oldest.timestamp).getTime() > hourAgo;
 }
 
+function normalizeRelativePath(value: string): string {
+  return value.replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+function samePathSet(actual: readonly string[], expected: readonly string[]): boolean {
+  const left = [...new Set(actual.map(normalizeRelativePath))].sort();
+  const right = [...new Set(expected.map(normalizeRelativePath))].sort();
+  return left.length === right.length && left.every((entry, index) => entry === right[index]);
+}
+
+// ─── Verification ─────────────────────────────────────────────
+
+function stringifyCommandOutput(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Buffer.isBuffer(value)) return value.toString("utf8");
+  return "";
+}
+
+function runPnpmGate(
+  cwd: string,
+  gate: string,
+  args: string[],
+  timeoutMs: number,
+): { success: boolean; evidence: Record<string, unknown>; error?: string } {
+  const startedAt = Date.now();
+  const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+  try {
+    const stdout = execFileSync(command, args, {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: timeoutMs,
+      windowsHide: true,
+      shell: process.platform === "win32",
+    });
+    return {
+      success: true,
+      evidence: {
+        gate,
+        result: "pass",
+        durationMs: Date.now() - startedAt,
+        detail: stdout.slice(-MAX_GATE_DETAIL),
+      },
+    };
+  } catch (error: any) {
+    const detail = (
+      stringifyCommandOutput(error?.stderr)
+      || stringifyCommandOutput(error?.stdout)
+      || error?.message
+      || String(error)
+    ).slice(-MAX_GATE_DETAIL);
+    return {
+      success: false,
+      error: `${gate} failed: ${detail}`,
+      evidence: {
+        gate,
+        result: "fail",
+        durationMs: Date.now() - startedAt,
+        detail,
+      },
+    };
+  }
+}
+
+async function defaultCandidateVerification(
+  workspacePath: string,
+): Promise<SelfModGateResult> {
+  const evidence: unknown[] = [];
+  const gates: Array<[string, string[], number]> = [
+    ["frozen_install", ["install", "--frozen-lockfile"], 180_000],
+    ["typecheck", ["run", "typecheck"], 120_000],
+    ["build", ["run", "build"], 120_000],
+    ["tests", ["test"], 240_000],
+  ];
+
+  for (const [gate, args, timeout] of gates) {
+    const result = runPnpmGate(workspacePath, gate, args, timeout);
+    evidence.push(result.evidence);
+    if (!result.success) {
+      return { success: false, evidence, error: result.error };
+    }
+  }
+  return { success: true, evidence };
+}
+
+async function defaultActiveProbe(runtimeRoot: string): Promise<SelfModGateResult> {
+  const result = runPnpmGate(runtimeRoot, "active_build_probe", ["run", "build"], 120_000);
+  return {
+    success: result.success,
+    evidence: [result.evidence],
+    error: result.error,
+  };
+}
+
+function cleanWorkspaceBestEffort(
+  workspacePath: string | undefined,
+  runtimeRoot: string,
+  tempRoot: string | undefined,
+  evidence: unknown[],
+): void {
+  if (!workspacePath) return;
+  try {
+    removeCandidateWorktree(workspacePath, { runtimeRoot, tempRoot });
+    evidence.push({ gate: "workspace_cleanup", result: "pass" });
+  } catch (error: any) {
+    evidence.push({
+      gate: "workspace_cleanup",
+      result: "fail",
+      detail: error?.message || String(error),
+    });
+  }
+}
+
 // ─── Self-Modification API ───────────────────────────────────
 
 /**
- * Edit a file in the abos's environment.
- * Records the change in the audit log.
- * Commits a git snapshot before modification.
+ * Transactionally edit a file in the active ABOS source checkout.
  *
- * Safety checks:
- * 1. Protected file check (hard-coded invariant)
- * 2. Blocked directory check
- * 3. Path traversal check (symlink resolution)
- * 4. Rate limiting
- * 5. File size limit
- * 6. Pre-modification git snapshot
- * 7. Audit log entry
+ * ConwayClient remains in the signature for API compatibility, but P-012 no
+ * longer uses a remote/local Conway write as the source authority. The source
+ * transaction is anchored to the process's exact RUNTIME_ROOT Git checkout.
  */
 export async function editFile(
-  conway: ConwayClient,
+  _conway: ConwayClient,
   db: AbosDatabase,
   filePath: string,
   newContent: string,
   reason: string,
-): Promise<{ success: boolean; error?: string }> {
-  // 1. Protected file check
-  if (isProtectedFile(filePath)) {
+  options: EditFileOptions = {},
+): Promise<EditFileResult> {
+  let runtimeRoot: string;
+  try {
+    runtimeRoot = fs.realpathSync(path.resolve(options.runtimeRoot ?? RUNTIME_ROOT));
+  } catch (error: any) {
     return {
       success: false,
-      error: `BLOCKED: Cannot modify protected file: ${filePath}. This is a hard-coded safety invariant.`,
+      error: `Transactional self-modification runtime root is unavailable: ${error?.message || String(error)}`,
     };
   }
 
-  // 2. Path validation (symlink resolution + traversal check)
-  const resolvedPath = resolveAndValidatePath(filePath);
+  const contentBytes = Buffer.byteLength(newContent, "utf8");
+  const validation = validateModification(db, filePath, contentBytes, { runtimeRoot });
+  if (!validation.allowed) {
+    return {
+      success: false,
+      error: `BLOCKED: ${validation.reason}`,
+    };
+  }
+
+  const resolvedPath = resolveAndValidatePath(filePath, runtimeRoot);
   if (!resolvedPath) {
-    return {
-      success: false,
-      error: `BLOCKED: Invalid or suspicious file path: ${filePath}`,
-    };
+    return { success: false, error: `BLOCKED: Invalid or suspicious file path: ${filePath}` };
   }
 
-  // 3. Rate limiting
-  if (isRateLimited(db)) {
-    return {
-      success: false,
-      error: `RATE LIMITED: Too many modifications in the past hour (max ${MAX_MODIFICATIONS_PER_HOUR}). Wait before making more changes.`,
-    };
+  const relativePath = normalizeRelativePath(path.relative(runtimeRoot, resolvedPath));
+  if (!relativePath || relativePath.startsWith("../") || path.isAbsolute(relativePath)) {
+    return { success: false, error: `BLOCKED: Path does not identify a file inside active source: ${filePath}` };
   }
 
-  // 4. File size limit
-  if (newContent.length > MAX_MODIFICATION_SIZE) {
-    return {
-      success: false,
-      error: `BLOCKED: File content too large (${newContent.length} bytes, max ${MAX_MODIFICATION_SIZE}). Break into smaller changes.`,
-    };
-  }
-
-  // 5. Read current content for diff
-  let oldContent = "";
+  let oldContent: string | undefined;
   try {
-    oldContent = await conway.readFile(filePath);
-  } catch {
-    oldContent = "(new file)";
-  }
-
-  // 6. Pre-modification git snapshot (in repo root, not ~/.abos/)
-  try {
-    const { gitCommit } = await import("../git/tools.js");
-    await gitCommit(conway, RUNTIME_ROOT, `pre-modify: ${reason}`);
-  } catch {
-    // Git not available -- proceed without snapshot
-  }
-
-  // 7. Write new content
-  try {
-    await conway.writeFile(filePath, newContent);
-  } catch (err: any) {
-    return {
-      success: false,
-      error: `Failed to write file: ${err.message}`,
-    };
-  }
-
-  // 8. Generate diff and log
-  const diff = generateSimpleDiff(oldContent, newContent);
-
-  logModification(db, "code_edit", reason, {
-    filePath,
-    diff: diff.slice(0, MAX_DIFF_SIZE),
-    reversible: true,
-  });
-
-  // 9. Post-modification git commit (in repo root)
-  try {
-    const { gitCommit } = await import("../git/tools.js");
-    await gitCommit(conway, RUNTIME_ROOT, `self-mod: ${reason}`);
-  } catch {
-    // Git not available -- proceed without commit
-  }
-
-  // 10. Rebuild if source file was edited
-  if (/\.(ts|js|tsx|jsx)$/.test(filePath)) {
-    try {
-      const buildRoot = escapeShellArg(toPosixShellPath(RUNTIME_ROOT));
-      const build = await conway.exec(`cd ${buildRoot} && pnpm run build`, 60_000);
-      if (build.exitCode !== 0) {
-        const detail = build.stderr || build.stdout || `exit code ${build.exitCode}`;
-        return {
-          success: true,
-          error: `File edited but rebuild failed: ${detail}. Run 'pnpm run build' manually.`,
-        };
-      }
-    } catch (err: any) {
-      return {
-        success: true,
-        error: `File edited but rebuild could not run: ${err?.message || String(err)}. Run 'pnpm run build' manually.`,
-      };
+    oldContent = fs.readFileSync(resolvedPath, "utf8");
+  } catch (error: any) {
+    if (error?.code !== "ENOENT") {
+      return { success: false, error: `Failed to read active source: ${error?.message || String(error)}` };
     }
   }
 
-  return { success: true };
+  if (oldContent === newContent) {
+    return { success: true, noChange: true };
+  }
+
+  let baseSha: string;
+  try {
+    baseSha = getGitHead(runtimeRoot);
+  } catch (error: any) {
+    return {
+      success: false,
+      error: `Transactional self-modification requires a Git checkout: ${error?.message || String(error)}`,
+    };
+  }
+
+  const transaction = createSelfModTransaction(db.raw, {
+    operation: "edit_own_file",
+    baseSha,
+    request: {
+      path: relativePath,
+      reason,
+      contentBytes,
+    },
+  });
+  const transactionId = transaction.id;
+  const owner = options.owner ?? `${os.hostname()}:${process.pid}:${randomUUID()}`;
+  const ttlMs = options.leaseTtlMs ?? DEFAULT_LEASE_TTL_MS;
+  const evidence: unknown[] = [
+    {
+      gate: "request_validation",
+      result: "pass",
+      path: relativePath,
+      contentBytes,
+      baseSha,
+    },
+  ];
+  let workspacePath: string | undefined;
+  let candidateSha: string | undefined;
+
+  const lease = acquireSelfModLease(db.raw, {
+    transactionId,
+    owner,
+    ttlMs,
+  });
+  if (!lease.acquired) {
+    const message = `SELF_MOD_LEASE_CONFLICT: source is owned by transaction ${lease.lease.transactionId}`;
+    transitionSelfModTransaction(db.raw, transactionId, "failed", {
+      error: message,
+      evidence: [...evidence, { gate: "lease", result: "blocked", expired: lease.expired }],
+    });
+    return { success: false, error: message, transactionId };
+  }
+  evidence.push({ gate: "lease", result: "acquired", owner, expiresAt: lease.lease.expiresAt });
+
+  const renewLease = (): boolean => acquireSelfModLease(db.raw, {
+    transactionId,
+    owner,
+    ttlMs,
+  }).acquired;
+
+  const finishBeforeActivationFailure = (
+    message: string,
+    cleanupWorkspace: boolean,
+    preserveVerifiedWorkspace = false,
+  ): EditFileResult => {
+    if (cleanupWorkspace && !preserveVerifiedWorkspace) {
+      cleanWorkspaceBestEffort(workspacePath, runtimeRoot, options.tempRoot, evidence);
+    }
+    const released = releaseSelfModLease(db.raw, { transactionId, owner });
+    evidence.push({ gate: "lease_release", result: released ? "pass" : "fail" });
+    if (!released) {
+      transitionSelfModTransaction(db.raw, transactionId, "recovery_required", {
+        candidateSha,
+        evidence,
+        error: `${message}; durable lease could not be released`,
+      });
+      return {
+        success: false,
+        error: `${message}; recovery required because the self-mod lease remains owned`,
+        transactionId,
+        candidateSha,
+        recoveryRequired: true,
+      };
+    }
+    transitionSelfModTransaction(db.raw, transactionId, "failed", {
+      candidateSha,
+      evidence,
+      error: message,
+    });
+    return { success: false, error: message, transactionId, candidateSha };
+  };
+
+  const markRecoveryRequired = (message: string): EditFileResult => {
+    evidence.push({ gate: "recovery_required", result: "open", detail: message });
+    const current = getSelfModTransaction(db.raw, transactionId);
+    if (current && current.status !== "recovery_required") {
+      transitionSelfModTransaction(db.raw, transactionId, "recovery_required", {
+        candidateSha,
+        evidence,
+        error: message,
+      });
+    }
+    return {
+      success: false,
+      error: message,
+      transactionId,
+      candidateSha,
+      recoveryRequired: true,
+    };
+  };
+
+  try {
+    const observedHead = getGitHead(runtimeRoot);
+    const dirty = getGitStatus(runtimeRoot);
+    if (observedHead !== baseSha || dirty) {
+      const detail = observedHead !== baseSha
+        ? `STALE_BASE: expected ${baseSha}, found ${observedHead}`
+        : `DIRTY_ACTIVE_CHECKOUT: ${dirty}`;
+      return finishBeforeActivationFailure(detail, false);
+    }
+
+    workspacePath = createCandidateWorktree(transactionId, baseSha, {
+      runtimeRoot,
+      tempRoot: options.tempRoot,
+    });
+    transitionSelfModTransaction(db.raw, transactionId, "staged", {
+      workspacePath,
+      evidence,
+    });
+
+    writeCandidateFile(workspacePath, relativePath, newContent);
+    const stagedChanges = getGitChangedPaths(workspacePath);
+    if (!samePathSet(stagedChanges, [relativePath])) {
+      return finishBeforeActivationFailure(
+        `CANDIDATE_SCOPE_MISMATCH before verification: ${stagedChanges.join(", ") || "(none)"}`,
+        true,
+      );
+    }
+
+    transitionSelfModTransaction(db.raw, transactionId, "verifying", { evidence });
+    if (!renewLease()) {
+      return markRecoveryRequired("SELF_MOD_LEASE_LOST before candidate verification");
+    }
+
+    const verifyCandidate = options.verifyCandidate ?? defaultCandidateVerification;
+    const verification = await verifyCandidate(workspacePath, relativePath);
+    evidence.push(...verification.evidence);
+    if (!verification.success) {
+      return finishBeforeActivationFailure(
+        verification.error || "Candidate verification failed",
+        true,
+      );
+    }
+
+    const verifiedChanges = getGitChangedPaths(workspacePath);
+    if (!samePathSet(verifiedChanges, [relativePath])) {
+      return finishBeforeActivationFailure(
+        `CANDIDATE_SCOPE_MISMATCH after verification: ${verifiedChanges.join(", ") || "(none)"}`,
+        true,
+      );
+    }
+
+    const commitMessage = `self-mod: ${reason.replace(/\s+/g, " ").trim().slice(0, 180) || relativePath}`;
+    candidateSha = commitCandidate(workspacePath, commitMessage, [relativePath]);
+    evidence.push({ gate: "candidate_commit", result: "pass", candidateSha });
+    transitionSelfModTransaction(db.raw, transactionId, "verified", {
+      candidateSha,
+      evidence,
+    });
+
+    if (!renewLease()) {
+      return markRecoveryRequired("SELF_MOD_LEASE_LOST after candidate verification");
+    }
+
+    const activeHeadBeforeActivation = getGitHead(runtimeRoot);
+    const activeDirtyBeforeActivation = getGitStatus(runtimeRoot);
+    if (activeHeadBeforeActivation !== baseSha || activeDirtyBeforeActivation) {
+      const detail = activeHeadBeforeActivation !== baseSha
+        ? `STALE_BASE: candidate ${candidateSha} was verified against ${baseSha}, active HEAD is now ${activeHeadBeforeActivation}`
+        : `DIRTY_ACTIVE_CHECKOUT before activation: ${activeDirtyBeforeActivation}`;
+      // Keep the verified worktree for inspection/restage; it is not active.
+      return finishBeforeActivationFailure(detail, false, true);
+    }
+
+    transitionSelfModTransaction(db.raw, transactionId, "activating", {
+      candidateSha,
+      evidence,
+    });
+
+    try {
+      activateCandidateCommit(baseSha, candidateSha, { runtimeRoot });
+      evidence.push({ gate: "activation", result: "pass", baseSha, candidateSha });
+    } catch (error: any) {
+      const activationError = error?.message || String(error);
+      let observedAfter = "UNKNOWN";
+      let dirtyAfter = "UNKNOWN";
+      try {
+        observedAfter = getGitHead(runtimeRoot);
+        dirtyAfter = getGitStatus(runtimeRoot);
+      } catch {
+        // Keep UNKNOWN and require recovery below.
+      }
+
+      if (observedAfter === candidateSha && !dirtyAfter) {
+        evidence.push({
+          gate: "activation",
+          result: "effect_observed_despite_error",
+          detail: activationError,
+          candidateSha,
+        });
+      } else if (observedAfter === baseSha && !dirtyAfter) {
+        return finishBeforeActivationFailure(
+          `Activation failed without changing active source: ${activationError}`,
+          false,
+          true,
+        );
+      } else {
+        return markRecoveryRequired(
+          `Activation outcome ambiguous: ${activationError}; HEAD=${observedAfter}; status=${dirtyAfter}`,
+        );
+      }
+    }
+
+    const postActivationProbe = options.postActivationProbe ?? defaultActiveProbe;
+    const probe = await postActivationProbe(runtimeRoot);
+    evidence.push(...probe.evidence);
+
+    const rollbackAfterActivation = async (cause: string): Promise<EditFileResult> => {
+      try {
+        rollbackActivatedCandidate(baseSha, candidateSha!, { runtimeRoot });
+        evidence.push({ gate: "rollback", result: "source_restored", baseSha, candidateSha });
+      } catch (error: any) {
+        return markRecoveryRequired(
+          `${cause}; automatic rollback refused/failed: ${error?.message || String(error)}`,
+        );
+      }
+
+      const rollbackProbe = options.postRollbackProbe ?? defaultActiveProbe;
+      const restored = await rollbackProbe(runtimeRoot);
+      evidence.push(...restored.evidence.map((entry) => ({
+        ...(typeof entry === "object" && entry !== null ? entry as Record<string, unknown> : { detail: entry }),
+        phase: "rollback_probe",
+      })));
+      if (!restored.success) {
+        return markRecoveryRequired(
+          `${cause}; source reset to base but rollback probe failed: ${restored.error || "unknown rollback probe error"}`,
+        );
+      }
+
+      cleanWorkspaceBestEffort(workspacePath, runtimeRoot, options.tempRoot, evidence);
+      const released = releaseSelfModLease(db.raw, { transactionId, owner });
+      evidence.push({ gate: "lease_release", result: released ? "pass" : "fail" });
+      if (!released) {
+        return markRecoveryRequired(`${cause}; rollback succeeded but durable lease release failed`);
+      }
+
+      transitionSelfModTransaction(db.raw, transactionId, "rolled_back", {
+        candidateSha,
+        evidence,
+        error: cause,
+        rollback: {
+          from: candidateSha,
+          to: baseSha,
+          verified: true,
+        },
+      });
+      return {
+        success: false,
+        error: `${cause}; active source was rolled back to ${baseSha}`,
+        transactionId,
+        candidateSha,
+      };
+    };
+
+    if (!probe.success) {
+      return rollbackAfterActivation(probe.error || "Post-activation probe failed");
+    }
+
+    const diff = generateSimpleDiff(oldContent ?? "(new file)", newContent);
+    try {
+      logModification(db, "code_edit", reason, {
+        filePath: relativePath,
+        diff: diff.slice(0, MAX_DIFF_SIZE),
+        reversible: true,
+      });
+      evidence.push({ gate: "audit_log", result: "pass" });
+    } catch (error: any) {
+      return rollbackAfterActivation(
+        `Activated candidate could not be written to the modification audit log: ${error?.message || String(error)}`,
+      );
+    }
+
+    cleanWorkspaceBestEffort(workspacePath, runtimeRoot, options.tempRoot, evidence);
+    const released = releaseSelfModLease(db.raw, { transactionId, owner });
+    evidence.push({ gate: "lease_release", result: released ? "pass" : "fail" });
+    if (!released) {
+      return markRecoveryRequired(
+        `Candidate ${candidateSha} is active and verified, but durable self-mod lease release failed`,
+      );
+    }
+
+    transitionSelfModTransaction(db.raw, transactionId, "activated", {
+      candidateSha,
+      evidence,
+      error: null,
+    });
+    return { success: true, transactionId, candidateSha };
+  } catch (error: any) {
+    const message = error?.message || String(error);
+    const current = getSelfModTransaction(db.raw, transactionId);
+    if (current?.status === "activating" || current?.status === "activated") {
+      return markRecoveryRequired(`Unexpected error after activation began: ${message}`);
+    }
+    return finishBeforeActivationFailure(`Self-modification failed before activation: ${message}`, true);
+  }
 }
 
 /**
@@ -336,6 +740,7 @@ export function validateModification(
   db: AbosDatabase,
   filePath: string,
   contentSize: number,
+  options: { runtimeRoot?: string } = {},
 ): {
   allowed: boolean;
   reason: string;
@@ -343,18 +748,16 @@ export function validateModification(
 } {
   const checks: { name: string; passed: boolean; detail: string }[] = [];
 
-  // Protected file check
   const isProtected = isProtectedFile(filePath);
   checks.push({
     name: "protected_file",
     passed: !isProtected,
     detail: isProtected
-      ? `File matches protected pattern`
+      ? "File matches protected pattern"
       : "File is not protected",
   });
 
-  // Path validation
-  const resolved = resolveAndValidatePath(filePath);
+  const resolved = resolveAndValidatePath(filePath, options.runtimeRoot ?? RUNTIME_ROOT);
   checks.push({
     name: "path_valid",
     passed: !!resolved,
@@ -363,7 +766,6 @@ export function validateModification(
       : "Path is invalid or suspicious",
   });
 
-  // Rate limit
   const rateLimited = isRateLimited(db);
   checks.push({
     name: "rate_limit",
@@ -373,7 +775,6 @@ export function validateModification(
       : "Within rate limit",
   });
 
-  // Size limit
   const sizeOk = contentSize <= MAX_MODIFICATION_SIZE;
   checks.push({
     name: "size_limit",
@@ -397,9 +798,6 @@ export function validateModification(
 
 // ─── Diff Generation ─────────────────────────────────────────
 
-/**
- * Generate a simple line-based diff between two strings.
- */
 function generateSimpleDiff(
   oldContent: string,
   newContent: string,
@@ -427,9 +825,4 @@ function generateSimpleDiff(
   }
 
   return lines.join("\n");
-}
-
-/** Escape a path/value for the POSIX shell used by Conway exec. */
-function escapeShellArg(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
 }
