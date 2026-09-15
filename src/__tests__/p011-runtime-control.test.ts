@@ -4,6 +4,7 @@ import { ChildLifecycle } from "../replication/lifecycle.js";
 import {
   ensureChildRuntimeStopped,
   observeChildRuntime,
+  recoverChildRuntime,
   restartChildRuntime,
 } from "../replication/runtime-control.js";
 import { createTestDb, MockConwayClient } from "./mocks.js";
@@ -135,6 +136,38 @@ describe("P-011 observed child runtime control", () => {
     expect(result.success).toBe(false);
     expect(result.state).toBe("running");
     expect(conway.terminateCount).toBe(1);
+    expect(lifecycle.getCurrentState("child-1")).toBe("healthy");
+  });
+
+  it("recovers a late-success running process after supervisor crash without stop or relaunch", async () => {
+    advanceToHealthy(lifecycle);
+    lifecycle.transition(
+      "child-1",
+      "unhealthy",
+      "supervisor lost before start outcome persistence",
+    );
+    conway.processRunning = true;
+
+    const result = await recoverChildRuntime(conway, db, "child-1", lifecycle);
+
+    expect(result.success).toBe(true);
+    expect(result.state).toBe("running");
+    expect(conway.terminateCount).toBe(0);
+    expect(conway.launchCount).toBe(0);
+    expect(lifecycle.getCurrentState("child-1")).toBe("healthy");
+  });
+
+  it("keeps repeated recovery idempotent after the first recovery launched the process", async () => {
+    advanceToHealthy(lifecycle);
+    conway.processRunning = false;
+
+    const first = await recoverChildRuntime(conway, db, "child-1", lifecycle);
+    const second = await recoverChildRuntime(conway, db, "child-1", lifecycle);
+
+    expect(first.success).toBe(true);
+    expect(second.success).toBe(true);
+    expect(conway.launchCount).toBe(1);
+    expect(conway.terminateCount).toBe(0);
     expect(lifecycle.getCurrentState("child-1")).toBe("healthy");
   });
 
