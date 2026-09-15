@@ -8,6 +8,7 @@ import {
   claimInboxMessages,
   createDatabase,
 } from "../state/database.js";
+import { SCHEMA_VERSION } from "../state/schema.js";
 import { createSocialClient } from "../social/client.js";
 import {
   ColonyMessaging,
@@ -216,7 +217,7 @@ describe("P-009 authority provenance", () => {
     const version = migrated.raw
       .prepare("SELECT MAX(version) AS version FROM schema_version")
       .get() as { version: number };
-    expect(version.version).toBe(16);
+    expect(version.version).toBe(SCHEMA_VERSION);
     const legacy = migrated.getUnprocessedInboxMessages(10)[0];
     expect(legacy?.provenance).toEqual({
       transport: "legacy_unknown",
