@@ -21,6 +21,7 @@ import type {
 import { ModelRegistry } from "./registry.js";
 import { InferenceBudgetTracker } from "./budget.js";
 import { DEFAULT_ROUTING_MATRIX, TASK_TIMEOUTS } from "./types.js";
+import { appendEvidenceEvent, correlationIdFor } from "../observability/evidence.js";
 
 type Database = BetterSqlite3.Database;
 
@@ -103,6 +104,12 @@ export class InferenceRouter {
       (sum, message) => sum + (message.content?.length || 0) / 4,
       0,
     );
+    const correlationId = turnId
+      ? correlationIdFor("turn", turnId)
+      : sessionId
+        ? correlationIdFor("session", sessionId)
+        : correlationIdFor("inference_route", ulid());
+    const rootCausationId = turnId ? correlationIdFor("turn", turnId) : null;
 
     let lastError: unknown;
     let lastBudgetFailure:
@@ -185,6 +192,31 @@ export class InferenceRouter {
         connectionProvider,
       };
 
+      const attemptId = ulid();
+      // Critical inference evidence is persisted before the external call. If
+      // the process dies after dispatch, restart can distinguish an in-doubt
+      // attempt from a request that was never sent.
+      appendEvidenceEvent(this.db, {
+        correlationId,
+        causationId: rootCausationId,
+        eventType: "inference.attempt_started",
+        domain: "inference",
+        authorityType: "inference_attempt",
+        authorityId: attemptId,
+        turnId: turnId || null,
+        epistemicStatus: "observation",
+        payload: {
+          model: model.modelId,
+          expectedProvider,
+          taskType,
+          tier,
+          estimatedCostCents,
+          costUnit: "cent",
+          timeoutMs: timeout,
+        },
+        provenance: { source: "InferenceRouter" },
+      });
+
       const startTime = Date.now();
       let response: any;
       const controller = new AbortController();
@@ -202,6 +234,27 @@ export class InferenceRouter {
         // The task deadline is authoritative. Once it expires, trying another
         // model would silently multiply the requested task timeout.
         if (controller.signal.aborted && error?.name === "AbortError") {
+          appendEvidenceEvent(this.db, {
+            correlationId,
+            causationId: attemptId,
+            eventType: "inference.local_timeout_external_settlement_unknown",
+            domain: "inference",
+            authorityType: "inference_attempt",
+            authorityId: attemptId,
+            turnId: turnId || null,
+            epistemicStatus: "unknown",
+            payload: {
+              model: model.modelId,
+              provider: expectedProvider,
+              latencyMs,
+              timeoutMs: timeout,
+              localOutcome: "timeout",
+              externalSettlement: "unknown",
+              accountedCostCents: 0,
+              costUnit: "cent",
+            },
+            provenance: { source: "InferenceRouter" },
+          });
           return {
             content: `Inference timeout after ${timeout}ms`,
             model: model.modelId,
@@ -214,6 +267,25 @@ export class InferenceRouter {
           };
         }
 
+        appendEvidenceEvent(this.db, {
+          correlationId,
+          causationId: attemptId,
+          eventType: "inference.provider_error_external_settlement_unknown",
+          domain: "inference",
+          authorityType: "inference_attempt",
+          authorityId: attemptId,
+          turnId: turnId || null,
+          epistemicStatus: "unknown",
+          payload: {
+            model: model.modelId,
+            provider: expectedProvider,
+            latencyMs,
+            localOutcome: "provider_error",
+            externalSettlement: "unknown",
+            error,
+          },
+          provenance: { source: "InferenceRouter" },
+        });
         lastError = error;
         if (fallbackEnabled) continue;
         throw error;
@@ -230,19 +302,43 @@ export class InferenceRouter {
         (outputTokens / 1000) * model.costPer1kOutput / 100,
       );
 
-      this.budget.recordCost({
-        sessionId,
-        turnId: turnId || null,
-        model: model.modelId,
-        provider: actualProvider,
-        inputTokens,
-        outputTokens,
-        costCents: actualCostCents,
-        latencyMs,
-        tier,
-        taskType,
-        cacheHit: false,
-      });
+      this.db.transaction(() => {
+        const costId = this.budget.recordCost({
+          sessionId,
+          turnId: turnId || null,
+          model: model.modelId,
+          provider: actualProvider,
+          inputTokens,
+          outputTokens,
+          costCents: actualCostCents,
+          latencyMs,
+          tier,
+          taskType,
+          cacheHit: false,
+        });
+        appendEvidenceEvent(this.db, {
+          correlationId,
+          causationId: attemptId,
+          eventType: "inference.succeeded",
+          domain: "inference",
+          authorityType: "inference_cost",
+          authorityId: costId,
+          turnId: turnId || null,
+          epistemicStatus: "observation",
+          payload: {
+            attemptId,
+            model: model.modelId,
+            provider: actualProvider,
+            inputTokens,
+            outputTokens,
+            costCents: actualCostCents,
+            costUnit: "cent",
+            latencyMs,
+            finishReason: response.finishReason || "stop",
+          },
+          provenance: { source: "inference_costs" },
+        });
+      })();
 
       return {
         content: response.message?.content || "",
