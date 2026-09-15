@@ -21,7 +21,7 @@ Master-Transformation-Plan: P-007
 | P-009 | Corregir Authority, Provenance y trust boundaries end-to-end | HECHO | integrado por PR #35; main `b9dbf144...` CI `34800425589` + ProjectOps `34800425594` green | plan/P-009.md |
 | P-010 | Hacer real Policy, Authorization, Approval y Quarantine lifecycle | HECHO | integrado por PR #36; main `f42c9bd1...` CI `34909182700` + ProjectOps `34909182692` green | plan/P-010.md |
 | P-011 | Hacer reales Lifecycle, Health, Restart y Recovery | HECHO | integrado por PR #38; cierre documental PR #39; baseline P-012 `main 1f1e93f4...` revalidado | plan/P-011.md |
-| P-012 | Convertir self-modification en transacción segura y recuperable | EN_EJECUCIÓN | source E3 green en rama `a1df8fbd...`; integrar/revalidar `main`; evidence P-013 antes de cierre completo | plan/P-012.md |
+| P-012 | Convertir self-modification en transacción segura y recuperable | EN_EJECUCIÓN | source E3 green final en rama `991650ce...` (tree `84399f49...`); integrar/revalidar `main`; evidence P-013 antes de cierre completo | plan/P-012.md |
 | P-013 | Unificar Observability, Audit y Evidence Fabric | PLANIFICADO | P-008 + P-009; se extiende durante la campaña | plan/P-013.md |
 | P-014 | Consolidar Capability Fabric canónico y lifecycle de capacidades | PLANIFICADO | P-008 + P-009 + P-010 + P-013 | plan/P-014.md |
 | P-015 | Sustituir MCP nominal por un runtime MCP real y verificable | PLANIFICADO | P-014 + P-009 + P-010 + P-013 | plan/P-015.md |
@@ -231,7 +231,7 @@ P-006 y P-003 están HECHO e integrados con revalidación de `main`. P-007 perma
 
 P-010 cerró una revisión adversarial material: creator-signed authorization sigue siendo una capability válida para fronteras reales, pero no es diseño general de gasto autónomo por threshold. La frontera integrada preserva una ruta explícita/auditable para autonomía económica futura sin hidden auto-spend.
 
-P-012 ya implementó y branch-gateó su source transaccional: journal/lease SQLite v17, candidate Git worktree aislado, verification previa, candidate commit exacto, activation compare-and-swap, post-probe/rollback/recovery causal y convergencia de edit/revert/reset/pull/write-to-runtime. Se retiraron `10/hour` y `20/hour` como safety authority; autonomía de self-mod permanece abierta y auditable, sin creator approval por cada corrección. Exact-head product/test `a1df8fbd6bd8014cba47d61db8132eb900b43843`: CI `34923711742` + ProjectOps `34923711160` SUCCESS. Todavía no es `HECHO`: falta integración/revalidación de `main` y evidence/correlation P-013 exigida por su Definition of Done.
+P-012 ya implementó y branch-gateó su source transaccional final: journal/lease SQLite v17, candidate Git worktree aislado, verification previa, candidate commit exacto, activation compare-and-swap, post-probe/rollback/recovery causal y convergencia de edit/revert/reset/pull/write-to-runtime. La reauditoría final separó direct-write protection de verdadera immutability: código crítico y dependencias pueden evolucionar en candidate verificado, `edit_own_file` soporta cambios multiarchivo atómicos y se retiró el threshold arbitrario de 100 KB además de `10/hour`/`20/hour` como falsas safety authorities. Source limpio `84399f491856ca8a6195bbb8c08940ab8201f5d8`; exact-head con el mismo tree `991650ce5deb7e170a99647bf5246982bc7cd37a`: CI `34925701691` + ProjectOps `34925701696` SUCCESS. Todavía no es `HECHO`: falta integración/revalidación de `main` y evidence/correlation P-013 exigida por su Definition of Done.
 
 ## 17. Cierre de campaña
 

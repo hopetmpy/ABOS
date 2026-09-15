@@ -13,8 +13,8 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p012-transactional-self-modification
 Host-Head-At-Audit-Open: 1f1e93f48c95265dba52b6a99a900bde6cdcb27c
-Last-Reconciled-Host-Head: a1df8fbd6bd8014cba47d61db8132eb900b43843
-Last-Reconciled-Head-Semantics: P012_SOURCE_E3_GREEN_PRE_MAIN_INTEGRATION
+Last-Reconciled-Host-Head: 991650ce5deb7e170a99647bf5246982bc7cd37a
+Last-Reconciled-Head-Semantics: P012_FINAL_AUTONOMY_SOURCE_E3_GREEN_PRE_MAIN_INTEGRATION
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -85,14 +85,19 @@ P011-P012-Transition-ProjectOps: 34916556358 SUCCESS
 P012-Canonical-Baseline: 1f1e93f48c95265dba52b6a99a900bde6cdcb27c
 P012-Baseline-CI: 34916918807 SUCCESS
 P012-Baseline-ProjectOps: 34916918658 SUCCESS
-P012-Final-Source-Head: a1df8fbd6bd8014cba47d61db8132eb900b43843
-P012-Final-Source-CI: 34923711742 SUCCESS
-P012-Final-Source-ProjectOps: 34923711160 SUCCESS
+P012-Pre-Autonomy-Source-Head: a1df8fbd6bd8014cba47d61db8132eb900b43843
+P012-Pre-Autonomy-Source-CI: 34923711742 SUCCESS
+P012-Pre-Autonomy-Source-ProjectOps: 34923711160 SUCCESS
+P012-Autonomy-Targeted-Apply: 34925618440 SUCCESS
+P012-Final-Source-Commit: 84399f491856ca8a6195bbb8c08940ab8201f5d8
+P012-Final-Gate-Head: 991650ce5deb7e170a99647bf5246982bc7cd37a
+P012-Final-Source-CI: 34925701691 SUCCESS
+P012-Final-Source-ProjectOps: 34925701696 SUCCESS
 P012-Continuity-Reconcile-Head: 887bc5107245bf538db7cd272b9034a97ac2a579
 
 ## Semántica del HEAD reconciliado
 
-`Last-Reconciled-Host-Head` es el product/test exact-head P-012 `a1df8fbd6bd8014cba47d61db8132eb900b43843`, validado por CI `34923711742` y ProjectOps `34923711160`. La rama contiene además reconciliación documental posterior, sin cambios de product source desde ese exact-head.
+`Last-Reconciled-Host-Head` es `991650ce5deb7e170a99647bf5246982bc7cd37a`, exact-head normal-gated del tree productivo P-012 final `b2a83d7f4caedcc72716f7ceb7e17909c3f6d91d`; CI `34925701691` y ProjectOps `34925701696` son SUCCESS. El source real fue producido en `84399f491856ca8a6195bbb8c08940ab8201f5d8`; `991650...` apunta al mismo tree y sólo existe para obtener un gate normal después del push de GitHub Actions.
 
 P-009 permanece HECHO únicamente para su objetivo exacto: authority/provenance/trust boundaries. No eleva Social inbound a autenticación criptográfica LIVE; `relay_asserted` sigue siendo el máximo claim demostrado en esa frontera.
 
@@ -115,7 +120,7 @@ P-012 conserva autonomía de self-modification y sustituye write-before-verify/f
 - P-009: HECHO — Authority/Provenance/trust boundaries integrados por PR #35 y revalidados sobre `main` `b9dbf144...`.
 - P-010: HECHO — Policy/Authorization/Approval/Quarantine integrado por PR #36 y cerrado canónicamente por PR #37 sobre `main` `33e4865b...`.
 - P-011: HECHO / INTEGRATION_VERIFIED — integrado por PR #38; cierre documental PR #39; C0007 cerrado.
-- P-012: EN_EJECUCIÓN — source/integration E3 **HECHO en rama** sobre `a1df8fbd...`; integración `main` y evidence/correlation P-013 siguen NO HECHO, por lo que no se eleva todavía a HECHO completo.
+- P-012: EN_EJECUCIÓN — source/integration E3 **HECHO en rama** sobre `991650ce...` (mismo product tree que `84399f49...`), incluida autonomía crítica multiarchivo; integración `main` y evidence/correlation P-013 siguen NO HECHO, por lo que no se eleva todavía a HECHO completo.
 - P-013..P-036: ver `ProjectOps/PLAN.md`; permanecen en su estado explícito.
 
 ## P-009 — cierre verificable
@@ -204,11 +209,14 @@ Resultado implementado:
 - mutadores Git locales no pueden saltar la authority, incluidos alias/symlinks canónicos;
 - shell general fuera del active checkout permanece abierto;
 - source self-mod no exige creator approval ni depende de frecuencia fija;
-- `10/hour` y `20/hour` fueron retirados como safety authority; cada cambio se decide por isolation/verification/recovery.
+- `10/hour` y `20/hour` fueron retirados como safety authority; cada cambio se decide por isolation/verification/recovery;
+- direct-write protection se separa de transactional immutability: código crítico (self-mod, tools, Policy, skills, dependencies) puede evolucionar sólo por candidate verificado;
+- `edit_own_file` soporta single-file backward-compatible y `edits[]` multiarchivo atómico mediante una única `editFiles()` authority;
+- el threshold fijo de 100 KB fue retirado como falsa safety authority; límites reales de recursos/transporte siguen aplicando cuando el entorno los demuestre.
 
 Frontera consciente: `exec` local que referencia directamente el active checkout se intercepta para impedir write-before-verify por shell arbitrario. No se clasifica la operación como prohibida ni se convierte el shell general en allowlist. Si se necesita shell arbitrario sobre source como capability de primera clase, la ampliación correcta es candidate-exec aislado/verificado; no direct-write ni una blacklist creciente.
 
-Evidencia branch final product/test: `a1df8fbd6bd8014cba47d61db8132eb900b43843`; CI `34923711742` SUCCESS; ProjectOps `34923711160` SUCCESS; Node 22/24 full+security, Windows 22/24, public smoke 22/24, dependency audit y rebrand PASS. Node 24 registró 122 archivos / 1969 tests full PASS y 22 archivos / 154 tests security focalizado PASS.
+Evidencia final branch: aplicador dirigido `34925618440` PASS con 125/125 tests focalizados; source limpio `84399f491856ca8a6195bbb8c08940ab8201f5d8`; exact-head normal-gated `991650ce5deb7e170a99647bf5246982bc7cd37a` sobre el mismo tree, CI `34925701691` SUCCESS y ProjectOps `34925701696` SUCCESS. Node 22/24 full+security, Windows 22/24, public smoke 22/24, dependency audit y rebrand todos PASS.
 
 Pendiente exacto antes de HECHO completo: squash/integración en `main` + revalidación `main`, luego P-013 evidence/correlation transversal según Definition of Done P-012.
 
