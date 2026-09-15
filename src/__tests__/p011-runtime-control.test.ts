@@ -55,6 +55,26 @@ function advanceToHealthy(lifecycle: ChildLifecycle, childId = "child-1"): void 
   lifecycle.transition(childId, "healthy");
 }
 
+function insertLegacyChild(
+  db: AbosDatabase,
+  status: "running" | "sleeping" | "unknown" | "dead" | "spawning" | "healthy",
+  childId = "legacy-child",
+): void {
+  db.raw.prepare(
+    `INSERT INTO children (
+      id, name, address, sandbox_id, genesis_prompt, status, created_at, chain_type
+    ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)`,
+  ).run(
+    childId,
+    "legacy",
+    `0x${childId}`,
+    `sandbox-${childId}`,
+    "genesis",
+    status,
+    "evm",
+  );
+}
+
 describe("P-011 observed child runtime control", () => {
   let db: AbosDatabase;
   let lifecycle: ChildLifecycle;
@@ -159,12 +179,97 @@ describe("P-011 observed child runtime control", () => {
     expect(lifecycle.getCurrentState("child-1")).toBe("healthy");
   });
 
+  it("adopts a legacy running child from observed running evidence before restart", async () => {
+    insertLegacyChild(db, "running");
+    conway.processRunning = true;
+
+    const result = await restartChildRuntime(conway, db, "legacy-child", lifecycle);
+    const history = lifecycle.getHistory("legacy-child");
+
+    expect(result.success).toBe(true);
+    expect(conway.terminateCount).toBe(1);
+    expect(conway.launchCount).toBe(1);
+    expect(history[0]?.fromState).toBe("legacy:running");
+    expect(history[0]?.toState).toBe("healthy");
+    expect(history.map((event) => event.toState).slice(-2)).toEqual([
+      "unhealthy",
+      "healthy",
+    ]);
+  });
+
+  it("adopts a legacy sleeping child as unhealthy when absence is observed, then restarts once", async () => {
+    insertLegacyChild(db, "sleeping");
+    conway.processRunning = false;
+
+    const result = await restartChildRuntime(conway, db, "legacy-child", lifecycle);
+    const history = lifecycle.getHistory("legacy-child");
+
+    expect(result.success).toBe(true);
+    expect(conway.terminateCount).toBe(0);
+    expect(conway.launchCount).toBe(1);
+    expect(history[0]?.fromState).toBe("legacy:sleeping");
+    expect(history[0]?.toState).toBe("unhealthy");
+    expect(lifecycle.getCurrentState("legacy-child")).toBe("healthy");
+  });
+
+  it("does not adopt or mutate a legacy child when process truth is UNKNOWN", async () => {
+    insertLegacyChild(db, "running");
+    conway.probeUnknown = true;
+
+    const result = await restartChildRuntime(conway, db, "legacy-child", lifecycle);
+
+    expect(result.success).toBe(false);
+    expect(result.state).toBe("unknown");
+    expect(conway.terminateCount).toBe(0);
+    expect(conway.launchCount).toBe(0);
+    expect(lifecycle.getHistory("legacy-child")).toHaveLength(0);
+    expect(db.getChildById("legacy-child")?.status).toBe("running");
+  });
+
+  it("adopts observed legacy absence as unhealthy before a permanent stopped transition", async () => {
+    insertLegacyChild(db, "running");
+    conway.processRunning = false;
+
+    const result = await ensureChildRuntimeStopped(
+      conway,
+      db,
+      "legacy-child",
+      lifecycle,
+    );
+    const history = lifecycle.getHistory("legacy-child");
+
+    expect(result.success).toBe(true);
+    expect(conway.terminateCount).toBe(0);
+    expect(history.map((event) => event.toState)).toEqual([
+      "unhealthy",
+      "stopped",
+    ]);
+    expect(lifecycle.getCurrentState("legacy-child")).toBe("stopped");
+  });
+
+  it("legacy adoption is idempotent once lifecycle history exists", () => {
+    insertLegacyChild(db, "running");
+
+    const first = lifecycle.adoptObservedLegacyState(
+      "legacy-child",
+      "healthy",
+      "observed running",
+      { evidence: ["probe running"] },
+    );
+    const second = lifecycle.adoptObservedLegacyState(
+      "legacy-child",
+      "unhealthy",
+      "stale competing observation",
+    );
+
+    expect(first).toBe(true);
+    expect(second).toBe(false);
+    expect(lifecycle.getHistory("legacy-child")).toHaveLength(1);
+    expect(lifecycle.getCurrentState("legacy-child")).toBe("healthy");
+  });
+
   it("refuses permanent stop before any process effect when lifecycle authority is unavailable", async () => {
-    db.raw.prepare(
-      `INSERT INTO children (
-        id, name, address, sandbox_id, genesis_prompt, status, created_at, chain_type
-      ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)`,
-    ).run("legacy-child", "legacy", "0xlegacy", "sandbox-legacy", "genesis", "healthy", "evm");
+    insertLegacyChild(db, "healthy");
 
     const result = await ensureChildRuntimeStopped(conway, db, "legacy-child", lifecycle);
 
