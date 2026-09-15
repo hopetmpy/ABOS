@@ -5,7 +5,11 @@ import type {
   EnvironmentResourceStatus,
   EnvironmentRetentionPolicy,
 } from "./types.js";
-import { appendEvidenceEvent, correlationIdFor } from "../observability/evidence.js";
+import {
+  appendEvidenceEvent,
+  correlationIdFor,
+  latestEvidenceByAuthority,
+} from "../observability/evidence.js";
 
 export interface EnvironmentResourceEvent {
   id: string;
@@ -410,7 +414,7 @@ export class EnvironmentResourceStore {
     appendEvidenceEvent(this.db, {
       correlationId,
       causationId: resource?.pathId
-        ? correlationIdFor("adaptive_path", resource.pathId)
+        ? latestEvidenceByAuthority(this.db, "adaptive_path", resource.pathId)?.id ?? null
         : null,
       eventType: "environment.resource_event",
       domain: "environment",

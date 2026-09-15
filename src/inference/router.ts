@@ -109,7 +109,6 @@ export class InferenceRouter {
       : sessionId
         ? correlationIdFor("session", sessionId)
         : correlationIdFor("inference_route", ulid());
-    const rootCausationId = turnId ? correlationIdFor("turn", turnId) : null;
 
     let lastError: unknown;
     let lastBudgetFailure:
@@ -196,9 +195,8 @@ export class InferenceRouter {
       // Critical inference evidence is persisted before the external call. If
       // the process dies after dispatch, restart can distinguish an in-doubt
       // attempt from a request that was never sent.
-      appendEvidenceEvent(this.db, {
+      const attemptEvent = appendEvidenceEvent(this.db, {
         correlationId,
-        causationId: rootCausationId,
         eventType: "inference.attempt_started",
         domain: "inference",
         authorityType: "inference_attempt",
@@ -236,7 +234,7 @@ export class InferenceRouter {
         if (controller.signal.aborted && error?.name === "AbortError") {
           appendEvidenceEvent(this.db, {
             correlationId,
-            causationId: attemptId,
+            causationId: attemptEvent.id,
             eventType: "inference.local_timeout_external_settlement_unknown",
             domain: "inference",
             authorityType: "inference_attempt",
@@ -269,7 +267,7 @@ export class InferenceRouter {
 
         appendEvidenceEvent(this.db, {
           correlationId,
-          causationId: attemptId,
+          causationId: attemptEvent.id,
           eventType: "inference.provider_error_external_settlement_unknown",
           domain: "inference",
           authorityType: "inference_attempt",
@@ -318,7 +316,7 @@ export class InferenceRouter {
         });
         appendEvidenceEvent(this.db, {
           correlationId,
-          causationId: attemptId,
+          causationId: attemptEvent.id,
           eventType: "inference.succeeded",
           domain: "inference",
           authorityType: "inference_cost",

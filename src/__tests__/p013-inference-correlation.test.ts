@@ -59,7 +59,7 @@ describe("P-013 inference correlation", () => {
     ]);
     expect(events[1].authorityType).toBe("inference_cost");
     expect(events[1].authorityId).toBe(costs[0].id);
-    expect(events[1].causationId).toBe(events[0].authorityId);
+    expect(events[1].causationId).toBe(events[0].id);
     db.close();
   });
 

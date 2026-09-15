@@ -81,7 +81,10 @@ describe("P-013 adaptive correlation", () => {
       expect(attemptEvent?.authorityType).toBe("adaptive_attempt");
       expect(attemptEvent?.authorityId).toBe(decision.attempt.id);
       expect(attemptEvent?.taskId).toBe("task-p013");
-      expect(attemptEvent?.causationId).toBe(`adaptive_path:${selected.path.id}`);
+      expect(attemptEvent?.causationId).toBeTruthy();
+      const attemptCause = events.find((event) => event.id === attemptEvent?.causationId);
+      expect(attemptCause?.authorityType).toBe("adaptive_path");
+      expect(attemptCause?.authorityId).toBe(selected.path.id);
 
       const evidenceRows = db.prepare(
         "SELECT id FROM adaptive_evidence WHERE attempt_id = ? ORDER BY created_at",

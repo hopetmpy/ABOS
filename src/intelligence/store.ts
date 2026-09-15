@@ -1,7 +1,11 @@
 import type { Database } from "better-sqlite3";
 import { ulid } from "ulid";
 import { MIGRATION_V12, MIGRATION_V18_EVIDENCE_FABRIC } from "../state/schema.js";
-import { appendEvidenceEvent, correlationIdFor } from "../observability/evidence.js";
+import {
+  appendEvidenceEvent,
+  correlationIdFor,
+  latestEvidenceByAuthority,
+} from "../observability/evidence.js";
 import { pathSignature } from "./path-signature.js";
 import type {
   Opportunity,
@@ -222,7 +226,8 @@ export class AdaptiveStore {
         authorityId: id,
         goalId: input.goalId,
         taskId: input.taskId ?? null,
-        causationId: correlationIdFor("adaptive_path", input.pathId),
+        causationId:
+          latestEvidenceByAuthority(this.db, "adaptive_path", input.pathId)?.id ?? null,
         payload: {
           outcome: input.outcome,
           failureClass: input.failureClass ?? null,
@@ -356,9 +361,9 @@ export class AdaptiveStore {
         authorityId: id,
         goalId: input.goalId,
         causationId: input.attemptId
-          ? correlationIdFor("adaptive_attempt", input.attemptId)
+          ? latestEvidenceByAuthority(this.db, "adaptive_attempt", input.attemptId)?.id ?? null
           : input.pathId
-            ? correlationIdFor("adaptive_path", input.pathId)
+            ? latestEvidenceByAuthority(this.db, "adaptive_path", input.pathId)?.id ?? null
             : null,
         payload: { kind: input.kind, source: input.source, confidence },
       });
@@ -450,7 +455,9 @@ export class AdaptiveStore {
         authorityId: input.taskId,
         goalId: input.goalId,
         taskId: input.taskId,
-        causationId: input.pathId ? correlationIdFor("adaptive_path", input.pathId) : null,
+        causationId: input.pathId
+          ? latestEvidenceByAuthority(this.db, "adaptive_path", input.pathId)?.id ?? null
+          : null,
         payload: { pathId: input.pathId ?? null },
       });
     })();
@@ -539,7 +546,8 @@ export class AdaptiveStore {
         authorityType: "adaptive_assumption",
         authorityId: id,
         goalId: existing.goal_id,
-        causationId: correlationIdFor("adaptive_path", existing.path_id),
+        causationId:
+          latestEvidenceByAuthority(this.db, "adaptive_path", existing.path_id)?.id ?? null,
         payload: {
           fromStatus: existing.status,
           toStatus: status,
@@ -670,7 +678,7 @@ export class AdaptiveStore {
         authorityId: id,
         goalId: input.goalId,
         causationId: input.sourcePathId
-          ? correlationIdFor("adaptive_path", input.sourcePathId)
+          ? latestEvidenceByAuthority(this.db, "adaptive_path", input.sourcePathId)?.id ?? null
           : null,
         payload: { status: "open" },
       });

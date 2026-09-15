@@ -218,6 +218,20 @@ export function appendEvidenceEvent(
     throw new Error(`createdAt is not a valid timestamp: ${createdAt}`);
   }
 
+  const causationId = input.causationId == null
+    ? null
+    : requireLabel(input.causationId, "causationId");
+  if (causationId) {
+    const predecessor = db.prepare(
+      "SELECT 1 FROM evidence_events WHERE id = ?",
+    ).get(causationId);
+    if (!predecessor) {
+      throw new Error(
+        `causationId must reference an existing evidence event: ${causationId}`,
+      );
+    }
+  }
+
   const payload = redactEvidenceValue(input.payload ?? {});
   const provenance = redactEvidenceValue(input.provenance ?? {});
 
@@ -230,7 +244,7 @@ export function appendEvidenceEvent(
   ).run(
     id,
     correlationId,
-    input.causationId ?? null,
+    causationId,
     eventType,
     domain,
     authorityType,

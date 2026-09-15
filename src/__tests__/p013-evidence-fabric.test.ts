@@ -147,6 +147,21 @@ describe("P-013 evidence fabric core", () => {
     expect(currentEvidenceContext()).toBeUndefined();
   });
 
+  it("rejects a causation id that is not an already-persisted evidence event", () => {
+    const db = new Database(":memory:");
+    db.exec(MIGRATION_V18_EVIDENCE_FABRIC);
+    expect(() => appendEvidenceEvent(db, {
+      correlationId: "test:causal-guard",
+      causationId: "adaptive_path:not-an-evidence-event",
+      eventType: "test.child",
+      domain: "test",
+      authorityType: "test_authority",
+      authorityId: "child-1",
+    })).toThrow(/causationId must reference an existing evidence event/);
+    expect(db.prepare("SELECT COUNT(*) AS count FROM evidence_events").get()).toEqual({ count: 0 });
+    db.close();
+  });
+
   it("rejects empty correlation and event identity labels", () => {
     const db = new Database(":memory:");
     db.exec(MIGRATION_V18_EVIDENCE_FABRIC);

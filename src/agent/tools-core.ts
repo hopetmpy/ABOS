@@ -3412,7 +3412,7 @@ export async function executeTool(
   return runWithEvidenceContext(
     {
       correlationId,
-      causationId: turnContext?.causationId ?? turnContext?.toolCallId ?? null,
+      causationId: turnContext?.causationId ?? null,
       goalId: turnContext?.goalId ?? null,
       taskId: turnContext?.taskId ?? null,
       turnId: turnContext?.turnId ?? null,
