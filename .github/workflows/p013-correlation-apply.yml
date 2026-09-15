@@ -27,6 +27,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Apply P-013 correlation integration
         run: python .github/p013_correlation_apply.py
+      - name: Apply TypeScript narrowing fix
+        run: python .github/p013_correlation_typefix.py
       - name: Typecheck
         run: pnpm run typecheck
       - name: Run targeted P-010/P-012/P-013 tests
@@ -39,7 +41,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f .github/p013_correlation_apply.py .github/workflows/p013-correlation-apply.yml
+          rm -f .github/p013_correlation_apply.py .github/p013_correlation_typefix.py .github/workflows/p013-correlation-apply.yml
           git config user.name "hopetmpy"
           git config user.email "hope.tmpy@gmail.com"
           git add -A
