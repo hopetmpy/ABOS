@@ -21,8 +21,8 @@ Master-Transformation-Plan: P-007
 | P-009 | Corregir Authority, Provenance y trust boundaries end-to-end | HECHO | integrado por PR #35; main `b9dbf144...` CI `34800425589` + ProjectOps `34800425594` green | plan/P-009.md |
 | P-010 | Hacer real Policy, Authorization, Approval y Quarantine lifecycle | HECHO | integrado por PR #36; main `f42c9bd1...` CI `34909182700` + ProjectOps `34909182692` green | plan/P-010.md |
 | P-011 | Hacer reales Lifecycle, Health, Restart y Recovery | HECHO | integrado por PR #38; cierre documental PR #39; baseline P-012 `main 1f1e93f4...` revalidado | plan/P-011.md |
-| P-012 | Convertir self-modification en transacción segura y recuperable | EN_EJECUCIÓN | source E3 green final en rama `991650ce...` (tree `84399f49...`); integrar/revalidar `main`; evidence P-013 antes de cierre completo | plan/P-012.md |
-| P-013 | Unificar Observability, Audit y Evidence Fabric | PLANIFICADO | P-008 + P-009; se extiende durante la campaña | plan/P-013.md |
+| P-012 | Convertir self-modification en transacción segura y recuperable | PARCIAL | integrado por PR #40 en `main fe845184...`; main CI/ProjectOps green; evidence P-013 antes de cierre completo | plan/P-012.md |
+| P-013 | Unificar Observability, Audit y Evidence Fabric | EN_EJECUCIÓN | P-008 + P-009; baseline P-012 `main fe845184...` revalidado; C0009 AUDIT_REQUIRED | plan/P-013.md |
 | P-014 | Consolidar Capability Fabric canónico y lifecycle de capacidades | PLANIFICADO | P-008 + P-009 + P-010 + P-013 | plan/P-014.md |
 | P-015 | Sustituir MCP nominal por un runtime MCP real y verificable | PLANIFICADO | P-014 + P-009 + P-010 + P-013 | plan/P-015.md |
 | P-016 | Dar a ABOS manos de computadora, browser y GUI mediante providers reales | PLANIFICADO | P-014 + P-009 + P-010 + P-011 + P-013 | plan/P-016.md |
@@ -79,7 +79,7 @@ Cada bloque puede poseer componentes especializados, pero debe conservar una aut
 1. **P-006 — HECHO**: security-audit restaurado sin debilitar gate e integrado en `main` por PR #32.
 2. **P-003 — HECHO**: child capital semantics reconciliadas por PR #33, integradas y revalidadas en `main`.
 
-La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth, P-009 Authority/Provenance, P-010 Policy/Authorization y P-011 Lifecycle/Recovery están integrados. P-012 transactional self-modification es la intervención activa de Ola 1.
+La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth, P-009 Authority/Provenance, P-010 Policy/Authorization y P-011 Lifecycle/Recovery están integrados. P-012 transactional self-modification está integrado y revalidado, con cierre lógico pendiente de evidencia P-013. P-013 observability/evidence es la intervención activa de Ola 1.
 
 ### Ola 1 — verdad, autoridad y recovery
 

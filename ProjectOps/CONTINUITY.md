@@ -2,19 +2,19 @@
 
 Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
-Active-Plan: P-012
-Active-Segment: continuity/C0008.md
-Active-Intervention: P012_TRANSACTIONAL_SELF_MODIFICATION — SOURCE_E3_GREEN / MAIN_INTEGRATION_PENDING
+Active-Plan: P-013
+Active-Segment: continuity/C0009.md
+Active-Intervention: P013_OBSERVABILITY_EVIDENCE_FABRIC — AUDIT_REQUIRED / SOURCE_NOT_MODIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p012-transactional-self-modification
-Host-Head-At-Audit-Open: 1f1e93f48c95265dba52b6a99a900bde6cdcb27c
-Last-Reconciled-Host-Head: 991650ce5deb7e170a99647bf5246982bc7cd37a
-Last-Reconciled-Head-Semantics: P012_FINAL_AUTONOMY_SOURCE_E3_GREEN_PRE_MAIN_INTEGRATION
+Current-Host-Branch: abos/p013-observability-evidence-fabric
+Host-Head-At-Audit-Open: fe845184fce48c65032f8521ecd0bdfa42e04b77
+Last-Reconciled-Host-Head: fe845184fce48c65032f8521ecd0bdfa42e04b77
+Last-Reconciled-Head-Semantics: P013_AUDIT_BASELINE_FROM_P012_INTEGRATION_VERIFIED_MAIN
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -94,10 +94,19 @@ P012-Final-Gate-Head: 991650ce5deb7e170a99647bf5246982bc7cd37a
 P012-Final-Source-CI: 34925701691 SUCCESS
 P012-Final-Source-ProjectOps: 34925701696 SUCCESS
 P012-Continuity-Reconcile-Head: 887bc5107245bf538db7cd272b9034a97ac2a579
+P012-PR: 40
+P012-Final-PR-Head: 1c9eabe430893c2be145c83441b8371b65af285e
+P012-PR-CI: 34926226279 SUCCESS
+P012-PR-ProjectOps: 34926226266 SUCCESS
+P012-Merge: fe845184fce48c65032f8521ecd0bdfa42e04b77
+P012-Main-CI: 34926393562 SUCCESS
+P012-Main-ProjectOps: 34926393570 SUCCESS
+P013-Canonical-Baseline: fe845184fce48c65032f8521ecd0bdfa42e04b77
+P013-Branch: abos/p013-observability-evidence-fabric
 
 ## Semántica del HEAD reconciliado
 
-`Last-Reconciled-Host-Head` es `991650ce5deb7e170a99647bf5246982bc7cd37a`, exact-head normal-gated del tree productivo P-012 final `b2a83d7f4caedcc72716f7ceb7e17909c3f6d91d`; CI `34925701691` y ProjectOps `34925701696` son SUCCESS. El source real fue producido en `84399f491856ca8a6195bbb8c08940ab8201f5d8`; `991650...` apunta al mismo tree y sólo existe para obtener un gate normal después del push de GitHub Actions.
+`Last-Reconciled-Host-Head` es `fe845184fce48c65032f8521ecd0bdfa42e04b77`, squash merge canónico P-012 y baseline de auditoría P-013. Ese `main` fue revalidado por CI `34926393562` y ProjectOps `34926393570`, ambos SUCCESS. P-012 conserva además su source/gate histórico `84399f...` / `991650...`; P-013 inicia sin product-source propio.
 
 P-009 permanece HECHO únicamente para su objetivo exacto: authority/provenance/trust boundaries. No eleva Social inbound a autenticación criptográfica LIVE; `relay_asserted` sigue siendo el máximo claim demostrado en esa frontera.
 
@@ -120,8 +129,9 @@ P-012 conserva autonomía de self-modification y sustituye write-before-verify/f
 - P-009: HECHO — Authority/Provenance/trust boundaries integrados por PR #35 y revalidados sobre `main` `b9dbf144...`.
 - P-010: HECHO — Policy/Authorization/Approval/Quarantine integrado por PR #36 y cerrado canónicamente por PR #37 sobre `main` `33e4865b...`.
 - P-011: HECHO / INTEGRATION_VERIFIED — integrado por PR #38; cierre documental PR #39; C0007 cerrado.
-- P-012: EN_EJECUCIÓN — source/integration E3 **HECHO en rama** sobre `991650ce...` (mismo product tree que `84399f49...`), incluida autonomía crítica multiarchivo; integración `main` y evidence/correlation P-013 siguen NO HECHO, por lo que no se eleva todavía a HECHO completo.
-- P-013..P-036: ver `ProjectOps/PLAN.md`; permanecen en su estado explícito.
+- P-012: PARCIAL / INTEGRATION_VERIFIED — integrado por PR #40 en `main` `fe845184...`, CI `34926393562` + ProjectOps `34926393570` SUCCESS; sólo falta la evidence/correlation P-013 exigida por su propio DoD.
+- P-013: EN_EJECUCIÓN / AUDIT_REQUIRED — C0009 activo sobre baseline `fe845184...`; source P-013 todavía no modificado.
+- P-014..P-036: ver `ProjectOps/PLAN.md`; permanecen en su estado explícito.
 
 ## P-009 — cierre verificable
 

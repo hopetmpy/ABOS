@@ -100,7 +100,7 @@ for(const needle of [
   "Identity-Model: TARGET_VISION_PLUS_EVIDENCE_BASELINE",
   "Autonomous Business Operating System",
   "Runtime-Version-Observed: `0.3.0`",
-  "Schema-Version-Observed-In-Source: `16`",
+  "Schema-Version-Observed-In-Source: `17`",
   "constitution.md",
   "Adaptive Path Intelligence",
   "objective != method",

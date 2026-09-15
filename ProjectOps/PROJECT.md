@@ -10,7 +10,7 @@ Supported-Node-Majors: `22,24`
 Recommended-Node-Major: `22`
 State-Root: `~/.abos`
 Source-Root: repository checkout
-Schema-Version-Observed-In-Source: `16`
+Schema-Version-Observed-In-Source: `17`
 ProjectOps-Protocol: `ProjectOps/system/ABOS_OPERATING_PROTOCOL.md`
 Adaptive-Reasoning: `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md`
 Plan-Authority: `ProjectOps/PLAN.md`
@@ -66,7 +66,7 @@ Checkout source y `~/.abos` son dominios distintos. `~/.abos` contiene estado ru
 
 ### 3.2 Persistencia
 
-`src/state/schema.ts` declara `SCHEMA_VERSION = 16` durante P-010; v16 extiende `policy_decisions` de forma aditiva para lifecycle de policy/authorization sin reinterpretar filas legacy como approvals.
+`src/state/schema.ts` declara `SCHEMA_VERSION = 17`. v16 extendió `policy_decisions` de forma aditiva para lifecycle de policy/authorization; v17 añadió el journal/lease transaccional P-012 (`self_mod_transactions` / `self_mod_leases`) sin reinterpretar filas legacy ni duplicar authorities existentes.
 
 La SQLite canónica conserva identity, turns/tool calls, heartbeat, finanzas, skills, children, registry, memory/soul, orchestration/adaptive/environment state y migrations acumuladas. P-009 añadió provenance de inbox/turns de forma aditiva; legacy ambiguity degrada a UNKNOWN en vez de inventar trust.
 
