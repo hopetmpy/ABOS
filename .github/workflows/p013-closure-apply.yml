@@ -25,10 +25,17 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Apply causal invariant and restart E2E
         run: python .github/p013_closure_apply.py
+      - name: Normalize remaining adaptive causation producers
+        run: python .github/p013_closure_fix_apply.py
       - name: Inspect causation producers
         run: |
           echo '--- causationId producers after normalization ---'
           grep -R -n --include='*.ts' 'causationId:' src || true
+          echo '--- forbidden adaptive domain-id causations ---'
+          if grep -R -n --include='*.ts' 'causationId:.*correlationIdFor("adaptive_' src/intelligence; then
+            echo 'Found domain identifiers in causation_id' >&2
+            exit 1
+          fi
       - name: Typecheck
         run: pnpm run typecheck
       - name: Targeted P-013 closure and regressions
@@ -56,7 +63,7 @@ jobs:
         env:
           BRANCH: abos/p013-observability-evidence-fabric
         run: |
-          rm -f .github/p013_closure_apply.py .github/workflows/p013-closure-apply.yml
+          rm -f .github/p013_closure_apply.py .github/p013_closure_fix_apply.py .github/workflows/p013-closure-apply.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
