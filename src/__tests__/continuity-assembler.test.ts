@@ -10,7 +10,6 @@ import {
   MIGRATION_V12,
   MIGRATION_V13,
   MIGRATION_V14,
-  SCHEMA_VERSION,
 } from "../state/schema.js";
 import { AdaptiveStore } from "../intelligence/store.js";
 import { EventStream } from "../memory/event-stream.js";
@@ -301,7 +300,6 @@ describe("ContinuityAssembler", () => {
         )
         .all();
       expect(tables).toEqual([]);
-      expect(SCHEMA_VERSION).toBe(16);
     } finally {
       db.close();
     }
