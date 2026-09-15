@@ -1,0 +1,51 @@
+name: P012 Source Apply
+
+on:
+  push:
+    branches:
+      - abos/p012-transactional-self-modification
+    paths:
+      - .github/p012_apply.py
+      - .github/workflows/p012-source-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-verify-clean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: abos/p012-transactional-self-modification
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+          run_install: false
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Apply P-012 first source unit
+        run: python .github/p012_apply.py
+      - name: Frozen install
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Targeted P-012 tests
+        run: pnpm exec vitest run src/__tests__/p012-self-mod-transaction.test.ts src/__tests__/database-transactions.test.ts src/__tests__/path-protection.test.ts
+      - name: ProjectOps integrity
+        run: node scripts/projectops-integrity-verify.mjs
+      - name: Diff check
+        run: git diff --check
+      - name: Remove temporary apply machinery and commit
+        run: |
+          git rm -f .github/p012_apply.py .github/workflows/p012-source-apply.yml
+          git add -A
+          git diff --cached --check
+          git commit -m "P-012 add transactional self-mod journal and workspace"
+          git push origin HEAD:abos/p012-transactional-self-modification
