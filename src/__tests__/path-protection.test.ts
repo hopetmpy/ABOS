@@ -150,12 +150,32 @@ describe("path protection policy rules", () => {
       expect(result).toBeNull();
     });
 
-    it("denies edit_own_file to protected file", () => {
+    it("allows critical source through the transactional edit boundary", () => {
       const request = makeMockRequest("edit_own_file", { path: "agent/tools.ts" });
+      request.tool = makeMockTool("edit_own_file");
+      const result = protectedFilesRule.evaluate(request);
+      expect(result).toBeNull();
+    });
+
+    it("denies edit_own_file to a true immutable boundary", () => {
+      const request = makeMockRequest("edit_own_file", { path: "constitution.md" });
       request.tool = makeMockTool("edit_own_file");
       const result = protectedFilesRule.evaluate(request);
       expect(result).not.toBeNull();
       expect(result!.action).toBe("deny");
+    });
+
+    it("checks every path in a multi-file edit request", () => {
+      const request = makeMockRequest("edit_own_file", {
+        edits: [
+          { path: "src/index.ts", content: "ok" },
+          { path: "constitution.md", content: "no" },
+        ],
+      });
+      request.tool = makeMockTool("edit_own_file");
+      const result = protectedFilesRule.evaluate(request);
+      expect(result).not.toBeNull();
+      expect(result!.reasonCode).toBe("PROTECTED_FILE");
     });
   });
 

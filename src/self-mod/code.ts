@@ -1,10 +1,10 @@
 /**
  * Self-Modification Engine
  *
- * Validates source-file edits and delegates every actual repository mutation to
- * the single P-012 transaction runner. Policy/provenance stay outside this
- * module; journal/lease/worktree/verification/CAS/rollback stay inside the
- * transaction authority.
+ * Validates source edits and delegates every actual repository mutation to the
+ * single P-012 transaction runner. Policy/provenance stay outside this module;
+ * journal/lease/worktree/verification/CAS/rollback stay inside the transaction
+ * authority.
  */
 
 import fs from "node:fs";
@@ -21,11 +21,16 @@ import {
 
 export type { SelfModGateResult } from "./transaction-runner.js";
 
-// ─── IMMUTABLE SAFETY INVARIANTS ─────────────────────────────
+// ─── DIRECT-WRITE PROTECTION VS TRUE IMMUTABILITY ─────────────
 
 /**
- * Files that the abos cannot modify through general self-edit entrypoints.
- * Transaction infrastructure is protected as part of the same authority.
+ * Legacy/direct-write protected paths. These must not be overwritten by raw
+ * write_file/shell paths because that would bypass candidate verification.
+ *
+ * IMPORTANT: membership here does NOT mean ABOS can never evolve this code.
+ * Transactional self-edit uses isImmutableFile() instead, so critical source
+ * can be changed in an isolated candidate and activated only after it passes
+ * the full P-012 verification path.
  */
 const PROTECTED_FILES: readonly string[] = Object.freeze([
   // Identity / persistent authority
@@ -35,7 +40,7 @@ const PROTECTED_FILES: readonly string[] = Object.freeze([
   "state.db-wal",
   "state.db-shm",
   "constitution.md",
-  // Defense infrastructure
+  // Defense infrastructure: direct writes are forbidden, verified candidates are allowed
   "injection-defense.ts",
   "injection-defense.js",
   "injection-defense.d.ts",
@@ -81,6 +86,26 @@ const PROTECTED_FILES: readonly string[] = Object.freeze([
   "agent/policy-rules/index.js",
 ]);
 
+/**
+ * True transactional immutability boundary. These are credential, durable
+ * runtime-state, or constitutional/config-secret surfaces rather than source
+ * code. P-012 intentionally does not freeze policy, tools, dependency files,
+ * skills, or its own transaction implementation.
+ */
+const IMMUTABLE_FILES: readonly string[] = Object.freeze([
+  "wallet.json",
+  "config.json",
+  "state.db",
+  "state.db-wal",
+  "state.db-shm",
+  "constitution.md",
+  "abos.json",
+  ".env",
+]);
+
+const IMMUTABLE_SUFFIXES: readonly string[] = Object.freeze([".key", ".pem"]);
+const IMMUTABLE_PREFIXES: readonly string[] = Object.freeze(["private-key"]);
+
 const BLOCKED_DIRECTORY_PATTERNS: readonly string[] = Object.freeze([
   ".ssh",
   ".gnupg",
@@ -97,20 +122,34 @@ const BLOCKED_DIRECTORY_PATTERNS: readonly string[] = Object.freeze([
   "/sys",
 ]);
 
-const MAX_MODIFICATION_SIZE = 100_000;
 const MAX_DIFF_SIZE = 10_000;
 
-export interface EditFileOptions {
+interface RepositoryEditOptionsBase {
   runtimeRoot?: string;
   tempRoot?: string;
   leaseTtlMs?: number;
   owner?: string;
+  postActivationProbe?: (runtimeRoot: string) => Promise<SelfModGateResult>;
+  postRollbackProbe?: (runtimeRoot: string) => Promise<SelfModGateResult>;
+}
+
+export interface EditFileOptions extends RepositoryEditOptionsBase {
   verifyCandidate?: (
     workspacePath: string,
     relativePath: string,
   ) => Promise<SelfModGateResult>;
-  postActivationProbe?: (runtimeRoot: string) => Promise<SelfModGateResult>;
-  postRollbackProbe?: (runtimeRoot: string) => Promise<SelfModGateResult>;
+}
+
+export interface EditFilesOptions extends RepositoryEditOptionsBase {
+  verifyCandidate?: (
+    workspacePath: string,
+    relativePaths: readonly string[],
+  ) => Promise<SelfModGateResult>;
+}
+
+export interface SelfModEdit {
+  path: string;
+  content: string;
 }
 
 export interface EditFileResult {
@@ -120,6 +159,11 @@ export interface EditFileResult {
   candidateSha?: string;
   noChange?: boolean;
   recoveryRequired?: boolean;
+}
+
+export interface EditFilesResult extends EditFileResult {
+  changedPaths?: string[];
+  unchangedPaths?: string[];
 }
 
 function resolveAndValidatePath(
@@ -173,22 +217,14 @@ export function isRuntimeSourcePath(
   }
 }
 
-export function isProtectedFile(filePath: string): boolean {
-  const normalized = path.posix.normalize(filePath.replace(/\\/g, "/"));
+function normalizePortablePath(filePath: string): string {
+  return path.posix.normalize(filePath.replace(/\\/g, "/"));
+}
 
-  for (const pattern of PROTECTED_FILES) {
-    const normalizedPattern = path.posix.normalize(pattern.replace(/\\/g, "/"));
-    if (
-      normalized === normalizedPattern
-      || normalized.endsWith("/" + normalizedPattern)
-    ) {
-      return true;
-    }
-  }
-
+function matchesBlockedDirectory(normalized: string): boolean {
   const segments = normalized.split("/").filter(Boolean);
   for (const pattern of BLOCKED_DIRECTORY_PATTERNS) {
-    const normalizedPattern = path.posix.normalize(pattern.replace(/\\/g, "/"));
+    const normalizedPattern = normalizePortablePath(pattern);
     if (normalizedPattern.startsWith("/")) {
       if (
         normalized === normalizedPattern
@@ -200,16 +236,57 @@ export function isProtectedFile(filePath: string): boolean {
     }
     if (segments.includes(normalizedPattern)) return true;
   }
-
   return false;
 }
 
 /**
- * Validate an edit without performing it.
+ * True for paths that raw/unverified file writers must not overwrite.
+ * Transactional source evolution must use isImmutableFile() instead.
+ */
+export function isProtectedFile(filePath: string): boolean {
+  const normalized = normalizePortablePath(filePath);
+
+  for (const pattern of PROTECTED_FILES) {
+    const normalizedPattern = normalizePortablePath(pattern);
+    if (
+      normalized === normalizedPattern
+      || normalized.endsWith("/" + normalizedPattern)
+    ) {
+      return true;
+    }
+  }
+
+  return matchesBlockedDirectory(normalized);
+}
+
+/** True only for boundaries a verified self-mod transaction may not overwrite. */
+export function isImmutableFile(filePath: string): boolean {
+  const normalized = normalizePortablePath(filePath);
+  const basename = path.posix.basename(normalized);
+
+  for (const pattern of IMMUTABLE_FILES) {
+    const normalizedPattern = normalizePortablePath(pattern);
+    if (
+      normalized === normalizedPattern
+      || normalized.endsWith("/" + normalizedPattern)
+    ) {
+      return true;
+    }
+  }
+
+  if (IMMUTABLE_SUFFIXES.some((suffix) => basename.endsWith(suffix))) return true;
+  if (IMMUTABLE_PREFIXES.some((prefix) => basename.startsWith(prefix))) return true;
+  return matchesBlockedDirectory(normalized);
+}
+
+/**
+ * Validate one requested transactional edit without performing it.
  *
- * P-012 intentionally does not treat an arbitrary per-hour counter as a source
- * safety authority. Isolation, exact lease, candidate verification, CAS and
- * recovery determine whether a mutation is safe to activate.
+ * P-012 intentionally does not treat arbitrary per-hour or per-file-size
+ * thresholds as source-safety authorities. Isolation, exact lease, candidate
+ * verification, CAS and recovery determine whether a source mutation is safe
+ * to activate. Transport/resource limits remain real when the environment
+ * actually reports them.
  */
 export function validateModification(
   _db: AbosDatabase,
@@ -223,13 +300,13 @@ export function validateModification(
 } {
   const checks: { name: string; passed: boolean; detail: string }[] = [];
 
-  const protectedFile = isProtectedFile(filePath);
+  const immutableFile = isImmutableFile(filePath);
   checks.push({
-    name: "protected_file",
-    passed: !protectedFile,
-    detail: protectedFile
-      ? "File matches protected pattern"
-      : "File is not protected",
+    name: "immutable_boundary",
+    passed: !immutableFile,
+    detail: immutableFile
+      ? "File matches a credential/state/constitutional immutability boundary"
+      : "File is transactionally evolvable",
   });
 
   const resolved = resolveAndValidatePath(filePath, options.runtimeRoot ?? RUNTIME_ROOT);
@@ -241,121 +318,192 @@ export function validateModification(
       : "Path is invalid or suspicious",
   });
 
-  const sizeOk = contentSize <= MAX_MODIFICATION_SIZE;
+  const sizeValid = Number.isSafeInteger(contentSize) && contentSize >= 0;
   checks.push({
-    name: "size_limit",
-    passed: sizeOk,
-    detail: sizeOk
-      ? `${contentSize} bytes (max ${MAX_MODIFICATION_SIZE})`
-      : `${contentSize} bytes exceeds ${MAX_MODIFICATION_SIZE} limit`,
+    name: "content_size_valid",
+    passed: sizeValid,
+    detail: sizeValid
+      ? `${contentSize} bytes; no arbitrary source-size safety threshold`
+      : `Invalid content size: ${contentSize}`,
   });
 
   const allPassed = checks.every((check) => check.passed);
   return {
     allowed: allPassed,
     reason: allPassed
-      ? "All safety checks passed"
+      ? "All transactional source checks passed"
       : `Blocked: ${checks.filter((check) => !check.passed).map((check) => check.detail).join("; ")}`,
     checks,
   };
 }
 
+interface PreparedEdit {
+  requestedPath: string;
+  resolvedPath: string;
+  relativePath: string;
+  content: string;
+  contentBytes: number;
+  oldContent?: string;
+  diff: string;
+}
+
+function normalizeRuntimeRoot(runtimeRoot: string): string | null {
+  try {
+    return fs.realpathSync(path.resolve(runtimeRoot));
+  } catch {
+    return null;
+  }
+}
+
+function pathIdentity(relativePath: string): string {
+  return process.platform === "win32" ? relativePath.toLowerCase() : relativePath;
+}
+
 /**
- * Transactionally edit one file in the active ABOS source checkout.
+ * Transactionally edit one or more files in a single isolated candidate.
  *
- * ConwayClient remains in the signature for tool API compatibility, but source
- * authority is the exact local RUNTIME_ROOT Git checkout, never a remote
- * sandbox write.
+ * Multi-file is essential for coherent dependency/config/source changes such
+ * as package.json + lockfile. Every requested path is validated before a
+ * journal/lease is created, duplicate targets are rejected, and all changed
+ * files share one verification/activation boundary.
  */
-export async function editFile(
+export async function editFiles(
   _conway: ConwayClient,
   db: AbosDatabase,
-  filePath: string,
-  newContent: string,
+  edits: readonly SelfModEdit[],
   reason: string,
-  options: EditFileOptions = {},
-): Promise<EditFileResult> {
-  let runtimeRoot: string;
-  try {
-    runtimeRoot = fs.realpathSync(path.resolve(options.runtimeRoot ?? RUNTIME_ROOT));
-  } catch (error: any) {
+  options: EditFilesOptions = {},
+): Promise<EditFilesResult> {
+  const runtimeRoot = normalizeRuntimeRoot(options.runtimeRoot ?? RUNTIME_ROOT);
+  if (!runtimeRoot) {
     return {
       success: false,
-      error: `Transactional self-modification runtime root is unavailable: ${error?.message || String(error)}`,
+      error: "Transactional self-modification runtime root is unavailable",
     };
   }
 
-  const contentBytes = Buffer.byteLength(newContent, "utf8");
-  const validation = validateModification(db, filePath, contentBytes, { runtimeRoot });
-  if (!validation.allowed) {
-    return { success: false, error: `BLOCKED: ${validation.reason}` };
+  if (!Array.isArray(edits) || edits.length === 0) {
+    return { success: false, error: "Transactional self-modification requires at least one edit" };
   }
 
-  const resolvedPath = resolveAndValidatePath(filePath, runtimeRoot);
-  if (!resolvedPath) {
-    return { success: false, error: `BLOCKED: Invalid or suspicious file path: ${filePath}` };
-  }
+  const prepared: PreparedEdit[] = [];
+  const unchangedPaths: string[] = [];
+  const seen = new Set<string>();
 
-  const relativePath = path.relative(runtimeRoot, resolvedPath).replace(/\\/g, "/");
-  if (!relativePath || relativePath.startsWith("../") || path.isAbsolute(relativePath)) {
-    return {
-      success: false,
-      error: `BLOCKED: Path does not identify a file inside active source: ${filePath}`,
-    };
-  }
+  for (const edit of edits) {
+    if (!edit || typeof edit.path !== "string" || typeof edit.content !== "string") {
+      return { success: false, error: "Each transactional edit requires string path and content" };
+    }
 
-  let oldContent: string | undefined;
-  try {
-    oldContent = fs.readFileSync(resolvedPath, "utf8");
-  } catch (error: any) {
-    if (error?.code !== "ENOENT") {
+    const contentBytes = Buffer.byteLength(edit.content, "utf8");
+    const validation = validateModification(db, edit.path, contentBytes, { runtimeRoot });
+    if (!validation.allowed) {
       return {
         success: false,
-        error: `Failed to read active source: ${error?.message || String(error)}`,
+        error: `BLOCKED: ${edit.path}: ${validation.reason}`,
       };
     }
+
+    const resolvedPath = resolveAndValidatePath(edit.path, runtimeRoot);
+    if (!resolvedPath) {
+      return { success: false, error: `BLOCKED: Invalid or suspicious file path: ${edit.path}` };
+    }
+
+    const relativePath = path.relative(runtimeRoot, resolvedPath).replace(/\\/g, "/");
+    if (!relativePath || relativePath.startsWith("../") || path.isAbsolute(relativePath)) {
+      return {
+        success: false,
+        error: `BLOCKED: Path does not identify a file inside active source: ${edit.path}`,
+      };
+    }
+
+    const identity = pathIdentity(relativePath);
+    if (seen.has(identity)) {
+      return { success: false, error: `DUPLICATE_EDIT_PATH: ${relativePath}` };
+    }
+    seen.add(identity);
+
+    let oldContent: string | undefined;
+    try {
+      oldContent = fs.readFileSync(resolvedPath, "utf8");
+    } catch (error: any) {
+      if (error?.code !== "ENOENT") {
+        return {
+          success: false,
+          error: `Failed to read active source ${relativePath}: ${error?.message || String(error)}`,
+        };
+      }
+    }
+
+    if (oldContent === edit.content) {
+      unchangedPaths.push(relativePath);
+      continue;
+    }
+
+    prepared.push({
+      requestedPath: edit.path,
+      resolvedPath,
+      relativePath,
+      content: edit.content,
+      contentBytes,
+      oldContent,
+      diff: generateSimpleDiff(oldContent ?? "(new file)", edit.content),
+    });
   }
 
-  if (oldContent === newContent) return { success: true, noChange: true };
+  if (prepared.length === 0) {
+    return {
+      success: true,
+      noChange: true,
+      changedPaths: [],
+      unchangedPaths,
+    };
+  }
 
-  const diff = generateSimpleDiff(oldContent ?? "(new file)", newContent);
+  const relativePaths = prepared.map((entry) => entry.relativePath);
+  const compactReason = reason.replace(/\s+/g, " ").trim().slice(0, 160);
   const transaction = await runRepositoryTransaction({
     db: db.raw,
     operation: "edit_own_file",
     request: {
-      path: relativePath,
       reason,
-      contentBytes,
+      edits: prepared.map((entry) => ({
+        path: entry.relativePath,
+        contentBytes: entry.contentBytes,
+      })),
+      unchangedPaths,
     },
     runtimeRoot,
     tempRoot: options.tempRoot,
     owner: options.owner,
     leaseTtlMs: options.leaseTtlMs,
     verifyCandidate: options.verifyCandidate
-      ? (workspacePath) => options.verifyCandidate!(workspacePath, relativePath)
+      ? (workspacePath) => options.verifyCandidate!(workspacePath, relativePaths)
       : undefined,
     postActivationProbe: options.postActivationProbe,
     postRollbackProbe: options.postRollbackProbe,
     prepareCandidate: ({ workspacePath }) => {
-      writeCandidateFile(workspacePath, relativePath, newContent);
+      for (const entry of prepared) {
+        writeCandidateFile(workspacePath, entry.relativePath, entry.content);
+      }
       return {
-        commitMessage: `self-mod: ${reason.replace(/\s+/g, " ").trim().slice(0, 180) || relativePath}`,
-        evidence: [
-          {
-            gate: "requested_file_stage",
-            result: "pass",
-            path: relativePath,
-            contentBytes,
-          },
-        ],
+        commitMessage: `self-mod: ${compactReason || (relativePaths.length === 1 ? relativePaths[0] : `${relativePaths.length} files`)}`,
+        evidence: prepared.map((entry) => ({
+          gate: "requested_file_stage",
+          result: "pass",
+          path: entry.relativePath,
+          contentBytes: entry.contentBytes,
+        })),
       };
     },
     afterActivation: () => {
-      logModification(db, "code_edit", reason, {
-        filePath: relativePath,
-        diff: diff.slice(0, MAX_DIFF_SIZE),
-        reversible: true,
-      });
+      for (const entry of prepared) {
+        logModification(db, "code_edit", reason, {
+          filePath: entry.relativePath,
+          diff: entry.diff.slice(0, MAX_DIFF_SIZE),
+          reversible: true,
+        });
+      }
     },
   });
 
@@ -365,6 +513,45 @@ export async function editFile(
     transactionId: transaction.transactionId,
     candidateSha: transaction.candidateSha,
     recoveryRequired: transaction.recoveryRequired,
+    changedPaths: transaction.changedPaths ?? relativePaths,
+    unchangedPaths,
+  };
+}
+
+/** Backward-compatible single-file entrypoint implemented by editFiles(). */
+export async function editFile(
+  conway: ConwayClient,
+  db: AbosDatabase,
+  filePath: string,
+  newContent: string,
+  reason: string,
+  options: EditFileOptions = {},
+): Promise<EditFileResult> {
+  const result = await editFiles(
+    conway,
+    db,
+    [{ path: filePath, content: newContent }],
+    reason,
+    {
+      runtimeRoot: options.runtimeRoot,
+      tempRoot: options.tempRoot,
+      leaseTtlMs: options.leaseTtlMs,
+      owner: options.owner,
+      verifyCandidate: options.verifyCandidate
+        ? (workspacePath, relativePaths) => options.verifyCandidate!(workspacePath, relativePaths[0])
+        : undefined,
+      postActivationProbe: options.postActivationProbe,
+      postRollbackProbe: options.postRollbackProbe,
+    },
+  );
+
+  return {
+    success: result.success,
+    error: result.error,
+    transactionId: result.transactionId,
+    candidateSha: result.candidateSha,
+    noChange: result.noChange,
+    recoveryRequired: result.recoveryRequired,
   };
 }
 

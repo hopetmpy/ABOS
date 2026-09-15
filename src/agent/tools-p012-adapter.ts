@@ -9,8 +9,9 @@ import {
 } from "../platform/home.js";
 import {
   editFile,
+  editFiles,
   isRuntimeSourcePath,
-  validateModification,
+  type SelfModEdit,
 } from "../self-mod/code.js";
 import {
   pullUpstreamTransactional,
@@ -152,6 +153,34 @@ function formatRepositoryResult(result: RepositoryOperationResult): string {
   return `${result.summary}.${candidate}${transaction}`;
 }
 
+function parseToolEdits(args: Record<string, unknown>): SelfModEdit[] | string {
+  if (args.edits !== undefined) {
+    if (args.path !== undefined || args.content !== undefined) {
+      return "Use either path+content or edits, not both, in one transactional self-modification request.";
+    }
+    if (!Array.isArray(args.edits) || args.edits.length === 0) {
+      return "edits must be a non-empty array of {path, content}.";
+    }
+    const edits: SelfModEdit[] = [];
+    for (const [index, value] of args.edits.entries()) {
+      if (!value || typeof value !== "object") {
+        return `edits[${index}] must be an object with string path and content.`;
+      }
+      const item = value as Record<string, unknown>;
+      if (typeof item.path !== "string" || typeof item.content !== "string") {
+        return `edits[${index}] must contain string path and content.`;
+      }
+      edits.push({ path: item.path, content: item.content });
+    }
+    return edits;
+  }
+
+  if (typeof args.path !== "string" || typeof args.content !== "string") {
+    return "Single-file self-modification requires string path and content; multi-file requests may use edits.";
+  }
+  return [{ path: args.path, content: args.content }];
+}
+
 /** Apply P-012 source-mutation routing to the existing builtin tool set. */
 export function applyP012ToolRouting(
   tools: AbosTool[],
@@ -159,23 +188,39 @@ export function applyP012ToolRouting(
 ): AbosTool[] {
   const editTool = findTool(tools, "edit_own_file");
   editTool.description =
-    "Edit a file in the active ABOS source through an isolated, verified, journaled transaction with exact activation and recovery.";
+    "Edit one or more files in active ABOS source through one isolated, verified, journaled transaction. Use path+content for backward-compatible single-file edits or edits=[{path,content}, ...] for coherent multi-file changes.";
+  editTool.parameters = {
+    type: "object",
+    properties: {
+      path: { type: "string", description: "Single-file path (omit when using edits)" },
+      content: { type: "string", description: "Single-file replacement content (omit when using edits)" },
+      edits: {
+        type: "array",
+        description: "Atomic multi-file replacements applied and verified in one candidate",
+        items: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "File path inside active ABOS source" },
+            content: { type: "string", description: "Replacement file content" },
+          },
+          required: ["path", "content"],
+        },
+      },
+      description: {
+        type: "string",
+        description: "Why this source change is being made",
+      },
+    },
+    required: ["description"],
+  } as any;
   editTool.execute = async (args, ctx) => {
-    const filePath = args.path as string;
-    const content = args.content as string;
-    const contentBytes = Buffer.byteLength(content, "utf8");
-    const validation = validateModification(ctx.db, filePath, contentBytes);
-    if (!validation.allowed) {
-      return `BLOCKED: ${validation.reason}\nChecks: ${validation.checks
-        .map((check) => `${check.name}: ${check.passed ? "PASS" : "FAIL"} (${check.detail})`)
-        .join(", ")}`;
-    }
+    const edits = parseToolEdits(args);
+    if (typeof edits === "string") return `BLOCKED: ${edits}`;
 
-    const result = await editFile(
+    const result = await editFiles(
       ctx.conway,
       ctx.db,
-      filePath,
-      content,
+      edits,
       args.description as string,
     );
     if (!result.success) {
@@ -184,8 +229,11 @@ export function applyP012ToolRouting(
         : "";
       return `${result.error || "Transactional source edit failed."}${recovery}`;
     }
-    if (result.noChange) return `No source change required: ${filePath} already has the requested content.`;
-    return `Source edit activated transactionally: ${filePath}${result.candidateSha ? ` (candidate ${result.candidateSha})` : ""}${result.transactionId ? ` [transaction ${result.transactionId}]` : ""}`;
+    if (result.noChange) {
+      return `No source change required: ${result.unchangedPaths?.join(", ") || "all requested paths"} already match.`;
+    }
+    const paths = result.changedPaths?.join(", ") || edits.map((edit) => edit.path).join(", ");
+    return `Source edit activated transactionally: ${paths}${result.candidateSha ? ` (candidate ${result.candidateSha})` : ""}${result.transactionId ? ` [transaction ${result.transactionId}]` : ""}`;
   };
 
   const revertTool = findTool(tools, "revert_last_edit");

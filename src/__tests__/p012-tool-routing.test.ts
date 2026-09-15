@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createBuiltinTools } from "../agent/tools.js";
 import { createBuiltinTools as createCoreBuiltinTools } from "../agent/tools-core.js";
 import { commandReferencesRuntimeSource } from "../agent/tools-p012-adapter.js";
-import { isProtectedFile } from "../self-mod/code.js";
+import { isImmutableFile, isProtectedFile } from "../self-mod/code.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
 import { getHomeDir } from "../platform/home.js";
 import type { ToolContext } from "../types.js";
@@ -43,11 +43,24 @@ describe("P-012 transactional tool routing", () => {
     expect(routedNames).toEqual(coreNames);
   });
 
-  it("protects the routing and core authority files from general self-edit", () => {
+  it("separates direct-write protection from transactional immutability", () => {
     expect(isProtectedFile("src/agent/tools-core.ts")).toBe(true);
     expect(isProtectedFile("src/agent/tools-p012-adapter.ts")).toBe(true);
     expect(isProtectedFile("src/self-mod/transaction-runner.ts")).toBe(true);
     expect(isProtectedFile("src/self-mod/repository-operations.ts")).toBe(true);
+    expect(isImmutableFile("src/agent/tools-core.ts")).toBe(false);
+    expect(isImmutableFile("src/self-mod/transaction-runner.ts")).toBe(false);
+    expect(isImmutableFile("package.json")).toBe(false);
+    expect(isImmutableFile("constitution.md")).toBe(true);
+  });
+
+  it("exposes backward-compatible single-file and atomic multi-file edit schema", () => {
+    const editTool = createBuiltinTools("").find((tool) => tool.name === "edit_own_file")!;
+    const parameters = editTool.parameters as any;
+    expect(parameters.properties.path).toBeDefined();
+    expect(parameters.properties.content).toBeDefined();
+    expect(parameters.properties.edits.items.required).toEqual(["path", "content"]);
+    expect(parameters.required).toEqual(["description"]);
   });
 
   it("distinguishes ordinary local shell commands from explicit runtime-source access", () => {
@@ -93,7 +106,7 @@ describe("P-012 transactional tool routing", () => {
 
       const tools = createBuiltinTools("");
       const writeTool = tools.find((tool) => tool.name === "write_file")!;
-      const protectedAlias = path.join(alias, "src", "agent", "tools-p012-adapter.ts");
+      const protectedAlias = path.join(alias, "constitution.md");
       const writeResult = await writeTool.execute(
         { path: protectedAlias, content: "alias bypass" },
         ctx,
