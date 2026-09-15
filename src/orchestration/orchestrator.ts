@@ -149,6 +149,10 @@ export class Orchestrator {
       result: TaskResult,
     ) => Promise<TaskResult>;
   }) {
+    // Planner/orchestration inference shares the same durable accounting and
+    // evidence database as the orchestrator. Optional chaining preserves test
+    // doubles and legacy adapters that intentionally omit P-013 binding.
+    params.inference.bindEvidenceDatabase?.(params.db);
     this.adaptive = new AdaptivePathEngine(params.db);
   }
 

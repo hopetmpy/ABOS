@@ -143,6 +143,11 @@ function runPlannerInference(params: {
   return params.inference.chat({
     tier: "reasoning",
     responseFormat: { type: "json_object" },
+    trace: {
+      goalId: params.goal.id,
+      taskId: params.failedTask?.id ?? null,
+      taskType: "planning",
+    },
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
