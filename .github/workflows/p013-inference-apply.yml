@@ -1,0 +1,48 @@
+name: P013 Inference Evidence Apply
+
+on:
+  push:
+    branches:
+      - abos/p013-observability-evidence-fabric
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[p013-inference-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Apply P-013 inference evidence
+        run: python .github/p013_inference_apply.py
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Run targeted inference and P-013 tests
+        run: pnpm exec vitest run src/__tests__/p013-inference-correlation.test.ts src/__tests__/inference-router.test.ts src/__tests__/p013-evidence-fabric.test.ts src/__tests__/p013-policy-selfmod-correlation.test.ts
+      - name: Verify ProjectOps integrity
+        run: node scripts/projectops-integrity-verify.mjs
+      - name: Diff check
+        run: git diff --check
+      - name: Commit clean inference unit and remove helpers
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/p013_inference_apply.py .github/workflows/p013-inference-apply.yml
+          git config user.name "hopetmpy"
+          git config user.email "hope.tmpy@gmail.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "P-013 correlate inference intent outcome and cost [p013-inference-applied]"
+          git push origin HEAD:abos/p013-observability-evidence-fabric
