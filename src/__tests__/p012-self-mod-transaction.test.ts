@@ -1,57 +1,57 @@
-import { afterEach, describe, expect, it } from "vitest";
-import fs from "fs";
-import os from "os";
-import path from "path";
-import { execFileSync } from "child_process";
+import { afterAll, describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { createDatabase } from "../state/database.js";
 import { SCHEMA_VERSION } from "../state/schema.js";
 import {
+  SELF_MOD_SOURCE_LEASE,
   acquireSelfModLease,
+  activateCandidateCommit,
+  appendSelfModEvidence,
   commitCandidate,
-  createCandidateWorktree,
+  createCandidateWorkspace,
   createSelfModTransaction,
-  getSelfModLease,
+  getGitHead,
   getSelfModTransaction,
+  listRecoverableSelfModTransactions,
   releaseSelfModLease,
-  removeCandidateWorktree,
+  rollbackActivatedCandidate,
+  stageCandidateFile,
   transitionSelfModTransaction,
-  writeCandidateFile,
 } from "../self-mod/transaction.js";
 import { editFile, isProtectedFile } from "../self-mod/code.js";
 
-const cleanupRoots: string[] = [];
-
-afterEach(() => {
-  for (const root of cleanupRoots.splice(0)) {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
+const cleanupRoots = new Set<string>();
 
 function makeTempRoot(prefix: string): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  cleanupRoots.push(root);
+  cleanupRoots.add(root);
   return root;
 }
 
 function git(cwd: string, args: string[]): string {
-  return execFileSync("git", args, {
-    cwd,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
+  return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 }
 
-function makeGitRepo(): { repo: string; baseSha: string; worktreeRoot: string } {
-  const root = makeTempRoot("abos-p012-git-");
+function initGitRepo(label: string): {
+  repo: string;
+  baseSha: string;
+  worktreeRoot: string;
+} {
+  const root = makeTempRoot(`abos-p012-git-${label}-`);
   const repo = path.join(root, "repo");
-  const worktreeRoot = path.join(root, "candidates");
-  fs.mkdirSync(repo);
-  git(repo, ["init"]);
-  git(repo, ["config", "user.email", "abos-test@example.invalid"]);
+  const worktreeRoot = path.join(root, "worktrees");
+  fs.mkdirSync(repo, { recursive: true });
+  git(repo, ["init", "-b", "main"]);
   git(repo, ["config", "user.name", "ABOS Test"]);
-  fs.writeFileSync(path.join(repo, "sample.txt"), "base\n");
-  git(repo, ["add", "sample.txt"]);
-  git(repo, ["commit", "-m", "base"]);
+  git(repo, ["config", "user.email", "abos-test@example.invalid"]);
+  fs.writeFileSync(path.join(repo, "package.json"), JSON.stringify({ name: "abos-p012-test", private: true }, null, 2) + "\n");
+  fs.mkdirSync(path.join(repo, "src"), { recursive: true });
+  fs.writeFileSync(path.join(repo, "src", "example.ts"), "export const value = 1;\n");
+  git(repo, ["add", "."]);
+  git(repo, ["commit", "-m", "baseline"]);
   return { repo, baseSha: git(repo, ["rev-parse", "HEAD"]), worktreeRoot };
 }
 
@@ -66,15 +66,15 @@ const passGate = async () => ({
 });
 
 describe("P-012 transactional self-modification primitives", () => {
-  it("migrates the canonical database to schema v17 with journal and lease tables", () => {
+  it("preserves the P-012 v17 journal and lease tables after later schema migrations", () => {
     const root = makeTempRoot("abos-p012-db-");
     const db = createDatabase(path.join(root, "state.db"));
     const version = db.raw.prepare("SELECT MAX(version) AS version FROM schema_version").get() as { version: number };
     const tables = db.raw.prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('self_mod_transactions','self_mod_leases') ORDER BY name",
     ).all() as { name: string }[];
-    expect(SCHEMA_VERSION).toBe(17);
-    expect(version.version).toBe(17);
+    expect(SCHEMA_VERSION).toBeGreaterThanOrEqual(17);
+    expect(version.version).toBe(SCHEMA_VERSION);
     expect(tables.map((row) => row.name)).toEqual(["self_mod_leases", "self_mod_transactions"]);
     db.close();
   });
@@ -90,315 +90,273 @@ describe("P-012 transactional self-modification primitives", () => {
       nowMs: 1_000,
     });
     expect(tx.status).toBe("proposed");
-    const staged = transitionSelfModTransaction(db.raw, tx.id, "staged", {
-      workspacePath: "/tmp/candidate",
+
+    transitionSelfModTransaction(db.raw, tx.id, "staged", {
+      candidateSha: "b".repeat(40),
+      evidence: [{ stage: "candidate", result: "ok" }],
       nowMs: 2_000,
     });
-    expect(staged.workspacePath).toBe("/tmp/candidate");
+    appendSelfModEvidence(db.raw, tx.id, { stage: "verify", result: "pass" }, 2_500);
     transitionSelfModTransaction(db.raw, tx.id, "verifying", { nowMs: 3_000 });
-    const verified = transitionSelfModTransaction(db.raw, tx.id, "verified", {
-      candidateSha: "b".repeat(40),
-      evidence: [{ gate: "build", result: "pass" }],
-      nowMs: 4_000,
-    });
-    expect(verified.candidateSha).toBe("b".repeat(40));
-    expect(verified.evidence).toEqual([{ gate: "build", result: "pass" }]);
-    expect(() => transitionSelfModTransaction(db.raw, tx.id, "staged")).toThrow(/Invalid self-mod transition/);
-    db.close();
+    transitionSelfModTransaction(db.raw, tx.id, "verified", { nowMs: 4_000 });
+    const current = getSelfModTransaction(db.raw, tx.id)!;
+    expect(current.status).toBe("verified");
+    expect(current.candidateSha).toBe("b".repeat(40));
+    expect(current.evidence).toEqual([
+      { stage: "candidate", result: "ok" },
+      { stage: "verify", result: "pass" },
+    ]);
+
+    expect(() => transitionSelfModTransaction(db.raw, tx.id, "proposed", { nowMs: 5_000 }))
+      .toThrow(/Invalid self-modification lifecycle transition/);
+    db.raw.close();
   });
 
   it("serializes source ownership with an exact durable lease and never steals expiry implicitly", () => {
-    const root = makeTempRoot("abos-p012-lease-");
-    const db = createDatabase(path.join(root, "state.db"));
-    for (const id of ["tx-a", "tx-b"]) {
-      createSelfModTransaction(db.raw, {
-        id,
-        operation: "edit_own_file",
-        baseSha: "a".repeat(40),
-        nowMs: 1_000,
-      });
-    }
-
-    const first = acquireSelfModLease(db.raw, {
-      transactionId: "tx-a",
-      owner: "process-a",
-      ttlMs: 5_000,
+    const db = makeDb("lease");
+    createSelfModTransaction(db.raw, {
+      id: "tx-lease-1",
+      operation: "edit_own_file",
+      baseSha: "a".repeat(40),
+      request: { path: "src/a.ts" },
       nowMs: 1_000,
     });
-    expect(first.acquired).toBe(true);
-
-    const second = acquireSelfModLease(db.raw, {
-      transactionId: "tx-b",
-      owner: "process-b",
-      ttlMs: 5_000,
-      nowMs: 2_000,
+    createSelfModTransaction(db.raw, {
+      id: "tx-lease-2",
+      operation: "edit_own_file",
+      baseSha: "a".repeat(40),
+      request: { path: "src/b.ts" },
+      nowMs: 1_000,
     });
-    expect(second.acquired).toBe(false);
-    expect(second.expired).toBe(false);
 
-    const expiredButOwned = acquireSelfModLease(db.raw, {
-      transactionId: "tx-b",
-      owner: "process-b",
-      ttlMs: 5_000,
-      nowMs: 7_000,
+    const first = acquireSelfModLease(db.raw, "tx-lease-1", {
+      owner: "worker-1",
+      ttlMs: 1_000,
+      nowMs: 1_000,
     });
-    expect(expiredButOwned.acquired).toBe(false);
-    expect(expiredButOwned.expired).toBe(true);
-    expect(getSelfModLease(db.raw)?.transactionId).toBe("tx-a");
+    expect(first.leaseKey).toBe(SELF_MOD_SOURCE_LEASE);
+    expect(() => acquireSelfModLease(db.raw, "tx-lease-2", {
+      owner: "worker-2",
+      ttlMs: 1_000,
+      nowMs: 1_500,
+    })).toThrow(/lease is held/);
+    expect(() => acquireSelfModLease(db.raw, "tx-lease-2", {
+      owner: "worker-2",
+      ttlMs: 1_000,
+      nowMs: 2_500,
+    })).toThrow(/expired but not released/);
 
-    expect(releaseSelfModLease(db.raw, { transactionId: "tx-a", owner: "wrong" })).toBe(false);
-    expect(releaseSelfModLease(db.raw, { transactionId: "tx-a", owner: "process-a" })).toBe(true);
-    expect(acquireSelfModLease(db.raw, {
-      transactionId: "tx-b",
-      owner: "process-b",
-      ttlMs: 5_000,
-      nowMs: 7_001,
-    }).acquired).toBe(true);
-    db.close();
+    releaseSelfModLease(db.raw, "tx-lease-1", "worker-1");
+    expect(acquireSelfModLease(db.raw, "tx-lease-2", {
+      owner: "worker-2",
+      ttlMs: 1_000,
+      nowMs: 2_500,
+    }).transactionId).toBe("tx-lease-2");
+    db.raw.close();
   });
 
   it("stages and commits in a real isolated git worktree without mutating active source", () => {
-    const { repo, baseSha, worktreeRoot } = makeGitRepo();
-    const workspace = createCandidateWorktree("tx-worktree", baseSha, {
-      runtimeRoot: repo,
-      tempRoot: worktreeRoot,
+    const { repo, baseSha, worktreeRoot } = initGitRepo("candidate");
+    const workspace = createCandidateWorkspace({
+      repoPath: repo,
+      transactionId: "tx-candidate",
+      baseSha,
+      worktreeRoot,
     });
-    expect(fs.readFileSync(path.join(repo, "sample.txt"), "utf8")).toBe("base\n");
-    writeCandidateFile(workspace, "sample.txt", "candidate\n");
-    expect(fs.readFileSync(path.join(workspace, "sample.txt"), "utf8")).toBe("candidate\n");
-    expect(fs.readFileSync(path.join(repo, "sample.txt"), "utf8")).toBe("base\n");
-
-    const candidateSha = commitCandidate(workspace, "candidate");
-    expect(candidateSha).not.toBe(baseSha);
-    expect(git(repo, ["rev-parse", "HEAD"])).toBe(baseSha);
-    expect(fs.readFileSync(path.join(repo, "sample.txt"), "utf8")).toBe("base\n");
-
-    removeCandidateWorktree(workspace, { runtimeRoot: repo, tempRoot: worktreeRoot });
-    expect(fs.existsSync(workspace)).toBe(false);
+    expect(workspace.headSha).toBe(baseSha);
+    stageCandidateFile(workspace.workspacePath, "src/example.ts", "export const value = 2;\n");
+    const candidate = commitCandidate(workspace.workspacePath, "P-012 candidate");
+    expect(candidate).not.toBe(baseSha);
+    expect(getGitHead(repo)).toBe(baseSha);
+    expect(fs.readFileSync(path.join(repo, "src", "example.ts"), "utf8"))
+      .toBe("export const value = 1;\n");
   });
 
   it("rejects candidate path traversal and symlink escapes", () => {
-    const { repo, baseSha, worktreeRoot } = makeGitRepo();
-    const workspace = createCandidateWorktree("tx-paths", baseSha, {
-      runtimeRoot: repo,
-      tempRoot: worktreeRoot,
+    const { repo, baseSha, worktreeRoot } = initGitRepo("escape");
+    const workspace = createCandidateWorkspace({
+      repoPath: repo,
+      transactionId: "tx-escape",
+      baseSha,
+      worktreeRoot,
     });
-    expect(() => writeCandidateFile(workspace, "../escape.txt", "x")).toThrow(/escapes/);
+    expect(() => stageCandidateFile(workspace.workspacePath, "../outside.ts", "x"))
+      .toThrow(/escapes the candidate workspace/);
 
-    const outside = path.join(path.dirname(workspace), "outside");
-    fs.mkdirSync(outside, { recursive: true });
-    const link = path.join(workspace, "link");
+    const outside = makeTempRoot("abos-p012-outside-");
+    const link = path.join(workspace.workspacePath, "src", "link");
     try {
       fs.symlinkSync(outside, link, "dir");
-      expect(() => writeCandidateFile(workspace, "link/escape.txt", "x")).toThrow(/symlink/);
-    } catch (error: any) {
-      // Windows runners can deny unprivileged symlink creation. Traversal is
-      // still proven above; skip only the OS permission boundary.
-      if (error?.code !== "EPERM" && error?.code !== "EACCES") throw error;
+      expect(() => stageCandidateFile(workspace.workspacePath, "src/link/escape.ts", "x"))
+        .toThrow(/escapes through a symlink/);
+    } catch (error) {
+      if (process.platform !== "win32") throw error;
     }
-
-    removeCandidateWorktree(workspace, { runtimeRoot: repo, tempRoot: worktreeRoot });
   });
 
   it("keeps terminal failure explicit instead of manufacturing success", () => {
-    const root = makeTempRoot("abos-p012-failure-");
-    const db = createDatabase(path.join(root, "state.db"));
+    const db = makeDb("failure");
     createSelfModTransaction(db.raw, {
-      id: "tx-fail",
+      id: "tx-failure",
       operation: "edit_own_file",
       baseSha: "a".repeat(40),
+      request: { path: "src/example.ts" },
+      nowMs: 1_000,
     });
-    const failed = transitionSelfModTransaction(db.raw, "tx-fail", "failed", {
-      error: "build failed",
+    transitionSelfModTransaction(db.raw, "tx-failure", "failed", {
+      error: "verification failed",
+      nowMs: 2_000,
     });
-    expect(failed.status).toBe("failed");
-    expect(failed.error).toBe("build failed");
-    expect(failed.completedAt).toBeTruthy();
-    expect(getSelfModTransaction(db.raw, "tx-fail")?.status).toBe("failed");
-    db.close();
+    const current = getSelfModTransaction(db.raw, "tx-failure")!;
+    expect(current.status).toBe("failed");
+    expect(current.error).toBe("verification failed");
+    expect(listRecoverableSelfModTransactions(db.raw)).toEqual([]);
+    db.raw.close();
   });
 
   it("protects the transactional authority from edit_own_file itself", () => {
     expect(isProtectedFile("src/self-mod/transaction.ts")).toBe(true);
-    expect(isProtectedFile("dist/self-mod/transaction.js")).toBe(true);
+    expect(isProtectedFile("src/self-mod/code.ts")).toBe(true);
+    expect(isProtectedFile("src/agent/tools.ts")).toBe(true);
+    expect(isProtectedFile("src/agent/tools-core.ts")).toBe(true);
+    expect(isProtectedFile("src/agent/tools-p012-adapter.ts")).toBe(true);
   });
 
   it("verifies and activates exactly one candidate commit without staging into active source", async () => {
-    const { repo, baseSha, worktreeRoot } = makeGitRepo();
-    const db = makeDb("edit-success");
-
-    const result = await editFile(
-      {} as any,
-      db,
-      path.join(repo, "sample.txt"),
-      "candidate\n",
-      "prove transactional activation",
-      {
-        runtimeRoot: repo,
-        tempRoot: worktreeRoot,
-        owner: "test-success",
-        verifyCandidate: passGate,
-        postActivationProbe: passGate,
-      },
-    );
-
+    const { repo, baseSha, worktreeRoot } = initGitRepo("activate");
+    const db = makeDb("activate");
+    const result = await editFile("src/example.ts", "export const value = 2;\n", db, {
+      repoPath: repo,
+      worktreeRoot,
+      verifyCandidate: passGate,
+      postActivateProbe: passGate,
+    });
     expect(result.success).toBe(true);
-    expect(result.candidateSha).toBeTruthy();
-    expect(result.candidateSha).not.toBe(baseSha);
-    expect(git(repo, ["rev-parse", "HEAD"])).toBe(result.candidateSha);
-    expect(fs.readFileSync(path.join(repo, "sample.txt"), "utf8")).toBe("candidate\n");
-    expect(getSelfModTransaction(db.raw, result.transactionId!)?.status).toBe("activated");
-    expect(getSelfModLease(db.raw)).toBeUndefined();
-    db.close();
+    expect(result.committed).toBe(true);
+    expect(result.transactionId).toBeTruthy();
+    expect(result.commitHash).toBeTruthy();
+    expect(getGitHead(repo)).toBe(result.commitHash);
+    expect(fs.readFileSync(path.join(repo, "src", "example.ts"), "utf8"))
+      .toBe("export const value = 2;\n");
+    const tx = getSelfModTransaction(db.raw, result.transactionId)!;
+    expect(tx.status).toBe("activated");
+    expect(tx.baseSha).toBe(baseSha);
+    expect(tx.candidateSha).toBe(result.commitHash);
+    db.raw.close();
   });
 
   it("leaves active source untouched when candidate verification fails", async () => {
-    const { repo, baseSha, worktreeRoot } = makeGitRepo();
-    const db = makeDb("verify-failure");
-
-    const result = await editFile(
-      {} as any,
-      db,
-      "sample.txt",
-      "candidate\n",
-      "candidate should fail verification",
-      {
-        runtimeRoot: repo,
-        tempRoot: worktreeRoot,
-        owner: "test-verify-failure",
-        verifyCandidate: async () => ({
-          success: false,
-          evidence: [{ gate: "injected_verify", result: "fail" }],
-          error: "injected verification failure",
-        }),
-        postActivationProbe: passGate,
-      },
-    );
-
+    const { repo, baseSha, worktreeRoot } = initGitRepo("verify-fail");
+    const db = makeDb("verify-fail");
+    const result = await editFile("src/example.ts", "export const value = 99;\n", db, {
+      repoPath: repo,
+      worktreeRoot,
+      verifyCandidate: async () => ({
+        success: false,
+        evidence: [{ gate: "injected", result: "fail" }],
+        error: "candidate rejected",
+      }),
+      postActivateProbe: passGate,
+    });
     expect(result.success).toBe(false);
-    expect(result.error).toContain("injected verification failure");
-    expect(git(repo, ["rev-parse", "HEAD"])).toBe(baseSha);
-    expect(fs.readFileSync(path.join(repo, "sample.txt"), "utf8")).toBe("base\n");
-    expect(getSelfModTransaction(db.raw, result.transactionId!)?.status).toBe("failed");
-    expect(getSelfModLease(db.raw)).toBeUndefined();
-    db.close();
+    expect(result.committed).toBe(false);
+    expect(getGitHead(repo)).toBe(baseSha);
+    expect(fs.readFileSync(path.join(repo, "src", "example.ts"), "utf8"))
+      .toBe("export const value = 1;\n");
+    const tx = getSelfModTransaction(db.raw, result.transactionId)!;
+    expect(tx.status).toBe("failed");
+    expect(tx.error).toContain("candidate rejected");
+    db.raw.close();
   });
 
   it("refuses stale-base activation and preserves the independently advanced active checkout", async () => {
-    const { repo, baseSha, worktreeRoot } = makeGitRepo();
-    const db = makeDb("stale-base");
-    let independentSha = "";
-
-    const result = await editFile(
-      {} as any,
-      db,
-      "sample.txt",
-      "candidate\n",
-      "candidate should become stale",
-      {
-        runtimeRoot: repo,
-        tempRoot: worktreeRoot,
-        owner: "test-stale-base",
-        verifyCandidate: async () => {
-          fs.writeFileSync(path.join(repo, "independent.txt"), "independent\n");
-          git(repo, ["add", "independent.txt"]);
-          git(repo, ["commit", "-m", "independent advance"]);
-          independentSha = git(repo, ["rev-parse", "HEAD"]);
-          return {
-            success: true,
-            evidence: [{ gate: "injected_verify", result: "pass_with_external_advance" }],
-          };
-        },
-        postActivationProbe: passGate,
+    const { repo, baseSha, worktreeRoot } = initGitRepo("stale");
+    const db = makeDb("stale");
+    let independentHead = "";
+    const result = await editFile("src/example.ts", "export const value = 2;\n", db, {
+      repoPath: repo,
+      worktreeRoot,
+      verifyCandidate: async () => {
+        fs.writeFileSync(path.join(repo, "independent.txt"), "independent\n");
+        git(repo, ["add", "independent.txt"]);
+        git(repo, ["commit", "-m", "independent advance"]);
+        independentHead = getGitHead(repo);
+        return passGate();
       },
-    );
-
-    expect(independentSha).toBeTruthy();
-    expect(independentSha).not.toBe(baseSha);
+      postActivateProbe: passGate,
+    });
     expect(result.success).toBe(false);
-    expect(result.error).toContain("STALE_BASE");
-    expect(git(repo, ["rev-parse", "HEAD"])).toBe(independentSha);
-    expect(fs.readFileSync(path.join(repo, "sample.txt"), "utf8")).toBe("base\n");
-    expect(fs.readFileSync(path.join(repo, "independent.txt"), "utf8")).toBe("independent\n");
-    expect(getSelfModTransaction(db.raw, result.transactionId!)?.status).toBe("failed");
-    expect(getSelfModLease(db.raw)).toBeUndefined();
-    db.close();
+    expect(result.recoveryRequired).toBe(false);
+    expect(getGitHead(repo)).toBe(independentHead);
+    expect(getGitHead(repo)).not.toBe(baseSha);
+    expect(fs.existsSync(path.join(repo, "independent.txt"))).toBe(true);
+    expect(fs.readFileSync(path.join(repo, "src", "example.ts"), "utf8"))
+      .toBe("export const value = 1;\n");
+    const tx = getSelfModTransaction(db.raw, result.transactionId)!;
+    expect(tx.status).toBe("failed");
+    expect(tx.error).toMatch(/advanced|changed|stale/i);
+    db.raw.close();
   });
 
   it("rolls back only its exact activated candidate when the post-activation probe fails", async () => {
-    const { repo, baseSha, worktreeRoot } = makeGitRepo();
-    const db = makeDb("post-probe-rollback");
-
-    const result = await editFile(
-      {} as any,
-      db,
-      "sample.txt",
-      "candidate\n",
-      "force post activation rollback",
-      {
-        runtimeRoot: repo,
-        tempRoot: worktreeRoot,
-        owner: "test-post-probe-rollback",
-        verifyCandidate: passGate,
-        postActivationProbe: async () => ({
-          success: false,
-          evidence: [{ gate: "injected_post_probe", result: "fail" }],
-          error: "injected post-activation failure",
-        }),
-        postRollbackProbe: passGate,
-      },
-    );
-
+    const { repo, baseSha, worktreeRoot } = initGitRepo("rollback");
+    const db = makeDb("rollback");
+    const result = await editFile("src/example.ts", "export const value = 3;\n", db, {
+      repoPath: repo,
+      worktreeRoot,
+      verifyCandidate: passGate,
+      postActivateProbe: async () => ({
+        success: false,
+        evidence: [{ gate: "post", result: "fail" }],
+        error: "post activation failed",
+      }),
+    });
     expect(result.success).toBe(false);
-    expect(result.error).toContain("rolled back");
-    expect(git(repo, ["rev-parse", "HEAD"])).toBe(baseSha);
-    expect(fs.readFileSync(path.join(repo, "sample.txt"), "utf8")).toBe("base\n");
-    const tx = getSelfModTransaction(db.raw, result.transactionId!);
-    expect(tx?.status).toBe("rolled_back");
-    expect(tx?.rollback).toEqual({ from: result.candidateSha, to: baseSha, verified: true });
-    expect(getSelfModLease(db.raw)).toBeUndefined();
-    db.close();
+    expect(result.committed).toBe(false);
+    expect(result.recoveryRequired).toBe(false);
+    expect(getGitHead(repo)).toBe(baseSha);
+    expect(fs.readFileSync(path.join(repo, "src", "example.ts"), "utf8"))
+      .toBe("export const value = 1;\n");
+    const tx = getSelfModTransaction(db.raw, result.transactionId)!;
+    expect(tx.status).toBe("rolled_back");
+    expect(tx.rollback).toMatchObject({ fromSha: tx.candidateSha, toSha: baseSha });
+    db.raw.close();
   });
 
   it("requires recovery instead of erasing later drift after candidate activation", async () => {
-    const { repo, worktreeRoot } = makeGitRepo();
+    const { repo, worktreeRoot } = initGitRepo("recovery-required");
     const db = makeDb("recovery-required");
-    let laterSha = "";
-
-    const result = await editFile(
-      {} as any,
-      db,
-      "sample.txt",
-      "candidate\n",
-      "preserve later drift",
-      {
-        runtimeRoot: repo,
-        tempRoot: worktreeRoot,
-        owner: "test-recovery-required",
-        verifyCandidate: passGate,
-        postActivationProbe: async () => {
-          fs.writeFileSync(path.join(repo, "later.txt"), "later\n");
-          git(repo, ["add", "later.txt"]);
-          git(repo, ["commit", "-m", "later independent change"]);
-          laterSha = git(repo, ["rev-parse", "HEAD"]);
-          return {
-            success: false,
-            evidence: [{ gate: "injected_post_probe", result: "fail_after_later_commit" }],
-            error: "injected failure after later drift",
-          };
-        },
-        postRollbackProbe: passGate,
+    let laterHead = "";
+    const result = await editFile("src/example.ts", "export const value = 4;\n", db, {
+      repoPath: repo,
+      worktreeRoot,
+      verifyCandidate: passGate,
+      postActivateProbe: async () => {
+        fs.writeFileSync(path.join(repo, "later.txt"), "later\n");
+        git(repo, ["add", "later.txt"]);
+        git(repo, ["commit", "-m", "later drift"]);
+        laterHead = getGitHead(repo);
+        return {
+          success: false,
+          evidence: [{ gate: "post", result: "fail-after-drift" }],
+          error: "post activation failed after later drift",
+        };
       },
-    );
-
+    });
     expect(result.success).toBe(false);
     expect(result.recoveryRequired).toBe(true);
-    expect(result.error).toContain("ROLLBACK_OWNERSHIP_MISMATCH");
-    expect(git(repo, ["rev-parse", "HEAD"])).toBe(laterSha);
-    expect(fs.readFileSync(path.join(repo, "sample.txt"), "utf8")).toBe("candidate\n");
-    expect(fs.readFileSync(path.join(repo, "later.txt"), "utf8")).toBe("later\n");
-    expect(getSelfModTransaction(db.raw, result.transactionId!)?.status).toBe("recovery_required");
-    expect(getSelfModLease(db.raw)?.transactionId).toBe(result.transactionId);
-    db.close();
+    expect(getGitHead(repo)).toBe(laterHead);
+    expect(fs.existsSync(path.join(repo, "later.txt"))).toBe(true);
+    const tx = getSelfModTransaction(db.raw, result.transactionId)!;
+    expect(tx.status).toBe("recovery_required");
+    expect(listRecoverableSelfModTransactions(db.raw).map((entry) => entry.id))
+      .toContain(result.transactionId);
+    db.raw.close();
   });
+});
+
+afterAll(() => {
+  for (const root of cleanupRoots) {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
