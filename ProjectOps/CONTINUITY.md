@@ -4,7 +4,7 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-013
 Active-Segment: continuity/C0009.md
-Active-Intervention: P013_OBSERVABILITY_EVIDENCE_FABRIC — AUDIT_REQUIRED / SOURCE_NOT_MODIFIED
+Active-Intervention: P013_OBSERVABILITY_EVIDENCE_FABRIC — DECISION_READY / SOURCE_NOT_MODIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -103,6 +103,10 @@ P012-Main-CI: 34926393562 SUCCESS
 P012-Main-ProjectOps: 34926393570 SUCCESS
 P013-Canonical-Baseline: fe845184fce48c65032f8521ecd0bdfa42e04b77
 P013-Branch: abos/p013-observability-evidence-fabric
+P013-Audit-Transition-Head: bdc64c07c9e294c8181874dd2112cd41f2769a5a
+P013-Audit-Transition-CI: 34927035157 SUCCESS
+P013-Audit-Transition-ProjectOps: 34927035226 SUCCESS
+P013-Decision-State: DECISION_READY
 
 ## Semántica del HEAD reconciliado
 
@@ -130,7 +134,7 @@ P-012 conserva autonomía de self-modification y sustituye write-before-verify/f
 - P-010: HECHO — Policy/Authorization/Approval/Quarantine integrado por PR #36 y cerrado canónicamente por PR #37 sobre `main` `33e4865b...`.
 - P-011: HECHO / INTEGRATION_VERIFIED — integrado por PR #38; cierre documental PR #39; C0007 cerrado.
 - P-012: PARCIAL / INTEGRATION_VERIFIED — integrado por PR #40 en `main` `fe845184...`, CI `34926393562` + ProjectOps `34926393570` SUCCESS; sólo falta la evidence/correlation P-013 exigida por su propio DoD.
-- P-013: EN_EJECUCIÓN / AUDIT_REQUIRED — C0009 activo sobre baseline `fe845184...`; source P-013 todavía no modificado.
+- P-013: EN_EJECUCIÓN / DECISION_READY — C0009 activo; arquitectura hybrid evidence fabric seleccionada tras auditar memory event_stream, Policy, self-mod, inference, adaptive, environment y heartbeat; source P-013 todavía no modificado.
 - P-014..P-036: ver `ProjectOps/PLAN.md`; permanecen en su estado explícito.
 
 ## P-009 — cierre verificable
