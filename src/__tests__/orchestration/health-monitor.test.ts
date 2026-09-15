@@ -84,6 +84,14 @@ function createMockMessaging() {
   } as any;
 }
 
+function createMockRuntimeActions() {
+  return {
+    observe: vi.fn().mockResolvedValue({ state: "running", evidence: ["runtime observed running"] }),
+    restart: vi.fn().mockResolvedValue({ success: true, evidence: ["restart observed healthy"] }),
+    stop: vi.fn().mockResolvedValue({ success: true, evidence: ["stop observed"] }),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // DB helpers
 // ---------------------------------------------------------------------------
@@ -169,6 +177,7 @@ describe("orchestration/health-monitor", () => {
   let mockTracker: ReturnType<typeof createMockTracker>;
   let mockFunding: ReturnType<typeof createMockFunding>;
   let mockMessaging: ReturnType<typeof createMockMessaging>;
+  let mockRuntimeActions: ReturnType<typeof createMockRuntimeActions>;
   let monitor: HealthMonitor;
 
   beforeEach(() => {
@@ -177,7 +186,8 @@ describe("orchestration/health-monitor", () => {
     mockTracker = createMockTracker();
     mockFunding = createMockFunding();
     mockMessaging = createMockMessaging();
-    monitor = new HealthMonitor(mockDb, mockTracker, mockFunding, mockMessaging);
+    mockRuntimeActions = createMockRuntimeActions();
+    monitor = new HealthMonitor(mockDb, mockTracker, mockFunding, mockMessaging, mockRuntimeActions);
   });
 
   afterEach(() => {
@@ -235,7 +245,8 @@ describe("orchestration/health-monitor", () => {
 
       const agent = report.agents[0];
       expect(agent.healthy).toBe(false);
-      expect(agent.issues).toContain("process_crashed");
+      expect(agent.issues).not.toContain("process_crashed");
+      expect(agent.issues).toContain("heartbeat_missing");
     });
 
     it("reports unhealthy when status is 'failed'", async () => {
@@ -250,7 +261,8 @@ describe("orchestration/health-monitor", () => {
       const report = await monitor.checkAll();
 
       expect(report.agents[0].healthy).toBe(false);
-      expect(report.agents[0].issues).toContain("process_crashed");
+      expect(report.agents[0].issues).not.toContain("process_crashed");
+      expect(report.agents[0].issues).toContain("heartbeat_missing");
     });
 
     it("reports unhealthy when status is 'stopped'", async () => {
@@ -265,10 +277,11 @@ describe("orchestration/health-monitor", () => {
       const report = await monitor.checkAll();
 
       expect(report.agents[0].healthy).toBe(false);
-      expect(report.agents[0].issues).toContain("process_crashed");
+      expect(report.agents[0].issues).not.toContain("process_crashed");
+      expect(report.agents[0].issues).toContain("heartbeat_missing");
     });
 
-    it("handles agent with 'unknown' status as crashed", async () => {
+    it("does not infer crash from unknown status when runtime is observed running", async () => {
       insertChild(db, {
         id: "c1",
         name: "UnknownAgent",
@@ -279,8 +292,8 @@ describe("orchestration/health-monitor", () => {
 
       const report = await monitor.checkAll();
 
-      expect(report.agents[0].healthy).toBe(false);
-      expect(report.agents[0].issues).toContain("process_crashed");
+      expect(report.agents[0].healthy).toBe(true);
+      expect(report.agents[0].issues).not.toContain("process_crashed");
     });
 
     it("handles agent with no heartbeat (no last_checked, no events)", async () => {
@@ -292,11 +305,13 @@ describe("orchestration/health-monitor", () => {
         lastChecked: null,
       });
 
+      mockRuntimeActions.observe.mockResolvedValueOnce({ state: "unknown", evidence: ["probe unavailable"] });
       const report = await monitor.checkAll();
 
       const agent = report.agents[0];
       expect(agent.healthy).toBe(false);
       expect(agent.issues).toContain("heartbeat_missing");
+      expect(agent.issues).toContain("runtime_unknown");
       expect(agent.lastHeartbeat).toBeNull();
     });
 
@@ -499,7 +514,7 @@ describe("orchestration/health-monitor", () => {
       const agent: AgentHealthStatus = {
         address: "0xcrashed",
         name: "Crashed",
-        status: "dead",
+        status: "unhealthy",
         healthy: false,
         lastHeartbeat: null,
         currentTaskId: null,
@@ -513,7 +528,7 @@ describe("orchestration/health-monitor", () => {
         totalAgents: 1,
         healthyAgents: 0,
         unhealthyAgents: 1,
-        deadAgents: 1,
+        deadAgents: 0,
         agents: [agent],
       };
 
@@ -523,8 +538,9 @@ describe("orchestration/health-monitor", () => {
       expect(actions[0].type).toBe("restart");
       expect(actions[0].agentAddress).toBe("0xcrashed");
       expect(actions[0].success).toBe(true);
-      expect(mockMessaging.send).toHaveBeenCalled();
-      expect(mockTracker.updateStatus).toHaveBeenCalledWith("0xcrashed", "starting");
+      expect(mockRuntimeActions.restart).toHaveBeenCalledWith("0xcrashed");
+      expect(mockMessaging.send).not.toHaveBeenCalled();
+      expect(mockTracker.updateStatus).not.toHaveBeenCalled();
     });
 
     it("reassigns task when stuck_on_task detected", async () => {
@@ -596,8 +612,10 @@ describe("orchestration/health-monitor", () => {
       expect(actions).toHaveLength(1);
       expect(actions[0].type).toBe("stop");
       expect(actions[0].agentAddress).toBe("0xerrorloop");
-      expect(mockMessaging.send).toHaveBeenCalled();
-      expect(mockTracker.updateStatus).toHaveBeenCalledWith("0xerrorloop", "stopped");
+      expect(actions[0].success).toBe(true);
+      expect(mockRuntimeActions.stop).toHaveBeenCalledWith("0xerrorloop");
+      expect(mockMessaging.send).not.toHaveBeenCalled();
+      expect(mockTracker.updateStatus).not.toHaveBeenCalled();
     });
 
     it("handles funding failure gracefully", async () => {

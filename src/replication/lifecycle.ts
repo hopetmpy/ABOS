@@ -45,6 +45,60 @@ export class ChildLifecycle {
   }
 
   /**
+   * Adopt a pre-V7 child into the durable lifecycle only when fresh process
+   * observation has resolved the child to healthy or unhealthy.
+   *
+   * This is deliberately narrow: legacy row labels are not lifecycle evidence.
+   * Only historical `running`/`sleeping` rows may be adopted, and only into a
+   * state justified by a child-scoped runtime observation supplied by the
+   * caller. Existing lifecycle history always wins and is never rewritten.
+   *
+   * Returns false when another observer already established lifecycle history.
+   */
+  adoptObservedLegacyState(
+    childId: string,
+    toState: "healthy" | "unhealthy",
+    reason: string,
+    metadata?: Record<string, unknown>,
+  ): boolean {
+    const adopt = this.db.transaction(() => {
+      if (lifecycleGetLatestState(this.db, childId)) {
+        return false;
+      }
+
+      const row = this.db
+        .prepare("SELECT status FROM children WHERE id = ?")
+        .get(childId) as { status: string } | undefined;
+      if (!row) {
+        throw new Error(`Child ${childId} not found.`);
+      }
+      if (row.status !== "running" && row.status !== "sleeping") {
+        throw new Error(
+          `Legacy lifecycle adoption refused from child status "${row.status}".`,
+        );
+      }
+
+      const event: ChildLifecycleEventRow = {
+        id: ulid(),
+        childId,
+        fromState: `legacy:${row.status}`,
+        toState,
+        reason,
+        metadata: JSON.stringify({
+          legacyStatus: row.status,
+          ...(metadata ?? {}),
+        }),
+        createdAt: new Date().toISOString(),
+      };
+      lifecycleInsertEvent(this.db, event);
+      dbUpdateChildStatus(this.db, childId, toState);
+      return true;
+    });
+
+    return adopt();
+  }
+
+  /**
    * Transition a child to a new state with validation.
    * Throws on invalid transitions.
    */

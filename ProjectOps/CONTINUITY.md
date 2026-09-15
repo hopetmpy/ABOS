@@ -4,17 +4,17 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-011
 Active-Segment: continuity/C0007.md
-Active-Intervention: P011_LIFECYCLE_HEALTH_RESTART_RECOVERY — AUDIT_REQUIRED
+Active-Intervention: P011_LIFECYCLE_HEALTH_RESTART_RECOVERY — READY_FOR_INTEGRATION
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p010-close-p011-activate
-Host-Head-At-Audit-Open: f42c9bd1d884c74a59d505ddd4c711e93b1aca8e
-Last-Reconciled-Host-Head: f42c9bd1d884c74a59d505ddd4c711e93b1aca8e
-Last-Reconciled-Head-Semantics: P010_INTEGRATION_VERIFIED_P011_AUDIT_ACTIVATED
+Current-Host-Branch: abos/p011-lifecycle-recovery-v1
+Host-Head-At-Audit-Open: 33e4865b777c9a810cabee370c7bf85600253185
+Last-Reconciled-Host-Head: af2d19fdf033c5a5a52a162ab0db3065702fd69c
+Last-Reconciled-Head-Semantics: P011_SOURCE_COMPLETE_READY_FOR_INTEGRATION
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -63,10 +63,20 @@ P010-PR: 36
 P010-Merge: f42c9bd1d884c74a59d505ddd4c711e93b1aca8e
 P010-Main-CI: 34909182700 SUCCESS
 P010-Main-ProjectOps: 34909182692 SUCCESS
+P010-Closure-PR: 37
+P010-P011-Transition-Head: 99d642e5629170a63e3ad36b0b7e4b1df324e1e4
+P010-P011-Transition-CI: 34909788023 SUCCESS
+P010-P011-Transition-ProjectOps: 34909787927 SUCCESS
+P011-Canonical-Baseline: 33e4865b777c9a810cabee370c7bf85600253185
+P011-Baseline-CI: 34910026353 SUCCESS
+P011-Baseline-ProjectOps: 34910026443 SUCCESS
+P011-Source-Head: af2d19fdf033c5a5a52a162ab0db3065702fd69c
+P011-Branch-CI: 34914283215 SUCCESS
+P011-Branch-ProjectOps: 34914283237 SUCCESS
 
 ## Semántica del HEAD reconciliado
 
-`Last-Reconciled-Host-Head` es el `main` exacto `f42c9bd1...` que integra P-010 por PR #36 y que fue revalidado por CI + ProjectOps. P-010 es HECHO / INTEGRATION_VERIFIED para su objetivo exacto. La continuidad activa rota a P-011/C0007 sin afirmar que exista todavía source P-011 nuevo.
+`Last-Reconciled-Host-Head` referencia el source P-011 exacto `af2d19fd...` ya validado en branch. El canonical baseline de P-011 sigue siendo `main 33e4865b...` por PR #37; branch está SOURCE_COMPLETE/READY_FOR_INTEGRATION pero no se eleva a HECHO hasta merge + revalidación de `main`.
 
 P-009 permanece HECHO únicamente para su objetivo exacto: authority/provenance/trust boundaries. No eleva Social inbound a autenticación criptográfica LIVE; `relay_asserted` sigue siendo el máximo claim demostrado en esa frontera.
 
@@ -85,8 +95,8 @@ P-011 hereda específicamente `execution_state=running/unknown` como estados que
 - P-007: HECHO — programa maestro P-008..P-036 consolidado.
 - P-008: HECHO — Runtime Truth integrado y revalidado.
 - P-009: HECHO — Authority/Provenance/trust boundaries integrados por PR #35 y revalidados sobre `main` `b9dbf144...`.
-- P-010: HECHO — Policy/Authorization/Approval/Quarantine integrado por PR #36 y revalidado sobre `main` `f42c9bd1...`.
-- P-011: EN_EJECUCIÓN / AUDIT_REQUIRED — dependencia P-010 satisfecha; C0007 abierto; source productivo P-011 aún no autorizado.
+- P-010: HECHO — Policy/Authorization/Approval/Quarantine integrado por PR #36 y cerrado canónicamente por PR #37 sobre `main` `33e4865b...`.
+- P-011: EN_EJECUCIÓN / SOURCE_COMPLETE / READY_FOR_INTEGRATION — C0007 activo; baseline canónico `33e4865b...`; source validado `af2d19fd...`; CI + ProjectOps branch green; integración en main pendiente.
 - P-012..P-036: ver `ProjectOps/PLAN.md`; permanecen en su estado explícito.
 
 ## P-009 — cierre verificable
@@ -138,35 +148,44 @@ Evidencia:
 - source head `78c02002...`: ProjectOps `34908128816`, CI `34908128854`, P010 Core Validate `34908129031`, todos SUCCESS;
 - final branch head `eb9e60fd...`: ProjectOps `34908824882`, CI `34908824898`, P010 Core Validate `34908824918`, todos SUCCESS;
 - PR #36 exact-head `eb9e60fd...` sobre base `b9dbf144...`, mergeable y sin review/thread material pendiente;
-- squash merge → `main` `f42c9bd1d884c74a59d505ddd4c711e93b1aca8e`;
-- main ProjectOps `34909182692`: SUCCESS;
-- main CI `34909182700`: SUCCESS, incluyendo Node 22/24, Windows 22/24, public distribution, security y rebrand.
+- squash merge → product `main` `f42c9bd1d884c74a59d505ddd4c711e93b1aca8e`;
+- product-main ProjectOps `34909182692`: SUCCESS;
+- product-main CI `34909182700`: SUCCESS;
+- cierre/activación PR #37 exact-head `99d642e5...`;
+- PR #37 merge → canonical `main` `33e4865b777c9a810cabee370c7bf85600253185`;
+- canonical-main ProjectOps `34910026443`: SUCCESS;
+- canonical-main CI `34910026353`: SUCCESS.
 
 Claims no demostrados por P-010:
 - E5 creator/provider LIVE real;
 - exactly-once externo cuando el provider no lo demuestra.
 
-## P-011 — activación
+## P-011 — source completo / integración pendiente
 
-Baseline: `main` `f42c9bd1d884c74a59d505ddd4c711e93b1aca8e`, CI `34909182700` y ProjectOps `34909182692` SUCCESS.
+Baseline: `main` `33e4865b777c9a810cabee370c7bf85600253185`, CI `34910026353` y ProjectOps `34910026443` SUCCESS.
 
-Estado: `EN_EJECUCIÓN / AUDIT_REQUIRED`.
+Rama: `abos/p011-lifecycle-recovery-v1`. Source validado: `af2d19fdf033c5a5a52a162ab0db3065702fd69c`. Branch CI `34914283215` y ProjectOps `34914283237`: SUCCESS.
 
-Antes de source productivo debe reconstruir Required-Context y mapear producers/consumers de lifecycle, health, restart y recovery; diferenciar requested/observed/stale/unknown; auditar leases/idempotency/reconciliation existentes; y discriminar las hipótesis H1–H6 registradas en C0007. No se crea un segundo supervisor ni lifecycle authority.
+Estado: `EN_EJECUCIÓN / SOURCE_COMPLETE / READY_FOR_INTEGRATION`.
+
+Resultado: lifecycle/restart/stop/health child usa post-condiciones observadas; legacy pre-V7 se adopta sólo desde child evidence; auto-heal es recover idempotente; heartbeat timeout queda durable in-doubt y no se redispatchea tras crash hasta reconciliación. No se creó segundo supervisor/lifecycle store ni se reabrió P-010.
+
+El drift `PROJECT.md §7.4` queda reconciliado puntualmente dentro de P-004 sin declarar P-004 HECHO.
 
 ## Límites / bloqueos actuales
 
-- clone/container local: NO DISPONIBLE por resolución DNS, reconfirmado tras el merge P-010; no se repite ciegamente.
+- clone/container local: NO DISPONIBLE por resolución DNS, reconfirmado tras P-010; no se repite ciegamente.
 - GitHub connector + GitHub Actions: DISPONIBLE / AUTORIZADO.
 - CI/E3 no acredita LIVE/E5/E6.
-- El ajuste puntual de baseline schema v16 acompaña P-010; P-004 permanece PLANIFICADO y no se declara cerrado.
+- El baseline schema v16 acompaña P-010; P-004 permanece PLANIFICADO y no se declara cerrado.
 
 ## Siguiente punto verificable
 
-1. Gatear e integrar esta transición ProjectOps P-010→P-011.
-2. Sobre el baseline integrado, leer Required-Context completo P-011.
-3. Auditar lifecycle/health/restart/recovery de punta a punta y registrar findings/alternatives/failure matrix en C0007.
-4. Alcanzar `DECISION_READY` antes de source P-011.
+1. Gatear el head documental exacto posterior a esta reconciliación.
+2. Reconfirmar branch y `main` exactos; no integrar si aparece drift.
+3. Abrir PR P-011 exact-head, revisar mergeability/reviews/threads y diff.
+4. Merge protegido y revalidación CI + ProjectOps sobre `main`.
+5. Sólo después marcar P-011 HECHO y activar el siguiente P-xxx autorizado por `PLAN.md`.
 
 ## Política de rotación
 
