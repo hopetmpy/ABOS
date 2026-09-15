@@ -4,7 +4,7 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-013
 Active-Segment: continuity/C0009.md
-Active-Intervention: P013_OBSERVABILITY_EVIDENCE_FABRIC — DECISION_READY / SOURCE_NOT_MODIFIED
+Active-Intervention: P013_OBSERVABILITY_EVIDENCE_FABRIC — CORE_V18_E3_GREEN / CRITICAL_CHAIN_PENDING
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -13,8 +13,8 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p013-observability-evidence-fabric
 Host-Head-At-Audit-Open: fe845184fce48c65032f8521ecd0bdfa42e04b77
-Last-Reconciled-Host-Head: fe845184fce48c65032f8521ecd0bdfa42e04b77
-Last-Reconciled-Head-Semantics: P013_AUDIT_BASELINE_FROM_P012_INTEGRATION_VERIFIED_MAIN
+Last-Reconciled-Host-Head: 04d2dee9349910bc8664073bfa58f34917e3e6fb
+Last-Reconciled-Head-Semantics: P013_CORE_V18_E3_GREEN_CRITICAL_CHAIN_PENDING
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -107,10 +107,15 @@ P013-Audit-Transition-Head: bdc64c07c9e294c8181874dd2112cd41f2769a5a
 P013-Audit-Transition-CI: 34927035157 SUCCESS
 P013-Audit-Transition-ProjectOps: 34927035226 SUCCESS
 P013-Decision-State: DECISION_READY
+P013-Core-Source-Commit: 4e24c0682121f2572a8af33a195bc67f7484168c
+P013-Core-Clean-Reconcile: 0b9e21ca17ca5a364cebd945711da5c31c533454
+P013-Core-Gate-Head: 04d2dee9349910bc8664073bfa58f34917e3e6fb
+P013-Core-CI: 34928243681 SUCCESS
+P013-Core-ProjectOps: 34928243697 SUCCESS
 
 ## Semántica del HEAD reconciliado
 
-`Last-Reconciled-Host-Head` es `fe845184fce48c65032f8521ecd0bdfa42e04b77`, squash merge canónico P-012 y baseline de auditoría P-013. Ese `main` fue revalidado por CI `34926393562` y ProjectOps `34926393570`, ambos SUCCESS. P-012 conserva además su source/gate histórico `84399f...` / `991650...`; P-013 inicia sin product-source propio.
+`Last-Reconciled-Host-Head` es `04d2dee9349910bc8664073bfa58f34917e3e6fb`, exact-head del Core v18 P-013 después de reconciliar el único test histórico P-012 que fijaba schema 17. CI `34928243681` y ProjectOps `34928243697` son SUCCESS. El source Core fue producido en `4e24c068...`; `04d2dee...` conserva el mismo tree productivo más la reconciliación mínima del test histórico.
 
 P-009 permanece HECHO únicamente para su objetivo exacto: authority/provenance/trust boundaries. No eleva Social inbound a autenticación criptográfica LIVE; `relay_asserted` sigue siendo el máximo claim demostrado en esa frontera.
 
@@ -134,7 +139,7 @@ P-012 conserva autonomía de self-modification y sustituye write-before-verify/f
 - P-010: HECHO — Policy/Authorization/Approval/Quarantine integrado por PR #36 y cerrado canónicamente por PR #37 sobre `main` `33e4865b...`.
 - P-011: HECHO / INTEGRATION_VERIFIED — integrado por PR #38; cierre documental PR #39; C0007 cerrado.
 - P-012: PARCIAL / INTEGRATION_VERIFIED — integrado por PR #40 en `main` `fe845184...`, CI `34926393562` + ProjectOps `34926393570` SUCCESS; sólo falta la evidence/correlation P-013 exigida por su propio DoD.
-- P-013: EN_EJECUCIÓN / DECISION_READY — C0009 activo; arquitectura hybrid evidence fabric seleccionada tras auditar memory event_stream, Policy, self-mod, inference, adaptive, environment y heartbeat; source P-013 todavía no modificado.
+- P-013: EN_EJECUCIÓN / CORE_V18_E3_GREEN — evidence fabric v18 implementado y exact-head gated en `04d2dee...`; siguiente unidad es critical chain v19 turn/tool→Policy→self-mod. P-013 aún no está HECHO.
 - P-014..P-036: ver `ProjectOps/PLAN.md`; permanecen en su estado explícito.
 
 ## P-009 — cierre verificable
