@@ -1,6 +1,7 @@
 import type { Database } from "better-sqlite3";
 import { ulid } from "ulid";
-import { MIGRATION_V12 } from "../state/schema.js";
+import { MIGRATION_V12, MIGRATION_V18_EVIDENCE_FABRIC } from "../state/schema.js";
+import { appendEvidenceEvent, correlationIdFor } from "../observability/evidence.js";
 import { pathSignature } from "./path-signature.js";
 import type {
   Opportunity,
@@ -29,6 +30,33 @@ const parseArray = (value: unknown): string[] => {
   }
 };
 
+function appendAdaptiveAuthorityEvent(
+  db: Database,
+  input: {
+    eventType: string;
+    authorityType: string;
+    authorityId: string;
+    goalId: string;
+    taskId?: string | null;
+    causationId?: string | null;
+    payload?: Record<string, unknown>;
+  },
+): void {
+  appendEvidenceEvent(db, {
+    correlationId: correlationIdFor("goal", input.goalId),
+    causationId: input.causationId ?? null,
+    eventType: input.eventType,
+    domain: "adaptive",
+    authorityType: input.authorityType,
+    authorityId: input.authorityId,
+    goalId: input.goalId,
+    taskId: input.taskId ?? null,
+    epistemicStatus: "observation",
+    payload: input.payload ?? {},
+    provenance: { source: input.authorityType },
+  });
+}
+
 export class AdaptiveStore {
   constructor(private readonly db: Database) {
     // Orchestrator is also used in tests/embeddings that provide a raw DB
@@ -36,6 +64,9 @@ export class AdaptiveStore {
     // idempotently available without requiring callers to know migration v12.
     // Production still records migration version through createDatabase().
     db.exec(MIGRATION_V12);
+    // Raw DB embeddings that opt into AdaptiveStore also need the causal fabric
+    // required by P-013. Production createDatabase() still owns schema_version.
+    db.exec(MIGRATION_V18_EVIDENCE_FABRIC);
   }
 
   getOrCreatePath(candidate: PathCandidate): PersistedPath {
@@ -78,30 +109,41 @@ export class AdaptiveStore {
     }
 
     const id = ulid();
-    this.db.prepare(
-      `INSERT INTO adaptive_paths
-       (id, goal_id, task_id, signature, hypothesis, strategy, assumptions,
-        required_capabilities, environment, executor, sequence, expected_outcome,
-        expected_cost_cents, evidence, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'candidate', ?, ?)`,
-    ).run(
-      id,
-      candidate.goalId,
-      candidate.taskId ?? null,
-      signature,
-      candidate.hypothesis,
-      candidate.strategy,
-      stringify(candidate.assumptions),
-      stringify(candidate.requiredCapabilities),
-      candidate.environment ?? null,
-      candidate.executor ?? null,
-      stringify(candidate.sequence),
-      candidate.expectedOutcome,
-      candidate.expectedCostCents ?? 0,
-      stringify(candidate.evidence ?? []),
-      new Date().toISOString(),
-      new Date().toISOString(),
-    );
+    this.db.transaction(() => {
+      const now = new Date().toISOString();
+      this.db.prepare(
+        `INSERT INTO adaptive_paths
+         (id, goal_id, task_id, signature, hypothesis, strategy, assumptions,
+          required_capabilities, environment, executor, sequence, expected_outcome,
+          expected_cost_cents, evidence, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'candidate', ?, ?)`,
+      ).run(
+        id,
+        candidate.goalId,
+        candidate.taskId ?? null,
+        signature,
+        candidate.hypothesis,
+        candidate.strategy,
+        stringify(candidate.assumptions),
+        stringify(candidate.requiredCapabilities),
+        candidate.environment ?? null,
+        candidate.executor ?? null,
+        stringify(candidate.sequence),
+        candidate.expectedOutcome,
+        candidate.expectedCostCents ?? 0,
+        stringify(candidate.evidence ?? []),
+        now,
+        now,
+      );
+      appendAdaptiveAuthorityEvent(this.db, {
+        eventType: "adaptive.path_created",
+        authorityType: "adaptive_path",
+        authorityId: id,
+        goalId: candidate.goalId,
+        taskId: candidate.taskId ?? null,
+        payload: { status: "candidate" },
+      });
+    })();
     return this.getPath(id)!;
   }
 
@@ -118,9 +160,21 @@ export class AdaptiveStore {
   }
 
   setPathStatus(pathId: string, status: PathStatus): void {
-    this.db.prepare(
-      "UPDATE adaptive_paths SET status = ?, updated_at = datetime('now') WHERE id = ?",
-    ).run(status, pathId);
+    const current = this.getPath(pathId);
+    if (!current || current.status === status) return;
+    this.db.transaction(() => {
+      this.db.prepare(
+        "UPDATE adaptive_paths SET status = ?, updated_at = datetime('now') WHERE id = ?",
+      ).run(status, pathId);
+      appendAdaptiveAuthorityEvent(this.db, {
+        eventType: "adaptive.path_status_changed",
+        authorityType: "adaptive_path",
+        authorityId: pathId,
+        goalId: current.goalId,
+        taskId: current.taskId,
+        payload: { fromStatus: current.status, toStatus: status },
+      });
+    })();
   }
 
   recordAttempt(input: {
@@ -139,28 +193,45 @@ export class AdaptiveStore {
   }): PathAttempt {
     const id = ulid();
     const createdAt = new Date().toISOString();
-    this.db.prepare(
-      `INSERT INTO adaptive_attempts
-       (id, path_id, goal_id, task_id, outcome, failure_class, failure_reason,
-        observations, evidence, condition_fingerprint, novelty_score,
-        learned_facts, retry_eligible, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      id,
-      input.pathId,
-      input.goalId,
-      input.taskId ?? null,
-      input.outcome,
-      input.failureClass ?? null,
-      input.failureReason ?? null,
-      stringify(input.observations ?? []),
-      stringify(input.evidence ?? []),
-      input.conditionFingerprint,
-      input.noveltyScore,
-      stringify(input.learnedFacts ?? []),
-      input.retryEligible ? 1 : 0,
-      createdAt,
-    );
+    this.db.transaction(() => {
+      this.db.prepare(
+        `INSERT INTO adaptive_attempts
+         (id, path_id, goal_id, task_id, outcome, failure_class, failure_reason,
+          observations, evidence, condition_fingerprint, novelty_score,
+          learned_facts, retry_eligible, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        id,
+        input.pathId,
+        input.goalId,
+        input.taskId ?? null,
+        input.outcome,
+        input.failureClass ?? null,
+        input.failureReason ?? null,
+        stringify(input.observations ?? []),
+        stringify(input.evidence ?? []),
+        input.conditionFingerprint,
+        input.noveltyScore,
+        stringify(input.learnedFacts ?? []),
+        input.retryEligible ? 1 : 0,
+        createdAt,
+      );
+      appendAdaptiveAuthorityEvent(this.db, {
+        eventType: "adaptive.attempt_recorded",
+        authorityType: "adaptive_attempt",
+        authorityId: id,
+        goalId: input.goalId,
+        taskId: input.taskId ?? null,
+        causationId: correlationIdFor("adaptive_path", input.pathId),
+        payload: {
+          outcome: input.outcome,
+          failureClass: input.failureClass ?? null,
+          retryEligible: input.retryEligible,
+          noveltyScore: input.noveltyScore,
+          learnedFactCount: input.learnedFacts?.length ?? 0,
+        },
+      });
+    })();
 
     return {
       id,
@@ -263,21 +334,35 @@ export class AdaptiveStore {
     const createdAt = new Date().toISOString();
     const confidence = Math.max(0, Math.min(1, input.confidence ?? 1));
 
-    this.db.prepare(
-      `INSERT INTO adaptive_evidence
-       (id, goal_id, path_id, attempt_id, kind, content, source, confidence, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      id,
-      input.goalId,
-      input.pathId ?? null,
-      input.attemptId ?? null,
-      input.kind,
-      content,
-      input.source,
-      confidence,
-      createdAt,
-    );
+    this.db.transaction(() => {
+      this.db.prepare(
+        `INSERT INTO adaptive_evidence
+         (id, goal_id, path_id, attempt_id, kind, content, source, confidence, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        id,
+        input.goalId,
+        input.pathId ?? null,
+        input.attemptId ?? null,
+        input.kind,
+        content,
+        input.source,
+        confidence,
+        createdAt,
+      );
+      appendAdaptiveAuthorityEvent(this.db, {
+        eventType: "adaptive.evidence_recorded",
+        authorityType: "adaptive_evidence",
+        authorityId: id,
+        goalId: input.goalId,
+        causationId: input.attemptId
+          ? correlationIdFor("adaptive_attempt", input.attemptId)
+          : input.pathId
+            ? correlationIdFor("adaptive_path", input.pathId)
+            : null,
+        payload: { kind: input.kind, source: input.source, confidence },
+      });
+    })();
 
     return {
       id,
@@ -339,25 +424,36 @@ export class AdaptiveStore {
     preferredEnvironment?: string | null;
   }): AdaptiveTaskBinding {
     const now = new Date().toISOString();
-    this.db.prepare(
-      `INSERT INTO adaptive_task_bindings
-       (task_id, goal_id, path_id, required_capabilities, preferred_environment, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(task_id) DO UPDATE SET
-         goal_id = excluded.goal_id,
-         path_id = excluded.path_id,
-         required_capabilities = excluded.required_capabilities,
-         preferred_environment = excluded.preferred_environment,
-         updated_at = excluded.updated_at`,
-    ).run(
-      input.taskId,
-      input.goalId,
-      input.pathId ?? null,
-      stringify(input.requiredCapabilities ?? []),
-      input.preferredEnvironment ?? null,
-      now,
-      now,
-    );
+    this.db.transaction(() => {
+      this.db.prepare(
+        `INSERT INTO adaptive_task_bindings
+         (task_id, goal_id, path_id, required_capabilities, preferred_environment, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(task_id) DO UPDATE SET
+           goal_id = excluded.goal_id,
+           path_id = excluded.path_id,
+           required_capabilities = excluded.required_capabilities,
+           preferred_environment = excluded.preferred_environment,
+           updated_at = excluded.updated_at`,
+      ).run(
+        input.taskId,
+        input.goalId,
+        input.pathId ?? null,
+        stringify(input.requiredCapabilities ?? []),
+        input.preferredEnvironment ?? null,
+        now,
+        now,
+      );
+      appendAdaptiveAuthorityEvent(this.db, {
+        eventType: "adaptive.task_bound",
+        authorityType: "adaptive_task_binding",
+        authorityId: input.taskId,
+        goalId: input.goalId,
+        taskId: input.taskId,
+        causationId: input.pathId ? correlationIdFor("adaptive_path", input.pathId) : null,
+        payload: { pathId: input.pathId ?? null },
+      });
+    })();
     return this.getTaskBinding(input.taskId)!;
   }
 
@@ -411,8 +507,14 @@ export class AdaptiveStore {
     confidence?: number,
   ): void {
     const existing = this.db.prepare(
-      "SELECT evidence, confidence FROM adaptive_assumptions WHERE id = ?",
-    ).get(id) as { evidence: string; confidence: number } | undefined;
+      "SELECT goal_id, path_id, status, evidence, confidence FROM adaptive_assumptions WHERE id = ?",
+    ).get(id) as {
+      goal_id: string;
+      path_id: string;
+      status: AssumptionStatus;
+      evidence: string;
+      confidence: number;
+    } | undefined;
     if (!existing) return;
 
     const mergedEvidence = [...new Set([
@@ -420,17 +522,32 @@ export class AdaptiveStore {
       ...evidence.filter(Boolean),
     ])];
 
-    this.db.prepare(
-      `UPDATE adaptive_assumptions
-       SET status = ?, confidence = ?, evidence = ?, updated_at = ?
-       WHERE id = ?`,
-    ).run(
-      status,
-      confidence ?? existing.confidence,
-      stringify(mergedEvidence),
-      new Date().toISOString(),
-      id,
-    );
+    this.db.transaction(() => {
+      this.db.prepare(
+        `UPDATE adaptive_assumptions
+         SET status = ?, confidence = ?, evidence = ?, updated_at = ?
+         WHERE id = ?`,
+      ).run(
+        status,
+        confidence ?? existing.confidence,
+        stringify(mergedEvidence),
+        new Date().toISOString(),
+        id,
+      );
+      appendAdaptiveAuthorityEvent(this.db, {
+        eventType: "adaptive.assumption_status_changed",
+        authorityType: "adaptive_assumption",
+        authorityId: id,
+        goalId: existing.goal_id,
+        causationId: correlationIdFor("adaptive_path", existing.path_id),
+        payload: {
+          fromStatus: existing.status,
+          toStatus: status,
+          confidence: confidence ?? existing.confidence,
+          evidenceCount: mergedEvidence.length,
+        },
+      });
+    })();
   }
 
   listAssumptions(goalId: string, pathId?: string): TrackedAssumption[] {
@@ -470,30 +587,43 @@ export class AdaptiveStore {
     ).get(input.goalId, input.key) as { id: string } | undefined;
     const id = existing?.id ?? ulid();
 
-    this.db.prepare(
-      `INSERT INTO adaptive_world_facts
-       (id, goal_id, key, value, confidence, epistemic_status, source,
-        last_verified_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(goal_id, key) DO UPDATE SET
-         value = excluded.value,
-         confidence = excluded.confidence,
-         epistemic_status = excluded.epistemic_status,
-         source = excluded.source,
-         last_verified_at = excluded.last_verified_at,
-         updated_at = excluded.updated_at`,
-    ).run(
-      id,
-      input.goalId,
-      input.key,
-      input.value,
-      input.confidence ?? 1,
-      input.epistemicStatus ?? "fact",
-      input.source,
-      input.lastVerifiedAt ?? null,
-      new Date().toISOString(),
-      new Date().toISOString(),
-    );
+    this.db.transaction(() => {
+      const now = new Date().toISOString();
+      this.db.prepare(
+        `INSERT INTO adaptive_world_facts
+         (id, goal_id, key, value, confidence, epistemic_status, source,
+          last_verified_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(goal_id, key) DO UPDATE SET
+           value = excluded.value,
+           confidence = excluded.confidence,
+           epistemic_status = excluded.epistemic_status,
+           source = excluded.source,
+           last_verified_at = excluded.last_verified_at,
+           updated_at = excluded.updated_at`,
+      ).run(
+        id,
+        input.goalId,
+        input.key,
+        input.value,
+        input.confidence ?? 1,
+        input.epistemicStatus ?? "fact",
+        input.source,
+        input.lastVerifiedAt ?? null,
+        now,
+        now,
+      );
+      appendAdaptiveAuthorityEvent(this.db, {
+        eventType: "adaptive.fact_upserted",
+        authorityType: "adaptive_world_fact",
+        authorityId: id,
+        goalId: input.goalId,
+        payload: {
+          domainEpistemicStatus: input.epistemicStatus ?? "fact",
+          confidence: input.confidence ?? 1,
+        },
+      });
+    })();
 
     return this.getFact(input.goalId, input.key)!;
   }
@@ -520,19 +650,31 @@ export class AdaptiveStore {
   }): Opportunity {
     const id = ulid();
     const now = new Date().toISOString();
-    this.db.prepare(
-      `INSERT INTO adaptive_opportunities
-       (id, goal_id, source_path_id, description, status, evidence, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'open', ?, ?, ?)`,
-    ).run(
-      id,
-      input.goalId,
-      input.sourcePathId ?? null,
-      input.description,
-      stringify(input.evidence ?? []),
-      now,
-      now,
-    );
+    this.db.transaction(() => {
+      this.db.prepare(
+        `INSERT INTO adaptive_opportunities
+         (id, goal_id, source_path_id, description, status, evidence, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'open', ?, ?, ?)`,
+      ).run(
+        id,
+        input.goalId,
+        input.sourcePathId ?? null,
+        input.description,
+        stringify(input.evidence ?? []),
+        now,
+        now,
+      );
+      appendAdaptiveAuthorityEvent(this.db, {
+        eventType: "adaptive.opportunity_opened",
+        authorityType: "adaptive_opportunity",
+        authorityId: id,
+        goalId: input.goalId,
+        causationId: input.sourcePathId
+          ? correlationIdFor("adaptive_path", input.sourcePathId)
+          : null,
+        payload: { status: "open" },
+      });
+    })();
     return {
       id,
       goalId: input.goalId,
