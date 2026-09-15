@@ -24,6 +24,13 @@ export interface ChildRuntimeMutationResult extends ChildRuntimeObservation {
   lifecycleUpdated: boolean;
 }
 
+interface LifecycleResolution {
+  state: string | null;
+  lifecycleUpdated: boolean;
+  evidence: string[];
+  observation?: ChildRuntimeObservation;
+}
+
 const RUNTIME_PATTERN = "node .*dist/index\\.js --run";
 
 function childOrThrow(db: AbosDatabase, childId: string) {
@@ -95,6 +102,86 @@ export async function observeChildRuntime(
         `Child runtime probe unavailable: ${error instanceof Error ? error.message : String(error)}`,
       ],
     };
+  }
+}
+
+/**
+ * Reconcile a pre-V7 child into ChildLifecycle only from fresh child-scoped
+ * process evidence. Legacy row labels alone are never promoted into truth.
+ */
+async function resolveLifecycleForRuntimeEffect(
+  conway: ConwayClient,
+  db: AbosDatabase,
+  childId: string,
+  lifecycle: ChildLifecycle,
+): Promise<LifecycleResolution> {
+  try {
+    return {
+      state: lifecycle.getCurrentState(childId),
+      lifecycleUpdated: false,
+      evidence: [],
+    };
+  } catch (error) {
+    const child = childOrThrow(db, childId);
+    if (child.status !== "running" && child.status !== "sleeping") {
+      return {
+        state: null,
+        lifecycleUpdated: false,
+        evidence: [
+          `Lifecycle reconciliation refused for child ${childId}: no lifecycle history and legacy status "${child.status}" is not safely adoptable.`,
+          `Original lifecycle lookup: ${error instanceof Error ? error.message : String(error)}`,
+        ],
+      };
+    }
+
+    const observed = await observeChildRuntime(conway, db, childId);
+    if (observed.state === "unknown") {
+      return {
+        state: null,
+        lifecycleUpdated: false,
+        observation: observed,
+        evidence: [
+          ...observed.evidence,
+          `Legacy child ${childId} was not adopted because runtime truth is UNKNOWN.`,
+        ],
+      };
+    }
+
+    const adoptedState = observed.state === "running" ? "healthy" : "unhealthy";
+    try {
+      const adopted = lifecycle.adoptObservedLegacyState(
+        childId,
+        adoptedState,
+        `legacy child reconciled from observed runtime ${observed.state}`,
+        {
+          sandboxId: child.sandboxId,
+          runtimeObservation: observed.state,
+          evidence: observed.evidence,
+        },
+      );
+      const current = lifecycle.getCurrentState(childId);
+      return {
+        state: current,
+        lifecycleUpdated: adopted,
+        observation: observed,
+        evidence: [
+          ...observed.evidence,
+          adopted
+            ? `Legacy child ${childId} adopted into lifecycle state ${current}.`
+            : `Lifecycle history for child ${childId} was established concurrently; current state ${current} reused.`,
+        ],
+      };
+    } catch (adoptError) {
+      return {
+        state: null,
+        lifecycleUpdated: false,
+        observation: observed,
+        evidence: [
+          ...observed.evidence,
+          `Legacy lifecycle adoption failed: ${adoptError instanceof Error ? adoptError.message : String(adoptError)}`,
+        ],
+      };
+    }
   }
 }
 
@@ -199,10 +286,9 @@ async function stopObservedProcess(
 /**
  * Permanently stop a lifecycle-managed child.
  *
- * `stopped` is persisted only after process absence is observed. The function
- * refuses to mutate a child whose lifecycle cannot represent a permanent stop,
- * so an old/unknown record is not silently rewritten into a false terminal
- * state.
+ * `stopped` is persisted only after process absence is observed. Pre-V7
+ * running/sleeping children may be adopted into lifecycle first, but only from
+ * fresh child-scoped process evidence.
  */
 export async function ensureChildRuntimeStopped(
   conway: ConwayClient,
@@ -210,20 +296,24 @@ export async function ensureChildRuntimeStopped(
   childId: string,
   lifecycle: ChildLifecycle,
 ): Promise<ChildRuntimeMutationResult> {
-  let lifecycleState: string;
-  try {
-    lifecycleState = lifecycle.getCurrentState(childId);
-  } catch (error) {
+  const resolution = await resolveLifecycleForRuntimeEffect(
+    conway,
+    db,
+    childId,
+    lifecycle,
+  );
+  let lifecycleState = resolution.state;
+  let lifecycleUpdated = resolution.lifecycleUpdated;
+
+  if (!lifecycleState) {
     const child = childOrThrow(db, childId);
     return {
       childId,
       sandboxId: child.sandboxId,
-      state: "unknown",
+      state: resolution.observation?.state ?? "unknown",
       success: false,
-      lifecycleUpdated: false,
-      evidence: [
-        `Permanent stop refused because lifecycle authority is unavailable for child ${childId}: ${error instanceof Error ? error.message : String(error)}`,
-      ],
+      lifecycleUpdated,
+      evidence: resolution.evidence,
     };
   }
 
@@ -234,8 +324,9 @@ export async function ensureChildRuntimeStopped(
       sandboxId: child.sandboxId,
       state: "unknown",
       success: false,
-      lifecycleUpdated: false,
+      lifecycleUpdated,
       evidence: [
+        ...resolution.evidence,
         `Permanent stop refused from lifecycle state ${lifecycleState}; no process effect was attempted.`,
       ],
     };
@@ -246,7 +337,8 @@ export async function ensureChildRuntimeStopped(
     return {
       ...observed,
       success: false,
-      lifecycleUpdated: false,
+      lifecycleUpdated,
+      evidence: [...resolution.evidence, ...observed.evidence],
     };
   }
 
@@ -254,7 +346,8 @@ export async function ensureChildRuntimeStopped(
     return {
       ...observed,
       success: true,
-      lifecycleUpdated: false,
+      lifecycleUpdated,
+      evidence: [...resolution.evidence, ...observed.evidence],
     };
   }
 
@@ -264,11 +357,14 @@ export async function ensureChildRuntimeStopped(
     "runtime process absence observed after permanent stop",
     { sandboxId: observed.sandboxId, evidence: observed.evidence },
   );
+  lifecycleState = "stopped";
+  lifecycleUpdated = true;
 
   return {
     ...observed,
-    success: true,
-    lifecycleUpdated: true,
+    success: lifecycleState === "stopped",
+    lifecycleUpdated,
+    evidence: [...resolution.evidence, ...observed.evidence],
   };
 }
 
@@ -279,7 +375,8 @@ export async function ensureChildRuntimeStopped(
  * The old process is reconciled/stopped first. Only observed absence can move
  * healthy -> unhealthy for the recovery window. The existing canonical start
  * primitive then performs start + post-start observation and owns promotion to
- * healthy.
+ * healthy. Pre-V7 running/sleeping children are first adopted from fresh
+ * process evidence, never from the legacy row label alone.
  */
 export async function restartChildRuntime(
   conway: ConwayClient,
@@ -287,20 +384,24 @@ export async function restartChildRuntime(
   childId: string,
   lifecycle: ChildLifecycle,
 ): Promise<ChildRuntimeMutationResult> {
-  let lifecycleState: string;
-  try {
-    lifecycleState = lifecycle.getCurrentState(childId);
-  } catch (error) {
+  const resolution = await resolveLifecycleForRuntimeEffect(
+    conway,
+    db,
+    childId,
+    lifecycle,
+  );
+  let lifecycleState = resolution.state;
+  let lifecycleUpdated = resolution.lifecycleUpdated;
+
+  if (!lifecycleState) {
     const child = childOrThrow(db, childId);
     return {
       childId,
       sandboxId: child.sandboxId,
-      state: "unknown",
+      state: resolution.observation?.state ?? "unknown",
       success: false,
-      lifecycleUpdated: false,
-      evidence: [
-        `Restart refused because lifecycle authority is unavailable for child ${childId}: ${error instanceof Error ? error.message : String(error)}`,
-      ],
+      lifecycleUpdated,
+      evidence: resolution.evidence,
     };
   }
 
@@ -311,16 +412,19 @@ export async function restartChildRuntime(
       sandboxId: child.sandboxId,
       state: "unknown",
       success: false,
-      lifecycleUpdated: false,
-      evidence: [`Restart refused from lifecycle state ${lifecycleState}; no process effect was attempted.`],
+      lifecycleUpdated,
+      evidence: [
+        ...resolution.evidence,
+        `Restart refused from lifecycle state ${lifecycleState}; no process effect was attempted.`,
+      ],
     };
   }
 
-  const evidence: string[] = [];
+  const evidence: string[] = [...resolution.evidence];
   const first = await observeChildRuntime(conway, db, childId);
   evidence.push(...first.evidence);
   if (first.state === "unknown") {
-    return { ...first, success: false, lifecycleUpdated: false, evidence };
+    return { ...first, success: false, lifecycleUpdated, evidence };
   }
 
   if (first.state === "running") {
@@ -330,7 +434,7 @@ export async function restartChildRuntime(
       return {
         ...stopped,
         success: false,
-        lifecycleUpdated: false,
+        lifecycleUpdated,
         evidence,
       };
     }
@@ -338,7 +442,6 @@ export async function restartChildRuntime(
 
   // Re-read after the stop because another observer may have reconciled state.
   lifecycleState = lifecycle.getCurrentState(childId);
-  let lifecycleUpdated = false;
   if (lifecycleState === "healthy") {
     lifecycle.transition(
       childId,
