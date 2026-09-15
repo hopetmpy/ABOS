@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { createBuiltinTools } from "../agent/tools.js";
@@ -73,6 +74,42 @@ describe("P-012 transactional tool routing", () => {
       expect(conway.execCalls).toHaveLength(1);
     } finally {
       ctx.db.close();
+    }
+  });
+
+  it("canonicalizes directory symlink aliases before local source routing", async () => {
+    const parent = fs.mkdtempSync(path.join(getHomeDir(), ".abos-p012-alias-"));
+    const alias = path.join(parent, "runtime");
+    fs.symlinkSync(
+      RUNTIME_ROOT,
+      alias,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+
+    const conway = new MockConwayClient();
+    const ctx = localContext(conway);
+    try {
+      expect(commandReferencesRuntimeSource(`cd '${alias}' && git status`)).toBe(true);
+
+      const tools = createBuiltinTools("");
+      const writeTool = tools.find((tool) => tool.name === "write_file")!;
+      const protectedAlias = path.join(alias, "src", "agent", "tools-p012-adapter.ts");
+      const writeResult = await writeTool.execute(
+        { path: protectedAlias, content: "alias bypass" },
+        ctx,
+      );
+      expect(writeResult).toContain("BLOCKED");
+      expect(conway.files[protectedAlias]).toBeUndefined();
+
+      const commitTool = tools.find((tool) => tool.name === "git_commit")!;
+      const commitResult = await commitTool.execute(
+        { path: alias, message: "alias bypass", add_all: true },
+        ctx,
+      );
+      expect(commitResult).toContain("P-012 transaction authority");
+    } finally {
+      ctx.db.close();
+      fs.rmSync(parent, { recursive: true, force: true });
     }
   });
 
