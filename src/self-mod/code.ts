@@ -57,6 +57,10 @@ const PROTECTED_FILES: readonly string[] = Object.freeze([
   // Tool and upstream routing authority
   "agent/tools.ts",
   "agent/tools.js",
+  "agent/tools-core.ts",
+  "agent/tools-core.js",
+  "agent/tools-p012-adapter.ts",
+  "agent/tools-p012-adapter.js",
   "self-mod/upstream.ts",
   "self-mod/upstream.js",
   "self-mod/tools-manager.ts",
