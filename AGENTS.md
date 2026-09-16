@@ -42,72 +42,23 @@ ABOS no se razona como un chatbot, un predictor ni un mero orchestrator. Su unid
 
 ## BARRERA OBLIGATORIA DE RECONCILIACIÓN
 
-`RECONCILIAR` es una **barrera de transición**, no una limpieza documental opcional al final.
+`RECONCILIAR` es una barrera de transición, no limpieza posterior. **Antes de marcar `HECHO`, cambiar `P-xxx`/segmento, declarar integración, abandonar una unidad o entregar contexto**, contrasta cuando aplique:
 
-Antes de cualquiera de estas transiciones:
+1. Git real: branch, HEAD, diff/worktree, commits, PR/merge y `main`;
+2. source/runtime/estado persistente real, sin confundir checkout, `~/.abos`, providers, children ni recursos externos;
+3. tests/evidence ladder: qué se ejecutó, qué nivel E0–E7 demuestra y qué sigue NO VERIFICADO;
+4. `ProjectOps/CONTINUITY.md` + Active-Segment;
+5. `ProjectOps/PLAN.md` + módulo activo y su Definition of Done.
 
-- cambiar una intervención de `EN_EJECUCIÓN`/`PARCIAL`/`BLOQUEADO` a `HECHO`;
-- pasar de un `P-xxx`, subunidad o corte significativo al siguiente;
-- cambiar `Active-Plan` o `Active-Segment`;
-- declarar un cambio integrado en `main`;
-- presentar un source/branch/PR como estado canónico;
-- abandonar una unidad porque termine la sesión, exista un bloqueo o cambie el agente/entorno;
-- entregar el trabajo a otra sesión, agente o herramienta;
+No avances mientras exista una contradicción material no resuelta entre esas fuentes. La divergencia detectada durante el cierre pertenece a la unidad actual; no se traslada como deuda implícita.
 
-DEBES reconciliar, cuando materialmente corresponda:
+Si una sesión/agente/proceso se interrumpe antes de reconciliar, **la unidad anterior se presume ABIERTA**. Narrativa, commits, archivos o CI aislado no prueban por sí solos cierre. Reanuda desde la última evidencia verificable y demuestra qué ocurrió realmente antes de continuar.
 
-1. **Git real** — repositorio, branch, HEAD, diff/worktree disponible, commits, PR, merge y `main` real;
-2. **source/runtime/estado persistente** — checkout, `~/.abos`, DB, resources, children, providers u otras authorities afectadas sin confundir dominios;
-3. **tests/evidence ladder** — qué se ejecutó realmente y qué nivel E0–E7 acredita; qué NO fue ejecutado;
-4. **`ProjectOps/CONTINUITY.md` + Active-Segment** — dónde quedó materialmente la intervención;
-5. **`ProjectOps/PLAN.md` + módulo `P-xxx` activo** — qué intención sigue vigente, qué Definition of Done se cumplió y qué continúa pendiente.
+Antes de abandonar o entregar, deja checkpoint de HEAD/estado, cambios reales, evidencia ejecutada, lo NO validado, `UNKNOWN`/in-doubt/recovery pendiente y estado correcto `EN_EJECUCIÓN`/`PARCIAL`/`BLOQUEADO` si no cruzó su DoD. No existe “seguramente terminado”.
 
-No existe transición válida mientras esas fuentes contengan una contradicción material no explicada. Si descubres drift durante el cierre, **resolverlo o reclasificarlo pertenece a la unidad actual**; no se deja como deuda implícita para una auditoría futura.
+Reconciliar no promociona evidencia: E3 no se convierte en provider/cloud LIVE E5 ni economic LIVE E6; parent bookkeeping no se convierte en child/wallet authority; `UNKNOWN` no se convierte en cero/dead/impossible.
 
-### Reanudación después de interrupción
-
-Si una sesión, agente, conversación, terminal, workflow, proceso o entorno se corta antes de completar esta barrera:
-
-- la unidad previa se presume **ABIERTA**, no terminada;
-- una frase anterior como “ya quedó”, “ya lo hice”, “sólo falta X” o equivalente es narrativa hasta contrastarla;
-- encontrar commits, archivos o CI no basta para declarar `HECHO`: debes demostrar que corresponden al alcance correcto, están integrados cuando se exige, y alcanzan el nivel de evidencia requerido;
-- comienza desde el último HEAD/evidencia verificable y contrástalo con Git, source/runtime/state, CI/tests, CONTINUITY y PLAN;
-- determina qué sí ocurrió, qué quedó parcial, qué no ocurrió y qué pudo cambiar después;
-- si el cierre anterior no puede demostrarse, continúa o reclasifica la unidad; **no avances para evitar reconstruirla**.
-
-Pregunta obligatoria al reanudar:
-
-**«¿La unidad anterior cruzó realmente su Definition of Done y su reconciliación, o sólo heredé una afirmación de cierre?»**
-
-### Checkpoint antes de abandonar o entregar
-
-Antes de terminar una sesión o dejar una unidad:
-
-- registra último HEAD/branch/PR/main material conocido;
-- registra cambios realmente realizados;
-- registra validaciones realmente ejecutadas y nivel E0–E7 demostrado;
-- registra lo que NO fue validado y cualquier `UNKNOWN` relevante;
-- registra side effects externos, in-doubt state o recovery pendiente cuando aplique;
-- actualiza CONTINUITY/segmento y PLAN sólo según evidencia;
-- deja `EN_EJECUCIÓN`, `PARCIAL` o `BLOQUEADO` si el cierre no fue demostrado.
-
-No existe el estado implícito “seguramente terminado”.
-
-### Evidencia ABOS no se promociona por reconciliación
-
-La reconciliación alinea autoridades; no aumenta por sí misma el nivel de evidencia:
-
-- merge + CI E3 no se transforma en OAuth/provider/cloud LIVE E5;
-- registros internos no se transforman en economic LIVE E6;
-- parent bookkeeping no se transforma en child/wallet authority;
-- source capability no se transforma en capability realmente disponible sin el probe/evidence requerido;
-- `UNKNOWN` no se transforma en cero, false, dead o impossible para poder cerrar.
-
-### Preservación de capacidad antes de restricción
-
-La definición canónica de `CAPABILITY_PRESERVATION_BEFORE_RESTRICTION` vive en `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md`. No la dupliques aquí bajo otra semántica.
-
-Antes de retirar, bloquear, hardcodear, human-gatear o degradar una capability legítima, aplica allí la clasificación `REAL_BOUNDARY / GOVERNABLE_RISK / IMMATURE_CAPABILITY / REDUNDANT_OR_HARMFUL / UNKNOWN` y evalúa una alternativa real de preservación. Una restricción material que omite ese análisis no está `DECISION_READY`.
+`CAPABILITY_PRESERVATION_BEFORE_RESTRICTION` permanece definido canónicamente en `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md`: aplica su clasificación `REAL_BOUNDARY / GOVERNABLE_RISK / IMMATURE_CAPABILITY / REDUNDANT_OR_HARMFUL / UNKNOWN` antes de retirar, hardcodear, human-gatear o degradar una capability legítima. No dupliques esa authority aquí.
 
 ## INVARIANTES ABOS QUE NO PUEDEN IMPORTARSE NI DILUIRSE
 
