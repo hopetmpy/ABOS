@@ -55,7 +55,7 @@ for(const needle of [
   "PUBLIC_TRACKED_MATRIX.md",
   "~/.abos",
   "BARRERA OBLIGATORIA DE RECONCILIACIÓN",
-  "la unidad anterior se presume **ABIERTA**",
+  "la unidad anterior se presume ABIERTA",
   "CAPABILITY_PRESERVATION_BEFORE_RESTRICTION",
 ])requireText(agents,needle,`root AGENTS missing: ${needle}`);
 const ai=agents.indexOf("ProjectOps/system/ABOS_OPERATING_PROTOCOL.md");
