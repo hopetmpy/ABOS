@@ -9,7 +9,7 @@ Este es el único punto de entrada operativo que debe permanecer en la raíz de 
 Antes de modificar código, configuración, datos, documentación operativa, dependencias, arquitectura, dinero, infraestructura, identidad, estado persistente o estado del proyecto, lee y aplica **en este orden**:
 
 1. `ProjectOps/system/ABOS_OPERATING_PROTOCOL.md` — **COMPLETO**. Conserva íntegro el protocolo canónico y los 39 puntos obligatorios previamente instalados en ABOS.
-2. `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md` — **COMPLETO**. Capa aditiva ABOS-specific para hipótesis competidoras, falsación, rutas adaptativas, autoridad económica, autonomía, recuperación, segundo orden, revisión adversarial, `NO_CHANGE` y gate `DECISION_READY`.
+2. `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md` — **COMPLETO**. Capa aditiva ABOS-specific para hipótesis competidoras, falsación, rutas adaptativas, autoridad económica, autonomía, recuperación, segundo orden, revisión adversarial, `NO_CHANGE`, preservación de capability y gate `DECISION_READY`.
 3. `ProjectOps/CONTINUITY.md` — manifest de continuidad actual.
 4. El `Active-Segment` indicado por CONTINUITY — completo.
 5. `ProjectOps/PROJECT.md` — identidad, baseline, invariantes, autoridades y escalera de evidencia de ABOS.
@@ -30,7 +30,7 @@ El método ProjectOps puede ser común a otros proyectos; **la semántica de ABO
 
 ABOS es un **Autonomous Business Operating System**: un runtime de agente soberano, persistente y económicamente consciente que puede razonar, actuar, conservar estado, adquirir/usar capacidades, operar entre entornos autorizados, administrar recursos, evolucionar y replicarse bajo evidencia y límites reales.
 
-No importes de ZeroIQ, CATO, Viazi u otro host sus métricas, gates, estados, arquitectura, nomenclatura, prioridades, thresholds, resultados o planes. Solo puede reutilizarse el método operativo universal cuando sea compatible.
+No importes de ZeroIQ, CATO, Viazi u otro host sus métricas, gates técnicos, estados, arquitectura, nomenclatura, prioridades, thresholds, resultados o planes. Solo puede reutilizarse una mecánica operativa general cuando sea compatible y se adapte a las autoridades reales de ABOS.
 
 Antes de planificar o implementar, conserva la separación declarada en `ProjectOps/PROJECT.md`:
 - **TARGET / intención** — lo que ABOS está decidido a ser;
@@ -39,6 +39,75 @@ Antes de planificar o implementar, conserva la separación declarada en `Project
 - **LIVE / ECONOMIC EVIDENCE** — lo demostrado con proveedores, dinero, wallets, sandboxes, agentes hijos o infraestructura reales.
 
 ABOS no se razona como un chatbot, un predictor ni un mero orchestrator. Su unidad de continuidad es un agente persistente que debe conservar objetivo, identidad, estado, autoridad, evidencia y consecuencias económicas a través de turnos, reinicios, rutas y entornos.
+
+## BARRERA OBLIGATORIA DE RECONCILIACIÓN
+
+`RECONCILIAR` es una **barrera de transición**, no una limpieza documental opcional al final.
+
+Antes de cualquiera de estas transiciones:
+
+- cambiar una intervención de `EN_EJECUCIÓN`/`PARCIAL`/`BLOQUEADO` a `HECHO`;
+- pasar de un `P-xxx`, subunidad o corte significativo al siguiente;
+- cambiar `Active-Plan` o `Active-Segment`;
+- declarar un cambio integrado en `main`;
+- presentar un source/branch/PR como estado canónico;
+- abandonar una unidad porque termine la sesión, exista un bloqueo o cambie el agente/entorno;
+- entregar el trabajo a otra sesión, agente o herramienta;
+
+DEBES reconciliar, cuando materialmente corresponda:
+
+1. **Git real** — repositorio, branch, HEAD, diff/worktree disponible, commits, PR, merge y `main` real;
+2. **source/runtime/estado persistente** — checkout, `~/.abos`, DB, resources, children, providers u otras authorities afectadas sin confundir dominios;
+3. **tests/evidence ladder** — qué se ejecutó realmente y qué nivel E0–E7 acredita; qué NO fue ejecutado;
+4. **`ProjectOps/CONTINUITY.md` + Active-Segment** — dónde quedó materialmente la intervención;
+5. **`ProjectOps/PLAN.md` + módulo `P-xxx` activo** — qué intención sigue vigente, qué Definition of Done se cumplió y qué continúa pendiente.
+
+No existe transición válida mientras esas fuentes contengan una contradicción material no explicada. Si descubres drift durante el cierre, **resolverlo o reclasificarlo pertenece a la unidad actual**; no se deja como deuda implícita para una auditoría futura.
+
+### Reanudación después de interrupción
+
+Si una sesión, agente, conversación, terminal, workflow, proceso o entorno se corta antes de completar esta barrera:
+
+- la unidad previa se presume **ABIERTA**, no terminada;
+- una frase anterior como “ya quedó”, “ya lo hice”, “sólo falta X” o equivalente es narrativa hasta contrastarla;
+- encontrar commits, archivos o CI no basta para declarar `HECHO`: debes demostrar que corresponden al alcance correcto, están integrados cuando se exige, y alcanzan el nivel de evidencia requerido;
+- comienza desde el último HEAD/evidencia verificable y contrástalo con Git, source/runtime/state, CI/tests, CONTINUITY y PLAN;
+- determina qué sí ocurrió, qué quedó parcial, qué no ocurrió y qué pudo cambiar después;
+- si el cierre anterior no puede demostrarse, continúa o reclasifica la unidad; **no avances para evitar reconstruirla**.
+
+Pregunta obligatoria al reanudar:
+
+**«¿La unidad anterior cruzó realmente su Definition of Done y su reconciliación, o sólo heredé una afirmación de cierre?»**
+
+### Checkpoint antes de abandonar o entregar
+
+Antes de terminar una sesión o dejar una unidad:
+
+- registra último HEAD/branch/PR/main material conocido;
+- registra cambios realmente realizados;
+- registra validaciones realmente ejecutadas y nivel E0–E7 demostrado;
+- registra lo que NO fue validado y cualquier `UNKNOWN` relevante;
+- registra side effects externos, in-doubt state o recovery pendiente cuando aplique;
+- actualiza CONTINUITY/segmento y PLAN sólo según evidencia;
+- deja `EN_EJECUCIÓN`, `PARCIAL` o `BLOQUEADO` si el cierre no fue demostrado.
+
+No existe el estado implícito “seguramente terminado”.
+
+### Evidencia ABOS no se promociona por reconciliación
+
+La reconciliación alinea autoridades; no aumenta por sí misma el nivel de evidencia:
+
+- merge + CI E3 no se transforma en OAuth/provider/cloud LIVE E5;
+- registros internos no se transforman en economic LIVE E6;
+- parent bookkeeping no se transforma en child/wallet authority;
+- source capability no se transforma en capability realmente disponible sin el probe/evidence requerido;
+- `UNKNOWN` no se transforma en cero, false, dead o impossible para poder cerrar.
+
+### Preservación de capacidad antes de restricción
+
+La definición canónica de `CAPABILITY_PRESERVATION_BEFORE_RESTRICTION` vive en `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md`. No la dupliques aquí bajo otra semántica.
+
+Antes de retirar, bloquear, hardcodear, human-gatear o degradar una capability legítima, aplica allí la clasificación `REAL_BOUNDARY / GOVERNABLE_RISK / IMMATURE_CAPABILITY / REDUNDANT_OR_HARMFUL / UNKNOWN` y evalúa una alternativa real de preservación. Una restricción material que omite ese análisis no está `DECISION_READY`.
 
 ## INVARIANTES ABOS QUE NO PUEDEN IMPORTARSE NI DILUIRSE
 
@@ -54,6 +123,7 @@ ABOS no se razona como un chatbot, un predictor ni un mero orchestrator. Su unid
 10. Source/CI no acreditan automáticamente OAuth real, AWS LIVE, saldos reales, ingresos atribuibles, continuidad económica ni operación sostenida.
 11. Self-modification y replication requieren provenance, auditabilidad, rollback/recuperación y preservación de la constitución.
 12. `~/.abos` contiene estado runtime del agente y no se confunde con el checkout/source del runtime.
+13. Una capability legítima no se destruye por riesgo gobernable o inmadurez; la capa adaptativa decide si existe una frontera real antes de restringir.
 
 ## REGLAS DE CIERRE DE CONTEXTO
 
@@ -94,6 +164,12 @@ Antes de aceptar la primera explicación: **«¿Qué otra explicación plausible
 Antes de crear: **«Busca si ya existe, aunque tenga otro nombre.»**
 
 Antes de repetir: **«¿Qué cambió materialmente desde el intento anterior y qué información nueva producirá este camino?»**
+
+Antes de restringir una capability: **«¿Es una frontera real o estoy sustituyendo juicio y evidencia por una limitación prematura?»**
+
+Antes de cambiar de unidad/estado: **«¿Git, realidad, evidencia, CONTINUITY y PLAN están reconciliados o estoy trasladando deuda?»**
+
+Al reanudar después de un corte: **«Demuestra el último cierre; no lo heredes como supuesto.»**
 
 Antes de afirmar rentabilidad o saldo: **«¿Cuál es la autoridad causal de este número y qué parte sigue UNKNOWN?»**
 
