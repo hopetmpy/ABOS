@@ -13,8 +13,8 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: main
 Host-Head-At-Audit-Open: 1f1e93f48c95265dba52b6a99a900bde6cdcb27c
-Last-Reconciled-Host-Head: fe845184fce48c65032f8521ecd0bdfa42e04b77
-Last-Reconciled-Head-Semantics: P012_MAIN_E3_GREEN_P013_EVIDENCE_PENDING
+Last-Reconciled-Host-Head: f2a2bcc546e8c59cb50982f9a853dd4b782d17e5
+Last-Reconciled-Head-Semantics: P012_MAIN_E3_GREEN_CROSS_PROJECT_GATES_RECONCILED_P013_PENDING
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -97,12 +97,15 @@ P012-Continuity-Reconcile-Head: 887bc5107245bf538db7cd272b9034a97ac2a579
 P012-Merge: fe845184fce48c65032f8521ecd0bdfa42e04b77
 P012-Main-CI: 34926393562 SUCCESS
 P012-Main-ProjectOps: 34926393570 SUCCESS
+Cross-Project-Reconciliation-Validated-Head: f2a2bcc546e8c59cb50982f9a853dd4b782d17e5
+Cross-Project-Reconciliation-CI: 35047214228 SUCCESS
+Cross-Project-Reconciliation-ProjectOps: 35047214252 SUCCESS
 
 ## Semántica del HEAD reconciliado
 
-`Last-Reconciled-Host-Head` es ahora `fe845184fce48c65032f8521ecd0bdfa42e04b77`, `main` real que integra la autoridad transaccional P-012. El exact-head de rama `1c9eabe430893c2be145c83441b8371b65af285e` había pasado CI `34926226279` y ProjectOps `34926226266`; el merge `fe845184...` fue después revalidado sobre `main` con CI `34926393562` y ProjectOps Integrity `34926393570`, ambos `SUCCESS`.
+`Last-Reconciled-Host-Head` es `f2a2bcc546e8c59cb50982f9a853dd4b782d17e5`, `main` real ya reconciliado después de integrar P-012 y de endurecer la mecánica operativa. El producto P-012 seguía integrado desde `fe845184fce48c65032f8521ecd0bdfa42e04b77`, con CI `34926393562` y ProjectOps `34926393570` SUCCESS. La sincronización metodológica posterior no cambió product source/runtime: sólo `AGENTS.md`, ProjectOps y su verifier; el exact-head `f2a2bcc...` pasó CI `35047214228` y ProjectOps Integrity `35047214252`, ambos SUCCESS.
 
-La contradicción documental previa `MAIN_INTEGRATION_PENDING` queda corregida. P-012 **no se eleva todavía a HECHO completo**: su módulo exige P-013 evidence/correlation transversal antes del cierre final. Por tanto la clasificación correcta es `EN_EJECUCIÓN / MAIN_E3_GREEN / P013_EVIDENCE_PENDING`.
+La contradicción documental previa `MAIN_INTEGRATION_PENDING` quedó corregida. P-012 **no se eleva todavía a HECHO completo**: su módulo exige P-013 evidence/correlation transversal antes del cierre final. La clasificación correcta sigue siendo `EN_EJECUCIÓN / MAIN_E3_GREEN / P013_EVIDENCE_PENDING`.
 
 P-009 permanece HECHO únicamente para su objetivo exacto: authority/provenance/trust boundaries. No eleva Social inbound a autenticación criptográfica LIVE; `relay_asserted` sigue siendo el máximo claim demostrado en esa frontera.
 
@@ -229,35 +232,49 @@ Pendiente exacto antes de HECHO completo: P-013 debe aportar evidence/correlatio
 
 ## Intervención de proceso — CROSS_PROJECT_RECONCILIATION_GATE
 
-Estado: `EN_EJECUCIÓN`.
+Estado: `HECHO / RECONCILIADO`.
 
-Motivo: al recuperar la mejora transversal `CAPABILITY_PRESERVATION_BEFORE_RESTRICTION` para portarla metodológicamente a ZEROIQ, la propia auditoría de ABOS detectó que ProjectOps seguía describiendo P-012 como `MAIN_INTEGRATION_PENDING` aunque `main fe845184...` ya existía y sus gates habían terminado `SUCCESS`. Este mismatch demuestra el mismo patrón que la nueva barrera de reconciliación pretende impedir.
+Motivo: al recuperar la mejora transversal `CAPABILITY_PRESERVATION_BEFORE_RESTRICTION` para portarla metodológicamente a ZEROIQ, la auditoría de ABOS detectó que ProjectOps aún describía P-012 como `MAIN_INTEGRATION_PENDING` aunque `main fe845184...` ya existía y sus gates eran verdes. Ese mismatch confirmó el defecto operativo que la nueva barrera debía impedir.
 
-Objetivo:
-- incorporar en ABOS una barrera explícita de transición/reanudación equivalente en mecánica a la endurecida en ZEROIQ, pero con identidad ABOS;
-- impedir que una unidad cambie a HECHO, cambie de P-xxx, declare integración, se abandone o se entregue sin reconciliar Git, source/runtime/state, evidencia, CONTINUITY y PLAN;
-- tras interrupción, presumir la unidad anterior abierta hasta demostrar Exit Criteria y reconciliación desde evidencia actual;
-- conservar explícitamente la escalera ABOS E0–E7: source/CI no se convierte en provider/economic LIVE por narrativa;
-- no duplicar la definición de capability preservation: ABOS ya posee esa authority en `ABOS_ADAPTIVE_REASONING_LAYER.md`.
+Resultado materializado:
+- `AGENTS.md` contiene una barrera ABOS-specific: ninguna transición a HECHO, siguiente P-xxx/segmento, integración declarada, abandono ni handoff ocurre sin reconciliar Git, source/runtime/state, evidence ladder, CONTINUITY y PLAN;
+- después de una interrupción, la unidad previa se presume ABIERTA hasta demostrar su Definition of Done desde evidencia actual;
+- reconciliar no promociona evidencia: E3 no se convierte en E5/E6, parent bookkeeping no se convierte en child/wallet authority y UNKNOWN no se inventa como cero/dead/impossible;
+- `CAPABILITY_PRESERVATION_BEFORE_RESTRICTION` permanece definido una sola vez en `ABOS_ADAPTIVE_REASONING_LAYER.md`; el router sólo lo referencia;
+- `PROJECT.md` quedó reconciliado con schema v17 real y estado P-012 main-green;
+- el verifier dejó de hardcodear schema v16 y ahora contrasta dinámicamente `Schema-Version-Observed-In-Source` con `SCHEMA_VERSION` real.
 
-Estado de entrada reconciliado para esta subintervención: `main fe845184fce48c65032f8521ecd0bdfa42e04b77`, CI `34926393562` SUCCESS, ProjectOps `34926393570` SUCCESS. P-012 permanece EN_EJECUCIÓN únicamente por P-013 evidence/correlation.
+Falsación y correcciones durante el cierre:
+1. `d23f4b242cf9ae1e524a98d84a6c0b6eed937c9f` falló ProjectOps `35047006683` por exceder el presupuesto de 12 KiB del router; se compactó el entrypoint sin relajar el gate.
+2. `04d9b260b9ed60b8d10c8e7fdb250d743c3893f4` expuso el hardcode schema v16 en ProjectOps `35047090081`; no se falseó `PROJECT.md`, se corrigió el verifier.
+3. `cacb77fceb63a31a73d7b74f17865a98c9436d3f` hizo el schema check dinámico y añadió invariantes de reconciliación/capability-preservation; ProjectOps `35047157850` encontró sólo un needle textual demasiado literal.
+4. `f2a2bcc546e8c59cb50982f9a853dd4b782d17e5` corrigió ese needle sin debilitar semántica.
 
-Siguiente acción: reconciliar PLAN/P-012/C0008/PROJECT con este estado y luego modificar `AGENTS.md`; reauditar y cerrar esta subintervención sólo después de comprobar el resultado.
+Evidencia final del exact-head auditado `f2a2bcc546e8c59cb50982f9a853dd4b782d17e5`:
+- ProjectOps Integrity `35047214252`: SUCCESS;
+- CI `35047214228`: SUCCESS;
+- Node 22/24 build, tests y security tests: SUCCESS;
+- Windows 22/24 typecheck/build/smoke/regressions: SUCCESS;
+- public-distribution-smoke 22/24: SUCCESS;
+- dependency security audit: SUCCESS;
+- rebrand integrity: SUCCESS;
+- compare desde `fe845184...`: sólo `AGENTS.md`, ProjectOps y `scripts/projectops-integrity-verify.mjs`; product source/runtime no cambió por esta sincronización.
+
+Estado de salida: la subintervención metodológica está cerrada. P-012 sigue `EN_EJECUCIÓN` únicamente por P-013 evidence/correlation; no por deuda de integración, documentación o reconciliación.
 
 ## Límites / bloqueos actuales
 
 - GitHub connector + GitHub Actions: DISPONIBLE / AUTORIZADO.
 - CI/E3 no acredita LIVE/E5/E6.
 - P-012 está integrado y revalidado en `main`; P-013 evidence/correlation sigue siendo dependencia explícita de cierre completo.
-- P-004 permanece PLANIFICADO; las reconciliaciones puntuales de este cierre son válidas según su propia regla.
+- P-004 permanece PLANIFICADO; las reconciliaciones puntuales realizadas son válidas según su propia regla.
 - La mejora de método no modifica constitution, product source, money authority, wallet authority ni evidence ladder.
 
 ## Siguiente punto verificable
 
-1. Reconciliar `ProjectOps/PLAN.md`, `ProjectOps/plan/P-012.md`, `ProjectOps/continuity/C0008.md` y `ProjectOps/PROJECT.md` con `main fe845184...`.
-2. Materializar `BARRERA OBLIGATORIA DE RECONCILIACIÓN` ABOS-specific en `AGENTS.md` sin duplicar capability-preservation authority.
-3. Releer las autoridades modificadas, verificar CI/ProjectOps del exact-head documental y cerrar `CROSS_PROJECT_RECONCILIATION_GATE`.
-4. Sólo después, P-013 puede ser la siguiente unidad técnica elegible para aportar la correlation/evidence que P-012 exige.
+1. La sincronización metodológica ABOS ↔ ZEROIQ está reconciliada y cerrada en ABOS.
+2. P-012 permanece `EN_EJECUCIÓN / MAIN_E3_GREEN / P013_EVIDENCE_PENDING`.
+3. La siguiente unidad técnica recuperable es P-013, pero debe abrirse sólo después de releer esta continuidad, verificar dependencias/realidad actual y registrarla `EN_EJECUCIÓN` conforme al nuevo gate.
 
 ## Política de rotación
 
