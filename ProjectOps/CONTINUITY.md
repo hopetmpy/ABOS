@@ -4,17 +4,17 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-013
 Active-Segment: continuity/C0009.md
-Active-Intervention: P013_OBSERVABILITY_EVIDENCE_FABRIC — E3_BRANCH_GREEN / MAIN_ANCESTRY_AND_EXACT_GATE_VERIFIED / READY_FOR_INTEGRATION
+Active-Intervention: P013_OBSERVABILITY_EVIDENCE_FABRIC — MAIN_E3_GREEN / TECHNICAL_OBJECTIVE_SATISFIED / CANONICAL_CLOSURE_READY
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p013-observability-evidence-fabric
+Current-Host-Branch: abos/p013-main-closure
 Host-Head-At-Audit-Open: fe845184fce48c65032f8521ecd0bdfa42e04b77
-Last-Reconciled-Host-Head: 1800d610dbbdfe14fb991117c7a4061dab8ec8e5
-Last-Reconciled-Head-Semantics: P013_E3_BRANCH_GREEN_MAIN_ANCESTRY_AND_EXACT_GATE_VERIFIED
+Last-Reconciled-Host-Head: 733eb762596cac019593c6f27d7740da0ab25462
+Last-Reconciled-Head-Semantics: P013_MAIN_E3_GREEN_CANONICAL_CLOSURE_READY
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -105,7 +105,7 @@ Cross-Project-Reconciliation-Validated-Head: f2a2bcc546e8c59cb50982f9a853dd4b782
 Cross-Project-Reconciliation-CI: 35047214228 SUCCESS
 Cross-Project-Reconciliation-ProjectOps: 35047214252 SUCCESS
 Main-ProjectOps-Reconciliation-Target: c94dbeba2d4672cd843580d3019d3af93d0ae728
-Main-ProjectOps-Reconciliation-State: SEMANTIC_UNION_APPLIED / ANCESTRY_AND_EXACT_GATE_VERIFIED
+Main-ProjectOps-Reconciliation-State: INTEGRATED / MAIN_E3_GREEN
 P013-Canonical-Baseline: fe845184fce48c65032f8521ecd0bdfa42e04b77
 P013-Branch: abos/p013-observability-evidence-fabric
 P013-Audit-Transition-Head: bdc64c07c9e294c8181874dd2112cd41f2769a5a
@@ -128,14 +128,24 @@ P013-Branch-Gate-Head: 326149d1ce18d65674006d8c13db95d068acb01a
 P013-Branch-CI: 35397538844 SUCCESS
 P013-Branch-ProjectOps: 35397538980 SUCCESS
 P013-Operational-Projections: NO_CHANGE — durable DoD satisfied without promoting logger/metrics/alerts to authority
-P013-Integration-State: READY_FOR_INTEGRATION / NOT_HECHO
+P013-Integration-State: MAIN_E3_GREEN / TECHNICAL_OBJECTIVE_SATISFIED / CANONICAL_CLOSURE_PENDING
 P013-Ancestry-Gate-Head: 1800d610dbbdfe14fb991117c7a4061dab8ec8e5
 P013-Ancestry-Gate-CI: 35406279606 SUCCESS
 P013-Ancestry-Gate-ProjectOps: 35406279579 SUCCESS
+P013-Final-Branch-Head: 911b8097e5a38a7a566039a2eb15f04be648a10a
+P013-Final-Branch-CI: 35406595321 SUCCESS
+P013-Final-Branch-ProjectOps: 35406595472 SUCCESS
+P013-PR: 41
+P013-PR-CI: 35406789667 SUCCESS
+P013-PR-ProjectOps: 35406789721 SUCCESS
+P013-Merge: 733eb762596cac019593c6f27d7740da0ab25462
+P013-Main-CI: 35406990676 SUCCESS
+P013-Main-ProjectOps: 35406990741 SUCCESS
+P012-P013-Dependency-State: SATISFIED / CANONICAL_CLOSURE_PENDING
 
 ## Semántica del HEAD reconciliado
 
-`Last-Reconciled-Host-Head` es `326149d1ce18d65674006d8c13db95d068acb01a`, exact-tree del producto recuperado. El fixture legacy Policy fue corregido reutilizando la migration v18 canónica, sin cambiar el fail-closed productivo. CI `35397538844` y ProjectOps `35397538980` son SUCCESS; Node 22/24 full+security, Windows 22/24, public smoke 22/24, dependency audit y rebrand están verdes. La auditoría de cierre clasifica Operational projections como `NO_CHANGE`: logger/metrics/alerts continúan como proyecciones no autoritativas y el E2E/restart durable satisface el DoD. P-013 está listo para integración, no HECHO.
+`Last-Reconciled-Host-Head` es `main 733eb762596cac019593c6f27d7740da0ab25462`: PR #41 fue integrado por squash y el exact merged main pasó CI `35406990676` + ProjectOps `35406990741`. El fixture legacy Policy usa la migration v18 canónica, fail-closed permanece intacto, Operational projections sigue `NO_CHANGE` y el E2E/restart durable satisface el DoD. El objetivo técnico P-013 y la dependencia material de P-012 están satisfechos; ambos conservan estado no terminal únicamente hasta integrar este cierre ProjectOps y ejecutar la transición canónica.
 
 P-009 permanece HECHO únicamente para su objetivo exacto: authority/provenance/trust boundaries. No eleva Social inbound a autenticación criptográfica LIVE; `relay_asserted` sigue siendo el máximo claim demostrado en esa frontera.
 
@@ -158,8 +168,8 @@ P-012 conserva autonomía de self-modification y sustituye write-before-verify/f
 - P-009: HECHO — Authority/Provenance/trust boundaries integrados por PR #35 y revalidados sobre `main` `b9dbf144...`.
 - P-010: HECHO — Policy/Authorization/Approval/Quarantine integrado por PR #36 y cerrado canónicamente por PR #37 sobre `main` `33e4865b...`.
 - P-011: HECHO / INTEGRATION_VERIFIED — integrado por PR #38; cierre documental PR #39; C0007 cerrado.
-- P-012: PARCIAL / INTEGRATION_VERIFIED — integrado por PR #40 en `main` `fe845184...`, CI `34926393562` + ProjectOps `34926393570` SUCCESS; sólo falta la evidence/correlation P-013 exigida por su propio DoD.
-- P-013: EN_EJECUCIÓN / READY_FOR_INTEGRATION — product fabric, critical chains, restart/E2E y economía correlacionada continúan validados; la autoridad ProjectOps de `main c94dbeba...`, su ancestry y el exact-head E3 quedaron verificados. No está HECHO: faltan PR/merge y revalidación exacta de `main`.
+- P-012: PARCIAL / INTEGRATION_VERIFIED / P013_EVIDENCE_SATISFIED — source/integration propios siguen verdes y P-013 ya quedó integrado/revalidado en `main 733eb762596cac019593c6f27d7740da0ab25462`; conserva PARCIAL sólo hasta la transición canónica posterior a este cierre.
+- P-013: EN_EJECUCIÓN / MAIN_E3_GREEN / CANONICAL_CLOSURE_READY — PR #41 fue integrado por squash en `main 733eb762596cac019593c6f27d7740da0ab25462` y revalidado por CI `35406990676` + ProjectOps `35406990741` SUCCESS. El objetivo técnico satisface el DoD; falta únicamente integrar este cierre ProjectOps y realizar la transición terminal.
 - P-014..P-036: ver `ProjectOps/PLAN.md`; permanecen en su estado explícito.
 
 ## P-009 — cierre verificable
