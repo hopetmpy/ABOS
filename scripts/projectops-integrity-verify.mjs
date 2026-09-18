@@ -54,6 +54,9 @@ for(const needle of [
   "funding no es balance",
   "PUBLIC_TRACKED_MATRIX.md",
   "~/.abos",
+  "BARRERA OBLIGATORIA DE RECONCILIACIÓN",
+  "la unidad anterior se presume ABIERTA",
+  "CAPABILITY_PRESERVATION_BEFORE_RESTRICTION",
 ])requireText(agents,needle,`root AGENTS missing: ${needle}`);
 const ai=agents.indexOf("ProjectOps/system/ABOS_OPERATING_PROTOCOL.md");
 const ri=agents.indexOf("ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md");
@@ -76,6 +79,11 @@ for(const needle of [
   "OBJECTIVE_IS_NOT_METHOD",
   "ECONOMIC_CLAIMS_REQUIRE_CAUSAL_AUTHORITY",
   "BOUNDARY_SWITCH_REQUIRES_REPLAN",
+  "CAPABILITY_PRESERVATION_BEFORE_RESTRICTION",
+  "REAL_BOUNDARY",
+  "GOVERNABLE_RISK",
+  "IMMATURE_CAPABILITY",
+  "REDUNDANT_OR_HARMFUL",
   "funding != balance",
   "Parent/child y replication",
   "Executor/environment boundaries",
@@ -100,7 +108,6 @@ for(const needle of [
   "Identity-Model: TARGET_VISION_PLUS_EVIDENCE_BASELINE",
   "Autonomous Business Operating System",
   "Runtime-Version-Observed: `0.3.0`",
-  "Schema-Version-Observed-In-Source: `18`",
   "constitution.md",
   "Adaptive Path Intelligence",
   "objective != method",
@@ -115,6 +122,12 @@ for(const needle of [
   "PR #29",
   "Documentation drift",
 ])requireText(project,needle,`PROJECT baseline missing: ${needle}`);
+requirePath("src/state/schema.ts");
+const schemaSource=read("src/state/schema.ts");
+const schemaMatch=schemaSource.match(/export const SCHEMA_VERSION\s*=\s*(\d+)\s*;/);
+if(!schemaMatch)fail("unable to determine SCHEMA_VERSION from src/state/schema.ts");
+const observedSchema=field(project,"Schema-Version-Observed-In-Source").replaceAll("`","");
+if(observedSchema!==schemaMatch[1])fail(`PROJECT schema baseline drift: source=${schemaMatch[1]} project=${observedSchema}`);
 
 const continuity=read(p.continuity);
 const activePlan=field(continuity,"Active-Plan");

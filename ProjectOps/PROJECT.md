@@ -66,9 +66,9 @@ Checkout source y `~/.abos` son dominios distintos. `~/.abos` contiene estado ru
 
 ### 3.2 Persistencia
 
-`src/state/schema.ts` declara `SCHEMA_VERSION = 18`. v16 extendió `policy_decisions` de forma aditiva para lifecycle de policy/authorization; v17 añadió el journal/lease transaccional P-012 (`self_mod_transactions` / `self_mod_leases`); v18 añadió `evidence_events` como fabric transversal de causalidad/correlación P-013, separado del `event_stream` comprimible de memoria y sin reemplazar authorities de dominio.
+`src/state/schema.ts` declara `SCHEMA_VERSION = 18`. v16 extendió `policy_decisions` para lifecycle de policy/authorization; v17 añadió el journal/lease transaccional P-012 (`self_mod_transactions` / `self_mod_leases`); v18 añade `evidence_events` como fabric transversal de causalidad/correlación P-013, separado del `event_stream` comprimible de memoria y sin reemplazar authorities de dominio.
 
-La SQLite canónica conserva identity, turns/tool calls, heartbeat, finanzas, skills, children, registry, memory/soul, orchestration/adaptive/environment state y migrations acumuladas. P-009 añadió provenance de inbox/turns de forma aditiva; legacy ambiguity degrada a UNKNOWN en vez de inventar trust.
+La SQLite canónica conserva identity, turns/tool calls, heartbeat, finanzas, skills, children, registry, memory/soul, orchestration/adaptive/environment state, policy lifecycle, self-mod recovery y migrations acumuladas. P-009 añadió provenance de inbox/turns de forma aditiva; legacy ambiguity degrada a UNKNOWN en vez de inventar trust.
 
 ### 3.3 Ciclo principal
 
@@ -113,6 +113,12 @@ Invariantes: parent executor != child runtime; parent bookkeeping != child live 
 
 **Economía causal**: funding != balance; allocation != expense; expected revenue != realized revenue; profitability unknown != loss; ROI requiere denominador y autoridad válidos. P-003 dejó child capital semantics integradas/revalidadas; balance/revenue externo siguen UNKNOWN cuando falta evidencia.
 
+### 3.11 Self-modification transaccional
+
+P-012 está integrado y revalidado en `main fe845184fce48c65032f8521ecd0bdfa42e04b77`. Una modificación de source legítima no escribe primero y verifica después: usa candidate aislado, journal/lease v17, verification, exact candidate commit, activation CAS y recovery causal. Código crítico no se trata automáticamente como inmutable; fronteras realmente separadas como constitution, credentials, secrets y runtime state mantienen protección propia.
+
+El main exacto pasó CI `34926393562` y ProjectOps Integrity `34926393570`. Esto acredita E3 del source integrado, no provider/economic LIVE. P-012 permanece PARCIAL / INTEGRATION_VERIFIED hasta que P-013 evidence/correlation transversal quede integrada conforme a su Definition of Done.
+
 ## 4. Invariantes duros ABOS
 
 1. Constitution sobre survival/economics.
@@ -123,11 +129,12 @@ Invariantes: parent executor != child runtime; parent bookkeeping != child live 
 6. Execution boundary explícita; no fallback silencioso.
 7. Efectos durables recuperables/idempotentes según riesgo.
 8. Economía causal con units/source/scope/time/actor.
-9. Self-modification auditada y reversible.
+9. Self-modification auditada, transaccional y recuperable.
 10. Children preservan constitution, identidad y autoridad propias.
 11. Source state != runtime state.
 12. Open-world capabilities no implica bypass de policy/auth/treasury/constitution/trust.
 13. Provenance externo no se eleva por contenido o forwarding.
+14. Capability legítima no se destruye por riesgo gobernable o implementación inmadura; `ABOS_ADAPTIVE_REASONING_LAYER.md` gobierna la clasificación antes de restricción.
 
 ## 5. Autoridades prácticas observadas
 
@@ -147,7 +154,7 @@ Responsabilidades a preservar, sujetas a evolución auditada:
 - Wallet/identity: `src/identity/` + external evidence.
 - Memory: `src/memory/`.
 - Soul: `src/soul/`.
-- Self-modification: `src/self-mod/` + Git audit trail.
+- Self-modification: `src/self-mod/` + Git audit trail + schema v17 journal/lease.
 - Replication/children: `src/replication/`.
 - On-chain registry: `src/registry/`.
 - Product constitution: `constitution.md`.
@@ -198,7 +205,7 @@ E3 nunca se promociona a E5/E6 por narrativa.
 
 ### 7.2 Documentation drift
 
-**Documentation drift** sigue siendo un track P-004. `ARCHITECTURE.md` puede contener versiones históricas (por ejemplo migrations v8) que no gobiernan el source actual. En este cutover se reconcilia únicamente el baseline de schema a v15 porque P-009 lo modificó materialmente; P-004 permanece PLANIFICADO para el cierre documental integral posterior.
+**Documentation drift** sigue siendo un track P-004. `ARCHITECTURE.md` puede contener versiones históricas que no gobiernan el source actual. Las reconciliaciones puntuales de ProjectOps corrigen únicamente hechos materiales necesarios para no dirigir trabajo desde un baseline falso; P-004 permanece PLANIFICADO para el cierre documental integral posterior.
 
 ### 7.3 Fronteras LIVE
 
@@ -206,11 +213,13 @@ Codex OAuth humano, AWS billable, providers externos, saldos/revenue atribuibles
 
 ### 7.4 P-013 activo
 
-P-011 Lifecycle/Health/Restart/Recovery está HECHO / INTEGRATION_VERIFIED. P-012 transactional self-modification está integrado en `main fe845184...` y permanece PARCIAL únicamente hasta que la evidence/correlation P-013 requerida por su DoD quede integrada. P-013 Observability/Audit/Evidence Fabric es la intervención activa: su branch exact-tree `326149d1...` está E3-green y READY_FOR_INTEGRATION, pero aún no es autoridad integrada en `main`.
+P-011 Lifecycle/Health/Restart/Recovery está HECHO / INTEGRATION_VERIFIED. P-012 transactional self-modification está integrado en `main fe845184...` y permanece PARCIAL únicamente hasta que la evidence/correlation P-013 requerida por su DoD quede integrada. P-013 Observability/Audit/Evidence Fabric es la intervención activa: el product tree está E3-green; antes del PR debe reconciliar e incorporar la autoridad ProjectOps de `main c94dbeba...`.
 
 ## 8. Anti-contaminación entre proyectos
 
 ProjectOps puede reutilizar método, nunca identidad/thresholds/arquitectura/resultados de ZeroIQ, CATO u otros hosts. Toda conclusión debe ser ABOS-specific y respaldada por evidencia del propio ABOS.
+
+Una mecánica metodológica compartida debe traducirse a las autoridades, evidence ladder, constitution, runtime y riesgos propios de ABOS; nunca copiar estados o conclusiones técnicas del proyecto de origen.
 
 ## 9. Definición global de progreso
 

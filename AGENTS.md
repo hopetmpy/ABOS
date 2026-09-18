@@ -24,7 +24,7 @@ El ciclo conjunto es:
 
 No ejecutes una modificación significativa mientras la decisión no sea `DECISION_READY` conforme a la capa adaptativa. Si la evidencia demuestra que modificar es innecesario, duplicado o peor, `NO_CHANGE` es una decisión válida.
 
-## CONTINUIDAD, CAPACIDADES Y RECONCILIACIÓN
+## BARRERA OBLIGATORIA DE RECONCILIACIÓN
 
 Antes de declarar `NO_DISPONIBLE`, `BLOQUEADO` o “requiere PC”, determina y usa primero las capacidades reales del entorno actual (shell/checkout, Git/GitHub, browser, Node/pnpm, SQLite, CI/runner, simuladores y conectores autorizados). Un límite de otra sesión o entorno no demuestra un límite actual. Sólo después de demostrar una frontera real clasifica qué falta y continúa todo trabajo independiente elegible. Esto no convierte una prueba no ejecutada en `PASS`, `HECHO` o evidencia LIVE.
 
@@ -36,7 +36,11 @@ No actualices CONTINUITY/PLAN por cada subunidad salvo que cambie materialmente 
 
 Tras una interrupción, presume el bloque macro **abierto** salvo evidencia actual de que cruzó sus criterios de salida y fue reconciliado. Narrativa, commits o archivos por sí solos no prueban `HECHO`. Reanuda desde la última evidencia verificable; si la sesión se corta con el bloque abierto, deja sólo el checkpoint recuperable necesario, sin fabricar un cierre completo.
 
+En la formulación canónica del gate: si la interrupción ocurre antes de reconciliar la frontera macro, **la unidad anterior se presume ABIERTA**. Esto no obliga a reconciliar cada subunidad: dentro del mismo bloque macro sigue aplicando `CHECKPOINT LIGERO → CONTINUAR`.
+
 Los históricos/legacy no se releen completos salvo necesidad material concreta. `Required-Context` es piso, nunca techo: sigue cualquier productor, consumidor, authority, test, runtime, Git o historia materialmente conectada.
+
+`CAPABILITY_PRESERVATION_BEFORE_RESTRICTION` permanece definido canónicamente en `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md`: antes de retirar, hardcodear, human-gatear o degradar una capability legítima, clasifica `REAL_BOUNDARY / GOVERNABLE_RISK / IMMATURE_CAPABILITY / REDUNDANT_OR_HARMFUL / UNKNOWN`. Riesgo gobernable o inmadurez no equivalen a una frontera real. No dupliques esa authority aquí.
 
 ## IDENTIDAD ABOS OBLIGATORIA
 
@@ -68,6 +72,7 @@ ABOS no se razona como un chatbot, un predictor ni un mero orchestrator. Su unid
 10. Source/CI no acreditan automáticamente OAuth real, AWS LIVE, saldos reales, ingresos atribuibles, continuidad económica ni operación sostenida.
 11. Self-modification y replication requieren provenance, auditabilidad, rollback/recuperación y preservación de la constitución.
 12. `~/.abos` contiene estado runtime del agente y no se confunde con el checkout/source del runtime.
+13. Una capability legítima no se destruye por riesgo gobernable o implementación inmadura; la capa adaptativa decide si existe una frontera real antes de restringir.
 
 ## REGLAS DE CIERRE DE CONTEXTO
 
@@ -110,6 +115,12 @@ Antes de crear: **«Busca si ya existe, aunque tenga otro nombre.»**
 Antes de reconciliar: **«¿Estoy cruzando una frontera macro o sólo terminé una subunidad que debe continuar?»**
 
 Antes de repetir: **«¿Qué cambió materialmente desde el intento anterior y qué información nueva producirá este camino?»**
+
+Antes de restringir una capability: **«¿Es una frontera real o estoy sustituyendo juicio y evidencia por una limitación prematura?»**
+
+Antes de cambiar de unidad/estado: **«¿Git, realidad, evidencia, CONTINUITY y PLAN están reconciliados o estoy trasladando deuda?»**
+
+Al reanudar después de un corte: **«Demuestra el último cierre; no lo heredes como supuesto.»**
 
 Antes de afirmar rentabilidad o saldo: **«¿Cuál es la autoridad causal de este número y qué parte sigue UNKNOWN?»**
 
