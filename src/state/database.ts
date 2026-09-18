@@ -55,6 +55,7 @@ import {
   MIGRATION_V15_ALTER_TURNS_INPUT_PROVENANCE,
   MIGRATION_V16_POLICY_LIFECYCLE,
   MIGRATION_V17_SELF_MOD_TRANSACTION,
+  MIGRATION_V18_EVIDENCE_FABRIC,
 } from "./schema.js";
 import type {
   RiskLevel,
@@ -81,6 +82,7 @@ import type {
 } from "../types.js";
 import { ulid } from "ulid";
 import { createLogger } from "../observability/logger.js";
+import { appendEvidenceEvent, currentEvidenceContext } from "../observability/evidence.js";
 
 const logger = createLogger("database");
 
@@ -245,7 +247,7 @@ export function createDatabase(dbPath: string): AbosDatabase {
   // ─── Transactions ────────────────────────────────────────────
 
   const insertTransaction = (txn: Transaction): void => {
-    db.prepare(
+    const insert = () => db.prepare(
       `INSERT INTO transactions (id, type, amount_cents, balance_after_cents, description)
        VALUES (?, ?, ?, ?, ?)`,
     ).run(
@@ -255,6 +257,36 @@ export function createDatabase(dbPath: string): AbosDatabase {
       txn.balanceAfterCents ?? null,
       txn.description,
     );
+
+    const context = currentEvidenceContext();
+    if (!context) {
+      insert();
+      return;
+    }
+
+    db.transaction(() => {
+      insert();
+      appendEvidenceEvent(db, {
+        correlationId: context.correlationId,
+        causationId: context.causationId ?? null,
+        eventType: "economic.transaction_recorded",
+        domain: "economic",
+        authorityType: "financial_transaction",
+        authorityId: txn.id,
+        goalId: context.goalId ?? null,
+        taskId: context.taskId ?? null,
+        turnId: context.turnId ?? null,
+        toolCallId: context.toolCallId ?? null,
+        epistemicStatus: "observation",
+        payload: {
+          type: txn.type,
+          amountCents: txn.amountCents ?? null,
+          balanceAfterCents: txn.balanceAfterCents ?? null,
+          costUnit: "cent",
+        },
+        provenance: { source: "transactions" },
+      });
+    })();
   };
 
   const getRecentTransactions = (limit: number): Transaction[] => {
@@ -682,6 +714,10 @@ function applyMigrations(db: DatabaseType): void {
     {
       version: 17,
       apply: () => db.exec(MIGRATION_V17_SELF_MOD_TRANSACTION),
+    },
+    {
+      version: 18,
+      apply: () => db.exec(MIGRATION_V18_EVIDENCE_FABRIC),
     },
   ];
 

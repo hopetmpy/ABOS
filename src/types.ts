@@ -227,6 +227,8 @@ export interface ToolContext {
   conway: ConwayClient;
   inference: InferenceClient;
   social?: SocialClientInterface;
+  /** Runtime-scoped policy accounting authority for economic effects. */
+  spendTracker?: SpendTrackerInterface;
 }
 
 export interface SocialClientInterface {
@@ -613,6 +615,13 @@ export interface PolicyRequest {
     inputSource: InputSource | undefined;
     inputProvenance?: TurnInputProvenance;
     actorAddress?: string;
+    /** Durable identities propagated by P-013; none creates a second domain authority. */
+    correlationId?: string;
+    causationId?: string | null;
+    goalId?: string | null;
+    taskId?: string | null;
+    turnId?: string | null;
+    toolCallId?: string | null;
     turnToolCallCount: number;
     sessionSpend?: SpendTrackerInterface;
   };

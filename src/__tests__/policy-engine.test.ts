@@ -41,6 +41,7 @@ import type {
   LimitCheckResult,
 } from "../types.js";
 import Database from "better-sqlite3";
+import { MIGRATION_V18_EVIDENCE_FABRIC } from "../state/schema.js";
 import path from "path";
 import os from "os";
 import fs from "fs";
@@ -101,6 +102,10 @@ function createRawTestDb(): Database.Database {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+
+  // Keep the raw Policy fixture minimal, but reuse the canonical v18
+  // evidence DDL required by protected executeTool paths.
+  db.exec(MIGRATION_V18_EVIDENCE_FABRIC);
 
   return db;
 }

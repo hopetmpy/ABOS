@@ -66,15 +66,15 @@ const passGate = async () => ({
 });
 
 describe("P-012 transactional self-modification primitives", () => {
-  it("migrates the canonical database to schema v17 with journal and lease tables", () => {
+  it("preserves the P-012 v17 journal and lease tables after later schema migrations", () => {
     const root = makeTempRoot("abos-p012-db-");
     const db = createDatabase(path.join(root, "state.db"));
     const version = db.raw.prepare("SELECT MAX(version) AS version FROM schema_version").get() as { version: number };
     const tables = db.raw.prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('self_mod_transactions','self_mod_leases') ORDER BY name",
     ).all() as { name: string }[];
-    expect(SCHEMA_VERSION).toBe(17);
-    expect(version.version).toBe(17);
+    expect(SCHEMA_VERSION).toBeGreaterThanOrEqual(17);
+    expect(version.version).toBe(SCHEMA_VERSION);
     expect(tables.map((row) => row.name)).toEqual(["self_mod_leases", "self_mod_transactions"]);
     db.close();
   });

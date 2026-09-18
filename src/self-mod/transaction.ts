@@ -14,6 +14,7 @@ import { execFileSync } from "child_process";
 import { randomUUID } from "crypto";
 import type Database from "better-sqlite3";
 import { RUNTIME_ROOT } from "../runtime-root.js";
+import { appendEvidenceEvent, currentEvidenceContext } from "../observability/evidence.js";
 
 export type SelfModTransactionStatus =
   | "proposed"
@@ -66,6 +67,35 @@ const ALLOWED_TRANSITIONS: Record<SelfModTransactionStatus, readonly SelfModTran
 
 function isoNow(nowMs = Date.now()): string {
   return new Date(nowMs).toISOString();
+}
+
+function appendSelfModCorrelationEvent(
+  db: Database.Database,
+  transaction: SelfModTransactionRecord,
+): void {
+  const context = currentEvidenceContext();
+  if (!context) return;
+  appendEvidenceEvent(db, {
+    correlationId: context.correlationId,
+    causationId: context.causationId ?? null,
+    eventType: `self_mod.${transaction.status}`,
+    domain: "self_mod",
+    authorityType: "self_mod_transaction",
+    authorityId: transaction.id,
+    goalId: context.goalId ?? null,
+    taskId: context.taskId ?? null,
+    turnId: context.turnId ?? null,
+    toolCallId: context.toolCallId ?? null,
+    epistemicStatus: "observation",
+    payload: {
+      operation: transaction.operation,
+      status: transaction.status,
+      baseSha: transaction.baseSha,
+      candidateSha: transaction.candidateSha,
+      error: transaction.error,
+    },
+    provenance: { source: "self_mod_transactions" },
+  });
 }
 
 function deserializeTransaction(row: any): SelfModTransactionRecord {
@@ -128,12 +158,16 @@ export function createSelfModTransaction(
 ): SelfModTransactionRecord {
   const id = input.id ?? randomUUID();
   const now = isoNow(input.nowMs);
-  db.prepare(
-    `INSERT INTO self_mod_transactions
-      (id, operation, status, base_sha, request_json, evidence_json, created_at, updated_at)
-     VALUES (?, ?, 'proposed', ?, ?, '[]', ?, ?)`,
-  ).run(id, input.operation, input.baseSha, JSON.stringify(input.request ?? {}), now, now);
-  return getSelfModTransaction(db, id)!;
+  return db.transaction(() => {
+    db.prepare(
+      `INSERT INTO self_mod_transactions
+        (id, operation, status, base_sha, request_json, evidence_json, created_at, updated_at)
+       VALUES (?, ?, 'proposed', ?, ?, '[]', ?, ?)`,
+    ).run(id, input.operation, input.baseSha, JSON.stringify(input.request ?? {}), now, now);
+    const transaction = getSelfModTransaction(db, id)!;
+    appendSelfModCorrelationEvent(db, transaction);
+    return transaction;
+  })();
 }
 
 export function getSelfModTransaction(
@@ -193,7 +227,9 @@ export function transitionSelfModTransaction(
       completedAt,
       id,
     );
-    return getSelfModTransaction(db, id)!;
+    const transaction = getSelfModTransaction(db, id)!;
+    appendSelfModCorrelationEvent(db, transaction);
+    return transaction;
   })();
 }
 

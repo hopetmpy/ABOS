@@ -5,7 +5,7 @@
  * The database IS the abos's memory.
  */
 
-export const SCHEMA_VERSION = 17;
+export const SCHEMA_VERSION = 18;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -1041,4 +1041,44 @@ export const MIGRATION_V17_SELF_MOD_TRANSACTION = `
 
   CREATE INDEX IF NOT EXISTS idx_self_mod_leases_expiry
     ON self_mod_leases(expires_at);
+`;
+
+
+// === Correlatable Evidence Fabric v1 (P-013) ===
+// This table owns only cross-domain causal/correlation evidence. Domain state
+// remains authoritative in policy/self-mod/task/economic/environment/etc.
+// Event/domain/authority strings are intentionally open-ended so future
+// capabilities can participate without a schema allowlist.
+export const MIGRATION_V18_EVIDENCE_FABRIC = `
+  CREATE TABLE IF NOT EXISTS evidence_events (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT NOT NULL UNIQUE,
+    correlation_id TEXT NOT NULL,
+    causation_id TEXT,
+    event_type TEXT NOT NULL,
+    domain TEXT NOT NULL,
+    authority_type TEXT NOT NULL,
+    authority_id TEXT,
+    goal_id TEXT,
+    task_id TEXT,
+    turn_id TEXT,
+    tool_call_id TEXT,
+    epistemic_status TEXT NOT NULL DEFAULT 'observation',
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    provenance_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_evidence_correlation
+    ON evidence_events(correlation_id, sequence);
+  CREATE INDEX IF NOT EXISTS idx_evidence_causation
+    ON evidence_events(causation_id, sequence);
+  CREATE INDEX IF NOT EXISTS idx_evidence_authority
+    ON evidence_events(authority_type, authority_id, sequence);
+  CREATE INDEX IF NOT EXISTS idx_evidence_turn
+    ON evidence_events(turn_id, sequence);
+  CREATE INDEX IF NOT EXISTS idx_evidence_tool_call
+    ON evidence_events(tool_call_id, sequence);
+  CREATE INDEX IF NOT EXISTS idx_evidence_goal_task
+    ON evidence_events(goal_id, task_id, sequence);
 `;

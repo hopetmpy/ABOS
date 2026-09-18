@@ -59,11 +59,23 @@ interface ParsedPaymentRequirement {
   requirement: PaymentRequirement;
 }
 
-interface X402PaymentResult {
+export interface X402PaymentMetadata {
+  /** Exact observed x402 amount in USDC atomic units (6 decimals). */
+  amountMicroUsdc: string;
+  /** Conservative ceil-to-cent amount used only for policy accounting. */
+  policyAmountCents: number;
+  payToAddress: string;
+  network: string;
+  settlement: "accepted_response" | "unknown";
+}
+
+export interface X402PaymentResult {
   success: boolean;
   response?: any;
   error?: string;
   status?: number;
+  /** Present only after a signed paid request was dispatched. */
+  payment?: X402PaymentMetadata;
 }
 
 export interface UsdcBalanceResult {
@@ -159,6 +171,25 @@ function normalizePaymentRequired(raw: unknown): PaymentRequiredResponse | null 
 
   const x402Version = parsePositiveInt(value.x402Version) ?? 1;
   return { x402Version, accepts };
+}
+
+export function describeMicroUsdcAmount(amountAtomic: bigint): {
+  amountMicroUsdc: string;
+  policyAmountCents: number;
+} {
+  if (amountAtomic < 0n) throw new Error("USDC amount cannot be negative");
+  const cents = (amountAtomic + 9_999n) / 10_000n;
+  if (cents > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error("USDC amount exceeds safe cent accounting range");
+  }
+  return {
+    amountMicroUsdc: amountAtomic.toString(),
+    policyAmountCents: Number(cents),
+  };
+}
+
+export function microUsdcToPolicyCents(amountAtomic: bigint): number {
+  return describeMicroUsdcAmount(amountAtomic).policyAmountCents;
 }
 
 function parseMaxAmountRequired(maxAmountRequired: string, x402Version: number): bigint {
@@ -326,6 +357,7 @@ export async function x402Fetch(
     };
   }
 
+  let dispatchedPayment: X402PaymentMetadata | undefined;
   try {
     // Initial request (non-mutating probe, uses resilient client)
     const initialResp = await x402HttpClient.request(url, {
@@ -351,21 +383,22 @@ export async function x402Fetch(
       };
     }
 
-    // Check amount against maxPaymentCents BEFORE signing
-    if (maxPaymentCents !== undefined) {
-      const amountAtomic = parseMaxAmountRequired(
-        parsed.requirement.maxAmountRequired,
-        parsed.x402Version,
-      );
-      // Convert atomic units (6 decimals) to cents (2 decimals)
-      const amountCents = Number(amountAtomic) / 10_000;
-      if (amountCents > maxPaymentCents) {
-        return {
-          success: false,
-          error: `Payment of ${amountCents.toFixed(2)} cents exceeds max allowed ${maxPaymentCents} cents`,
-          status: 402,
-        };
-      }
+    // Calculate exact policy accounting before signing. Round fractional
+    // cents up conservatively and never coerce an unsafe bigint to Number.
+    const amountAtomic = parseMaxAmountRequired(
+      parsed.requirement.maxAmountRequired,
+      parsed.x402Version,
+    );
+    const amountDescription = describeMicroUsdcAmount(amountAtomic);
+    if (
+      maxPaymentCents !== undefined &&
+      amountDescription.policyAmountCents > maxPaymentCents
+    ) {
+      return {
+        success: false,
+        error: `Payment policy ceiling ${amountDescription.policyAmountCents} cents exceeds max allowed ${maxPaymentCents} cents`,
+        status: 402,
+      };
     }
 
     // Sign payment
@@ -389,6 +422,13 @@ export async function x402Fetch(
       JSON.stringify(payment),
     ).toString("base64");
 
+    dispatchedPayment = {
+      ...amountDescription,
+      payToAddress: parsed.requirement.payToAddress,
+      network: parsed.requirement.network,
+      settlement: "unknown",
+    };
+
     const paidResp = await x402HttpClient.request(url, {
       method,
       headers: {
@@ -401,9 +441,21 @@ export async function x402Fetch(
     });
 
     const data = await paidResp.json().catch(() => paidResp.text());
-    return { success: paidResp.ok, response: data, status: paidResp.status };
+    return {
+      success: paidResp.ok,
+      response: data,
+      status: paidResp.status,
+      payment: {
+        ...dispatchedPayment,
+        settlement: paidResp.ok ? "accepted_response" : "unknown",
+      },
+    };
   } catch (err: any) {
-    return { success: false, error: err.message };
+    return {
+      success: false,
+      error: err?.message || String(err),
+      payment: dispatchedPayment,
+    };
   }
 }
 

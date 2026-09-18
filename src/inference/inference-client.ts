@@ -1,5 +1,9 @@
 import OpenAI from "openai";
+import type BetterSqlite3 from "better-sqlite3";
+import { ulid } from "ulid";
 import type { ChatMessage } from "../types.js";
+import { inferenceInsertCost } from "../state/database.js";
+import { appendEvidenceEvent, correlationIdFor } from "../observability/evidence.js";
 import {
   ProviderRegistry,
   type ModelTier,
@@ -11,6 +15,32 @@ const RETRYABLE_STATUS_CODES = new Set([429, 500, 503]);
 const RETRY_BACKOFF_MS = [1000, 2000, 4000] as const;
 const CIRCUIT_BREAKER_FAILURE_THRESHOLD = 5;
 const CIRCUIT_BREAKER_DISABLE_MS = 5 * 60_000;
+
+type Database = BetterSqlite3.Database;
+
+export interface UnifiedInferenceTraceContext {
+  correlationId?: string;
+  causationId?: string | null;
+  sessionId?: string;
+  turnId?: string | null;
+  goalId?: string | null;
+  taskId?: string | null;
+  taskType?: string;
+}
+
+export interface UnifiedInferenceClientOptions {
+  db?: Database;
+}
+
+interface ResolvedInferenceTrace {
+  correlationId: string;
+  causationId: string | null;
+  sessionId: string;
+  turnId: string | null;
+  goalId: string | null;
+  taskId: string | null;
+  taskType: string;
+}
 
 export interface UnifiedInferenceResult {
   content: string;
@@ -51,6 +81,8 @@ interface SharedChatParams {
   toolChoice?: "auto" | "none" | "required" | Record<string, unknown>;
   responseFormat?: { type: "json_object" | "text" };
   stream?: boolean;
+  /** Optional durable causal context. It never carries prompt content. */
+  trace?: UnifiedInferenceTraceContext;
 }
 
 interface UnifiedChatParams extends SharedChatParams {
@@ -100,9 +132,19 @@ class ProviderAttemptError extends Error {
 export class UnifiedInferenceClient {
   private readonly registry: ProviderRegistry;
   private readonly circuitBreaker = new Map<string, CircuitBreakerState>();
+  private evidenceDb?: Database;
 
-  constructor(registry: ProviderRegistry) {
+  constructor(
+    registry: ProviderRegistry,
+    options: UnifiedInferenceClientOptions = {},
+  ) {
     this.registry = registry;
+    this.evidenceDb = options.db;
+  }
+
+  /** Bind the canonical runtime DB when this client enters an orchestrated runtime. */
+  bindEvidenceDatabase(db: Database): void {
+    this.evidenceDb = db;
   }
 
   async chat(params: UnifiedChatParams): Promise<UnifiedInferenceResult> {
@@ -114,6 +156,7 @@ export class UnifiedInferenceClient {
 
     const failedProviders: string[] = [];
     let totalRetries = 0;
+    const trace = this.resolveTrace(params.trace);
 
     for (const resolved of candidates) {
       if (this.isProviderCircuitOpen(resolved.provider.id)) {
@@ -122,7 +165,7 @@ export class UnifiedInferenceClient {
       }
 
       try {
-        const attempt = await this.executeWithRetries(resolved, params, params.tier);
+        const attempt = await this.executeWithRetries(resolved, params, params.tier, trace);
         this.markProviderSuccess(resolved.provider.id);
 
         return {
@@ -161,9 +204,15 @@ export class UnifiedInferenceClient {
     }
 
     const resolved = this.registry.getModel(params.providerId, params.modelId);
+    const trace = this.resolveTrace(params.trace);
 
     try {
-      const attempt = await this.executeWithRetries(resolved, params, resolved.model.tier);
+      const attempt = await this.executeWithRetries(
+        resolved,
+        params,
+        resolved.model.tier,
+        trace,
+      );
       this.markProviderSuccess(params.providerId);
 
       return {
@@ -188,20 +237,68 @@ export class UnifiedInferenceClient {
     resolved: ResolvedModel,
     params: SharedChatParams,
     requestedTier: ModelTier,
+    trace: ResolvedInferenceTrace,
   ): Promise<AttemptResult> {
     let retries = 0;
 
     while (true) {
+      const attemptId = ulid();
+      const attemptEvent = this.evidenceDb
+        ? appendEvidenceEvent(this.evidenceDb, {
+            correlationId: trace.correlationId,
+            causationId: trace.causationId,
+            eventType: "inference.attempt_started",
+            domain: "inference",
+            authorityType: "inference_attempt",
+            authorityId: attemptId,
+            goalId: trace.goalId,
+            taskId: trace.taskId,
+            turnId: trace.turnId,
+            epistemicStatus: "observation",
+            payload: {
+              provider: resolved.provider.id,
+              model: resolved.model.id,
+              requestedTier,
+              retryOrdinal: retries,
+            },
+            provenance: { source: "UnifiedInferenceClient" },
+          })
+        : null;
+
+      let result: UnifiedInferenceResult;
       try {
-        const result = await this.executeSingleRequest(
+        result = await this.executeSingleRequest(
           resolved.client,
           resolved.provider.id,
           resolved.model,
           requestedTier,
           params,
         );
-        return { result, retries };
       } catch (error) {
+        if (this.evidenceDb) {
+          appendEvidenceEvent(this.evidenceDb, {
+            correlationId: trace.correlationId,
+            causationId: attemptEvent?.id ?? trace.causationId,
+            eventType: "inference.provider_error_external_settlement_unknown",
+            domain: "inference",
+            authorityType: "inference_attempt",
+            authorityId: attemptId,
+            goalId: trace.goalId,
+            taskId: trace.taskId,
+            turnId: trace.turnId,
+            epistemicStatus: "unknown",
+            payload: {
+              provider: resolved.provider.id,
+              model: resolved.model.id,
+              retryOrdinal: retries,
+              localOutcome: "provider_error",
+              externalSettlement: "unknown",
+              error,
+            },
+            provenance: { source: "UnifiedInferenceClient" },
+          });
+        }
+
         const retryable = this.isRetryableError(error);
         if (!retryable) {
           throw new ProviderAttemptError({
@@ -224,8 +321,85 @@ export class UnifiedInferenceClient {
         const delayMs = RETRY_BACKOFF_MS[retries];
         retries += 1;
         await sleep(delayMs);
+        continue;
       }
+
+      // Persistence of a successful external response is deliberately outside
+      // the provider catch path. If durable accounting/evidence cannot commit,
+      // do not send another request and risk duplicating a successful effect.
+      this.persistSuccess(result, requestedTier, trace, attemptId, attemptEvent?.id ?? null);
+      return { result, retries };
     }
+  }
+
+  private resolveTrace(trace?: UnifiedInferenceTraceContext): ResolvedInferenceTrace {
+    const routeId = ulid();
+    const correlationId = trace?.correlationId
+      ?? (trace?.goalId ? correlationIdFor("goal", trace.goalId) : undefined)
+      ?? (trace?.taskId ? correlationIdFor("task", trace.taskId) : undefined)
+      ?? (trace?.turnId ? correlationIdFor("turn", trace.turnId) : undefined)
+      ?? (trace?.sessionId ? correlationIdFor("session", trace.sessionId) : undefined)
+      ?? correlationIdFor("unified_inference", routeId);
+
+    return {
+      correlationId,
+      causationId: trace?.causationId ?? null,
+      sessionId: trace?.sessionId ?? correlationId,
+      turnId: trace?.turnId ?? null,
+      goalId: trace?.goalId ?? null,
+      taskId: trace?.taskId ?? null,
+      taskType: trace?.taskType ?? "unified",
+    };
+  }
+
+  private persistSuccess(
+    result: UnifiedInferenceResult,
+    requestedTier: ModelTier,
+    trace: ResolvedInferenceTrace,
+    attemptId: string,
+    causationId: string | null,
+  ): void {
+    if (!this.evidenceDb) return;
+
+    this.evidenceDb.transaction(() => {
+      const costId = inferenceInsertCost(this.evidenceDb!, {
+        sessionId: trace.sessionId,
+        turnId: trace.turnId,
+        model: result.metadata.modelId,
+        provider: result.metadata.providerId,
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+        costCents: result.cost.totalCostCents,
+        latencyMs: result.metadata.latencyMs,
+        tier: requestedTier,
+        taskType: trace.taskType,
+        cacheHit: false,
+      });
+
+      appendEvidenceEvent(this.evidenceDb!, {
+        correlationId: trace.correlationId,
+        causationId,
+        eventType: "inference.succeeded",
+        domain: "inference",
+        authorityType: "inference_cost",
+        authorityId: costId,
+        goalId: trace.goalId,
+        taskId: trace.taskId,
+        turnId: trace.turnId,
+        epistemicStatus: "observation",
+        payload: {
+          attemptId,
+          provider: result.metadata.providerId,
+          model: result.metadata.modelId,
+          inputTokens: result.usage.inputTokens,
+          outputTokens: result.usage.outputTokens,
+          costCents: result.cost.totalCostCents,
+          costUnit: "cent",
+          latencyMs: result.metadata.latencyMs,
+        },
+        provenance: { source: "inference_costs" },
+      });
+    })();
   }
 
   private async executeSingleRequest(

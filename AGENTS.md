@@ -9,7 +9,7 @@ Este es el único punto de entrada operativo que debe permanecer en la raíz de 
 Antes de modificar código, configuración, datos, documentación operativa, dependencias, arquitectura, dinero, infraestructura, identidad, estado persistente o estado del proyecto, lee y aplica **en este orden**:
 
 1. `ProjectOps/system/ABOS_OPERATING_PROTOCOL.md` — **COMPLETO**. Conserva íntegro el protocolo canónico y los 39 puntos obligatorios previamente instalados en ABOS.
-2. `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md` — **COMPLETO**. Capa aditiva ABOS-specific para hipótesis competidoras, falsación, rutas adaptativas, autoridad económica, autonomía, recuperación, segundo orden, revisión adversarial, `NO_CHANGE`, preservación de capability y gate `DECISION_READY`.
+2. `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md` — **COMPLETO**. Capa aditiva ABOS-specific para hipótesis competidoras, falsación, rutas adaptativas, autoridad económica, autonomía, recuperación, segundo orden, revisión adversarial, `NO_CHANGE` y gate `DECISION_READY`.
 3. `ProjectOps/CONTINUITY.md` — manifest de continuidad actual.
 4. El `Active-Segment` indicado por CONTINUITY — completo.
 5. `ProjectOps/PROJECT.md` — identidad, baseline, invariantes, autoridades y escalera de evidencia de ABOS.
@@ -24,13 +24,31 @@ El ciclo conjunto es:
 
 No ejecutes una modificación significativa mientras la decisión no sea `DECISION_READY` conforme a la capa adaptativa. Si la evidencia demuestra que modificar es innecesario, duplicado o peor, `NO_CHANGE` es una decisión válida.
 
+## BARRERA OBLIGATORIA DE RECONCILIACIÓN
+
+Antes de declarar `NO_DISPONIBLE`, `BLOQUEADO` o “requiere PC”, determina y usa primero las capacidades reales del entorno actual (shell/checkout, Git/GitHub, browser, Node/pnpm, SQLite, CI/runner, simuladores y conectores autorizados). Un límite de otra sesión o entorno no demuestra un límite actual. Sólo después de demostrar una frontera real clasifica qué falta y continúa todo trabajo independiente elegible. Esto no convierte una prueba no ejecutada en `PASS`, `HECHO` o evidencia LIVE.
+
+Mientras exista trabajo elegible y haya capacidad, evidencia y autorización suficientes, **encadena la ejecución**. Terminar una función, archivo, submódulo, fix, test, commit, subcorte o checkpoint no es motivo para devolver control ni para reconciliar todo. Dentro del mismo bloque macro usa **CHECKPOINT LIGERO → CONTINUAR**; un checkpoint ligero conserva sólo HEAD/commit, cambio, validación, bloqueo/defecto material y siguiente punto verificable.
+
+La reconciliación completa es una barrera de **frontera macro**: por defecto un `P-xxx` o un bloque que el plan marque `RECONCILIATION_BOUNDARY`. Debe ocurrir antes de cerrar/cambiar ese bloque, cambiar `Active-Plan`, declarar integración/cierre o entregarlo como terminado. Reconciliar significa contrastar Git/árbol, código/runtime/estado persistente, tests/evidencia, CONTINUITY+segmento activo y PLAN+módulo activo. Una contradicción material se resuelve dentro del bloque actual.
+
+No actualices CONTINUITY/PLAN por cada subunidad salvo que cambie materialmente intención, authority, dependencias, riesgo, seguridad o estado macro. Si una subunidad se bloquea, registra la causa exacta y continúa otra elegible. Un reporte intermedio que no requiera decisión humana no detiene la cadena.
+
+Tras una interrupción, presume el bloque macro **abierto** salvo evidencia actual de que cruzó sus criterios de salida y fue reconciliado. Narrativa, commits o archivos por sí solos no prueban `HECHO`. Reanuda desde la última evidencia verificable; si la sesión se corta con el bloque abierto, deja sólo el checkpoint recuperable necesario, sin fabricar un cierre completo.
+
+En la formulación canónica del gate: si la interrupción ocurre antes de reconciliar la frontera macro, **la unidad anterior se presume ABIERTA**. Esto no obliga a reconciliar cada subunidad: dentro del mismo bloque macro sigue aplicando `CHECKPOINT LIGERO → CONTINUAR`.
+
+Los históricos/legacy no se releen completos salvo necesidad material concreta. `Required-Context` es piso, nunca techo: sigue cualquier productor, consumidor, authority, test, runtime, Git o historia materialmente conectada.
+
+`CAPABILITY_PRESERVATION_BEFORE_RESTRICTION` permanece definido canónicamente en `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md`: antes de retirar, hardcodear, human-gatear o degradar una capability legítima, clasifica `REAL_BOUNDARY / GOVERNABLE_RISK / IMMATURE_CAPABILITY / REDUNDANT_OR_HARMFUL / UNKNOWN`. Riesgo gobernable o inmadurez no equivalen a una frontera real. No dupliques esa authority aquí.
+
 ## IDENTIDAD ABOS OBLIGATORIA
 
 El método ProjectOps puede ser común a otros proyectos; **la semántica de ABOS no**.
 
 ABOS es un **Autonomous Business Operating System**: un runtime de agente soberano, persistente y económicamente consciente que puede razonar, actuar, conservar estado, adquirir/usar capacidades, operar entre entornos autorizados, administrar recursos, evolucionar y replicarse bajo evidencia y límites reales.
 
-No importes de ZeroIQ, CATO, Viazi u otro host sus métricas, gates técnicos, estados, arquitectura, nomenclatura, prioridades, thresholds, resultados o planes. Solo puede reutilizarse una mecánica operativa general cuando sea compatible y se adapte a las autoridades reales de ABOS.
+No importes de ZeroIQ, CATO, Viazi u otro host sus métricas, gates, estados, arquitectura, nomenclatura, prioridades, thresholds, resultados o planes. Solo puede reutilizarse el método operativo universal cuando sea compatible.
 
 Antes de planificar o implementar, conserva la separación declarada en `ProjectOps/PROJECT.md`:
 - **TARGET / intención** — lo que ABOS está decidido a ser;
@@ -39,26 +57,6 @@ Antes de planificar o implementar, conserva la separación declarada en `Project
 - **LIVE / ECONOMIC EVIDENCE** — lo demostrado con proveedores, dinero, wallets, sandboxes, agentes hijos o infraestructura reales.
 
 ABOS no se razona como un chatbot, un predictor ni un mero orchestrator. Su unidad de continuidad es un agente persistente que debe conservar objetivo, identidad, estado, autoridad, evidencia y consecuencias económicas a través de turnos, reinicios, rutas y entornos.
-
-## BARRERA OBLIGATORIA DE RECONCILIACIÓN
-
-`RECONCILIAR` es una barrera de transición, no limpieza posterior. **Antes de marcar `HECHO`, cambiar `P-xxx`/segmento, declarar integración, abandonar una unidad o entregar contexto**, contrasta cuando aplique:
-
-1. Git real: branch, HEAD, diff/worktree, commits, PR/merge y `main`;
-2. source/runtime/estado persistente real, sin confundir checkout, `~/.abos`, providers, children ni recursos externos;
-3. tests/evidence ladder: qué se ejecutó, qué nivel E0–E7 demuestra y qué sigue NO VERIFICADO;
-4. `ProjectOps/CONTINUITY.md` + Active-Segment;
-5. `ProjectOps/PLAN.md` + módulo activo y su Definition of Done.
-
-No avances mientras exista una contradicción material no resuelta entre esas fuentes. La divergencia detectada durante el cierre pertenece a la unidad actual; no se traslada como deuda implícita.
-
-Si una sesión/agente/proceso se interrumpe antes de reconciliar, **la unidad anterior se presume ABIERTA**. Narrativa, commits, archivos o CI aislado no prueban por sí solos cierre. Reanuda desde la última evidencia verificable y demuestra qué ocurrió realmente antes de continuar.
-
-Antes de abandonar o entregar, deja checkpoint de HEAD/estado, cambios reales, evidencia ejecutada, lo NO validado, `UNKNOWN`/in-doubt/recovery pendiente y estado correcto `EN_EJECUCIÓN`/`PARCIAL`/`BLOQUEADO` si no cruzó su DoD. No existe “seguramente terminado”.
-
-Reconciliar no promociona evidencia: E3 no se convierte en provider/cloud LIVE E5 ni economic LIVE E6; parent bookkeeping no se convierte en child/wallet authority; `UNKNOWN` no se convierte en cero/dead/impossible.
-
-`CAPABILITY_PRESERVATION_BEFORE_RESTRICTION` permanece definido canónicamente en `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md`: aplica su clasificación `REAL_BOUNDARY / GOVERNABLE_RISK / IMMATURE_CAPABILITY / REDUNDANT_OR_HARMFUL / UNKNOWN` antes de retirar, hardcodear, human-gatear o degradar una capability legítima. No dupliques esa authority aquí.
 
 ## INVARIANTES ABOS QUE NO PUEDEN IMPORTARSE NI DILUIRSE
 
@@ -74,16 +72,16 @@ Reconciliar no promociona evidencia: E3 no se convierte en provider/cloud LIVE E
 10. Source/CI no acreditan automáticamente OAuth real, AWS LIVE, saldos reales, ingresos atribuibles, continuidad económica ni operación sostenida.
 11. Self-modification y replication requieren provenance, auditabilidad, rollback/recuperación y preservación de la constitución.
 12. `~/.abos` contiene estado runtime del agente y no se confunde con el checkout/source del runtime.
-13. Una capability legítima no se destruye por riesgo gobernable o inmadurez; la capa adaptativa decide si existe una frontera real antes de restringir.
+13. Una capability legítima no se destruye por riesgo gobernable o implementación inmadura; la capa adaptativa decide si existe una frontera real antes de restringir.
 
 ## REGLAS DE CIERRE DE CONTEXTO
 
 - `ProjectOps/CONTINUITY.md` es la única autoridad lógica de continuidad actual.
 - `ProjectOps/PLAN.md` es la única autoridad lógica de planificación.
 - El estado de cada `P-xxx` se obtiene del manifest/módulo vivo; no se hardcodea en este router.
-- `ProjectOps/continuity/C0000-legacy.md` y `ProjectOps/plan/LEGACY_FULL_PLAN.md` son historia preservada; no son autoridades vivas.
+- `ProjectOps/continuity/C0000-legacy.md` y `ProjectOps/plan/LEGACY_FULL_PLAN.md` son historia preservada; no son autoridades vivas y sólo se releen cuando la evidencia histórica concreta lo exige.
 - Los segmentos históricos cerrados no se reescriben; correcciones posteriores se registran en el segmento activo.
-- `Required-Context` es piso, no techo.
+- `Required-Context` es piso, no techo; nunca impide ampliar investigación materialmente conectada.
 - Git/código/runtime/tests gobiernan claims sobre lo que existe realmente.
 - Un PR abierto, branch, documento o test aislado no equivale a integración en `main`.
 - CI verde demuestra lo que ese CI ejecutó; no demuestra efectos externos que el job no ejercitó.
@@ -113,6 +111,8 @@ Antes de actuar: **«Entiende qué existe, por qué existe, quién depende de el
 Antes de aceptar la primera explicación: **«¿Qué otra explicación plausible produciría la misma evidencia y cómo las separo?»**
 
 Antes de crear: **«Busca si ya existe, aunque tenga otro nombre.»**
+
+Antes de reconciliar: **«¿Estoy cruzando una frontera macro o sólo terminé una subunidad que debe continuar?»**
 
 Antes de repetir: **«¿Qué cambió materialmente desde el intento anterior y qué información nueva producirá este camino?»**
 

@@ -10,7 +10,7 @@ Supported-Node-Majors: `22,24`
 Recommended-Node-Major: `22`
 State-Root: `~/.abos`
 Source-Root: repository checkout
-Schema-Version-Observed-In-Source: `17`
+Schema-Version-Observed-In-Source: `18`
 ProjectOps-Protocol: `ProjectOps/system/ABOS_OPERATING_PROTOCOL.md`
 Adaptive-Reasoning: `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md`
 Plan-Authority: `ProjectOps/PLAN.md`
@@ -66,9 +66,9 @@ Checkout source y `~/.abos` son dominios distintos. `~/.abos` contiene estado ru
 
 ### 3.2 Persistencia
 
-`src/state/schema.ts` declara `SCHEMA_VERSION = 17` después de P-012. v16 extendió `policy_decisions` de forma aditiva para lifecycle de policy/authorization; v17 añade el journal/lease transaccional de self-modification (`self_mod_transactions` y `self_mod_leases`) sin reinterpretar filas legacy como approvals ni mezclar source-state con runtime-state.
+`src/state/schema.ts` declara `SCHEMA_VERSION = 18`. v16 extendió `policy_decisions` para lifecycle de policy/authorization; v17 añadió el journal/lease transaccional P-012 (`self_mod_transactions` / `self_mod_leases`); v18 añade `evidence_events` como fabric transversal de causalidad/correlación P-013, separado del `event_stream` comprimible de memoria y sin reemplazar authorities de dominio.
 
-La SQLite canónica conserva identity, turns/tool calls, heartbeat, finanzas, skills, children, registry, memory/soul, orchestration/adaptive/environment state, policy lifecycle y migrations acumuladas. P-009 añadió provenance de inbox/turns de forma aditiva; P-012 añadió recovery state durable para self-modification. Legacy ambiguity degrada a UNKNOWN en vez de inventar trust.
+La SQLite canónica conserva identity, turns/tool calls, heartbeat, finanzas, skills, children, registry, memory/soul, orchestration/adaptive/environment state, policy lifecycle, self-mod recovery y migrations acumuladas. P-009 añadió provenance de inbox/turns de forma aditiva; legacy ambiguity degrada a UNKNOWN en vez de inventar trust.
 
 ### 3.3 Ciclo principal
 
@@ -117,7 +117,7 @@ Invariantes: parent executor != child runtime; parent bookkeeping != child live 
 
 P-012 está integrado y revalidado en `main fe845184fce48c65032f8521ecd0bdfa42e04b77`. Una modificación de source legítima no escribe primero y verifica después: usa candidate aislado, journal/lease v17, verification, exact candidate commit, activation CAS y recovery causal. Código crítico no se trata automáticamente como inmutable; fronteras realmente separadas como constitution, credentials, secrets y runtime state mantienen protección propia.
 
-El main exacto pasó CI `34926393562` y ProjectOps Integrity `34926393570`. Esto acredita E3 del source integrado, no provider/economic LIVE. P-012 permanece EN_EJECUCIÓN hasta P-013 evidence/correlation transversal conforme a su Definition of Done.
+El main exacto pasó CI `34926393562` y ProjectOps Integrity `34926393570`. Esto acredita E3 del source integrado, no provider/economic LIVE. P-012 permanece PARCIAL / INTEGRATION_VERIFIED hasta que P-013 evidence/correlation transversal quede integrada conforme a su Definition of Done.
 
 ## 4. Invariantes duros ABOS
 
@@ -211,9 +211,9 @@ E3 nunca se promociona a E5/E6 por narrativa.
 
 Codex OAuth humano, AWS billable, providers externos, saldos/revenue atribuibles y otras fronteras E5/E6 requieren evidencia real; CI/source no las autocertifican.
 
-### 7.4 P-012 activo
+### 7.4 P-013 activo
 
-P-011 Lifecycle/Health/Restart/Recovery está HECHO / INTEGRATION_VERIFIED. P-012 transactional self-modification está **integrado y E3-green en `main fe845184...`**, pero permanece `EN_EJECUCIÓN` porque P-013 debe aportar la evidence/correlation transversal exigida para su cierre completo. No queda merge/revalidación P-012 pendiente.
+P-011 Lifecycle/Health/Restart/Recovery está HECHO / INTEGRATION_VERIFIED. P-012 transactional self-modification está integrado en `main fe845184...` y permanece PARCIAL únicamente hasta que la evidence/correlation P-013 requerida por su DoD quede integrada. P-013 Observability/Audit/Evidence Fabric es la intervención activa: el product tree está E3-green y la autoridad/ancestry ProjectOps de `main c94dbeba...` ya fue reconciliada y exact-head gateada; la siguiente frontera es PR/merge + revalidación exacta de `main`.
 
 ## 8. Anti-contaminación entre proyectos
 

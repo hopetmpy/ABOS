@@ -6,6 +6,7 @@ import {
   MIGRATION_V10,
   MIGRATION_V12,
   MIGRATION_V13,
+  MIGRATION_V18_EVIDENCE_FABRIC,
 } from "../state/schema.js";
 import { EnvironmentRegistry } from "../environments/registry.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
@@ -21,6 +22,7 @@ function createDb() {
   db.exec(MIGRATION_V10);
   db.exec(MIGRATION_V12);
   db.exec(MIGRATION_V13);
+  db.exec(MIGRATION_V18_EVIDENCE_FABRIC);
   return db;
 }
 

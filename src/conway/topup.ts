@@ -14,7 +14,7 @@
  */
 
 import type { PrivateKeyAccount, Address } from "viem";
-import { x402Fetch } from "./x402.js";
+import { x402Fetch, type X402PaymentMetadata } from "./x402.js";
 import { createLogger } from "../observability/logger.js";
 import type { ChainType } from "../identity/chain.js";
 
@@ -28,6 +28,8 @@ export interface TopupResult {
   amountUsd: number;
   creditsCentsAdded?: number;
   error?: string;
+  /** Exact x402 payment observation when a paid request was dispatched. */
+  payment?: X402PaymentMetadata;
 }
 
 export type AutonomousTopupReason =
@@ -224,7 +226,13 @@ export async function topupCredits(
   if (!result.success) {
     const detail = result.error || `HTTP ${result.status}`;
     logger.error(`Credit topup failed: ${detail}`);
-    throw new Error(`Credit topup failed: ${detail}`);
+    const error = new Error(`Credit topup failed: ${detail}`) as Error & {
+      externalEffectOutcomeUnknown?: boolean;
+    };
+    if (result.payment?.settlement === "unknown") {
+      error.externalEffectOutcomeUnknown = true;
+    }
+    throw error;
   }
 
   const creditsCentsAdded = typeof result.response === "object"
@@ -237,6 +245,7 @@ export async function topupCredits(
     success: true,
     amountUsd,
     creditsCentsAdded,
+    payment: result.payment,
   };
 }
 

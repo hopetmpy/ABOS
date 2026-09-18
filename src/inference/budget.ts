@@ -95,8 +95,8 @@ export class InferenceBudgetTracker {
   /**
    * Record a completed inference cost.
    */
-  recordCost(cost: Omit<InferenceCostRow, "id" | "createdAt">): void {
-    inferenceInsertCost(this.db, cost);
+  recordCost(cost: Omit<InferenceCostRow, "id" | "createdAt">): string {
+    return inferenceInsertCost(this.db, cost);
   }
 
   /**

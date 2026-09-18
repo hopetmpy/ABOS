@@ -63,6 +63,7 @@ import { MemoryIngestionPipeline } from "../memory/ingestion.js";
 import { DEFAULT_MEMORY_BUDGET } from "../types.js";
 import { formatMemoryBlock } from "./context.js";
 import { createLogger } from "../observability/logger.js";
+import { correlationIdFor } from "../observability/evidence.js";
 import {
   Orchestrator,
   calculateTaskFundingCents,
@@ -1422,6 +1423,9 @@ export async function runAgentLoop(
       );
 
       const inferenceTools = toolsToInferenceFormat(tools);
+      // P-013: one durable turn identity must correlate inference cost, persisted
+      // turn state, policy decisions and every tool call spawned by this turn.
+      const turnId = ulid();
       const routerResult = await inferenceRouter.route(
         {
           messages: messages,
@@ -1429,7 +1433,7 @@ export async function runAgentLoop(
           connectionProvider: activeConnectionProvider,
           tier: survivalTier,
           sessionId: db.getKV("session_id") || "default",
-          turnId: ulid(),
+          turnId,
           tools: inferenceTools,
           dailyBudgetCents:
             liveConfig?.treasuryPolicy?.maxInferenceDailyCents ??
@@ -1452,7 +1456,7 @@ export async function runAgentLoop(
       };
 
       const turn: AgentTurn = {
-        id: ulid(),
+        id: turnId,
         timestamp: new Date().toISOString(),
         state: db.getAgentState(),
         input: currentInput?.content,
@@ -1495,6 +1499,9 @@ export async function runAgentLoop(
             {
               inputSource: currentInputSource,
               inputProvenance: currentInput?.provenance,
+              correlationId: correlationIdFor("turn", turn.id),
+              turnId: turn.id,
+              toolCallId: tc.id,
               turnToolCallCount: turn.toolCalls.filter(t => t.name === "transfer_credits").length,
               ...(spendTracker ? { sessionSpend: spendTracker } : {}),
             },
