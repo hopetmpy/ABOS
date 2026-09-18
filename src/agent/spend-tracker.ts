@@ -20,6 +20,7 @@ import {
   pruneSpendRecords,
 } from "../state/database.js";
 import type { SpendTrackingRow } from "../state/database.js";
+import { appendEvidenceEvent, currentEvidenceContext } from "../observability/evidence.js";
 
 /**
  * Get the current hour window string in ISO format: '2026-02-19T14'
@@ -55,7 +56,37 @@ export class SpendTracker implements SpendTrackerInterface {
       windowHour: getCurrentHourWindow(),
       windowDay: getCurrentDayWindow(),
     };
-    insertSpendRecord(this.db, row);
+    const context = currentEvidenceContext();
+    if (!context) {
+      insertSpendRecord(this.db, row);
+      return;
+    }
+
+    this.db.transaction(() => {
+      insertSpendRecord(this.db, row);
+      appendEvidenceEvent(this.db, {
+        correlationId: context.correlationId,
+        causationId: context.causationId ?? null,
+        eventType: "economic.spend_recorded",
+        domain: "economic",
+        authorityType: "spend_tracking",
+        authorityId: row.id,
+        goalId: context.goalId ?? null,
+        taskId: context.taskId ?? null,
+        turnId: context.turnId ?? null,
+        toolCallId: context.toolCallId ?? null,
+        epistemicStatus: "observation",
+        payload: {
+          toolName: row.toolName,
+          amountCents: row.amountCents,
+          category: row.category,
+          costUnit: "cent",
+          accountingSemantics:
+            row.category === "x402" ? "policy_ceiling" : "observed_amount",
+        },
+        provenance: { source: "spend_tracking" },
+      });
+    })();
   }
 
   getHourlySpend(category: SpendCategory): number {

@@ -18,16 +18,34 @@ import type {
   PolicyRequest,
   InputSource,
   SpendTrackerInterface,
+  PolicyDecision,
 } from "../types.js";
 import type { PolicyEngine } from "./policy-engine.js";
 import { sanitizeToolResult, sanitizeInput } from "./injection-defense.js";
 import { createLogger } from "../observability/logger.js";
-import { correlationIdFor, runWithEvidenceContext } from "../observability/evidence.js";
+import { appendEvidenceEvent, correlationIdFor, currentEvidenceContext, latestEvidenceByAuthority, runWithEvidenceContext } from "../observability/evidence.js";
 import { isCreditTransferAccepted } from "../conway/credits.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
 import { expandHomePath, getHomeDir, toPosixShellPath } from "../platform/home.js";
 
 const logger = createLogger("tools");
+
+class ExternalEffectOutcomeUnknownError extends Error {
+  readonly externalEffectOutcomeUnknown = true;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "ExternalEffectOutcomeUnknownError";
+  }
+}
+
+function isExternalEffectOutcomeUnknown(error: unknown): boolean {
+  return error instanceof ExternalEffectOutcomeUnknownError || (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { externalEffectOutcomeUnknown?: unknown }).externalEffectOutcomeUnknown === true
+  );
+}
 
 // ─── Path Confinement ─────────────────────────────────────────
 // Remote Conway sandboxes are Linux and use /root. Local execution must use
@@ -371,16 +389,59 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
           return `Credit topup failed: ${result.error}`;
         }
 
-        // Record transaction
-        const { ulid } = await import("ulid");
-        ctx.db.insertTransaction({
-          id: ulid(),
-          type: "credit_purchase",
-          amountCents: amountUsd * 100,
-          balanceAfterCents: result.creditsCentsAdded,
-          description: `x402 credit topup: $${amountUsd} USD`,
-          timestamp: new Date().toISOString(),
-        });
+        // The external purchase has succeeded. Preserve the exact x402
+        // observation separately from any cent-denominated local projection.
+        try {
+          const { ulid } = await import("ulid");
+          const transactionId = ulid();
+          const paymentAtomic = result.payment
+            ? BigInt(result.payment.amountMicroUsdc)
+            : null;
+          const exactWholeCents = paymentAtomic !== null && paymentAtomic % 10_000n === 0n
+            ? Number(paymentAtomic / 10_000n)
+            : undefined;
+          ctx.db.insertTransaction({
+            id: transactionId,
+            type: "credit_purchase",
+            amountCents: exactWholeCents,
+            balanceAfterCents: undefined,
+            description: `x402 credit topup requested tier: $${amountUsd} USD`,
+            timestamp: new Date().toISOString(),
+          });
+          const evidence = currentEvidenceContext();
+          if (evidence && result.payment) {
+            const transactionEvent = latestEvidenceByAuthority(
+              ctx.db.raw,
+              "financial_transaction",
+              transactionId,
+            );
+            appendEvidenceEvent(ctx.db.raw, {
+              correlationId: evidence.correlationId,
+              causationId: transactionEvent?.id ?? evidence.causationId ?? null,
+              eventType: "economic.x402_payment_observed",
+              domain: "economic",
+              authorityType: "financial_transaction",
+              authorityId: transactionId,
+              goalId: evidence.goalId ?? null,
+              taskId: evidence.taskId ?? null,
+              turnId: evidence.turnId ?? null,
+              toolCallId: evidence.toolCallId ?? null,
+              epistemicStatus: "observation",
+              payload: {
+                amountMicroUsdc: result.payment.amountMicroUsdc,
+                amountUnit: "micro-USDC",
+                policyAmountCents: result.payment.policyAmountCents,
+                policyUnit: "cent",
+                policyRounding: "ceil",
+              },
+              provenance: { source: "x402" },
+            });
+          }
+        } catch (error) {
+          throw new ExternalEffectOutcomeUnknownError(
+            `Credit topup completed externally but local accounting failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
 
         return `Credit topup successful: +$${amountUsd} (${amountUsd * 100} cents) credits purchased via x402. Check your new balance with check_credits.`;
       },
@@ -1106,16 +1167,34 @@ Model: ${ctx.inference.getDefaultModel()}
           args.reason as string | undefined,
         );
 
-        const { ulid } = await import("ulid");
-        ctx.db.insertTransaction({
-          id: ulid(),
-          type: "transfer_out",
-          amountCents: amount,
-          balanceAfterCents:
-            transfer.balanceAfterCents ?? Math.max(balance - amount, 0),
-          description: `Transfer to ${args.to_address}: ${args.reason || ""}`,
-          timestamp: new Date().toISOString(),
-        });
+        if (!isCreditTransferAccepted(transfer.status)) {
+          return `Credit transfer was not accepted (status: ${transfer.status || "unknown"}). No local transfer was recorded.`;
+        }
+
+        // The provider accepted the external effect. Persist the canonical
+        // transaction first, then policy spend accounting. If either local
+        // authority cannot commit, never invite a duplicate transfer.
+        try {
+          const { ulid } = await import("ulid");
+          ctx.db.insertTransaction({
+            id: ulid(),
+            type: "transfer_out",
+            amountCents: amount,
+            balanceAfterCents: transfer.balanceAfterCents,
+            description: `Transfer to ${args.to_address}: ${args.reason || ""}`,
+            timestamp: new Date().toISOString(),
+          });
+          ctx.spendTracker?.recordSpend({
+            toolName: "transfer_credits",
+            amountCents: amount,
+            recipient: args.to_address as string,
+            category: "transfer",
+          });
+        } catch (error) {
+          throw new ExternalEffectOutcomeUnknownError(
+            `Credit transfer was accepted externally but local accounting failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
 
         return `Credit transfer submitted: $${(amount / 100).toFixed(2)} to ${transfer.toAddress} (status: ${transfer.status}, id: ${transfer.transferId || "n/a"})`;
       },
@@ -1861,8 +1940,7 @@ Model: ${ctx.inference.getDefaultModel()}
               id: ulid(),
               type: "capital_allocation",
               amountCents: amount,
-              balanceAfterCents:
-                transfer.balanceAfterCents ?? Math.max(balance - amount, 0),
+              balanceAfterCents: transfer.balanceAfterCents,
               description: `Allocate working capital to child ${child.name} (${child.id})`,
               timestamp: new Date().toISOString(),
             });
@@ -1888,7 +1966,9 @@ Model: ${ctx.inference.getDefaultModel()}
         }
 
         if (!localPersistenceOk) {
-          return `Funding transfer ${transfer.transferId || "unknown"} completed for child ${child.name}, but local capital bookkeeping failed. Do not retry the transfer blindly; reconcile the external transfer first.`;
+          throw new ExternalEffectOutcomeUnknownError(
+            `Child funding transfer ${transfer.transferId || "unknown"} completed externally but local capital bookkeeping failed.`,
+          );
         }
 
         // Transition to funded if wallet_verified
@@ -2875,7 +2955,69 @@ Model: ${ctx.inference.getDefaultModel()}
         );
 
         if (!result.success) {
+          if (result.payment?.settlement === "unknown") {
+            throw new ExternalEffectOutcomeUnknownError(
+              "x402 paid request was dispatched but settlement is unknown.",
+            );
+          }
           return `x402 fetch failed: ${result.error || "Unknown error"}`;
+        }
+
+        if (result.payment?.settlement === "accepted_response") {
+          try {
+            const { ulid } = await import("ulid");
+            const transactionId = ulid();
+            const paymentAtomic = BigInt(result.payment.amountMicroUsdc);
+            const exactWholeCents = paymentAtomic % 10_000n === 0n
+              ? Number(paymentAtomic / 10_000n)
+              : undefined;
+            ctx.db.insertTransaction({
+              id: transactionId,
+              type: "tool_use",
+              amountCents: exactWholeCents,
+              description: `x402 paid request to ${new URL(url).hostname}`,
+              timestamp: new Date().toISOString(),
+            });
+            const evidence = currentEvidenceContext();
+            if (evidence) {
+              const transactionEvent = latestEvidenceByAuthority(
+                ctx.db.raw,
+                "financial_transaction",
+                transactionId,
+              );
+              appendEvidenceEvent(ctx.db.raw, {
+                correlationId: evidence.correlationId,
+                causationId: transactionEvent?.id ?? evidence.causationId ?? null,
+                eventType: "economic.x402_payment_observed",
+                domain: "economic",
+                authorityType: "financial_transaction",
+                authorityId: transactionId,
+                goalId: evidence.goalId ?? null,
+                taskId: evidence.taskId ?? null,
+                turnId: evidence.turnId ?? null,
+                toolCallId: evidence.toolCallId ?? null,
+                epistemicStatus: "observation",
+                payload: {
+                  amountMicroUsdc: result.payment.amountMicroUsdc,
+                  amountUnit: "micro-USDC",
+                  policyAmountCents: result.payment.policyAmountCents,
+                  policyUnit: "cent",
+                  policyRounding: "ceil",
+                },
+                provenance: { source: "x402" },
+              });
+            }
+            ctx.spendTracker?.recordSpend({
+              toolName: "x402_fetch",
+              amountCents: result.payment.policyAmountCents,
+              domain: new URL(url).hostname,
+              category: "x402",
+            });
+          } catch (error) {
+            throw new ExternalEffectOutcomeUnknownError(
+              `x402 payment was accepted but local accounting failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
         }
 
         const responseStr =
@@ -3429,6 +3571,7 @@ async function executeToolProtected(
   context: ToolContext,
   policyEngine?: PolicyEngine,
   turnContext?: PolicyRequest["turnContext"],
+  preEvaluatedDecision?: PolicyDecision,
 ): Promise<ToolCallResult> {
   const tool = tools.find((t) => t.name === toolName);
   const startTime = Date.now();
@@ -3457,7 +3600,7 @@ async function executeToolProtected(
   }
 
   const request: PolicyRequest = { tool, args, context, turnContext };
-  const decision = policyEngine.evaluate(request);
+  const decision = preEvaluatedDecision ?? policyEngine.evaluate(request);
   if (!decision.id) {
     return {
       id: ulid(),
@@ -3467,6 +3610,21 @@ async function executeToolProtected(
       durationMs: Date.now() - startTime,
       error: "Policy evaluation failed closed: durable decision id missing",
     };
+  }
+
+  if (!currentEvidenceContext()) {
+    return runWithEvidenceContext(
+      { correlationId: correlationIdFor("policy_decision", decision.id) },
+      () => executeToolProtected(
+        toolName,
+        args,
+        tools,
+        context,
+        policyEngine,
+        turnContext,
+        decision,
+      ),
+    );
   }
 
   try {
@@ -3538,9 +3696,30 @@ async function executeToolProtected(
 
   try {
     let result: string;
+    const executionContext: ToolContext = turnContext.sessionSpend
+      ? { ...context, spendTracker: turnContext.sessionSpend }
+      : context;
     try {
-      result = await tool.execute(args, context);
+      result = await tool.execute(args, executionContext);
     } catch (err: any) {
+      if (isExternalEffectOutcomeUnknown(err)) {
+        try {
+          policyEngine.recordExecution(decision.id, "unknown", {
+            reason: "external_effect_or_settlement_unknown",
+            toolName,
+          });
+        } catch {
+          // The running claim remains durable; do not mask the original uncertainty.
+        }
+        return {
+          id: ulid(),
+          name: toolName,
+          arguments: args,
+          result: "",
+          durationMs: Date.now() - startTime,
+          error: `${err.message} External effect may already have occurred; do not retry blindly.`,
+        };
+      }
       try {
         policyEngine.recordExecution(decision.id, "failed", { error: err?.message || String(err) });
       } catch {
@@ -3561,49 +3740,6 @@ async function executeToolProtected(
       result = sanitizeToolResult(result);
     }
 
-    // Record spend for financial operations
-    if (turnContext.sessionSpend && !result.startsWith("Blocked:")) {
-      if (toolName === "transfer_credits") {
-        const amount = args.amount_cents as number | undefined;
-        if (amount && amount > 0) {
-          try {
-            turnContext.sessionSpend.recordSpend({
-              toolName: "transfer_credits",
-              amountCents: amount,
-              recipient: args.to_address as string | undefined,
-              category: "transfer",
-            });
-          } catch (error) {
-            logger.error(
-              "Spend tracking failed for transfer_credits",
-              error instanceof Error ? error : undefined,
-            );
-          }
-        }
-      } else if (toolName === "x402_fetch") {
-        // x402 payment amounts are determined by the server response,
-        // but we record a nominal entry for tracking purposes
-        try {
-          turnContext.sessionSpend.recordSpend({
-            toolName: "x402_fetch",
-            amountCents: 0, // Actual amount is inside the x402 protocol
-            domain: (() => {
-              try {
-                return new URL(args.url as string).hostname;
-              } catch {
-                return undefined;
-              }
-            })(),
-            category: "x402",
-          });
-        } catch (error) {
-          logger.error(
-            "Spend tracking failed for x402_fetch",
-            error instanceof Error ? error : undefined,
-          );
-        }
-      }
-    }
 
     try {
       policyEngine.recordExecution(decision.id, "succeeded");

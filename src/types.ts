@@ -227,6 +227,8 @@ export interface ToolContext {
   conway: ConwayClient;
   inference: InferenceClient;
   social?: SocialClientInterface;
+  /** Runtime-scoped policy accounting authority for economic effects. */
+  spendTracker?: SpendTrackerInterface;
 }
 
 export interface SocialClientInterface {

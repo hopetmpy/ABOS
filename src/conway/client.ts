@@ -401,22 +401,37 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     let lastError = "Unknown transfer error";
 
     for (const path of paths) {
-      const resp = await httpClient.request(`${apiUrl}${path}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: apiKey,
-        },
-        body: JSON.stringify(payload),
-        idempotencyKey,
-        retries: 0, // Mutating: do not auto-retry transfers
-      });
+      let resp: Response;
+      try {
+        resp = await httpClient.request(`${apiUrl}${path}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: apiKey,
+          },
+          body: JSON.stringify(payload),
+          idempotencyKey,
+          retries: 0, // Mutating: do not auto-retry transfers
+        });
+      } catch (cause) {
+        const uncertain = new Error(
+          `Conway credit transfer response was not observed after dispatch: ${cause instanceof Error ? cause.message : String(cause)}`,
+        ) as Error & { externalEffectOutcomeUnknown?: boolean };
+        uncertain.externalEffectOutcomeUnknown = true;
+        throw uncertain;
+      }
 
       if (!resp.ok) {
         const text = await resp.text();
         lastError = `${resp.status}: ${text}`;
-        // Try next known endpoint shape before failing.
         if (resp.status === 404) continue;
+        if (resp.status >= 500) {
+          const uncertain = new Error(
+            `Conway credit transfer returned ambiguous server status ${lastError}`,
+          ) as Error & { externalEffectOutcomeUnknown?: boolean };
+          uncertain.externalEffectOutcomeUnknown = true;
+          throw uncertain;
+        }
         throw new Error(`Conway API error: POST ${path} -> ${lastError}`);
       }
 
