@@ -1,0 +1,277 @@
+name: P013 Main ProjectOps Reconcile
+
+on:
+  push:
+    branches:
+      - abos/p013-observability-evidence-fabric
+    paths:
+      - .github/workflows/p013-main-projectops-reconcile.yml
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: abos/p013-observability-evidence-fabric
+          fetch-depth: 0
+
+      - name: Pin and inspect current main
+        shell: bash
+        run: |
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "c94dbeba2d4672cd843580d3019d3af93d0ae728"
+
+      - name: Register main divergence before reconciliation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("ProjectOps/continuity/C0009.md")
+          text = p.read_text(encoding="utf-8")
+          marker = "## Main ProjectOps divergence checkpoint — 2026-09-18"
+          if marker not in text:
+              block = [
+                  "",
+                  "",
+                  marker,
+                  "",
+                  "State: EN_EJECUCIÓN / INTEGRATION_BLOCKED_MAIN_PROJECTOPS_DIVERGENCE",
+                  "Plan-Reference: P-013",
+                  "Branch-Audited-Head: `be9226b96860bcead67aa4fbc1c9578ad2b340e5`",
+                  "Branch-Documentary-CI: `35397952326` SUCCESS",
+                  "Branch-Documentary-ProjectOps: `35397952280` SUCCESS",
+                  "Current-Main: `c94dbeba2d4672cd843580d3019d3af93d0ae728`",
+                  "Merge-Base: `fe845184fce48c65032f8521ecd0bdfa42e04b77`",
+                  "Main-Ahead-Of-Merge-Base: 11 commits",
+                  "",
+                  "La auditoría pre-PR demostró que la rama y `main` divergieron después del baseline P-013. Los 11 commits exclusivos de `main` no modifican product source/runtime; modifican `AGENTS.md`, ProjectOps y `scripts/projectops-integrity-verify.mjs`. Por tanto el producto P-013 E3-green no queda invalidado, pero la integración directa sí queda bloqueada hasta reconciliar la autoridad metodológica más reciente.",
+                  "",
+                  "Evidencia falsadora de `NO_CHANGE`/PR directo: el verifier de `main` valida dinámicamente `SCHEMA_VERSION`, exige `BARRERA OBLIGATORIA DE RECONCILIACIÓN`, recuperación `la unidad anterior se presume ABIERTA` y `CAPABILITY_PRESERVATION_BEFORE_RESTRICTION`; el verifier de la rama todavía hardcodea schema 18 y no exige esos invariantes. `PROJECT.md` de `main` además conserva semántica transaccional P-012 y capability preservation que la rama no debe perder.",
+                  "",
+                  "Hipótesis discriminadas:",
+                  "- H_DIRECT_PR / NO_CHANGE — FALSADA: un merge que elija la rama podría degradar gates/verifier y baseline metodológico de `main`.",
+                  "- H_TAKE_MAIN_WHOLESALE — FALSADA: borraría schema v18, Active-Plan P-013, C0009 y la evidencia real de la rama.",
+                  "- H_UNIFY_SEMANTICS — SELECCIONADA: preservar P-013/schema v18/cadencia macro de la rama y absorber reconciliation/capability gates + verifier dinámico de `main`.",
+                  "",
+                  "Decisiones: `UNIFY` AGENTS/PROJECT/CONTINUITY/PLAN/P-012/C0008 de forma semántica; `REUSE` exacto del verifier actual de `main`; no tocar product source P-013. Después de la unión se debe incorporar ancestry de `main`, ejecutar gate exact-tree y sólo entonces recuperar READY_FOR_INTEGRATION.",
+                  "",
+              ]
+              text += "\n".join(block)
+              p.write_text(text, encoding="utf-8")
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ProjectOps/continuity/C0009.md
+          git commit -m "ProjectOps: record P-013 main reconciliation blocker"
+          git push origin HEAD:abos/p013-observability-evidence-fabric
+
+      - name: Unify main ProjectOps safeguards with active P-013 state
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+
+          def main_text(path: str) -> str:
+              return subprocess.check_output(["git", "show", f"origin/main:{path}"], text=True)
+
+          # AGENTS: retain branch cadence and add the newer main reconciliation/capability safeguards.
+          p = Path("AGENTS.md")
+          text = p.read_text(encoding="utf-8")
+          text = text.replace(
+              "capa aditiva ABOS-specific para hipótesis competidoras, falsación, rutas adaptativas, autoridad económica, autonomía, recuperación, segundo orden, revisión adversarial, `NO_CHANGE` y gate `DECISION_READY`.",
+              "capa aditiva ABOS-specific para hipótesis competidoras, falsación, rutas adaptativas, autoridad económica, autonomía, recuperación, segundo orden, revisión adversarial, `NO_CHANGE`, preservación de capability y gate `DECISION_READY`.",
+              1,
+          )
+          text = text.replace(
+              "## CONTINUIDAD, CAPACIDADES Y RECONCILIACIÓN",
+              "## BARRERA OBLIGATORIA DE RECONCILIACIÓN",
+              1,
+          )
+          anchor = "Tras una interrupción, presume el bloque macro **abierto** salvo evidencia actual de que cruzó sus criterios de salida y fue reconciliado. Narrativa, commits o archivos por sí solos no prueban `HECHO`. Reanuda desde la última evidencia verificable; si la sesión se corta con el bloque abierto, deja sólo el checkpoint recuperable necesario, sin fabricar un cierre completo."
+          addition = anchor + "\n\nEn la formulación canónica del gate: si la interrupción ocurre antes de reconciliar la frontera macro, **la unidad anterior se presume ABIERTA**. Esto no obliga a reconciliar cada subunidad: dentro del mismo bloque macro sigue aplicando `CHECKPOINT LIGERO → CONTINUAR`."
+          if anchor not in text:
+              raise SystemExit("missing branch interruption paragraph")
+          text = text.replace(anchor, addition, 1)
+          identity = "## IDENTIDAD ABOS OBLIGATORIA"
+          cap = "`CAPABILITY_PRESERVATION_BEFORE_RESTRICTION` permanece definido canónicamente en `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md`: antes de retirar, hardcodear, human-gatear o degradar una capability legítima, clasifica `REAL_BOUNDARY / GOVERNABLE_RISK / IMMATURE_CAPABILITY / REDUNDANT_OR_HARMFUL / UNKNOWN`. Riesgo gobernable o inmadurez no equivalen a una frontera real. No dupliques esa authority aquí.\n\n"
+          if "CAPABILITY_PRESERVATION_BEFORE_RESTRICTION` permanece" not in text:
+              if identity not in text:
+                  raise SystemExit("missing AGENTS identity heading")
+              text = text.replace(identity, cap + identity, 1)
+          inv = "12. `~/.abos` contiene estado runtime del agente y no se confunde con el checkout/source del runtime."
+          if inv not in text:
+              raise SystemExit("missing AGENTS invariant 12")
+          if "13. Una capability legítima" not in text:
+              text = text.replace(inv, inv + "\n13. Una capability legítima no se destruye por riesgo gobernable o implementación inmadura; la capa adaptativa decide si existe una frontera real antes de restringir.", 1)
+          phrase = "Antes de repetir: **«¿Qué cambió materialmente desde el intento anterior y qué información nueva producirá este camino?»**"
+          extra = phrase + "\n\nAntes de restringir una capability: **«¿Es una frontera real o estoy sustituyendo juicio y evidencia por una limitación prematura?»**\n\nAntes de cambiar de unidad/estado: **«¿Git, realidad, evidencia, CONTINUITY y PLAN están reconciliados o estoy trasladando deuda?»**\n\nAl reanudar después de un corte: **«Demuestra el último cierre; no lo heredes como supuesto.»**"
+          if phrase not in text:
+              raise SystemExit("missing AGENTS repeat phrase")
+          if "Antes de restringir una capability" not in text:
+              text = text.replace(phrase, extra, 1)
+          p.write_text(text, encoding="utf-8")
+
+          # Reuse main verifier exactly: it dynamically compares PROJECT schema to source and enforces the newer gates.
+          Path("scripts/projectops-integrity-verify.mjs").write_text(main_text("scripts/projectops-integrity-verify.mjs"), encoding="utf-8")
+
+          # PROJECT: main is the stronger baseline; apply only branch facts that P-013 has materially changed.
+          text = main_text("ProjectOps/PROJECT.md")
+          text = text.replace("Schema-Version-Observed-In-Source: `17`", "Schema-Version-Observed-In-Source: `18`", 1)
+          old_persist = "`src/state/schema.ts` declara `SCHEMA_VERSION = 17` después de P-012. v16 extendió `policy_decisions` de forma aditiva para lifecycle de policy/authorization; v17 añade el journal/lease transaccional de self-modification (`self_mod_transactions` y `self_mod_leases`) sin reinterpretar filas legacy como approvals ni mezclar source-state con runtime-state.\n\nLa SQLite canónica conserva identity, turns/tool calls, heartbeat, finanzas, skills, children, registry, memory/soul, orchestration/adaptive/environment state, policy lifecycle y migrations acumuladas. P-009 añadió provenance de inbox/turns de forma aditiva; P-012 añadió recovery state durable para self-modification. Legacy ambiguity degrada a UNKNOWN en vez de inventar trust."
+          new_persist = "`src/state/schema.ts` declara `SCHEMA_VERSION = 18`. v16 extendió `policy_decisions` para lifecycle de policy/authorization; v17 añadió el journal/lease transaccional P-012 (`self_mod_transactions` / `self_mod_leases`); v18 añade `evidence_events` como fabric transversal de causalidad/correlación P-013, separado del `event_stream` comprimible de memoria y sin reemplazar authorities de dominio.\n\nLa SQLite canónica conserva identity, turns/tool calls, heartbeat, finanzas, skills, children, registry, memory/soul, orchestration/adaptive/environment state, policy lifecycle, self-mod recovery y migrations acumuladas. P-009 añadió provenance de inbox/turns de forma aditiva; legacy ambiguity degrada a UNKNOWN en vez de inventar trust."
+          if old_persist not in text:
+              raise SystemExit("missing main PROJECT persistence block")
+          text = text.replace(old_persist, new_persist, 1)
+          text = text.replace(
+              "El main exacto pasó CI `34926393562` y ProjectOps Integrity `34926393570`. Esto acredita E3 del source integrado, no provider/economic LIVE. P-012 permanece EN_EJECUCIÓN hasta P-013 evidence/correlation transversal conforme a su Definition of Done.",
+              "El main exacto pasó CI `34926393562` y ProjectOps Integrity `34926393570`. Esto acredita E3 del source integrado, no provider/economic LIVE. P-012 permanece PARCIAL / INTEGRATION_VERIFIED hasta que P-013 evidence/correlation transversal quede integrada conforme a su Definition of Done.",
+              1,
+          )
+          old_active = "### 7.4 P-012 activo\n\nP-011 Lifecycle/Health/Restart/Recovery está HECHO / INTEGRATION_VERIFIED. P-012 transactional self-modification está **integrado y E3-green en `main fe845184...`**, pero permanece `EN_EJECUCIÓN` porque P-013 debe aportar la evidence/correlation transversal exigida para su cierre completo. No queda merge/revalidación P-012 pendiente."
+          new_active = "### 7.4 P-013 activo\n\nP-011 Lifecycle/Health/Restart/Recovery está HECHO / INTEGRATION_VERIFIED. P-012 transactional self-modification está integrado en `main fe845184...` y permanece PARCIAL únicamente hasta que la evidence/correlation P-013 requerida por su DoD quede integrada. P-013 Observability/Audit/Evidence Fabric es la intervención activa: el product tree está E3-green; antes del PR debe reconciliar e incorporar la autoridad ProjectOps de `main c94dbeba...`."
+          if old_active not in text:
+              raise SystemExit("missing main PROJECT active block")
+          text = text.replace(old_active, new_active, 1)
+          p = Path("ProjectOps/PROJECT.md")
+          p.write_text(text, encoding="utf-8")
+
+          # P-012: preserve main's latest semantics, while retaining the branch's correct terminal classification dependency.
+          text = main_text("ProjectOps/plan/P-012.md")
+          text = text.replace("State: EN_EJECUCIÓN", "State: PARCIAL", 1)
+          text = text.replace("Evidence-State: E3_MAIN_GREEN / P013_EVIDENCE_PENDING", "Evidence-State: E3_INTEGRATION_VERIFIED / P013_EVIDENCE_PENDING", 1)
+          text = text.replace("- segmento activo: `ProjectOps/continuity/C0008.md`", "- P-012 segment closed: `ProjectOps/continuity/C0008.md`\n- dependent evidence segment: `ProjectOps/continuity/C0009.md` (P-013)", 1)
+          old_state = "`EN_EJECUCIÓN / E3_MAIN_GREEN / P013_EVIDENCE_PENDING`.\n\nLa arquitectura DECISION_READY fue implementada, integrada y revalidada en `main`; no queda source, merge ni revalidación P-012 pendiente. El siguiente gate de cierre es P-013 evidence/correlation transversal. P-012 no se eleva a `HECHO` completo hasta que esa evidencia exista. No reabrir la arquitectura P-012 salvo defecto reproducible o incompatibilidad demostrada."
+          new_state = "`PARCIAL / INTEGRATION_VERIFIED / P013_EVIDENCE_PENDING`.\n\nLa arquitectura DECISION_READY fue implementada, integrada y revalidada en `main`; no queda source, merge ni revalidación P-012 pendiente. El siguiente gate de cierre es P-013 evidence/correlation transversal. P-012 no se eleva a `HECHO` completo hasta que esa evidencia quede integrada. No reabrir la arquitectura P-012 salvo defecto reproducible o incompatibilidad demostrada."
+          if old_state not in text:
+              raise SystemExit("missing main P012 activation state")
+          text = text.replace(old_state, new_state, 1)
+          Path("ProjectOps/plan/P-012.md").write_text(text, encoding="utf-8")
+
+          # C0008: preserve the later main reconciliation evidence, then close the historical P-012 segment as the branch already did.
+          text = main_text("ProjectOps/continuity/C0008.md")
+          text = text.replace("State: ACTIVE", "State: CLOSED", 1)
+          text = text.replace("State: EN_EJECUCIÓN", "State: PARCIAL", 1)
+          text = text.replace(
+              "Classification: HECHO source/integration E3 en `main`; NO HECHO cierre completo únicamente hasta P-013 evidence/correlation",
+              "Classification: HECHO source + INTEGRATION_VERIFIED en `main`; PARCIAL cierre completo hasta P-013 evidence/correlation",
+              1,
+          )
+          closure = "\n".join([
+              "",
+              "### Cierre de segmento posterior",
+              "",
+              "C0008 queda CLOSED porque no existe trabajo source/integration P-012 pendiente. La dependencia residual es explícitamente P-013 evidence/correlation y se ejecuta en `ProjectOps/continuity/C0009.md`; la sincronización metodológica registrada aquí se preserva como historia y no se convierte en una intervención P-012 nueva.",
+              "",
+          ])
+          if "### Cierre de segmento posterior" not in text:
+              text += closure
+          Path("ProjectOps/continuity/C0008.md").write_text(text, encoding="utf-8")
+
+          # Active continuity: preserve P-013 evidence and record semantic reconciliation status without fabricating ancestry integration.
+          p = Path("ProjectOps/CONTINUITY.md")
+          text = p.read_text(encoding="utf-8")
+          text = text.replace(
+              "Active-Intervention: P013_OBSERVABILITY_EVIDENCE_FABRIC — E3_BRANCH_GREEN / READY_FOR_INTEGRATION",
+              "Active-Intervention: P013_OBSERVABILITY_EVIDENCE_FABRIC — E3_BRANCH_GREEN / MAIN_PROJECTOPS_SEMANTIC_UNION_APPLIED / MERGE_ANCESTRY_PENDING",
+              1,
+          )
+          text = text.replace(
+              "Last-Reconciled-Head-Semantics: P013_E3_BRANCH_GREEN_READY_FOR_INTEGRATION",
+              "Last-Reconciled-Head-Semantics: P013_E3_BRANCH_GREEN_MAIN_DIVERGENCE_DISCOVERED",
+              1,
+          )
+          anchor = "P012-Main-ProjectOps: 34926393570 SUCCESS\n"
+          add = "\n".join([
+              "Cross-Project-Reconciliation-Validated-Head: f2a2bcc546e8c59cb50982f9a853dd4b782d17e5",
+              "Cross-Project-Reconciliation-CI: 35047214228 SUCCESS",
+              "Cross-Project-Reconciliation-ProjectOps: 35047214252 SUCCESS",
+              "Main-ProjectOps-Reconciliation-Target: c94dbeba2d4672cd843580d3019d3af93d0ae728",
+              "Main-ProjectOps-Reconciliation-State: SEMANTIC_UNION_APPLIED / ANCESTRY_AND_EXACT_GATE_PENDING",
+              "",
+          ])
+          if "Main-ProjectOps-Reconciliation-Target:" not in text:
+              if anchor not in text:
+                  raise SystemExit("missing CONTINUITY P012 main anchor")
+              text = text.replace(anchor, anchor + add, 1)
+          text = text.replace(
+              "- P-013: EN_EJECUCIÓN / E3_BRANCH_GREEN / READY_FOR_INTEGRATION — fabric transversal, critical chains, restart/E2E y economía correlacionada validados en exact-tree `326149d1...`; CI `35397538844` + ProjectOps `35397538980` SUCCESS. No está HECHO hasta merge y revalidación de `main`.",
+              "- P-013: EN_EJECUCIÓN / E3_BRANCH_GREEN — product fabric, critical chains, restart/E2E y economía correlacionada continúan validados; la autoridad ProjectOps de `main c94dbeba...` fue semánticamente unificada, pero ancestry merge + exact gate siguen pendientes. No está HECHO ni READY_FOR_INTEGRATION hasta cruzar esos gates.",
+              1,
+          )
+          p.write_text(text, encoding="utf-8")
+
+          # PLAN and active module: intent remains P-013; integration gate is now explicit.
+          p = Path("ProjectOps/PLAN.md")
+          text = p.read_text(encoding="utf-8")
+          old = "| P-013 | Unificar Observability, Audit y Evidence Fabric | EN_EJECUCIÓN | P-008 + P-009; branch exact-tree `326149d1...` CI/ProjectOps green; READY_FOR_INTEGRATION; merge + main revalidation pendientes | plan/P-013.md |"
+          new = "| P-013 | Unificar Observability, Audit y Evidence Fabric | EN_EJECUCIÓN | P-008 + P-009; product E3-green; main `c94dbeba...` ProjectOps semantic union applied; ancestry merge + exact gate + PR/main revalidation pendientes | plan/P-013.md |"
+          if old not in text:
+              raise SystemExit("missing PLAN P013 row")
+          p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          p = Path("ProjectOps/plan/P-013.md")
+          text = p.read_text(encoding="utf-8")
+          text = text.replace(
+              "Evidence-State: E3_BRANCH_GREEN / READY_FOR_INTEGRATION",
+              "Evidence-State: E3_BRANCH_GREEN / MAIN_PROJECTOPS_SEMANTIC_UNION_APPLIED / MERGE_ANCESTRY_PENDING",
+              1,
+          )
+          marker = "## Main ProjectOps integration audit — semantic union"
+          if marker not in text:
+              block = [
+                  "",
+                  marker,
+                  "",
+                  "La auditoría pre-PR detectó que `main c94dbeba...` avanzó 11 commits metodológicos desde el merge-base P-013 `fe845184...`. No hubo product source en esos 11 commits, pero sí un verifier dinámico y salvaguardas de reconciliation/capability que no pueden perderse.",
+                  "",
+                  "Decision: `UNIFY`, no direct merge y no wholesale-main. La rama conserva schema v18, Active P-013 y cadencia macro/checkpoint ligero; absorbe `BARRERA OBLIGATORIA DE RECONCILIACIÓN`, recuperación tras interrupción, `CAPABILITY_PRESERVATION_BEFORE_RESTRICTION`, baseline P-012 más fuerte y el verifier dinámico de `main`.",
+                  "",
+                  "Estado: semantic union aplicada; todavía falta representar ancestry de `main` en Git y ejecutar un exact-tree gate ordinario antes de recuperar `READY_FOR_INTEGRATION`.",
+                  "",
+              ]
+              text += "\n".join(block)
+          p.write_text(text, encoding="utf-8")
+
+          # Active segment classification and audit trail.
+          p = Path("ProjectOps/continuity/C0009.md")
+          text = p.read_text(encoding="utf-8")
+          text = text.replace(
+              "Classification: E3_BRANCH_GREEN / READY_FOR_INTEGRATION",
+              "Classification: E3_BRANCH_GREEN / MAIN_PROJECTOPS_SEMANTIC_UNION_APPLIED / MERGE_ANCESTRY_PENDING",
+              1,
+          )
+          if "## Main ProjectOps semantic-union checkpoint" not in text:
+              text += "\n".join([
+                  "",
+                  "## Main ProjectOps semantic-union checkpoint",
+                  "",
+                  "State: EN_EJECUCIÓN / MERGE_ANCESTRY_PENDING",
+                  "Plan-Reference: P-013",
+                  "Main-Target: `c94dbeba2d4672cd843580d3019d3af93d0ae728`",
+                  "Decision: UNIFY",
+                  "Verifier: REUSE exact current main verifier",
+                  "Product-Source-Changed: NO",
+                  "",
+                  "Resultado: AGENTS conserva ejecución continua/checkpoint ligero y agrega los gates de reconciliación/capability; PROJECT conserva schema v18/P-013 y recupera semántica P-012/capability de main; P-012/C0008 preservan la evidencia metodológica posterior; CONTINUITY/PLAN mantienen P-013 activo. Falta ancestry merge de `main`, exact-tree gate y después PR/main revalidation.",
+                  "",
+              ])
+          p.write_text(text, encoding="utf-8")
+          PY
+
+          node scripts/projectops-integrity-verify.mjs
+          git diff --check
+          git add AGENTS.md scripts/projectops-integrity-verify.mjs ProjectOps/PROJECT.md ProjectOps/CONTINUITY.md ProjectOps/PLAN.md ProjectOps/plan/P-012.md ProjectOps/plan/P-013.md ProjectOps/continuity/C0008.md ProjectOps/continuity/C0009.md
+          git commit -m "ProjectOps: unify P-013 branch with current main safeguards"
+          git push origin HEAD:abos/p013-observability-evidence-fabric
+
+      - name: Remove one-shot reconciler
+        shell: bash
+        run: |
+          git rm .github/workflows/p013-main-projectops-reconcile.yml
+          git commit -m "chore(p013): retire main ProjectOps reconciler"
+          git push origin HEAD:abos/p013-observability-evidence-fabric
