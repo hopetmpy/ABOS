@@ -4,7 +4,7 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-013
 Active-Segment: continuity/C0009.md
-Active-Intervention: P013_OBSERVABILITY_EVIDENCE_FABRIC — CORE_V18_E3_GREEN / CRITICAL_CHAIN_PENDING
+Active-Intervention: P013_OBSERVABILITY_EVIDENCE_FABRIC — MULTI_DOMAIN_EVIDENCE_IMPLEMENTED / ECONOMIC_GATE_BLOCKED_LEGACY_POLICY_FIXTURE
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -13,8 +13,8 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p013-observability-evidence-fabric
 Host-Head-At-Audit-Open: fe845184fce48c65032f8521ecd0bdfa42e04b77
-Last-Reconciled-Host-Head: 04d2dee9349910bc8664073bfa58f34917e3e6fb
-Last-Reconciled-Head-Semantics: P013_CORE_V18_E3_GREEN_CRITICAL_CHAIN_PENDING
+Last-Reconciled-Host-Head: 6b0ee960baae6ffdc871628777a1acc0f4ea6a26
+Last-Reconciled-Head-Semantics: P013_MULTI_DOMAIN_IMPLEMENTED_ECONOMIC_GATE_BLOCKED_TEST_FIXTURE
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -112,10 +112,15 @@ P013-Core-Clean-Reconcile: 0b9e21ca17ca5a364cebd945711da5c31c533454
 P013-Core-Gate-Head: 04d2dee9349910bc8664073bfa58f34917e3e6fb
 P013-Core-CI: 34928243681 SUCCESS
 P013-Core-ProjectOps: 34928243697 SUCCESS
+P013-Recovery-Audit-Head: 6b0ee960baae6ffdc871628777a1acc0f4ea6a26
+P013-Economic-Source-Head: 3941b2299b620a117cb59956b58933e992371664
+P013-Economic-Gate-Head: 6b0ee960baae6ffdc871628777a1acc0f4ea6a26
+P013-Economic-Gate-CI: 35395401873 FAILURE — 2009/2011 PASS; 2 legacy Policy fixture failures (missing evidence_events)
+P013-Economic-Gate-ProjectOps: 35395401886 SUCCESS
 
 ## Semántica del HEAD reconciliado
 
-`Last-Reconciled-Host-Head` es `04d2dee9349910bc8664073bfa58f34917e3e6fb`, exact-head del Core v18 P-013 después de reconciliar el único test histórico P-012 que fijaba schema 17. CI `34928243681` y ProjectOps `34928243697` son SUCCESS. El source Core fue producido en `4e24c068...`; `04d2dee...` conserva el mismo tree productivo más la reconciliación mínima del test histórico.
+`Last-Reconciled-Host-Head` es `6b0ee960baae6ffdc871628777a1acc0f4ea6a26`. La rama ya avanzó más allá del Core v18: Policy/self-mod, inference, adaptive, environment, heartbeat, unificación causal/restart y la unidad económica están materialmente presentes. El source económico más reciente es `3941b229...`; el gate same-tree `6b0ee960...` conserva ese producto. ProjectOps `35395401886` es SUCCESS, pero CI `35395401873` es FAILURE: 2009/2011 tests PASS y los únicos dos fallos provienen del helper legacy `createRawTestDb()` de `policy-engine.test.ts`, que fabrica Policy/spend pero no la tabla v18 `evidence_events`. El runtime fresh/migrado sí exige v18; por tanto la decisión es CORRECT sobre el fixture, no debilitar el fail-closed productivo.
 
 P-009 permanece HECHO únicamente para su objetivo exacto: authority/provenance/trust boundaries. No eleva Social inbound a autenticación criptográfica LIVE; `relay_asserted` sigue siendo el máximo claim demostrado en esa frontera.
 
