@@ -1,0 +1,192 @@
+name: P013 Main Closure Reconcile
+
+on:
+  push:
+    branches:
+      - abos/p013-main-closure
+    paths:
+      - .github/workflows/p013-main-closure-reconcile.yml
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: abos/p013-main-closure
+          fetch-depth: 0
+
+      - name: Verify exact green main baseline
+        shell: bash
+        run: |
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "733eb762596cac019593c6f27d7740da0ab25462"
+          test "$(git rev-parse HEAD^)" = "733eb762596cac019593c6f27d7740da0ab25462"
+
+      - name: Reconcile P-013 post-integration closure evidence
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          main = "733eb762596cac019593c6f27d7740da0ab25462"
+          main_ci = "35406990676"
+          main_po = "35406990741"
+          pr_head = "911b8097e5a38a7a566039a2eb15f04be648a10a"
+          pr_ci = "35406789667"
+          pr_po = "35406789721"
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              if old not in text:
+                  raise SystemExit(f"missing expected text in {path}: {old[:140]}")
+              p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          # Register actual post-merge evidence in active continuity before terminal transition.
+          replace_once(
+              "ProjectOps/continuity/C0009.md",
+              "Classification: E3_BRANCH_GREEN / MAIN_ANCESTRY_AND_EXACT_GATE_VERIFIED / READY_FOR_INTEGRATION",
+              "Classification: MAIN_E3_GREEN / TECHNICAL_OBJECTIVE_SATISFIED / CANONICAL_CLOSURE_READY",
+          )
+          p = Path("ProjectOps/continuity/C0009.md")
+          text = p.read_text(encoding="utf-8")
+          marker = "## Main integration and revalidation checkpoint — 2026-09-18"
+          if marker not in text:
+              text += f'''\n\n{marker}\n\nState: EN_EJECUCIÓN / MAIN_E3_GREEN / CANONICAL_CLOSURE_READY\nPlan-Reference: P-013\nPR: #41\nPR-Exact-Head: `{pr_head}`\nPR-CI: `{pr_ci}` SUCCESS\nPR-ProjectOps: `{pr_po}` SUCCESS\nSquash-Merge-Main: `{main}`\nMain-CI: `{main_ci}` SUCCESS\nMain-ProjectOps: `{main_po}` SUCCESS\n\nLa frontera de integración quedó materialmente satisfecha. PR #41 fue mergeable/clean, sin reviews ni threads bloqueantes, y se integró por squash con el exact head fijado. El resulting `main {main}` conserva el mismo tree validado y completó CI + ProjectOps ordinarios con SUCCESS, incluyendo Node 22/24 full+security, Windows 22/24, public distribution smoke 22/24, dependency audit y rebrand.\n\nResultado técnico: el objetivo P-013 está implementado, conectado, integrado y revalidado E3; el DoD causal/restart queda satisfecho sin introducir una segunda domain authority. La dependencia material P-013 exigida por P-012 también queda satisfecha.\n\nNo demostrado por este cierre: E5 autenticación LIVE de providers externos, E6 economía LIVE ni E7 operación sostenida global; P-013 no reclama esas capas.\n\nEstado canónico deliberado en este corte: P-013 permanece `EN_EJECUCIÓN` y P-012 `PARCIAL` únicamente porque este checkpoint de cierre aún debe integrarse como autoridad ProjectOps. Tras integrar/revalidar este cierre, la siguiente transición válida puede cerrar P-013/P-012 y activar P-014; no abrir P-014 antes.\n'''
+          p.write_text(text, encoding="utf-8")
+
+          # P-013 module: evidence is now main-green, but state remains active until canonical closure integration.
+          replace_once(
+              "ProjectOps/plan/P-013.md",
+              "Evidence-State: E3_BRANCH_GREEN / MAIN_ANCESTRY_AND_EXACT_GATE_VERIFIED / READY_FOR_INTEGRATION",
+              "Evidence-State: E3_MAIN_GREEN / INTEGRATION_VERIFIED / CANONICAL_CLOSURE_READY",
+          )
+          p = Path("ProjectOps/plan/P-013.md")
+          text = p.read_text(encoding="utf-8")
+          anchor = "- ancestry exact-head ProjectOps `35406279579`: SUCCESS\n"
+          add = anchor + f"- final integration-ready head: `{pr_head}`; CI `35406595321` SUCCESS; ProjectOps `35406595472` SUCCESS\n- PR #41 exact-head: `{pr_head}`; PR CI `{pr_ci}` SUCCESS; PR ProjectOps `{pr_po}` SUCCESS\n- squash merge `main`: `{main}`\n- merged main CI `{main_ci}`: SUCCESS\n- merged main ProjectOps `{main_po}`: SUCCESS\n"
+          if "- PR #41 exact-head:" not in text:
+              if anchor not in text:
+                  raise SystemExit("missing P-013 ancestry evidence anchor")
+              text = text.replace(anchor, add, 1)
+          text = text.replace(
+              "- P-013 permanece `EN_EJECUCIÓN / READY_FOR_INTEGRATION`; ancestry de `main` y exact-head E3 ya están verificados; no se declara `HECHO` antes del PR/merge y revalidación de `main`.",
+              "- P-013 permanece `EN_EJECUCIÓN / MAIN_E3_GREEN / CANONICAL_CLOSURE_READY`; PR #41, squash merge y exact `main` revalidation ya están verificados. El objetivo técnico satisface su DoD; `HECHO` canónico se difiere únicamente hasta integrar/revalidar este cierre ProjectOps.",
+              1,
+          )
+          stale = "Estado: semantic union aplicada; todavía falta representar ancestry de `main` en Git y ejecutar un exact-tree gate ordinario antes de recuperar `READY_FOR_INTEGRATION`."
+          if stale in text:
+              text = text.replace(stale, f"Estado: semantic union, ancestry, PR #41 y exact `main {main}` quedaron integrados y gateados. No queda deuda técnica P-013 conocida; sólo queda integrar este cierre ProjectOps antes de la transición terminal.", 1)
+          marker = "## Main integration closure evidence"
+          if marker not in text:
+              text += f'''\n\n{marker}\n\n- PR #41 exact head `{pr_head}`: CI `{pr_ci}` SUCCESS; ProjectOps `{pr_po}` SUCCESS; mergeable/clean y sin review/thread bloqueante antes del merge.\n- squash merge `main {main}`.\n- exact merged main CI `{main_ci}` SUCCESS y ProjectOps `{main_po}` SUCCESS.\n- Node 22/24 full+security, Windows 22/24, public smoke 22/24, dependency audit y rebrand PASS.\n- Definition of Done causal/restart: SATISFECHA a nivel E3 integration.\n- Residual LIVE claims: NO DEMOSTRADOS / fuera del alcance de cierre E3.\n\nCanonical state remains `EN_EJECUCIÓN` only until this closure evidence itself is integrated; next transition may mark P-013 `HECHO` and activate P-014.\n'''
+          p.write_text(text, encoding="utf-8")
+
+          # P-012 dependency is materially satisfied but terminal state waits for same canonical transition.
+          replace_once(
+              "ProjectOps/plan/P-012.md",
+              "Evidence-State: E3_INTEGRATION_VERIFIED / P013_EVIDENCE_PENDING",
+              "Evidence-State: E3_INTEGRATION_VERIFIED / P013_EVIDENCE_SATISFIED / CANONICAL_CLOSURE_READY",
+          )
+          replace_once(
+              "ProjectOps/plan/P-012.md",
+              "Dependencies: P-009, P-010, P-011; P-013 evidence antes de cierre completo.",
+              "Dependencies: P-009, P-010, P-011; P-013 evidence satisfecha por PR #41 + main E3, pendiente únicamente de transición canónica de cierre.",
+          )
+          p = Path("ProjectOps/plan/P-012.md")
+          text = p.read_text(encoding="utf-8")
+          old = "`PARCIAL / INTEGRATION_VERIFIED / P013_EVIDENCE_PENDING`.\n\nLa arquitectura DECISION_READY fue implementada, integrada y revalidada en `main`; no queda source, merge ni revalidación P-012 pendiente. El siguiente gate de cierre es P-013 evidence/correlation transversal. P-012 no se eleva a `HECHO` completo hasta que esa evidencia quede integrada. No reabrir la arquitectura P-012 salvo defecto reproducible o incompatibilidad demostrada."
+          new = f"`PARCIAL / INTEGRATION_VERIFIED / P013_EVIDENCE_SATISFIED / CANONICAL_CLOSURE_READY`.\n\nLa arquitectura DECISION_READY fue implementada, integrada y revalidada en `main`; no queda source, merge ni revalidación P-012 pendiente. La dependencia P-013 quedó materialmente satisfecha por PR #41, squash merge `main {main}`, CI `{main_ci}` SUCCESS y ProjectOps `{main_po}` SUCCESS. P-012 conserva `PARCIAL` sólo hasta que este cierre ProjectOps se integre y la transición canónica pueda elevarlo a `HECHO`; no reabrir su arquitectura salvo defecto reproducible o incompatibilidad demostrada."
+          if old not in text:
+              raise SystemExit("missing P-012 activation-state block")
+          p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          # Root continuity: actual execution position after main integration.
+          replace_once(
+              "ProjectOps/CONTINUITY.md",
+              "Active-Intervention: P013_OBSERVABILITY_EVIDENCE_FABRIC — E3_BRANCH_GREEN / MAIN_ANCESTRY_AND_EXACT_GATE_VERIFIED / READY_FOR_INTEGRATION",
+              "Active-Intervention: P013_OBSERVABILITY_EVIDENCE_FABRIC — MAIN_E3_GREEN / TECHNICAL_OBJECTIVE_SATISFIED / CANONICAL_CLOSURE_READY",
+          )
+          replace_once("ProjectOps/CONTINUITY.md", "Current-Host-Branch: abos/p013-observability-evidence-fabric", "Current-Host-Branch: abos/p013-main-closure")
+          replace_once("ProjectOps/CONTINUITY.md", "Last-Reconciled-Host-Head: 1800d610dbbdfe14fb991117c7a4061dab8ec8e5", f"Last-Reconciled-Host-Head: {main}")
+          replace_once("ProjectOps/CONTINUITY.md", "Last-Reconciled-Head-Semantics: P013_E3_BRANCH_GREEN_MAIN_ANCESTRY_AND_EXACT_GATE_VERIFIED", "Last-Reconciled-Head-Semantics: P013_MAIN_E3_GREEN_CANONICAL_CLOSURE_READY")
+          replace_once("ProjectOps/CONTINUITY.md", "Main-ProjectOps-Reconciliation-State: SEMANTIC_UNION_APPLIED / ANCESTRY_AND_EXACT_GATE_VERIFIED", "Main-ProjectOps-Reconciliation-State: INTEGRATED / MAIN_E3_GREEN")
+          replace_once("ProjectOps/CONTINUITY.md", "P013-Integration-State: READY_FOR_INTEGRATION / NOT_HECHO", "P013-Integration-State: MAIN_E3_GREEN / TECHNICAL_OBJECTIVE_SATISFIED / CANONICAL_CLOSURE_PENDING")
+          p = Path("ProjectOps/CONTINUITY.md")
+          text = p.read_text(encoding="utf-8")
+          anchor = "P013-Ancestry-Gate-ProjectOps: 35406279579 SUCCESS\n"
+          add = anchor + f"P013-Final-Branch-Head: {pr_head}\nP013-Final-Branch-CI: 35406595321 SUCCESS\nP013-Final-Branch-ProjectOps: 35406595472 SUCCESS\nP013-PR: 41\nP013-PR-CI: {pr_ci} SUCCESS\nP013-PR-ProjectOps: {pr_po} SUCCESS\nP013-Merge: {main}\nP013-Main-CI: {main_ci} SUCCESS\nP013-Main-ProjectOps: {main_po} SUCCESS\nP012-P013-Dependency-State: SATISFIED / CANONICAL_CLOSURE_PENDING\n"
+          if "P013-Merge:" not in text:
+              if anchor not in text:
+                  raise SystemExit("missing continuity ancestry anchor")
+              text = text.replace(anchor, add, 1)
+          old_sem = "`Last-Reconciled-Host-Head` es `326149d1ce18d65674006d8c13db95d068acb01a`, exact-tree del producto recuperado. El fixture legacy Policy fue corregido reutilizando la migration v18 canónica, sin cambiar el fail-closed productivo. CI `35397538844` y ProjectOps `35397538980` son SUCCESS; Node 22/24 full+security, Windows 22/24, public smoke 22/24, dependency audit y rebrand están verdes. La auditoría de cierre clasifica Operational projections como `NO_CHANGE`: logger/metrics/alerts continúan como proyecciones no autoritativas y el E2E/restart durable satisface el DoD. P-013 está listo para integración, no HECHO."
+          new_sem = f"`Last-Reconciled-Host-Head` es `main {main}`: PR #41 fue integrado por squash y el exact merged main pasó CI `{main_ci}` + ProjectOps `{main_po}`. El fixture legacy Policy usa la migration v18 canónica, fail-closed permanece intacto, Operational projections sigue `NO_CHANGE` y el E2E/restart durable satisface el DoD. El objetivo técnico P-013 y la dependencia material de P-012 están satisfechos; ambos conservan estado no terminal únicamente hasta integrar este cierre ProjectOps y ejecutar la transición canónica."
+          if old_sem not in text:
+              raise SystemExit("missing continuity reconciled-head semantic paragraph")
+          text = text.replace(old_sem, new_sem, 1)
+          text = text.replace(
+              "- P-012: PARCIAL / INTEGRATION_VERIFIED — integrado por PR #40 en `main` `fe845184...`, CI `34926393562` + ProjectOps `34926393570` SUCCESS; sólo falta la evidence/correlation P-013 exigida por su propio DoD.",
+              f"- P-012: PARCIAL / INTEGRATION_VERIFIED / P013_EVIDENCE_SATISFIED — source/integration propios siguen verdes y P-013 ya quedó integrado/revalidado en `main {main}`; conserva PARCIAL sólo hasta la transición canónica posterior a este cierre.",
+              1,
+          )
+          text = text.replace(
+              "- P-013: EN_EJECUCIÓN / READY_FOR_INTEGRATION — product fabric, critical chains, restart/E2E y economía correlacionada continúan validados; la autoridad ProjectOps de `main c94dbeba...`, su ancestry y el exact-head E3 quedaron verificados. No está HECHO: faltan PR/merge y revalidación exacta de `main`.",
+              f"- P-013: EN_EJECUCIÓN / MAIN_E3_GREEN / CANONICAL_CLOSURE_READY — PR #41 fue integrado por squash en `main {main}` y revalidado por CI `{main_ci}` + ProjectOps `{main_po}` SUCCESS. El objetivo técnico satisface el DoD; falta únicamente integrar este cierre ProjectOps y realizar la transición terminal.",
+              1,
+          )
+          p.write_text(text, encoding="utf-8")
+
+          # Plan manifest: factual main integration, while terminal states intentionally deferred.
+          replace_once(
+              "ProjectOps/PLAN.md",
+              "| P-012 | Convertir self-modification en transacción segura y recuperable | PARCIAL | integrado por PR #40 en `main fe845184...`; main CI/ProjectOps green; evidence P-013 antes de cierre completo | plan/P-012.md |",
+              "| P-012 | Convertir self-modification en transacción segura y recuperable | PARCIAL | source/integration P-012 green; P-013 evidence integrada/revalidada por PR #41; transición canónica de cierre pendiente | plan/P-012.md |",
+          )
+          replace_once(
+              "ProjectOps/PLAN.md",
+              "| P-013 | Unificar Observability, Audit y Evidence Fabric | EN_EJECUCIÓN | P-008 + P-009; product E3-green; main ancestry + exact gate verified; READY_FOR_INTEGRATION; PR/merge + main revalidation pendientes | plan/P-013.md |",
+              f"| P-013 | Unificar Observability, Audit y Evidence Fabric | EN_EJECUCIÓN | P-008 + P-009; PR #41 squash-merged to `{main[:10]}...`; main CI/ProjectOps green; technical DoD satisfied; canonical closure transition pending | plan/P-013.md |",
+          )
+          p = Path("ProjectOps/PLAN.md")
+          text = p.read_text(encoding="utf-8")
+          text = text.replace(
+              "P-012 transactional self-modification está integrado y revalidado, con cierre lógico pendiente de evidencia P-013. P-013 observability/evidence es la intervención activa de Ola 1.",
+              "P-012 transactional self-modification está integrado/revalidado y su dependencia de evidencia P-013 ya quedó materialmente satisfecha. P-013 observability/evidence está integrado/revalidado en main; la intervención activa de Ola 1 sólo conserva el cierre canónico antes de la transición a P-014.",
+              1,
+          )
+          p.write_text(text, encoding="utf-8")
+
+          # Project baseline: update only facts materially changed by integration.
+          p = Path("ProjectOps/PROJECT.md")
+          text = p.read_text(encoding="utf-8")
+          old = "El main exacto pasó CI `34926393562` y ProjectOps Integrity `34926393570`. Esto acredita E3 del source integrado, no provider/economic LIVE. P-012 permanece PARCIAL / INTEGRATION_VERIFIED hasta que P-013 evidence/correlation transversal quede integrada conforme a su Definition of Done."
+          new = f"El main exacto pasó CI `34926393562` y ProjectOps Integrity `34926393570`. Esto acredita E3 del source integrado, no provider/economic LIVE. La dependencia evidence/correlation de P-012 quedó materialmente satisfecha por P-013 PR #41 y `main {main}` revalidado; P-012 conserva PARCIAL únicamente hasta la transición canónica posterior a este cierre ProjectOps."
+          if old not in text:
+              raise SystemExit("missing PROJECT P-012 status paragraph")
+          text = text.replace(old, new, 1)
+          old2 = "P-011 Lifecycle/Health/Restart/Recovery está HECHO / INTEGRATION_VERIFIED. P-012 transactional self-modification está integrado en `main fe845184...` y permanece PARCIAL únicamente hasta que la evidence/correlation P-013 requerida por su DoD quede integrada. P-013 Observability/Audit/Evidence Fabric es la intervención activa: el product tree está E3-green y la autoridad/ancestry ProjectOps de `main c94dbeba...` ya fue reconciliada y exact-head gateada; la siguiente frontera es PR/merge + revalidación exacta de `main`."
+          new2 = f"P-011 Lifecycle/Health/Restart/Recovery está HECHO / INTEGRATION_VERIFIED. P-012 transactional self-modification está integrado y su dependencia P-013 ya está materialmente satisfecha. P-013 Observability/Audit/Evidence Fabric fue integrado por PR #41 en `main {main}` y revalidado por CI `{main_ci}` + ProjectOps `{main_po}` SUCCESS. La intervención activa conserva sólo el cierre canónico ProjectOps; P-014 no se activa hasta integrar y revalidar ese cierre."
+          if old2 not in text:
+              raise SystemExit("missing PROJECT active P-013 paragraph")
+          p.write_text(text.replace(old2, new2, 1), encoding="utf-8")
+          PY
+
+          node scripts/projectops-integrity-verify.mjs
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ProjectOps/CONTINUITY.md ProjectOps/PLAN.md ProjectOps/PROJECT.md ProjectOps/continuity/C0009.md ProjectOps/plan/P-012.md ProjectOps/plan/P-013.md
+          git commit -m "ProjectOps: reconcile P-013 main integration closure"
+          git push origin HEAD:abos/p013-main-closure
+
+      - name: Remove one-shot reconciler
+        shell: bash
+        run: |
+          git rm .github/workflows/p013-main-closure-reconcile.yml
+          git commit -m "chore(p013): retire main closure reconciler"
+          git push origin HEAD:abos/p013-main-closure
