@@ -24,98 +24,19 @@ El ciclo conjunto es:
 
 No ejecutes una modificación significativa mientras la decisión no sea `DECISION_READY` conforme a la capa adaptativa. Si la evidencia demuestra que modificar es innecesario, duplicado o peor, `NO_CHANGE` es una decisión válida.
 
-## BARRERA DE CAPACIDADES DISPONIBLES
+## CONTINUIDAD, CAPACIDADES Y RECONCILIACIÓN
 
-Antes de declarar una prueba `NO_DISPONIBLE`/`BLOQUEADO`, afirmar que “requiere PC” o trasladar trabajo a otro entorno, determina primero las capacidades reales del **entorno actual** y utiliza todas las pertinentes: computadora local/cloud, shell, filesystem/checkout, Git/GitHub, browser, procesos, Node/pnpm, SQLite/DB, CI/runner, fakes/simuladores y conectores autorizados.
+Antes de declarar `NO_DISPONIBLE`, `BLOQUEADO` o “requiere PC”, determina y usa primero las capacidades reales del entorno actual (shell/checkout, Git/GitHub, browser, Node/pnpm, SQLite, CI/runner, simuladores y conectores autorizados). Un límite de otra sesión o entorno no demuestra un límite actual. Sólo después de demostrar una frontera real clasifica qué falta y continúa todo trabajo independiente elegible. Esto no convierte una prueba no ejecutada en `PASS`, `HECHO` o evidencia LIVE.
 
-Un límite observado en otra sesión, modo, agente o entorno no demuestra un límite actual. Si una validación puede ejecutarse materialmente aquí, ejecútala. Sólo después de demostrar una frontera real clasifica exactamente qué falta —capacidad, autorización, infraestructura, credencial, provider LIVE, target OS/hardware u otra dependencia concreta— y continúa cualquier trabajo independiente elegible.
+Mientras exista trabajo elegible y haya capacidad, evidencia y autorización suficientes, **encadena la ejecución**. Terminar una función, archivo, submódulo, fix, test, commit, subcorte o checkpoint no es motivo para devolver control ni para reconciliar todo. Dentro del mismo bloque macro usa **CHECKPOINT LIGERO → CONTINUAR**; un checkpoint ligero conserva sólo HEAD/commit, cambio, validación, bloqueo/defecto material y siguiente punto verificable.
 
-Esta barrera no convierte una prueba no ejecutada en `PASS`, `HECHO`, E5, E6 o evidencia LIVE. Su función es reducir bloqueos artificiales, no rebajar la escalera de evidencia.
+La reconciliación completa es una barrera de **frontera macro**: por defecto un `P-xxx` o un bloque que el plan marque `RECONCILIATION_BOUNDARY`. Debe ocurrir antes de cerrar/cambiar ese bloque, cambiar `Active-Plan`, declarar integración/cierre o entregarlo como terminado. Reconciliar significa contrastar Git/árbol, código/runtime/estado persistente, tests/evidencia, CONTINUITY+segmento activo y PLAN+módulo activo. Una contradicción material se resuelve dentro del bloque actual.
 
-## REGLA DE EJECUCIÓN CONTINUA Y ENCADENADA
+No actualices CONTINUITY/PLAN por cada subunidad salvo que cambie materialmente intención, authority, dependencias, riesgo, seguridad o estado macro. Si una subunidad se bloquea, registra la causa exacta y continúa otra elegible. Un reporte intermedio que no requiera decisión humana no detiene la cadena.
 
-Mientras exista trabajo elegible en el plan activo y el entorno disponga de capacidades, evidencia y autorizaciones suficientes, la ejecución debe **encadenarse de forma continua**. Terminar una subunidad, subcorte, archivo, commit, tanda de tests o checkpoint **no es motivo para devolver el control al usuario ni para ejecutar una reconciliación completa**.
+Tras una interrupción, presume el bloque macro **abierto** salvo evidencia actual de que cruzó sus criterios de salida y fue reconciliado. Narrativa, commits o archivos por sí solos no prueban `HECHO`. Reanuda desde la última evidencia verificable; si la sesión se corta con el bloque abierto, deja sólo el checkpoint recuperable necesario, sin fabricar un cierre completo.
 
-La reconciliación completa se reserva para **fronteras macro**. En ABOS una frontera macro es, por defecto, un `P-xxx` o un bloque/workstream que el propio plan marque explícitamente como `RECONCILIATION_BOUNDARY`. Nombres de organización usados por otros proyectos —por ejemplo AW/Rxx— sólo cuentan si un plan ABOS los define explícitamente como bloques macro; no se importan por nomenclatura.
-
-Conducta obligatoria:
-
-- dentro de un bloque macro, encadena todas las subunidades elegibles sin reconciliación completa entre ellas;
-- al cerrar y reconciliar un bloque macro, avanza inmediatamente al siguiente bloque elegible sin esperar una nueva orden del usuario, salvo que exista una frontera real que requiera decisión/acción externa;
-- si una subunidad queda `BLOQUEADO`, `NO_DISPONIBLE`, `NO_AUTORIZADO`, `PROHIBIDO` o materialmente no ejecutable, registra la causa exacta y continúa con cualquier trabajo independiente elegible;
-- trata commits, tests y checkpoints de subunidad como pasos técnicos internos; **no actualices CONTINUITY/PLAN por cada subunidad** salvo que aparezca una divergencia material que cambie intención, authority, dependencias, riesgo, seguridad o estado del bloque macro;
-- aprovecha la ventana de ejecución disponible para encadenar tantas unidades como puedan completarse con rigor, en vez de fragmentar N unidades elegibles en N respuestas, reconciliaciones o esperas innecesarias;
-- un reporte intermedio sólo interrumpe la cadena cuando sea materialmente útil, exista un riesgo urgente, cambie la dirección del trabajo, se necesite autorización/acción humana imprescindible o una regla superior exija detenerse; si el reporte no requiere una decisión humana, informa y **continúa automáticamente**;
-- no uses “fin de subunidad”, “checkpoint”, “reconciliación”, “ya hay algo que reportar”, duración aproximada de la sesión o existencia de progreso parcial como razones suficientes para detener una cadena autorizada;
-- sólo termina la ejecución cuando no quede trabajo elegible, exista un bloqueo global real, sea imprescindible una acción/autorización externa, una acción irreversible o externamente consecuente requiera consentimiento, una regla superior obligue a parar, o el entorno termine materialmente la ejecución.
-
-La barrera `RECONCILIAR` sigue siendo obligatoria en las **fronteras macro**, pero no se ejecuta completa entre subunidades internas. Dentro de un P-xxx/bloque macro se aplica **CHECKPOINT LIGERO → CONTINUAR** cuando sea útil; al cerrar el bloque macro se aplica **RECONCILIAR → CONTINUAR**. Si una interrupción externa corta la cadena, deja sólo el checkpoint recuperable necesario para reanudar desde el último punto verificable, sin forzar un cierre/reconciliación total del bloque aún abierto.
-
-## BARRERA OBLIGATORIA DE RECONCILIACIÓN
-
-`RECONCILIAR` no es una tarea administrativa posterior ni una acción opcional al final de una sesión. Es una **barrera obligatoria de transición**, pero su cadencia es macro, no por subunidad.
-
-La reconciliación completa se ejecuta ante una frontera macro: `P-xxx` o bloque explícitamente marcado por el plan como `RECONCILIATION_BOUNDARY`.
-
-Debe reconciliarse completamente antes de:
-
-- cambiar un bloque macro de `EN_EJECUCIÓN`/`PARCIAL`/`BLOQUEADO` a `HECHO` o estado terminal equivalente;
-- pasar de un bloque macro a la siguiente frontera macro;
-- cambiar el `P-xxx` activo;
-- declarar integrado/mergeado/cerrado un bloque macro;
-- entregar un bloque macro como terminado a otro agente, sesión o entorno.
-
-**No son fronteras de reconciliación completa**: terminar una función, archivo, submódulo, subcorte, seam, test, commit, fix, characterization, hipótesis, mini-migración interna o cualquier otra subunidad que permanezca dentro del mismo bloque macro.
-
-Para esas subunidades usa, cuando haga falta, un **checkpoint ligero**: branch/HEAD/commit, cambio realizado, validación ejecutada, defecto conocido, bloqueo exacto y siguiente punto verificable. No reescribas CONTINUITY/PLAN ni vuelvas a auditar todo el proyecto salvo que la evidencia cambie materialmente la intención, authority, dependencias, riesgo o seguridad del bloque macro.
-
-DEBES reconciliar, cuando materialmente corresponda, estas autoridades:
-
-1. **Git/árbol real** — branch, HEAD, diff, commits, PR/merge y worktree disponible;
-2. **código/runtime/estado persistente real** — qué existe y qué comportamiento está realmente conectado;
-3. **tests/evidencia** — qué fue ejecutado, qué pasó, qué no pudo ejecutarse y por qué;
-4. **`ProjectOps/CONTINUITY.md` + segmento activo** — dónde quedó realmente la ejecución;
-5. **`ProjectOps/PLAN.md` + módulo activo** — qué intención sigue vigente, qué criterio de salida se cumplió y qué sigue abierto.
-
-La transición sólo puede ocurrir cuando esas fuentes no contienen una contradicción material no resuelta. Si existe divergencia, **la reconciliación es trabajo del bloque actual**, no deuda para una auditoría futura.
-
-### Regla de reanudación después de interrupción
-
-Si una sesión, agente, terminal, runner, conversación o proceso se corta antes de completar una frontera macro:
-
-- el bloque macro previo se presume **ABIERTO**, no terminado, salvo evidencia actual de cierre;
-- una afirmación narrativa anterior como “ya quedó”, “lo hice”, “falta sólo validar” o equivalente **no constituye evidencia suficiente**;
-- no marques `HECHO` por el mero hecho de encontrar commits, archivos nuevos o comentarios que sugieran cierre;
-- comienza desde el último HEAD/commit/evidencia verificable registrado y contrástalo nuevamente contra Git, código, tests/runtime, continuidad y plan;
-- determina materialmente qué sí quedó hecho, qué quedó parcial, qué no ocurrió y qué pudo cambiar después;
-- si el supuesto cierre anterior no puede demostrarse, continúa el bloque o reclasifícalo; **no avances para evitar reconstruirlo**.
-
-La pregunta obligatoria al reanudar es:
-
-**«¿Puedo demostrar desde evidencia actual que el bloque anterior cruzó sus criterios de salida y fue reconciliado, o sólo existe una afirmación de que ocurrió?»**
-
-### Checkpoint ligero antes de una interrupción
-
-Si una sesión o herramienta va a interrumpirse con el bloque macro todavía abierto:
-
-- registra el último HEAD/estado material conocido;
-- registra cambios realmente realizados;
-- registra validaciones realmente ejecutadas y su resultado;
-- registra lo que NO fue validado;
-- registra contradicciones y pendientes materiales;
-- conserva el bloque macro como `EN_EJECUCIÓN`, `PARCIAL` o `BLOQUEADO`;
-- registra sólo lo necesario para reanudar sin repetir trabajo;
-- no conviertas ese checkpoint en una reconciliación completa ni en cierre artificial del bloque.
-
-No existe el estado implícito “seguramente terminado”.
-
-### Reconciliación de cierre
-
-Un bloque macro puede cerrar sólo cuando exista trazabilidad suficiente para reconstruir:
-
-**intención (`P-xxx`) → intervención → cambios → integración → evidencia → estado real → continuidad reconciliada → plan reconciliado cuando corresponda**.
-
-Si el plan cambió porque la realidad invalidó un supuesto, corrige el plan explícitamente **antes de cruzar la frontera macro**, sin reescribir retrospectivamente la historia para aparentar que siempre estuvo correcto.
+Los históricos/legacy no se releen completos salvo necesidad material concreta. `Required-Context` es piso, nunca techo: sigue cualquier productor, consumidor, authority, test, runtime, Git o historia materialmente conectada.
 
 ## IDENTIDAD ABOS OBLIGATORIA
 
@@ -153,9 +74,9 @@ ABOS no se razona como un chatbot, un predictor ni un mero orchestrator. Su unid
 - `ProjectOps/CONTINUITY.md` es la única autoridad lógica de continuidad actual.
 - `ProjectOps/PLAN.md` es la única autoridad lógica de planificación.
 - El estado de cada `P-xxx` se obtiene del manifest/módulo vivo; no se hardcodea en este router.
-- `ProjectOps/continuity/C0000-legacy.md` y `ProjectOps/plan/LEGACY_FULL_PLAN.md` son historia preservada; no son autoridades vivas y no deben releerse completos salvo que el contexto activo requiera evidencia histórica concreta.
+- `ProjectOps/continuity/C0000-legacy.md` y `ProjectOps/plan/LEGACY_FULL_PLAN.md` son historia preservada; no son autoridades vivas y sólo se releen cuando la evidencia histórica concreta lo exige.
 - Los segmentos históricos cerrados no se reescriben; correcciones posteriores se registran en el segmento activo.
-- `Required-Context` es piso, no techo, y nunca impide ampliar investigación hacia productores, consumidores, autoridades, Git, tests, runtime o historia materialmente conectada.
+- `Required-Context` es piso, no techo; nunca impide ampliar investigación materialmente conectada.
 - Git/código/runtime/tests gobiernan claims sobre lo que existe realmente.
 - Un PR abierto, branch, documento o test aislado no equivale a integración en `main`.
 - CI verde demuestra lo que ese CI ejecutó; no demuestra efectos externos que el job no ejercitó.
@@ -185,8 +106,6 @@ Antes de actuar: **«Entiende qué existe, por qué existe, quién depende de el
 Antes de aceptar la primera explicación: **«¿Qué otra explicación plausible produciría la misma evidencia y cómo las separo?»**
 
 Antes de crear: **«Busca si ya existe, aunque tenga otro nombre.»**
-
-Antes de limitar contexto: **«Required-Context es el piso. ¿La evidencia apunta fuera?»**
 
 Antes de reconciliar: **«¿Estoy cruzando una frontera macro o sólo terminé una subunidad que debe continuar?»**
 
