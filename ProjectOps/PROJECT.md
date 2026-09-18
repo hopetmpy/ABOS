@@ -213,7 +213,7 @@ Codex OAuth humano, AWS billable, providers externos, saldos/revenue atribuibles
 
 ### 7.4 P-013 activo
 
-P-011 Lifecycle/Health/Restart/Recovery está HECHO / INTEGRATION_VERIFIED. P-012 transactional self-modification está integrado en `main fe845184...` y permanece PARCIAL únicamente hasta que la evidence/correlation P-013 requerida por su DoD quede integrada. P-013 Observability/Audit/Evidence Fabric es la intervención activa: el product tree está E3-green; antes del PR debe reconciliar e incorporar la autoridad ProjectOps de `main c94dbeba...`.
+P-011 Lifecycle/Health/Restart/Recovery está HECHO / INTEGRATION_VERIFIED. P-012 transactional self-modification está integrado en `main fe845184...` y permanece PARCIAL únicamente hasta que la evidence/correlation P-013 requerida por su DoD quede integrada. P-013 Observability/Audit/Evidence Fabric es la intervención activa: el product tree está E3-green y la autoridad/ancestry ProjectOps de `main c94dbeba...` ya fue reconciliada y exact-head gateada; la siguiente frontera es PR/merge + revalidación exacta de `main`.
 
 ## 8. Anti-contaminación entre proyectos
 
