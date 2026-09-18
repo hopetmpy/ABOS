@@ -1,0 +1,210 @@
+name: P013 Closure Reconcile
+
+on:
+  push:
+    branches:
+      - abos/p013-observability-evidence-fabric
+    paths:
+      - .github/workflows/p013-closure-reconcile.yml
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: abos/p013-observability-evidence-fabric
+          fetch-depth: 0
+
+      - name: Record closure-audit divergences before reconciliation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("ProjectOps/continuity/C0009.md")
+          text = p.read_text(encoding="utf-8")
+          marker = "## Closure audit checkpoint — 2026-09-18 — pre-integration\n"
+          if marker not in text:
+              block = "\n".join([
+                  "",
+                  "",
+                  marker.rstrip(),
+                  "",
+                  "State: EN_EJECUCIÓN",
+                  "Plan-Reference: P-013",
+                  "Audited-Product-Gate-Head: `326149d1ce18d65674006d8c13db95d068acb01a`",
+                  "Audited-Product-CI: `35397538844` SUCCESS",
+                  "Audited-Product-ProjectOps: `35397538980` SUCCESS",
+                  "",
+                  "Hallazgos antes de reconciliar documentación:",
+                  "- `ProjectOps/PROJECT.md` conserva `P-012 activo`, contradiciendo `CONTINUITY.md`, `PLAN.md`, branch y source real P-013. Clasificación: DOCUMENTATION_DRIFT; no es autoridad runtime.",
+                  "- el subbloque `Corrección transversal de ProjectOps` conserva `State: EN_EJECUCIÓN`, aunque la cadencia continua/checkpoint macro ya está incorporada en `AGENTS.md` y fue validada durante la rama. Clasificación: STALE_SUBINTERVENTION_STATE.",
+                  "- Unit 6 `Operational projections`: StructuredLogger sigue siendo sink estructurado no durable; MetricsCollector/alerts siguen siendo proyecciones operacionales y el fabric SQLite ya satisface reconstrucción durable. Añadir correlation a logger/metrics no cambia el DoD y ampliaría superficies sin necesidad demostrada. Decisión: `NO_CHANGE` para esta unidad; no crear una segunda authority ni persistencia paralela.",
+                  "- DoD branch-level: `p013-e2e-restart-correlation.test.ts` reconstruye una misma correlation a través de goal/task, adaptive, environment, inference, Policy, self-mod y turn/tool tras reabrir SQLite; también rechaza causation huérfana y leakage de secretos/valores aprendidos. El gate exact-tree 326149d1 ejecutó full/security Node 22/24, Windows 22/24, public smoke 22/24, dependency audit, rebrand y ProjectOps con SUCCESS.",
+                  "",
+                  "Decision: reconciliar los drifts documentales y dejar P-013 `EN_EJECUCIÓN / READY_FOR_INTEGRATION`; no marcar `HECHO` antes del merge y revalidación de `main`.",
+                  "",
+              ])
+              text += block
+              p.write_text(text, encoding="utf-8")
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ProjectOps/continuity/C0009.md
+          git commit -m "ProjectOps: record P-013 closure audit divergences"
+          git push origin HEAD:abos/p013-observability-evidence-fabric
+
+      - name: Reconcile P-013 branch-ready authorities
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          # CONTINUITY — actual execution state.
+          p = Path("ProjectOps/CONTINUITY.md")
+          text = p.read_text(encoding="utf-8")
+          reps = {
+              "Active-Intervention: P013_OBSERVABILITY_EVIDENCE_FABRIC — MULTI_DOMAIN_EVIDENCE_IMPLEMENTED / ECONOMIC_GATE_BLOCKED_LEGACY_POLICY_FIXTURE":
+                  "Active-Intervention: P013_OBSERVABILITY_EVIDENCE_FABRIC — E3_BRANCH_GREEN / READY_FOR_INTEGRATION",
+              "Last-Reconciled-Host-Head: 6b0ee960baae6ffdc871628777a1acc0f4ea6a26":
+                  "Last-Reconciled-Host-Head: 326149d1ce18d65674006d8c13db95d068acb01a",
+              "Last-Reconciled-Head-Semantics: P013_MULTI_DOMAIN_IMPLEMENTED_ECONOMIC_GATE_BLOCKED_TEST_FIXTURE":
+                  "Last-Reconciled-Head-Semantics: P013_E3_BRANCH_GREEN_READY_FOR_INTEGRATION",
+              "- P-013: EN_EJECUCIÓN / CORE_V18_E3_GREEN — evidence fabric v18 implementado y exact-head gated en `04d2dee...`; siguiente unidad es critical chain v19 turn/tool→Policy→self-mod. P-013 aún no está HECHO.":
+                  "- P-013: EN_EJECUCIÓN / E3_BRANCH_GREEN / READY_FOR_INTEGRATION — fabric transversal, critical chains, restart/E2E y economía correlacionada validados en exact-tree `326149d1...`; CI `35397538844` + ProjectOps `35397538980` SUCCESS. No está HECHO hasta merge y revalidación de `main`.",
+          }
+          for old, new in reps.items():
+              if old not in text:
+                  raise SystemExit(f"missing CONTINUITY marker: {old}")
+              text = text.replace(old, new, 1)
+          anchor = "P013-Economic-Gate-ProjectOps: 35395401886 SUCCESS\n"
+          add = "\n".join([
+              "P013-Fixture-Correction-Commit: 7ac1d3b77c989573cf99a09db2b7531654cb4bf4",
+              "P013-Recovery-Validated-Head: 82cac81e5cb9aa75399de4ba9f4822c006458456",
+              "P013-Branch-Gate-Head: 326149d1ce18d65674006d8c13db95d068acb01a",
+              "P013-Branch-CI: 35397538844 SUCCESS",
+              "P013-Branch-ProjectOps: 35397538980 SUCCESS",
+              "P013-Operational-Projections: NO_CHANGE — durable DoD satisfied without promoting logger/metrics/alerts to authority",
+              "P013-Integration-State: READY_FOR_INTEGRATION / NOT_HECHO",
+              "",
+          ])
+          if "P013-Branch-Gate-Head:" not in text:
+              if anchor not in text:
+                  raise SystemExit("missing P013 economic evidence anchor")
+              text = text.replace(anchor, anchor + add, 1)
+          old_sem = "`Last-Reconciled-Host-Head` es `6b0ee960baae6ffdc871628777a1acc0f4ea6a26`. La rama ya avanzó más allá del Core v18: Policy/self-mod, inference, adaptive, environment, heartbeat, unificación causal/restart y la unidad económica están materialmente presentes. El source económico más reciente es `3941b229...`; el gate same-tree `6b0ee960...` conserva ese producto. ProjectOps `35395401886` es SUCCESS, pero CI `35395401873` es FAILURE: 2009/2011 tests PASS y los únicos dos fallos provienen del helper legacy `createRawTestDb()` de `policy-engine.test.ts`, que fabrica Policy/spend pero no la tabla v18 `evidence_events`. El runtime fresh/migrado sí exige v18; por tanto la decisión es CORRECT sobre el fixture, no debilitar el fail-closed productivo."
+          new_sem = "`Last-Reconciled-Host-Head` es `326149d1ce18d65674006d8c13db95d068acb01a`, exact-tree del producto recuperado. El fixture legacy Policy fue corregido reutilizando la migration v18 canónica, sin cambiar el fail-closed productivo. CI `35397538844` y ProjectOps `35397538980` son SUCCESS; Node 22/24 full+security, Windows 22/24, public smoke 22/24, dependency audit y rebrand están verdes. La auditoría de cierre clasifica Operational projections como `NO_CHANGE`: logger/metrics/alerts continúan como proyecciones no autoritativas y el E2E/restart durable satisface el DoD. P-013 está listo para integración, no HECHO."
+          if old_sem not in text:
+              raise SystemExit("missing previous HEAD semantics")
+          p.write_text(text.replace(old_sem, new_sem, 1), encoding="utf-8")
+
+          # P-013 plan module — intention/evidence, still nonterminal until integration.
+          p = Path("ProjectOps/plan/P-013.md")
+          text = p.read_text(encoding="utf-8")
+          old = "Evidence-State: E3_MULTI_DOMAIN_IMPLEMENTED / ECONOMIC_GATE_BLOCKED_LEGACY_POLICY_FIXTURE"
+          new = "Evidence-State: E3_BRANCH_GREEN / READY_FOR_INTEGRATION"
+          if old not in text:
+              raise SystemExit("missing P013 evidence state")
+          text = text.replace(old, new, 1)
+          recovery_old = "- La unidad económica está implementada en `3941b229...`; el gate `6b0ee960...` no demuestra E3 porque CI está rojo.\n- La causa discriminada del rojo actual es fixture drift: `policy-engine.test.ts` fabrica una SQLite parcial pre-v18, mientras runtime fresh/migrado crea/migra schema 18.\n- Decisión: `CORRECT` el fixture legacy reutilizando `MIGRATION_V18_EVIDENCE_FABRIC`; no introducir fallback productivo ni segunda schema authority.\n- P-013 permanece `EN_EJECUCIÓN`; después de recuperar CI se auditarán proyecciones operacionales y criterios de cierre antes de declarar `HECHO`."
+          recovery_new = "- La unidad económica está implementada en `3941b229...`; el gate `6b0ee960...` reveló únicamente fixture drift legacy.\n- El fixture Policy fue corregido en `7ac1d3b7...` reutilizando `MIGRATION_V18_EVIDENCE_FABRIC`; no se añadió fallback productivo ni segunda schema authority.\n- Exact-tree branch gate `326149d1...`: CI `35397538844` y ProjectOps `35397538980` SUCCESS con Node 22/24 full+security, Windows 22/24, public smoke 22/24, dependency audit y rebrand.\n- Operational projections: `NO_CHANGE`; logger/metrics/alerts continúan derivados/no autoritativos y no se necesita ampliar superficies para satisfacer el DoD durable.\n- P-013 permanece `EN_EJECUCIÓN / READY_FOR_INTEGRATION`; no se declara `HECHO` antes del merge y revalidación de `main`."
+          if recovery_old not in text:
+              raise SystemExit("missing P013 reconciled-state paragraph")
+          text = text.replace(recovery_old, recovery_new, 1)
+          activation_anchor = "- latest economic gate ProjectOps `35395401886`: SUCCESS\n"
+          activation_add = "\n".join([
+              "- fixture correction: `7ac1d3b77c989573cf99a09db2b7531654cb4bf4`",
+              "- recovered clean tree: `82cac81e5cb9aa75399de4ba9f4822c006458456`",
+              "- branch exact-tree gate: `326149d1ce18d65674006d8c13db95d068acb01a`",
+              "- branch CI `35397538844`: SUCCESS",
+              "- branch ProjectOps `35397538980`: SUCCESS",
+              "",
+          ])
+          if "- branch exact-tree gate:" not in text:
+              if activation_anchor not in text:
+                  raise SystemExit("missing P013 activation evidence anchor")
+              text = text.replace(activation_anchor, activation_anchor + activation_add, 1)
+          closure = "\n".join([
+              "",
+              "## Branch closure audit — READY_FOR_INTEGRATION",
+              "",
+              "- Critical chains: implemented and exercised across Policy/self-mod, inference, adaptive/orchestration, environments, heartbeat and economic evidence without replacing their domain authorities.",
+              "- Restart/causality DoD: `p013-e2e-restart-correlation.test.ts` reopens SQLite and reconstructs one correlation across real authority references; orphan causation is rejected and secret/learned-value leakage is checked.",
+              "- Operational projections (Unit 6): `NO_CHANGE`. `StructuredLogger`, metrics and alerts remain derived operational surfaces; making them a second durable correlation authority has no demonstrated value and would violate the one-authority constraint.",
+              "- Adversarial recovery: the economic gate failure was fixture drift, not product compatibility. Correction reused canonical v18 migration and retained fail-closed product semantics.",
+              "- Exact branch evidence: `326149d1...`; CI `35397538844` SUCCESS; ProjectOps `35397538980` SUCCESS.",
+              "- Remaining acceptance boundary: integration through PR plus exact `main` revalidation. Until then State stays `EN_EJECUCIÓN` and `HECHO` is prohibited.",
+              "",
+          ])
+          if "## Branch closure audit — READY_FOR_INTEGRATION" not in text:
+              text += closure
+          p.write_text(text, encoding="utf-8")
+
+          # PROJECT — remove stale active-intervention statement.
+          p = Path("ProjectOps/PROJECT.md")
+          text = p.read_text(encoding="utf-8")
+          old = "### 7.4 P-012 activo\n\nP-011 Lifecycle/Health/Restart/Recovery está HECHO / INTEGRATION_VERIFIED sobre `main cc26ee0c...`. P-012 transactional self-modification es la intervención activa: el source activo no debe quedar roto por write-before-verify, failure no puede convertirse en success y cualquier guard fijo de frecuencia debe justificarse como control provisional/configurable, no como sustituto universal de juicio transaccional."
+          new = "### 7.4 P-013 activo\n\nP-011 Lifecycle/Health/Restart/Recovery está HECHO / INTEGRATION_VERIFIED. P-012 transactional self-modification está integrado en `main fe845184...` y permanece PARCIAL únicamente hasta que la evidence/correlation P-013 requerida por su DoD quede integrada. P-013 Observability/Audit/Evidence Fabric es la intervención activa: su branch exact-tree `326149d1...` está E3-green y READY_FOR_INTEGRATION, pero aún no es autoridad integrada en `main`."
+          if old not in text:
+              raise SystemExit("missing stale PROJECT P012 active block")
+          p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          # PLAN manifest — status stays EN_EJECUCION; update only its verified condition.
+          p = Path("ProjectOps/PLAN.md")
+          text = p.read_text(encoding="utf-8")
+          old = "| P-013 | Unificar Observability, Audit y Evidence Fabric | EN_EJECUCIÓN | P-008 + P-009; baseline P-012 `main fe845184...` revalidado; C0009 AUDIT_REQUIRED | plan/P-013.md |"
+          new = "| P-013 | Unificar Observability, Audit y Evidence Fabric | EN_EJECUCIÓN | P-008 + P-009; branch exact-tree `326149d1...` CI/ProjectOps green; READY_FOR_INTEGRATION; merge + main revalidation pendientes | plan/P-013.md |"
+          if old not in text:
+              raise SystemExit("missing PLAN P013 row")
+          p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          # Segment — reconcile current classification and stale cadence subintervention.
+          p = Path("ProjectOps/continuity/C0009.md")
+          text = p.read_text(encoding="utf-8")
+          old = "Classification: CORE_V18_E3_GREEN / CRITICAL_CHAIN_PENDING"
+          new = "Classification: E3_BRANCH_GREEN / READY_FOR_INTEGRATION"
+          if old not in text:
+              raise SystemExit("missing C0009 classification")
+          text = text.replace(old, new, 1)
+          heading = "## Corrección transversal de ProjectOps — continuidad y cadencia de reconciliación\n\nState: EN_EJECUCIÓN"
+          replacement = "## Corrección transversal de ProjectOps — continuidad y cadencia de reconciliación\n\nState: HECHO / RECONCILIADO"
+          if heading not in text:
+              raise SystemExit("missing cadence subintervention state")
+          text = text.replace(heading, replacement, 1)
+          final_block = "\n".join([
+              "",
+              "## Integration-ready checkpoint — 2026-09-18",
+              "",
+              "State: EN_EJECUCIÓN / READY_FOR_INTEGRATION",
+              "Plan-Reference: P-013",
+              "Product-Gate-Head: `326149d1ce18d65674006d8c13db95d068acb01a`",
+              "Product-CI: `35397538844` SUCCESS",
+              "Product-ProjectOps: `35397538980` SUCCESS",
+              "Fixture-Correction: `7ac1d3b77c989573cf99a09db2b7531654cb4bf4`",
+              "",
+              "Reconciliación: los dos drifts documentales registrados en el checkpoint previo quedan corregidos. PROJECT reconoce P-013 como intervención activa y la corrección transversal de cadencia queda terminal/reconciliada. Operational projections se cierra como `NO_CHANGE` por falta de valor material y para preservar una sola durable evidence authority.",
+              "",
+              "Acceptance branch-level: DoD causal/restart demostrado por dedicated E2E y gate ordinario exact-tree completo. No hay defecto productivo conocido que invalide P-013. Falta exclusivamente integración por PR y revalidación exacta de `main`; por regla absoluta de HECHO, P-013 no se cierra todavía.",
+              "",
+              "Next valid boundary: abrir PR P-013 con exact head documental limpio, exigir checks/review state, integrar sólo si mergeable y verde, y revalidar `main`. Después de esa evidencia se puede cerrar P-013 y, por dependencia explícita, elevar P-012.",
+              "",
+          ])
+          if "## Integration-ready checkpoint — 2026-09-18" not in text:
+              text += final_block
+          p.write_text(text, encoding="utf-8")
+          PY
+
+          node scripts/projectops-integrity-verify.mjs
+          git add ProjectOps/CONTINUITY.md ProjectOps/PROJECT.md ProjectOps/PLAN.md ProjectOps/plan/P-013.md ProjectOps/continuity/C0009.md
+          git commit -m "ProjectOps: reconcile P-013 integration-ready state"
+          git push origin HEAD:abos/p013-observability-evidence-fabric
+
+      - name: Remove closure reconciler
+        shell: bash
+        run: |
+          git rm .github/workflows/p013-closure-reconcile.yml
+          git commit -m "chore(p013): retire closure reconciler"
+          git push origin HEAD:abos/p013-observability-evidence-fabric
