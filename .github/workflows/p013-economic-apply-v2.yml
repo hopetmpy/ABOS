@@ -1,0 +1,59 @@
+name: P-013 Economic Evidence Apply v2
+
+on:
+  push:
+    branches:
+      - abos/p013-observability-evidence-fabric
+    paths:
+      - .github/workflows/p013-economic-apply-v2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply reviewed economic base
+        run: python .github/p013_economic_apply.py
+      - name: Apply audited semantic corrections
+        run: python .github/p013_economic_semantic_fix.py
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Targeted P-013 economic and continuity regressions
+        run: >-
+          pnpm exec vitest run
+          src/__tests__/p013-economic-correlation.test.ts
+          src/__tests__/p010-autonomous-topup.test.ts
+          src/__tests__/p013-evidence-fabric.test.ts
+          src/__tests__/p013-policy-selfmod-correlation.test.ts
+          src/__tests__/p013-e2e-restart-correlation.test.ts
+      - name: ProjectOps integrity
+        run: node scripts/projectops-integrity-verify.mjs
+      - name: Diff integrity
+        run: git diff --check
+      - name: Commit clean product source
+        shell: bash
+        run: |
+          rm -f \
+            .github/p013_economic_apply.py \
+            .github/p013_economic_semantic_fix.py \
+            .github/workflows/p013-economic-apply.yml \
+            .github/workflows/p013-economic-apply-v2.yml
+          git add -A
+          git diff --cached --check
+          git config user.name "hopetmpy"
+          git config user.email "hope.tmpy@gmail.com"
+          git commit -m "P-013: correlate economic effects without false settlement"
+          git push origin HEAD:abos/p013-observability-evidence-fabric
