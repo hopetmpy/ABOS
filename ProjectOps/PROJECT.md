@@ -204,9 +204,9 @@ E3 nunca se promociona a E5/E6 por narrativa.
 
 Codex OAuth humano, AWS billable, providers externos, saldos/revenue atribuibles y otras fronteras E5/E6 requieren evidencia real; CI/source no las autocertifican.
 
-### 7.4 P-012 activo
+### 7.4 P-013 activo
 
-P-011 Lifecycle/Health/Restart/Recovery está HECHO / INTEGRATION_VERIFIED sobre `main cc26ee0c...`. P-012 transactional self-modification es la intervención activa: el source activo no debe quedar roto por write-before-verify, failure no puede convertirse en success y cualquier guard fijo de frecuencia debe justificarse como control provisional/configurable, no como sustituto universal de juicio transaccional.
+P-011 Lifecycle/Health/Restart/Recovery está HECHO / INTEGRATION_VERIFIED. P-012 transactional self-modification está integrado en `main fe845184...` y permanece PARCIAL únicamente hasta que la evidence/correlation P-013 requerida por su DoD quede integrada. P-013 Observability/Audit/Evidence Fabric es la intervención activa: su branch exact-tree `326149d1...` está E3-green y READY_FOR_INTEGRATION, pero aún no es autoridad integrada en `main`.
 
 ## 8. Anti-contaminación entre proyectos
 

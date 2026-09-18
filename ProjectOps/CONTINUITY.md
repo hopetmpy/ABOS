@@ -4,7 +4,7 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-013
 Active-Segment: continuity/C0009.md
-Active-Intervention: P013_OBSERVABILITY_EVIDENCE_FABRIC — MULTI_DOMAIN_EVIDENCE_IMPLEMENTED / ECONOMIC_GATE_BLOCKED_LEGACY_POLICY_FIXTURE
+Active-Intervention: P013_OBSERVABILITY_EVIDENCE_FABRIC — E3_BRANCH_GREEN / READY_FOR_INTEGRATION
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -13,8 +13,8 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p013-observability-evidence-fabric
 Host-Head-At-Audit-Open: fe845184fce48c65032f8521ecd0bdfa42e04b77
-Last-Reconciled-Host-Head: 6b0ee960baae6ffdc871628777a1acc0f4ea6a26
-Last-Reconciled-Head-Semantics: P013_MULTI_DOMAIN_IMPLEMENTED_ECONOMIC_GATE_BLOCKED_TEST_FIXTURE
+Last-Reconciled-Host-Head: 326149d1ce18d65674006d8c13db95d068acb01a
+Last-Reconciled-Head-Semantics: P013_E3_BRANCH_GREEN_READY_FOR_INTEGRATION
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -117,10 +117,17 @@ P013-Economic-Source-Head: 3941b2299b620a117cb59956b58933e992371664
 P013-Economic-Gate-Head: 6b0ee960baae6ffdc871628777a1acc0f4ea6a26
 P013-Economic-Gate-CI: 35395401873 FAILURE — 2009/2011 PASS; 2 legacy Policy fixture failures (missing evidence_events)
 P013-Economic-Gate-ProjectOps: 35395401886 SUCCESS
+P013-Fixture-Correction-Commit: 7ac1d3b77c989573cf99a09db2b7531654cb4bf4
+P013-Recovery-Validated-Head: 82cac81e5cb9aa75399de4ba9f4822c006458456
+P013-Branch-Gate-Head: 326149d1ce18d65674006d8c13db95d068acb01a
+P013-Branch-CI: 35397538844 SUCCESS
+P013-Branch-ProjectOps: 35397538980 SUCCESS
+P013-Operational-Projections: NO_CHANGE — durable DoD satisfied without promoting logger/metrics/alerts to authority
+P013-Integration-State: READY_FOR_INTEGRATION / NOT_HECHO
 
 ## Semántica del HEAD reconciliado
 
-`Last-Reconciled-Host-Head` es `6b0ee960baae6ffdc871628777a1acc0f4ea6a26`. La rama ya avanzó más allá del Core v18: Policy/self-mod, inference, adaptive, environment, heartbeat, unificación causal/restart y la unidad económica están materialmente presentes. El source económico más reciente es `3941b229...`; el gate same-tree `6b0ee960...` conserva ese producto. ProjectOps `35395401886` es SUCCESS, pero CI `35395401873` es FAILURE: 2009/2011 tests PASS y los únicos dos fallos provienen del helper legacy `createRawTestDb()` de `policy-engine.test.ts`, que fabrica Policy/spend pero no la tabla v18 `evidence_events`. El runtime fresh/migrado sí exige v18; por tanto la decisión es CORRECT sobre el fixture, no debilitar el fail-closed productivo.
+`Last-Reconciled-Host-Head` es `326149d1ce18d65674006d8c13db95d068acb01a`, exact-tree del producto recuperado. El fixture legacy Policy fue corregido reutilizando la migration v18 canónica, sin cambiar el fail-closed productivo. CI `35397538844` y ProjectOps `35397538980` son SUCCESS; Node 22/24 full+security, Windows 22/24, public smoke 22/24, dependency audit y rebrand están verdes. La auditoría de cierre clasifica Operational projections como `NO_CHANGE`: logger/metrics/alerts continúan como proyecciones no autoritativas y el E2E/restart durable satisface el DoD. P-013 está listo para integración, no HECHO.
 
 P-009 permanece HECHO únicamente para su objetivo exacto: authority/provenance/trust boundaries. No eleva Social inbound a autenticación criptográfica LIVE; `relay_asserted` sigue siendo el máximo claim demostrado en esa frontera.
 
@@ -144,7 +151,7 @@ P-012 conserva autonomía de self-modification y sustituye write-before-verify/f
 - P-010: HECHO — Policy/Authorization/Approval/Quarantine integrado por PR #36 y cerrado canónicamente por PR #37 sobre `main` `33e4865b...`.
 - P-011: HECHO / INTEGRATION_VERIFIED — integrado por PR #38; cierre documental PR #39; C0007 cerrado.
 - P-012: PARCIAL / INTEGRATION_VERIFIED — integrado por PR #40 en `main` `fe845184...`, CI `34926393562` + ProjectOps `34926393570` SUCCESS; sólo falta la evidence/correlation P-013 exigida por su propio DoD.
-- P-013: EN_EJECUCIÓN / CORE_V18_E3_GREEN — evidence fabric v18 implementado y exact-head gated en `04d2dee...`; siguiente unidad es critical chain v19 turn/tool→Policy→self-mod. P-013 aún no está HECHO.
+- P-013: EN_EJECUCIÓN / E3_BRANCH_GREEN / READY_FOR_INTEGRATION — fabric transversal, critical chains, restart/E2E y economía correlacionada validados en exact-tree `326149d1...`; CI `35397538844` + ProjectOps `35397538980` SUCCESS. No está HECHO hasta merge y revalidación de `main`.
 - P-014..P-036: ver `ProjectOps/PLAN.md`; permanecen en su estado explícito.
 
 ## P-009 — cierre verificable
