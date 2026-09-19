@@ -211,9 +211,11 @@ E3 nunca se promociona a E5/E6 por narrativa.
 
 Codex OAuth humano, AWS billable, providers externos, saldos/revenue atribuibles y otras fronteras E5/E6 requieren evidencia real; CI/source no las autocertifican.
 
-### 7.4 P-014 activo
+### 7.4 P-015 activo
 
-P-011 Lifecycle/Health/Restart/Recovery, P-012 transactional self-modification y P-013 Observability/Audit/Evidence Fabric están HECHO / INTEGRATION_VERIFIED para sus objetivos exactos. PR #43 activó P-014 en `main a8d22778b4cd6f1641efe4bc586711915cd06609`, revalidado por CI `35410702717` + ProjectOps `35410702730` SUCCESS. La auditoría P-014 alcanzó DECISION_READY sin tocar source: `src/capabilities/` permanece la única authority/facade de dominio y se extenderá in-place con persistencia durable y adapters explícitos, sin crear otro registry ni absorber P-015/P-017/P-018.
+P-011 Lifecycle/Health/Restart/Recovery, P-012 transactional self-modification, P-013 Observability/Audit/Evidence Fabric y P-014 Capability Fabric están HECHO / INTEGRATION_VERIFIED para sus objetivos exactos. P-014 fue integrado por PR #44 y el `main bf9adfd11617a37698ce7095248c1e1228f0d3cf` resultante fue revalidado por CI `35417887204` + ProjectOps `35417887215` SUCCESS.
+
+P-015 se activa para sustituir MCP nominal por un runtime real/verificable. `src/capabilities/` continúa como authority de capability lifecycle/contract; P-015 debe adaptar tools MCP reales hacia esa authority, no crear un registry paralelo. La especificación/SDK MCP vigente se verificará antes de cualquier decisión de implementación.
 
 ## 8. Anti-contaminación entre proyectos
 

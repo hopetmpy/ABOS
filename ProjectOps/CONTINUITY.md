@@ -2,19 +2,19 @@
 
 Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
-Active-Plan: P-014
-Active-Segment: continuity/C0010.md
-Active-Intervention: P014_CAPABILITY_FABRIC — TECHNICAL_OBJECTIVE_SATISFIED / MAIN_INTEGRATION_PENDING
+Active-Plan: P-015
+Active-Segment: continuity/C0011.md
+Active-Intervention: P015_MCP_RUNTIME — AUDIT_OPEN / SOURCE_UNMODIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p014-capability-fabric
+Current-Host-Branch: abos/p015-mcp-runtime
 Host-Head-At-Audit-Open: fe845184fce48c65032f8521ecd0bdfa42e04b77
-Last-Reconciled-Host-Head: 267d6dda8a845fbc38ef07e302a6a81f77bda822
-Last-Reconciled-Head-Semantics: P014_TECHNICAL_OBJECTIVE_SATISFIED_MAIN_INTEGRATION_PENDING
+Last-Reconciled-Host-Head: bf9adfd11617a37698ce7095248c1e1228f0d3cf
+Last-Reconciled-Head-Semantics: P014_HECHO_MAIN_E3_GREEN_P015_AUDIT_OPEN_SOURCE_UNMODIFIED
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -168,11 +168,27 @@ P014-Contract-Exact-Gate-Head: 267d6dda8a845fbc38ef07e302a6a81f77bda822
 P014-Contract-Exact-Gate-CI: 35415290448 SUCCESS
 P014-Contract-Exact-Gate-ProjectOps: 35415290455 SUCCESS
 P014-Contract-Unit-State: INTEGRATION_VERIFIED / E3_BRANCH_GREEN
-P014-Technical-State: TECHNICAL_OBJECTIVE_SATISFIED / MAIN_INTEGRATION_PENDING
+P014-Technical-State: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED
+P014-Final-Branch-Head: fdc2c28158228fe8ee1adf7ae550248a414a7e93
+P014-Final-Branch-CI: 35415606564 SUCCESS
+P014-Final-Branch-ProjectOps: 35415606578 SUCCESS
+P014-PR: 44
+P014-PR-CI: 35417732593 SUCCESS
+P014-PR-ProjectOps: 35417732574 SUCCESS
+P014-Merge: bf9adfd11617a37698ce7095248c1e1228f0d3cf
+P014-Main-CI: 35417887204 SUCCESS
+P014-Main-ProjectOps: 35417887215 SUCCESS
+P014-Canonical-State: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED
+P015-Activation-Branch: abos/p015-mcp-runtime
+P015-Canonical-Baseline: bf9adfd11617a37698ce7095248c1e1228f0d3cf
+P015-Baseline-CI: 35417887204 SUCCESS
+P015-Baseline-ProjectOps: 35417887215 SUCCESS
+P015-Decision-State: AUDIT_OPEN
+P015-Source-State: SOURCE_UNMODIFIED
 
 ## Semántica del HEAD reconciliado
 
-`Last-Reconciled-Host-Head` es `435df303be2fe5e7ae72fd24edb4374c68d9ce89`: la primera unidad P-014 ya tiene lifecycle durable v19 y gate ordinario exact-head `d1ada43674ebcd45a29773d9257352a2e8dbac38` con CI `35413377040` + ProjectOps `35413376990` SUCCESS. La segunda auditoría falsificó NO_CHANGE, RESOLVER_ONLY y un rewrite del Fabric; la siguiente unidad autorizada es contract hardening sobre el mismo CapabilityRegistry, preservando ownership P-017/P-018.
+`Last-Reconciled-Host-Head` es `bf9adfd11617a37698ce7095248c1e1228f0d3cf`: P-014 está integrado por PR #44 y revalidado en `main` por CI `35417887204` + ProjectOps `35417887215` SUCCESS. P-015 se activa únicamente para auditoría en `abos/p015-mcp-runtime`; product source permanece sin modificar y no existe todavía decisión de implementación MCP.
 
 P-009 permanece HECHO únicamente para su objetivo exacto: authority/provenance/trust boundaries. No eleva Social inbound a autenticación criptográfica LIVE; `relay_asserted` sigue siendo el máximo claim demostrado en esa frontera.
 
@@ -301,18 +317,19 @@ Pendiente exacto antes de HECHO completo: squash/integración en `main` + revali
 
 - GitHub connector + GitHub Actions: DISPONIBLE / AUTORIZADO.
 - CI/E3 no acredita LIVE/E5/E6.
-- P-014 source/branch technical DoD: SATISFECHO / INTEGRATION_VERIFIED_EN_RAMA.
-- P-014 todavía no es HECHO porque el producto no está integrado/revalidado en `main`.
-- P-015/P-017/P-018 permanecen fuera de scope hasta transición canónica; no existe bloqueo externo para integrar P-014.
+- P-014: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
+- P-015: EN_EJECUCIÓN / AUDIT_OPEN / SOURCE_UNMODIFIED.
+- MCP spec/SDK vigente aún debe verificarse contra fuentes oficiales antes de DECISION_READY.
+- P-016/P-017/P-018 permanecen fuera de scope de esta intervención.
 
 ## Siguiente punto verificable
 
-1. Gatear el final branch head reconciliado.
-2. Abrir PR P-014 contra `main a8d22778b4cd6f1641efe4bc586711915cd06609`.
-3. Verificar exact-head, mergeability y cualquier review/thread material.
-4. Squash-merge y revalidar el `main` resultante con CI + ProjectOps.
-5. Sólo después cerrar P-014 como HECHO y activar P-015 en una transición canónica separada/gateada.
+1. Gatear esta transición ProjectOps sobre `abos/p015-mcp-runtime`.
+2. Integrarla canónicamente y revalidar `main`.
+3. Reconstruir la implementación MCP actual desde source/tests/history y sus producers/consumers.
+4. Verificar especificación/SDK MCP oficial vigente y compatibilidad con Node 22/24.
+5. Registrar hipótesis competidoras y alcanzar `DECISION_READY` antes de modificar product source.
 
 ## Política de rotación
 
-`C0006` queda CLOSED / HECHO como historia P-010. `C0007` queda CLOSED / HECHO como historia P-011. `C0008` queda CLOSED / HECHO como historia P-012. `C0009` queda CLOSED / HECHO como historia P-013. `C0010` continúa activo para P-014 hasta integración y cierre canónico. Nunca se crea un segundo manifest `CONTINUITY.md`.
+`C0006` queda CLOSED / HECHO como historia P-010. `C0007` queda CLOSED / HECHO como historia P-011. `C0008` queda CLOSED / HECHO como historia P-012. `C0009` queda CLOSED / HECHO como historia P-013. `C0010` queda CLOSED / HECHO como historia P-014. `C0011` queda ACTIVE para P-015.  Nunca se crea un segundo manifest `CONTINUITY.md`.
