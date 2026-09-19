@@ -23,8 +23,8 @@ Master-Transformation-Plan: P-007
 | P-011 | Hacer reales Lifecycle, Health, Restart y Recovery | HECHO | integrado por PR #38; cierre documental PR #39; baseline P-012 `main 1f1e93f4...` revalidado | plan/P-011.md |
 | P-012 | Convertir self-modification en transacción segura y recuperable | HECHO | source/integration P-012 + evidencia P-013 cerradas; transición canónica respaldada por main `21911888b8271662f1b546bc637f49d76610c132` CI `35410063228` + ProjectOps `35410063240` | plan/P-012.md |
 | P-013 | Unificar Observability, Audit y Evidence Fabric | HECHO | P-008 + P-009; producto PR #41 + cierre PR #42 integrados; main `21911888b8271662f1b546bc637f49d76610c132` CI `35410063228` + ProjectOps `35410063240` green | plan/P-013.md |
-| P-014 | Consolidar Capability Fabric canónico y lifecycle de capacidades | EN_EJECUCIÓN | technical DoD satisfecho; branch exact product gate `267d6dda8a845fbc38ef07e302a6a81f77bda822` CI `35415290448` + ProjectOps `35415290455` SUCCESS; integración/revalidación main pendiente | plan/P-014.md |
-| P-015 | Sustituir MCP nominal por un runtime MCP real y verificable | PLANIFICADO | P-014 + P-009 + P-010 + P-013 | plan/P-015.md |
+| P-014 | Consolidar Capability Fabric canónico y lifecycle de capacidades | HECHO | PR #44 integrado; `main bf9adfd11617a37698ce7095248c1e1228f0d3cf` revalidado por CI `35417887204` + ProjectOps `35417887215` SUCCESS | plan/P-014.md |
+| P-015 | Sustituir MCP nominal por un runtime MCP real y verificable | EN_EJECUCIÓN | P-014 + P-009 + P-010 + P-013 HECHOS; baseline `main bf9adfd11617a37698ce7095248c1e1228f0d3cf` E3 green; AUDIT_OPEN / SOURCE_UNMODIFIED | plan/P-015.md |
 | P-016 | Dar a ABOS manos de computadora, browser y GUI mediante providers reales | PLANIFICADO | P-014 + P-009 + P-010 + P-011 + P-013 | plan/P-016.md |
 | P-017 | Implementar discovery, acquisition, composition y construction de capacidades | PLANIFICADO | P-012 + P-014 + P-015 + P-016 + P-013 | plan/P-017.md |
 | P-018 | Reconciliar Environment y Resource Fabric provider-neutral | PLANIFICADO | P-009 + P-010 + P-011 + P-013 + P-014 | plan/P-018.md |
@@ -225,13 +225,11 @@ P-004 puede corregir drift puntual antes, pero su cierre final ocurre después d
 
 P-005 es un track incremental: Codex OAuth real, AWS billable, MCP/provider externo, economic/child/resource claims y futuras fronteras que requieran E5/E6. No toda capability local requiere E5: una computer/browser E4 realista puede cerrar integración local. Si falta autorización/credencial/dinero, registrar `LIVE_BLOCKED_EXTERNAL` y continuar source.
 
-## 16. Ola 0 cerrada; P-012 activo
+## 16. Estado actual — P-015 activo
 
-P-006 y P-003 están HECHO e integrados con revalidación de `main`. P-007 permanece HECHO únicamente como planificación maestra. P-008 Runtime Truth está HECHO e integrado/revalidado. P-009 Authority/Provenance está HECHO e integrado por PR #35. P-010 Policy/Authorization/Approval/Quarantine está HECHO e integrado. P-011 Lifecycle/Health/Restart/Recovery está HECHO, integrado por PR #38 y cerrado documentalmente por PR #39. El baseline canónico P-012 es `main 1f1e93f48c95265dba52b6a99a900bde6cdcb27c`, revalidado por CI `34916918807` y ProjectOps `34916918658` SUCCESS.
+P-008 a P-014 están HECHO para sus objetivos exactos e integrados/revalidados. P-014 Capability Fabric cerró por PR #44; `main bf9adfd11617a37698ce7095248c1e1228f0d3cf` pasó CI `35417887204` y ProjectOps `35417887215` SUCCESS.
 
-P-010 cerró una revisión adversarial material: creator-signed authorization sigue siendo una capability válida para fronteras reales, pero no es diseño general de gasto autónomo por threshold. La frontera integrada preserva una ruta explícita/auditable para autonomía económica futura sin hidden auto-spend.
-
-P-012 ya implementó y branch-gateó su source transaccional final: journal/lease SQLite v17, candidate Git worktree aislado, verification previa, candidate commit exacto, activation compare-and-swap, post-probe/rollback/recovery causal y convergencia de edit/revert/reset/pull/write-to-runtime. La reauditoría final separó direct-write protection de verdadera immutability: código crítico y dependencias pueden evolucionar en candidate verificado, `edit_own_file` soporta cambios multiarchivo atómicos y se retiró el threshold arbitrario de 100 KB además de `10/hour`/`20/hour` como falsas safety authorities. Source limpio `84399f491856ca8a6195bbb8c08940ab8201f5d8`; exact-head con el mismo tree `991650ce5deb7e170a99647bf5246982bc7cd37a`: CI `34925701691` + ProjectOps `34925701696` SUCCESS. Todavía no es `HECHO`: falta integración/revalidación de `main` y evidence/correlation P-013 exigida por su Definition of Done.
+P-015 queda `EN_EJECUCIÓN / AUDIT_OPEN / SOURCE_UNMODIFIED` en `abos/p015-mcp-runtime`. La primera unidad no está decidida todavía: debe auditar la implementación MCP existente y contrastarla con la especificación/SDK oficial vigente antes de `DECISION_READY`. No se adelantan P-016/P-017/P-018 ni se interpreta source/CI como MCP LIVE.
 
 ## 17. Cierre de campaña
 
@@ -239,4 +237,4 @@ P-036 no significa “todo el universo futuro de ABOS está terminado”. Signif
 
 ## 18. Siguiente trabajo recuperable
 
-`P-012 — gatear documentación, integrar por squash y revalidar main; después activar P-013 evidence/correlation antes del cierre completo P-012`.
+`P-015 — reconstruir el runtime MCP actual desde source/evidencia, verificar protocolo/SDK oficial vigente, discriminar alternativas y alcanzar DECISION_READY antes de modificar producto.`
