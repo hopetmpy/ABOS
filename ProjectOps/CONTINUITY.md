@@ -4,7 +4,7 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-015
 Active-Segment: continuity/C0011.md
-Active-Intervention: P015_MCP_RUNTIME — AUDIT_OPEN / SOURCE_UNMODIFIED
+Active-Intervention: P015_MCP_RUNTIME — DECISION_READY / SOURCE_UNMODIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -13,8 +13,8 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p015-mcp-runtime
 Host-Head-At-Audit-Open: fe845184fce48c65032f8521ecd0bdfa42e04b77
-Last-Reconciled-Host-Head: bf9adfd11617a37698ce7095248c1e1228f0d3cf
-Last-Reconciled-Head-Semantics: P014_HECHO_MAIN_E3_GREEN_P015_AUDIT_OPEN_SOURCE_UNMODIFIED
+Last-Reconciled-Host-Head: 622087e9e007c2922020ebd98bee14618f843d14
+Last-Reconciled-Head-Semantics: P015_DECISION_READY_SOURCE_UNMODIFIED_OFFICIAL_SDK_V2
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -180,15 +180,23 @@ P014-Main-CI: 35417887204 SUCCESS
 P014-Main-ProjectOps: 35417887215 SUCCESS
 P014-Canonical-State: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED
 P015-Activation-Branch: abos/p015-mcp-runtime
-P015-Canonical-Baseline: bf9adfd11617a37698ce7095248c1e1228f0d3cf
-P015-Baseline-CI: 35417887204 SUCCESS
-P015-Baseline-ProjectOps: 35417887215 SUCCESS
-P015-Decision-State: AUDIT_OPEN
+P015-Canonical-Baseline: 87e256a93a655b1ccce000cd2de3896a8f3f74b5
+P015-Baseline-CI: 35418524268 SUCCESS
+P015-Baseline-ProjectOps: 35418524330 SUCCESS
+P015-Decision-State: DECISION_READY
 P015-Source-State: SOURCE_UNMODIFIED
+P015-Transition-Merge: 87e256a93a655b1ccce000cd2de3896a8f3f74b5
+P015-Transition-Main-CI: 35418524268 SUCCESS
+P015-Transition-Main-ProjectOps: 35418524330 SUCCESS
+P015-Ancestry-Reconciled-Head: 622087e9e007c2922020ebd98bee14618f843d14
+P015-Ancestry-Reconciled-CI: 35418659669 SUCCESS
+P015-Ancestry-Reconciled-ProjectOps: 35418659610 SUCCESS
+P015-Protocol-Revision-Observed: 2026-07-28
+P015-SDK-Decision: OFFICIAL_TYPESCRIPT_SDK_V2 / DEDICATED_ADAPTER / EXISTING_AUTHORITIES
 
 ## Semántica del HEAD reconciliado
 
-`Last-Reconciled-Host-Head` es `bf9adfd11617a37698ce7095248c1e1228f0d3cf`: P-014 está integrado por PR #44 y revalidado en `main` por CI `35417887204` + ProjectOps `35417887215` SUCCESS. P-015 se activa únicamente para auditoría en `abos/p015-mcp-runtime`; product source permanece sin modificar y no existe todavía decisión de implementación MCP.
+`Last-Reconciled-Host-Head` es `622087e9e007c2922020ebd98bee14618f843d14`: la rama P-015 incorpora el `main 87e256a93a655b1ccce000cd2de3896a8f3f74b5` canónico como segundo padre sin cambiar el tree, y pasó CI `35418659669` + ProjectOps `35418659610` SUCCESS. La auditoría source + protocolo/SDK oficial vigente alcanzó `DECISION_READY`; product source P-015 continúa sin modificar.
 
 P-009 permanece HECHO únicamente para su objetivo exacto: authority/provenance/trust boundaries. No eleva Social inbound a autenticación criptográfica LIVE; `relay_asserted` sigue siendo el máximo claim demostrado en esa frontera.
 
@@ -318,17 +326,16 @@ Pendiente exacto antes de HECHO completo: squash/integración en `main` + revali
 - GitHub connector + GitHub Actions: DISPONIBLE / AUTORIZADO.
 - CI/E3 no acredita LIVE/E5/E6.
 - P-014: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
-- P-015: EN_EJECUCIÓN / AUDIT_OPEN / SOURCE_UNMODIFIED.
-- MCP spec/SDK vigente aún debe verificarse contra fuentes oficiales antes de DECISION_READY.
+- P-015: EN_EJECUCIÓN / DECISION_READY / SOURCE_UNMODIFIED.
+- MCP spec/SDK oficial vigente ya fue verificado; la decisión usa SDK TypeScript v2 y no un protocolo manual.
 - P-016/P-017/P-018 permanecen fuera de scope de esta intervención.
 
 ## Siguiente punto verificable
 
-1. Gatear esta transición ProjectOps sobre `abos/p015-mcp-runtime`.
-2. Integrarla canónicamente y revalidar `main`.
-3. Reconstruir la implementación MCP actual desde source/tests/history y sus producers/consumers.
-4. Verificar especificación/SDK MCP oficial vigente y compatibilidad con Node 22/24.
-5. Registrar hipótesis competidoras y alcanzar `DECISION_READY` antes de modificar product source.
+1. Gatear esta reconciliación `DECISION_READY` sobre `abos/p015-mcp-runtime`.
+2. Implementar únicamente la primera unidad P-015: inventory adapter + SDK client core + stdio discovery/call + bridge Policy/Capability/Evidence, sin absorber HTTP/auth avanzado ni P-017.
+3. Ejecutar fake deterministic MCP protocol tests, targeted regressions, typecheck, build, full/security, ProjectOps y diff integrity.
+4. Producir clean source head y gate ordinario exact-head antes de ampliar a Streamable HTTP/auth/reconnect.
 
 ## Política de rotación
 
