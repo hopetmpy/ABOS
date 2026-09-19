@@ -90,6 +90,7 @@ import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import { isIdleOnlyTool } from "./idle-only-tools.js";
 import { CapabilityRegistry } from "../capabilities/registry.js";
 import { CapabilityStore } from "../capabilities/store.js";
+import { discoverConfiguredMcpTools } from "../mcp/runtime.js";
 import { createCapabilityTools } from "../capabilities/tools.js";
 import { EnvironmentRegistry } from "../environments/registry.js";
 import { LocalEnvironmentProvider } from "../environments/local.js";
@@ -358,6 +359,16 @@ export async function runAgentLoop(
     capabilityRegistry.registerEnvironmentSnapshot(snapshot);
   }
 
+  const mcpTools = await discoverConfiguredMcpTools({
+    db,
+    capabilityRegistry,
+    reservedToolNames: [
+      ...builtinTools,
+      ...installedTools,
+      ...environmentTools,
+    ].map((tool) => tool.name),
+  });
+
   const capabilityTools = createCapabilityTools(
     capabilityRegistry,
     environmentRegistry,
@@ -367,6 +378,7 @@ export async function runAgentLoop(
     ...builtinTools,
     ...installedTools,
     ...environmentTools,
+    ...mcpTools,
     ...capabilityTools,
   ];
 

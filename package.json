@@ -53,6 +53,7 @@
     "test:diagnose": "vitest run --reporter=default --reporter=hanging-process"
   },
   "dependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
     "@solana/web3.js": "^1.98.0",
     "@types/better-sqlite3": "^7.6.0",
     "better-sqlite3": "^12.11.1",
@@ -71,10 +72,12 @@
     "yaml": "^2.4.0"
   },
   "devDependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
     "@types/node": "^20.10.0",
     "tsx": "^4.7.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "zod": "^4.6.5"
   },
   "engines": {
     "node": ">=22 <23 || >=24 <25"

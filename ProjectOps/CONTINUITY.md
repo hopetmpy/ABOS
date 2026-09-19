@@ -4,7 +4,7 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-015
 Active-Segment: continuity/C0011.md
-Active-Intervention: P015_MCP_RUNTIME — AUDIT_OPEN / SOURCE_UNMODIFIED
+Active-Intervention: P015_MCP_RUNTIME — TECHNICAL_CLOSURE / E3_BRANCH_GREEN / INTEGRATION_PENDING
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -13,8 +13,8 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p015-mcp-runtime
 Host-Head-At-Audit-Open: fe845184fce48c65032f8521ecd0bdfa42e04b77
-Last-Reconciled-Host-Head: bf9adfd11617a37698ce7095248c1e1228f0d3cf
-Last-Reconciled-Head-Semantics: P014_HECHO_MAIN_E3_GREEN_P015_AUDIT_OPEN_SOURCE_UNMODIFIED
+Last-Reconciled-Host-Head: 622087e9e007c2922020ebd98bee14618f843d14
+Last-Reconciled-Head-Semantics: P015_DECISION_READY_SOURCE_UNMODIFIED_OFFICIAL_SDK_V2
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -180,15 +180,32 @@ P014-Main-CI: 35417887204 SUCCESS
 P014-Main-ProjectOps: 35417887215 SUCCESS
 P014-Canonical-State: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED
 P015-Activation-Branch: abos/p015-mcp-runtime
-P015-Canonical-Baseline: bf9adfd11617a37698ce7095248c1e1228f0d3cf
-P015-Baseline-CI: 35417887204 SUCCESS
-P015-Baseline-ProjectOps: 35417887215 SUCCESS
-P015-Decision-State: AUDIT_OPEN
-P015-Source-State: SOURCE_UNMODIFIED
+P015-Canonical-Baseline: 87e256a93a655b1ccce000cd2de3896a8f3f74b5
+P015-Baseline-CI: 35418524268 SUCCESS
+P015-Baseline-ProjectOps: 35418524330 SUCCESS
+P015-Decision-State: DECISION_READY
+P015-Decision-Gate-Head: 60f460efca0dea5d7d90bd5239813ffdc4e8792e
+P015-Decision-Gate-CI: 35419517700 SUCCESS
+P015-Decision-Gate-ProjectOps: 35419517699 SUCCESS
+P015-Unit: MCP_LIFECYCLE_HARDENING
+P015-MCP-Core-Source-Head: 2aa5bdea715f395f8a9db332e89c01fcbcb224f1
+P015-MCP-Core-Exact-Gate-Head: a5365fe1e721464c442ff92d7db93cc81d2af203
+P015-MCP-Core-CI: 35420000569 SUCCESS / 8_OF_8
+P015-MCP-Core-ProjectOps: 35420000480 SUCCESS
+P015-MCP-Core-State: INTEGRATION_VERIFIED / E3_BRANCH_GREEN
+P015-Source-State: MCP_LIFECYCLE_HARDENING_E3_GREEN / MCP_STREAMABLE_HTTP_AUTH_AUDIT_OPEN
+P015-Transition-Merge: 87e256a93a655b1ccce000cd2de3896a8f3f74b5
+P015-Transition-Main-CI: 35418524268 SUCCESS
+P015-Transition-Main-ProjectOps: 35418524330 SUCCESS
+P015-Ancestry-Reconciled-Head: 622087e9e007c2922020ebd98bee14618f843d14
+P015-Ancestry-Reconciled-CI: 35418659669 SUCCESS
+P015-Ancestry-Reconciled-ProjectOps: 35418659610 SUCCESS
+P015-Protocol-Revision-Observed: 2026-07-28
+P015-SDK-Decision: OFFICIAL_TYPESCRIPT_SDK_V2 / DEDICATED_ADAPTER / EXISTING_AUTHORITIES
 
 ## Semántica del HEAD reconciliado
 
-`Last-Reconciled-Host-Head` es `bf9adfd11617a37698ce7095248c1e1228f0d3cf`: P-014 está integrado por PR #44 y revalidado en `main` por CI `35417887204` + ProjectOps `35417887215` SUCCESS. P-015 se activa únicamente para auditoría en `abos/p015-mcp-runtime`; product source permanece sin modificar y no existe todavía decisión de implementación MCP.
+`Last-Reconciled-Host-Head` es `622087e9e007c2922020ebd98bee14618f843d14`: la rama P-015 incorpora el `main 87e256a93a655b1ccce000cd2de3896a8f3f74b5` canónico como segundo padre sin cambiar el tree, y pasó CI `35418659669` + ProjectOps `35418659610` SUCCESS. La auditoría source + protocolo/SDK oficial vigente alcanzó `DECISION_READY`; product source P-015 continúa sin modificar.
 
 P-009 permanece HECHO únicamente para su objetivo exacto: authority/provenance/trust boundaries. No eleva Social inbound a autenticación criptográfica LIVE; `relay_asserted` sigue siendo el máximo claim demostrado en esa frontera.
 
@@ -318,18 +335,82 @@ Pendiente exacto antes de HECHO completo: squash/integración en `main` + revali
 - GitHub connector + GitHub Actions: DISPONIBLE / AUTORIZADO.
 - CI/E3 no acredita LIVE/E5/E6.
 - P-014: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
-- P-015: EN_EJECUCIÓN / AUDIT_OPEN / SOURCE_UNMODIFIED.
-- MCP spec/SDK vigente aún debe verificarse contra fuentes oficiales antes de DECISION_READY.
+- P-015: EN_EJECUCIÓN / DECISION_READY / SOURCE_UNMODIFIED.
+- MCP spec/SDK oficial vigente ya fue verificado; la decisión usa SDK TypeScript v2 y no un protocolo manual.
 - P-016/P-017/P-018 permanecen fuera de scope de esta intervención.
 
 ## Siguiente punto verificable
 
-1. Gatear esta transición ProjectOps sobre `abos/p015-mcp-runtime`.
-2. Integrarla canónicamente y revalidar `main`.
-3. Reconstruir la implementación MCP actual desde source/tests/history y sus producers/consumers.
-4. Verificar especificación/SDK MCP oficial vigente y compatibilidad con Node 22/24.
-5. Registrar hipótesis competidoras y alcanzar `DECISION_READY` antes de modificar product source.
+1. Gatear esta reconciliación `DECISION_READY` sobre `abos/p015-mcp-runtime`.
+2. Implementar únicamente la primera unidad P-015: inventory adapter + SDK client core + stdio discovery/call + bridge Policy/Capability/Evidence, sin absorber HTTP/auth avanzado ni P-017.
+3. Ejecutar fake deterministic MCP protocol tests, targeted regressions, typecheck, build, full/security, ProjectOps y diff integrity.
+4. Producir clean source head y gate ordinario exact-head antes de ampliar a Streamable HTTP/auth/reconnect.
 
 ## Política de rotación
 
 `C0006` queda CLOSED / HECHO como historia P-010. `C0007` queda CLOSED / HECHO como historia P-011. `C0008` queda CLOSED / HECHO como historia P-012. `C0009` queda CLOSED / HECHO como historia P-013. `C0010` queda CLOSED / HECHO como historia P-014. `C0011` queda ACTIVE para P-015.  Nunca se crea un segundo manifest `CONTINUITY.md`.
+
+
+## P-015 — MCP_CORE_STDIO gate y siguiente frontera
+
+`MCP_CORE_STDIO` quedó validado en exact-head `a5365fe1e721464c442ff92d7db93cc81d2af203`: CI `35420000569` 8/8 SUCCESS y ProjectOps `35420000480` SUCCESS. El source limpio de la unidad es `2aa5bdea715f395f8a9db332e89c01fcbcb224f1`.
+
+La auditoría posterior al gate detectó tres defectos/enduraciones que impiden declarar P-015 HECHO y abren `MCP_LIFECYCLE_HARDENING` sin modificar source todavía:
+
+1. `removeTool()` sólo escribe `enabled=0`, pero MCP configurado ya nace `enabled=false`; por tanto un MCP removido permanece en `getToolInventory()` y sería redescubierto.
+2. Tras un `tools/list` exitoso, una tool que desaparezca del servidor deja de proyectarse al runtime, pero su capability persistida puede conservar estado histórico verificado; debe reconciliarse a `retired`/no-ejecutable sólo cuando una observación actual pruebe la ausencia.
+3. La sanitización de schema remoto cubre superficies descriptivas, pero todavía debe endurecerse la frontera de identificadores/keys no confiables sin corromper semántica válida de JSON Schema.
+
+Siguiente punto verificable: implementar y validar `MCP_LIFECYCLE_HARDENING` reutilizando las authorities existentes; no avanzar aún a HTTP/auth ni integrar P-015 a `main`.
+
+
+## P-015 — MCP_LIFECYCLE_HARDENING source aplicado
+
+La unidad implementa retiro MCP durable mediante `runtimeTruth=retired`, evita reconectar inventario retirado, retira capabilities sólo cuando un `tools/list` actual exitoso demuestra ausencia, y rechaza identifiers/keys de schema con delimitadores de prompt/control sin mutar valores semánticos `enum/default/pattern`. Estado: IMPLEMENTED / VALIDATION_PENDING; no acredita HTTP/auth ni cierre de P-015.
+
+
+## P-015 — MCP_LIFECYCLE_HARDENING cerrado; HTTP/auth en auditoría
+
+`MCP_LIFECYCLE_HARDENING` quedó validado en clean source `c111ceb8ddaaae3b55757c36d17a8ab5825a7750` y exact gate `31c524452caf5a702f91f85a5c684dcb0a8544fb`: CI `35421011822` 8/8 SUCCESS y ProjectOps `35421011820` SUCCESS.
+
+La siguiente frontera se abre sólo como auditoría: `MCP_STREAMABLE_HTTP_AUTH`. Product source permanece sin cambios desde el hardening gate mientras se reconstruyen endpoint trust, credential authority, auth flows, reconnect/session semantics y failure matrix vigentes.
+
+
+## P-015 — MCP_STREAMABLE_HTTP_BEARER — DECISION_READY
+
+Gate de auditoría: `570a89ff1eb6b733a6786d5d9b31e114b6db7b05`; CI `35421221717` SUCCESS 8/8; ProjectOps `35421221723` SUCCESS.
+
+La auditoría oficial vigente confirmó `StreamableHTTPClientTransport` y `AuthProvider` en `@modelcontextprotocol/client@2.0.0`. Decisión: **EXTEND_EXISTING_MCP_ADAPTER / EXTEND_INSTALL_MCP_SERVER / STREAMABLE_HTTP / ENV_BEARER_AUTH / HTTPS_REMOTE_LOOPBACK_HTTP_ONLY / NO_SIDE_EFFECT_RETRY**.
+
+Falsadas: `NO_CHANGE`, runtime HTTP paralelo, reutilizar `ResilientHttpClient` completo y persistir bearer/OAuth tokens en `installed_tools`. El token no se persiste: sólo se guarda `tokenEnv` y el valor se resuelve en runtime. OAuth interactivo queda explícitamente no implementado en esta unidad porque ABOS no tiene una authority genérica de credenciales/callback MCP; no se declara HECHO ni se simula.
+
+Siguiente punto verificable: implementar Streamable HTTP + bearer referenciado por entorno, negative auth, URL trust, reconnect por nueva conexión y timeout/outcome-unknown; exact-head gates antes de decidir el siguiente remanente P-015.
+
+
+## P-015 — MCP_STREAMABLE_HTTP_BEARER — source implementado
+
+Pre-source exact gate: `f86ba6efa607ae5aed99e3669bd170db1bdc5662`; CI `35421748654` SUCCESS 8/8; ProjectOps `35421748651` SUCCESS.
+
+Implementación: el adapter MCP existente soporta `streamable-http` oficial, bearer por referencia `tokenEnv`, URL trust HTTPS/loopback, clasificación auth 401/403, conexión fresca por invocación y timeout de call con outcome UNKNOWN sin blind retry. `install_mcp_server` fue extendido; HTTP remoto no instala npm ni persiste bearer tokens. OAuth interactivo permanece fuera de esta unidad.
+
+Estado: `IMPLEMENTED / VALIDATION_PENDING_EXACT_HEAD`. Los tests del aplicador deben pasar antes del clean source commit; CI y ProjectOps ordinarios del exact-head siguen siendo obligatorios para E3.
+
+
+## P-015 — MCP_STREAMABLE_HTTP_BEARER — E3 branch green
+
+- clean source: `52436f6550cfbced06a6b7f049a1717155f75968`;
+- exact same-tree gate: `d1e23d9f142d73305f0abbfaea5cff38b8da3608`;
+- custom material validation `35422841692`: SUCCESS — targeted MCP 3 files / 14 tests, typecheck, build, full suite 135 files / 2036 tests, security-focused 25 files / 161 tests, ProjectOps y diff integrity;
+- ordinary CI `35422987928`: SUCCESS, 8/8 jobs incluyendo Node 22/24, Windows 22/24, public distribution 22/24, dependency audit y rebrand;
+- ordinary ProjectOps `35422987933`: SUCCESS;
+- clasificación: `INTEGRATION_VERIFIED / E3_BRANCH_GREEN`.
+
+### P-015 — auditoría final de remanentes
+
+El objetivo técnico de P-015 queda satisfecho en rama: stdio real, Streamable HTTP real, discovery/call bajo Policy, lifecycle/evidence en Capability Fabric, output/schema boundary, retiro/list-shrink, negative auth, timeout/outcome UNKNOWN y reconexión fresca. El runtime descubre MCP al iniciar y cada call reabre conexión + revalida `tools/list`/contract antes del efecto; por ello no depende de una conexión persistente ni de notifications para evitar ejecutar un contrato obsoleto.
+
+OAuth interactivo queda **DEFERRED_BY_OWNERSHIP / NO_CHANGE_P015**. El SDK v2 exige `OAuthClientProvider`, PKCE/verifier, discovery state, tokens persistentes ligados al issuer, callback `state/iss` y reconnect fresco. ABOS ya declara `connection/auth method` como concern separado en `src/ai-connections/`; P-019 posee el model/connection fabric y ya modela OAuth mediante adapters (Codex). Crear dentro de MCP una segunda credential/session authority violaría one-authority-per-concern. P-015 conserva el boundary honesto `UNAUTHORIZED`/unavailable para MCP OAuth hasta que una authority reutilizable de P-019 exista; no persiste secretos en `installed_tools`.
+
+La aceptación contra un servidor MCP externo con cuenta/credencial real pertenece a P-005 cuando exista endpoint/autorización. E3 no se eleva a E5/LIVE por CI.
+
+Estado técnico P-015: `HECHO_SOURCE / E3_BRANCH_GREEN / INTEGRATION_PENDING`. Siguiente paso: integrar la rama exacta en `main`, revalidar `main` y sólo entonces marcar P-015 canónicamente HECHO y activar P-016.
