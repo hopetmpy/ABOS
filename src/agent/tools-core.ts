@@ -1074,66 +1074,128 @@ Model: ${ctx.inference.getDefaultModel()}
       },
     },
 
-    // ── Self-Mod: Install MCP Server ──
-    {
-      name: "install_mcp_server",
-      description: "Install an MCP server package and persist configuration. Runtime execution remains unverified until a real MCP adapter verifies handshake, tool discovery, and calls.",
-      category: "self_mod",
-      riskLevel: "dangerous",
-      parameters: {
-        type: "object",
-        properties: {
-          name: { type: "string", description: "MCP server name" },
-          package: { type: "string", description: "npm package name" },
-          config: {
-            type: "string",
-            description: "JSON config for the MCP server",
-          },
-        },
-        required: ["name", "package"],
+// ── Self-Mod: Install MCP Server ──
+{
+  name: "install_mcp_server",
+  description:
+    "Configure an MCP server. stdio servers may install an npm package; Streamable HTTP servers persist only endpoint metadata and optional tokenEnv, never the bearer token itself.",
+  category: "self_mod",
+  riskLevel: "dangerous",
+  parameters: {
+    type: "object",
+    properties: {
+      name: { type: "string", description: "MCP server name" },
+      package: {
+        type: "string",
+        description: "npm package name for stdio MCP servers (not used for Streamable HTTP)",
       },
-      execute: async (args, ctx) => {
-        const pkg = args.package as string;
-        // Defense-in-depth: validate package name inline in case the
-        // policy engine's validate.package_name rule is bypassed.
-        if (!/^[@a-zA-Z0-9._\/-]+$/.test(pkg)) {
-          return `Blocked: invalid package name "${pkg}"`;
-        }
-        const result = await ctx.conway.exec(`npm install -g ${pkg}`, 60000);
-
-        if (result.exitCode !== 0) {
-          return `Failed to install MCP server: ${result.stderr}`;
-        }
-
-        const { ulid } = await import("ulid");
-        const toolEntry = {
-          id: ulid(),
-          name: args.name as string,
-          type: "mcp" as const,
-          config: {
-            ...(args.config ? JSON.parse(args.config as string) : {}),
-            package: pkg,
-            runtimeTruth: "configured_unverified",
-          },
-          installedAt: new Date().toISOString(),
-          // `enabled` is the legacy runtime-loading gate. Configuration alone
-          // is not proof of a usable MCP protocol runtime.
-          enabled: false,
-        };
-
-        ctx.db.installTool(toolEntry);
-
-        ctx.db.insertModification({
-          id: ulid(),
-          timestamp: new Date().toISOString(),
-          type: "mcp_install",
-          description: `Configured MCP server inventory (runtime unverified): ${args.name} (${pkg})`,
-          reversible: true,
-        });
-
-        return `MCP server package installed and configuration saved: ${args.name}. Runtime execution is UNVERIFIED and remains disabled until a verified MCP adapter is available.`;
+      config: {
+        type: "string",
+        description:
+          "JSON MCP config. Use transport=streamable-http, url, optional tokenEnv/callTimeoutMs for remote HTTP; never include raw credentials.",
       },
     },
+    required: ["name"],
+  },
+  execute: async (args, ctx) => {
+    let parsedConfig: Record<string, unknown> = {};
+    if (args.config !== undefined) {
+      try {
+        const parsed = JSON.parse(args.config as string) as unknown;
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          return "Blocked: MCP config must be a JSON object.";
+        }
+        parsedConfig = parsed as Record<string, unknown>;
+      } catch (error) {
+        return `Blocked: invalid MCP config JSON: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    }
+
+    const pkg = typeof args.package === "string" ? args.package.trim() : "";
+    const explicitTransport = typeof parsedConfig.transport === "string"
+      ? parsedConfig.transport.trim().toLowerCase()
+      : "";
+    const transport = explicitTransport || (pkg ? "stdio" : "");
+
+    if (transport === "streamable-http") {
+      if (pkg) {
+        return "Blocked: Streamable HTTP MCP configuration must not install an npm package.";
+      }
+      const { validateMcpHttpConfig } = await import("../mcp/runtime.js");
+      const validation = validateMcpHttpConfig(parsedConfig);
+      if ("error" in validation) {
+        return `Blocked: ${validation.error}`;
+      }
+
+      const { ulid } = await import("ulid");
+      const toolEntry = {
+        id: ulid(),
+        name: args.name as string,
+        type: "mcp" as const,
+        config: {
+          transport: "streamable-http",
+          url: validation.value.url,
+          ...(validation.value.tokenEnv ? { tokenEnv: validation.value.tokenEnv } : {}),
+          ...(validation.value.callTimeoutMs
+            ? { callTimeoutMs: validation.value.callTimeoutMs }
+            : {}),
+          runtimeTruth: "configured_unverified",
+        },
+        installedAt: new Date().toISOString(),
+        enabled: false,
+      };
+      ctx.db.installTool(toolEntry);
+      ctx.db.insertModification({
+        id: ulid(),
+        timestamp: new Date().toISOString(),
+        type: "mcp_install",
+        description: `Configured Streamable HTTP MCP inventory (runtime unverified): ${args.name}`,
+        reversible: true,
+      });
+      return `Streamable HTTP MCP configuration saved: ${args.name}. Runtime execution is UNVERIFIED; bearer credentials, when configured, are resolved only from tokenEnv at runtime.`;
+    }
+
+    if (transport !== "stdio") {
+      return "Blocked: specify an npm package for stdio or config.transport=streamable-http for a remote MCP endpoint.";
+    }
+    if (!pkg) {
+      return "Blocked: stdio MCP configuration requires an npm package.";
+    }
+    // Defense-in-depth: validate package name inline in case the
+    // policy engine's validate.package_name rule is bypassed.
+    if (!/^[@a-zA-Z0-9._\/-]+$/.test(pkg)) {
+      return `Blocked: invalid package name "${pkg}"`;
+    }
+    const result = await ctx.conway.exec(`npm install -g ${pkg}`, 60000);
+    if (result.exitCode !== 0) {
+      return `Failed to install MCP server: ${result.stderr}`;
+    }
+
+    const { ulid } = await import("ulid");
+    const toolEntry = {
+      id: ulid(),
+      name: args.name as string,
+      type: "mcp" as const,
+      config: {
+        ...parsedConfig,
+        transport: "stdio",
+        package: pkg,
+        runtimeTruth: "configured_unverified",
+      },
+      installedAt: new Date().toISOString(),
+      enabled: false,
+    };
+    ctx.db.installTool(toolEntry);
+    ctx.db.insertModification({
+      id: ulid(),
+      timestamp: new Date().toISOString(),
+      type: "mcp_install",
+      description: `Configured MCP server inventory (runtime unverified): ${args.name} (${pkg})`,
+      reversible: true,
+    });
+    return `MCP server package installed and configuration saved: ${args.name}. Runtime execution is UNVERIFIED until protocol discovery/probe succeeds.`;
+  },
+},
 
     // ── Financial: Transfer Credits ──
     {

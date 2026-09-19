@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { Client } from "@modelcontextprotocol/client";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import type {
   AbosDatabase,
@@ -34,15 +34,22 @@ interface StdioMcpConfig {
   cwd?: string;
 }
 
-interface ParsedMcpConfig {
-  kind: "stdio";
-  value: StdioMcpConfig;
+interface HttpMcpConfig {
+  url: string;
+  tokenEnv?: string;
+  callTimeoutMs?: number;
 }
+
+type ParsedMcpConfig =
+  | { kind: "stdio"; value: StdioMcpConfig }
+  | { kind: "streamable-http"; value: HttpMcpConfig };
 
 export interface DiscoverConfiguredMcpToolsOptions {
   db: AbosDatabase;
   capabilityRegistry: CapabilityRegistry;
   reservedToolNames?: Iterable<string>;
+  /** Deterministic test seam. Production leaves this undefined and uses global fetch. */
+  httpFetch?: typeof fetch;
 }
 
 class McpExternalOutcomeUnknownError extends Error {
@@ -88,11 +95,102 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseStdioConfig(entry: InstalledTool): ParsedMcpConfig | { error: string } {
+const MCP_LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+const MCP_TOKEN_ENV_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const MCP_HTTP_SECRET_KEYS = new Set([
+  "token",
+  "bearerToken",
+  "authorization",
+  "apiKey",
+  "clientSecret",
+]);
+
+function mcpTransport(entry: InstalledTool): string {
+  const value = entry.config?.transport;
+  return typeof value === "string" && value.trim()
+    ? value.trim().toLowerCase()
+    : "stdio";
+}
+
+function trustedMcpHttpUrl(rawUrl: unknown): string | { error: string } {
+  if (typeof rawUrl !== "string" || !rawUrl.trim()) {
+    return { error: "streamable-http url is not configured" };
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl.trim());
+  } catch {
+    return { error: "streamable-http url is invalid" };
+  }
+
+  if (parsed.username || parsed.password) {
+    return { error: "streamable-http url must not embed credentials" };
+  }
+
+  const protocol = parsed.protocol.toLowerCase();
+  const host = parsed.hostname.toLowerCase();
+  if (protocol !== "https:" && !(protocol === "http:" && MCP_LOOPBACK_HOSTS.has(host))) {
+    return {
+      error: "HTTPS is required for remote MCP endpoints; HTTP is allowed only on loopback",
+    };
+  }
+
+  parsed.hash = "";
+  return parsed.toString();
+}
+
+export function validateMcpHttpConfig(
+  config: Record<string, unknown>,
+): { value: HttpMcpConfig } | { error: string } {
+  for (const key of MCP_HTTP_SECRET_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(config, key)) {
+      return {
+        error: `raw MCP credential field ${key} must not be persisted; use tokenEnv`,
+      };
+    }
+  }
+
+  const trustedUrl = trustedMcpHttpUrl(config.url);
+  if (typeof trustedUrl !== "string") return trustedUrl;
+
+  const rawTokenEnv = config.tokenEnv;
+  if (rawTokenEnv !== undefined) {
+    if (typeof rawTokenEnv !== "string" || !MCP_TOKEN_ENV_RE.test(rawTokenEnv)) {
+      return { error: "tokenEnv must be a valid environment variable name" };
+    }
+  }
+
+  const rawTimeout = config.callTimeoutMs;
+  if (
+    rawTimeout !== undefined &&
+    (typeof rawTimeout !== "number" || !Number.isSafeInteger(rawTimeout) || rawTimeout <= 0)
+  ) {
+    return { error: "callTimeoutMs must be a positive integer number of milliseconds" };
+  }
+
+  return {
+    value: {
+      url: trustedUrl,
+      ...(rawTokenEnv !== undefined ? { tokenEnv: rawTokenEnv as string } : {}),
+      ...(rawTimeout !== undefined ? { callTimeoutMs: rawTimeout as number } : {}),
+    },
+  };
+}
+
+function parseMcpConfig(entry: InstalledTool): ParsedMcpConfig | { error: string } {
   const config = entry.config ?? {};
-  const transport = typeof config.transport === "string" ? config.transport.trim().toLowerCase() : "stdio";
+  const transport = mcpTransport(entry);
+
+  if (transport === "streamable-http") {
+    const parsed = validateMcpHttpConfig(config);
+    return "error" in parsed
+      ? parsed
+      : { kind: "streamable-http", value: parsed.value };
+  }
+
   if (transport !== "stdio") {
-    return { error: `transport ${transport || "<empty>"} is outside MCP_CORE_STDIO` };
+    return { error: `unsupported MCP transport: ${transport || "<empty>"}` };
   }
 
   const command = typeof config.command === "string" ? config.command.trim() : "";
@@ -126,6 +224,45 @@ function parseStdioConfig(entry: InstalledTool): ParsedMcpConfig | { error: stri
       env: rawEnv as Record<string, string> | undefined,
       cwd: rawCwd as string | undefined,
     },
+  };
+}
+
+function safeErrorText(error: unknown): string {
+  return sanitizeToolResult(error instanceof Error ? error.message : String(error), 2_000);
+}
+
+function httpStatusFromError(error: unknown): number | undefined {
+  if (!isRecord(error)) return undefined;
+  return typeof error.status === "number" ? error.status : undefined;
+}
+
+function discoveryFailure(
+  error: unknown,
+  transport: ParsedMcpConfig["kind"],
+): { reason: string; evidence: string; safeError: string } {
+  const safeError = safeErrorText(error);
+  const status = httpStatusFromError(error);
+  const name = isRecord(error) && typeof error.name === "string" ? error.name : "";
+
+  if (transport === "streamable-http" && (status === 401 || name === "UnauthorizedError")) {
+    return {
+      reason: "auth_unauthorized",
+      evidence: "The Streamable HTTP MCP endpoint rejected authentication (HTTP 401/unauthorized).",
+      safeError,
+    };
+  }
+  if (transport === "streamable-http" && status === 403) {
+    return {
+      reason: "auth_forbidden",
+      evidence: "The Streamable HTTP MCP endpoint denied access (HTTP 403/forbidden).",
+      safeError,
+    };
+  }
+
+  return {
+    reason: "connect_or_list_failed",
+    evidence: `The configured MCP server could not complete ${transport} connection and tools/list.`,
+    safeError,
   };
 }
 
@@ -234,7 +371,7 @@ function appendMcpEvidence(
     payload,
     provenance: {
       source: "mcp-runtime",
-      transport: "stdio",
+      transport: mcpTransport(entry),
       inventoryId: entry.id,
     },
   });
@@ -362,7 +499,7 @@ function serverDescriptor(
     evidence,
     metadata: {
       inventoryId: entry.id,
-      transport: "stdio",
+      transport: mcpTransport(entry),
     },
   };
 }
@@ -373,17 +510,46 @@ function toolRisk(tool: ListedMcpTool): RiskLevel {
   return tool.annotations?.destructiveHint === true ? "dangerous" : "caution";
 }
 
-async function connect(entry: InstalledTool, config: StdioMcpConfig): Promise<Client> {
+async function connect(
+  entry: InstalledTool,
+  config: ParsedMcpConfig,
+  httpFetch?: typeof fetch,
+): Promise<Client> {
   const client = new Client(CLIENT_INFO, {
     versionNegotiation: { mode: "auto" },
   });
   try {
-    const transport = new StdioClientTransport({
-      command: config.command,
-      args: config.args,
-      ...(config.env ? { env: config.env } : {}),
-      ...(config.cwd ? { cwd: config.cwd } : {}),
-    });
+    if (config.kind === "stdio") {
+      const transport = new StdioClientTransport({
+        command: config.value.command,
+        args: config.value.args,
+        ...(config.value.env ? { env: config.value.env } : {}),
+        ...(config.value.cwd ? { cwd: config.value.cwd } : {}),
+      });
+      await client.connect(transport);
+      return client;
+    }
+
+    const tokenEnv = config.value.tokenEnv;
+    const authProvider = tokenEnv
+      ? {
+          token: async (): Promise<string> => {
+            const token = process.env[tokenEnv];
+            if (!token?.trim()) {
+              throw new Error(`MCP bearer environment variable ${tokenEnv} is not set`);
+            }
+            return token.trim();
+          },
+        }
+      : undefined;
+
+    const transport = new StreamableHTTPClientTransport(
+      new URL(config.value.url),
+      {
+        ...(authProvider ? { authProvider } : {}),
+        ...(httpFetch ? { fetch: httpFetch } : {}),
+      },
+    );
     await client.connect(transport);
     return client;
   } catch (error) {
@@ -431,7 +597,8 @@ async function invokeTool(
   db: AbosDatabase,
   registry: CapabilityRegistry,
   entry: InstalledTool,
-  config: StdioMcpConfig,
+  config: ParsedMcpConfig,
+  httpFetch: typeof fetch | undefined,
   remoteToolName: string,
   capabilityId: string,
   expectedContractFingerprint: string,
@@ -439,7 +606,7 @@ async function invokeTool(
 ): Promise<string> {
   let client: Client | undefined;
   try {
-    client = await connect(entry, config);
+    client = await connect(entry, config, httpFetch);
     const currentTools = await listAllTools(client);
     const current = currentTools.find((tool) => tool.name === remoteToolName);
     if (!current) {
@@ -471,7 +638,13 @@ async function invokeTool(
 
     let result: Awaited<ReturnType<Client["callTool"]>>;
     try {
-      result = await client.callTool({ name: remoteToolName, arguments: args });
+const requestOptions = config.kind === "streamable-http" && config.value.callTimeoutMs
+  ? { timeout: config.value.callTimeoutMs }
+  : undefined;
+result = await client.callTool(
+  { name: remoteToolName, arguments: args },
+  requestOptions,
+);
     } catch (error) {
       try {
         recordCapabilityProbe(
@@ -539,7 +712,7 @@ async function invokeTool(
 export async function discoverConfiguredMcpTools(
   options: DiscoverConfiguredMcpToolsOptions,
 ): Promise<AbosTool[]> {
-  const { db, capabilityRegistry } = options;
+  const { db, capabilityRegistry, httpFetch } = options;
   const reserved = new Set(options.reservedToolNames ?? []);
   const inventory = db.getToolInventory().filter((entry) => entry.type === "mcp");
   const projected: AbosTool[] = [];
@@ -557,7 +730,7 @@ export async function discoverConfiguredMcpTools(
       continue;
     }
 
-    const parsed = parseStdioConfig(entry);
+    const parsed = parseMcpConfig(entry);
     if ("error" in parsed) {
       try {
         registerCapability(
@@ -579,7 +752,7 @@ export async function discoverConfiguredMcpTools(
 
     let client: Client | undefined;
     try {
-      client = await connect(entry, parsed.value);
+      client = await connect(entry, parsed, httpFetch);
       const tools = await listAllTools(client);
       const observedAt = new Date().toISOString();
       const era = client.getProtocolEra();
@@ -596,7 +769,7 @@ export async function discoverConfiguredMcpTools(
         serverDescriptor(
           entry,
           "verified_available",
-          ["Official MCP SDK connected over stdio and completed tools/list."],
+          [`Official MCP SDK connected over ${parsed.kind} and completed tools/list.`],
           observedAt,
         ),
         "mcp.server_verified",
@@ -648,7 +821,7 @@ export async function discoverConfiguredMcpTools(
               evidence: ["The remote MCP tool schema contained an unsafe identifier and was refused before projection."],
               metadata: {
                 inventoryId: entry.id,
-                transport: "stdio",
+                transport: mcpTransport(entry),
                 remoteToolName: remoteTool.name,
                 remoteToolContractHash: fingerprint,
               },
@@ -682,7 +855,7 @@ export async function discoverConfiguredMcpTools(
           ],
           metadata: {
             inventoryId: entry.id,
-            transport: "stdio",
+            transport: mcpTransport(entry),
             remoteToolName: remoteTool.name,
             remoteToolContractHash: fingerprint,
           },
@@ -709,7 +882,8 @@ export async function discoverConfiguredMcpTools(
               db,
               capabilityRegistry,
               entry,
-              parsed.value,
+              parsed,
+              httpFetch,
               remoteTool.name,
               capabilityId,
               fingerprint,
@@ -734,16 +908,15 @@ export async function discoverConfiguredMcpTools(
         );
       }
     } catch (error) {
+      const failure = discoveryFailure(error, parsed.kind);
       try {
         registerCapability(
           db,
           capabilityRegistry,
           entry,
-          serverDescriptor(entry, "unavailable", [
-            "The configured MCP server could not complete stdio connection and tools/list.",
-          ]),
+          serverDescriptor(entry, "unavailable", [failure.evidence]),
           "mcp.server_unavailable",
-          { error: error instanceof Error ? error.message : String(error) },
+          { reason: failure.reason, error: failure.safeError },
         );
       } catch {
         // Keep this server unavailable for this discovery pass; do not block others.

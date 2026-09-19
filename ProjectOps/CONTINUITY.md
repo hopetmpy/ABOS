@@ -4,7 +4,7 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-015
 Active-Segment: continuity/C0011.md
-Active-Intervention: P015_MCP_RUNTIME — MCP_STREAMABLE_HTTP_BEARER / DECISION_READY / SOURCE_UNMODIFIED_SINCE_HARDENING_GATE
+Active-Intervention: P015_MCP_RUNTIME — MCP_STREAMABLE_HTTP_BEARER / IMPLEMENTED / VALIDATION_PENDING_EXACT_HEAD
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -385,3 +385,12 @@ La auditoría oficial vigente confirmó `StreamableHTTPClientTransport` y `AuthP
 Falsadas: `NO_CHANGE`, runtime HTTP paralelo, reutilizar `ResilientHttpClient` completo y persistir bearer/OAuth tokens en `installed_tools`. El token no se persiste: sólo se guarda `tokenEnv` y el valor se resuelve en runtime. OAuth interactivo queda explícitamente no implementado en esta unidad porque ABOS no tiene una authority genérica de credenciales/callback MCP; no se declara HECHO ni se simula.
 
 Siguiente punto verificable: implementar Streamable HTTP + bearer referenciado por entorno, negative auth, URL trust, reconnect por nueva conexión y timeout/outcome-unknown; exact-head gates antes de decidir el siguiente remanente P-015.
+
+
+## P-015 — MCP_STREAMABLE_HTTP_BEARER — source implementado
+
+Pre-source exact gate: `f86ba6efa607ae5aed99e3669bd170db1bdc5662`; CI `35421748654` SUCCESS 8/8; ProjectOps `35421748651` SUCCESS.
+
+Implementación: el adapter MCP existente soporta `streamable-http` oficial, bearer por referencia `tokenEnv`, URL trust HTTPS/loopback, clasificación auth 401/403, conexión fresca por invocación y timeout de call con outcome UNKNOWN sin blind retry. `install_mcp_server` fue extendido; HTTP remoto no instala npm ni persiste bearer tokens. OAuth interactivo permanece fuera de esta unidad.
+
+Estado: `IMPLEMENTED / VALIDATION_PENDING_EXACT_HEAD`. Los tests del aplicador deben pasar antes del clean source commit; CI y ProjectOps ordinarios del exact-head siguen siendo obligatorios para E3.
