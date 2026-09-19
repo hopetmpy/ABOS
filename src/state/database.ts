@@ -330,6 +330,29 @@ export function createDatabase(dbPath: string): AbosDatabase {
   };
 
   const removeTool = (id: string): void => {
+    const existing = db
+      .prepare("SELECT type, config FROM installed_tools WHERE id = ?")
+      .get(id) as { type: string; config: string | null } | undefined;
+    if (!existing) return;
+
+    if (existing.type === "mcp") {
+      let config: Record<string, unknown> = {};
+      try {
+        const parsed = existing.config ? JSON.parse(existing.config) : {};
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          config = parsed as Record<string, unknown>;
+        }
+      } catch {
+        // Preserve removal authority even when legacy config is malformed.
+      }
+      config.runtimeTruth = "retired";
+      config.retiredAt = new Date().toISOString();
+      db.prepare(
+        "UPDATE installed_tools SET enabled = 0, config = ? WHERE id = ?",
+      ).run(JSON.stringify(config), id);
+      return;
+    }
+
     db.prepare(
       "UPDATE installed_tools SET enabled = 0 WHERE id = ?",
     ).run(id);

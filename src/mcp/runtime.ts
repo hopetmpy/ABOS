@@ -129,19 +129,37 @@ function parseStdioConfig(entry: InstalledTool): ParsedMcpConfig | { error: stri
   };
 }
 
+const UNSAFE_SCHEMA_IDENTIFIER = /[\u0000-\u001f\u007f\u200b-\u200d\ufeff]|<\|(?:im_start|im_end|endoftext)\|>|<\/?(?:system|prompt)>|\[\/?INST\]|<<\/?SYS>>/i;
+const SCHEMA_IDENTIFIER_VALUE_KEYS = new Set([
+  "$id",
+  "$anchor",
+  "$dynamicAnchor",
+  "$ref",
+  "$dynamicRef",
+]);
+
+function assertSafeSchemaIdentifier(value: string): void {
+  if (UNSAFE_SCHEMA_IDENTIFIER.test(value)) {
+    throw new Error("Unsafe MCP input schema identifier was rejected before projection.");
+  }
+}
+
 function sanitizedSchema(value: unknown, key = ""): unknown {
-  if (Array.isArray(value)) return value.map((entry) => sanitizedSchema(entry));
+  if (Array.isArray(value)) return value.map((entry) => sanitizedSchema(entry, key));
   if (!isRecord(value)) {
-    if (typeof value === "string" && ["description", "title", "$comment"].includes(key)) {
-      return sanitizeToolResult(value, 2_000);
+    if (typeof value === "string") {
+      if (SCHEMA_IDENTIFIER_VALUE_KEYS.has(key)) assertSafeSchemaIdentifier(value);
+      if (["description", "title", "$comment"].includes(key)) {
+        return sanitizeToolResult(value, 2_000);
+      }
     }
     return value;
   }
   return Object.fromEntries(
-    Object.entries(value).map(([childKey, childValue]) => [
-      childKey,
-      sanitizedSchema(childValue, childKey),
-    ]),
+    Object.entries(value).map(([childKey, childValue]) => {
+      assertSafeSchemaIdentifier(childKey);
+      return [childKey, sanitizedSchema(childValue, childKey)];
+    }),
   );
 }
 
@@ -180,6 +198,10 @@ function serverCapabilityId(entry: InstalledTool): string {
 
 function toolCapabilityId(entry: InstalledTool, remoteName: string): string {
   return `mcp-tool:${entry.id}:${hash(remoteName, 16)}`;
+}
+
+function isRetiredMcpInventory(entry: InstalledTool): boolean {
+  return entry.config?.runtimeTruth === "retired";
 }
 
 function correlationFields(serverId: string) {
@@ -271,6 +293,51 @@ function recordCapabilityProbe(
       // Preserve the first persistence failure.
     }
     throw error;
+  }
+}
+
+function retireInventoryCapabilities(
+  db: AbosDatabase,
+  registry: CapabilityRegistry,
+  entry: InstalledTool,
+): void {
+  const serverId = serverCapabilityId(entry);
+  const evidence = ["The local MCP inventory was explicitly retired; it must not be connected or projected."];
+  if (registry.get(serverId)) {
+    recordCapabilityProbe(
+      db,
+      registry,
+      entry,
+      serverId,
+      "retired",
+      evidence,
+      "mcp.server_retired",
+      { reason: "inventory_retired" },
+    );
+  } else {
+    registerCapability(
+      db,
+      registry,
+      entry,
+      serverDescriptor(entry, "retired", evidence),
+      "mcp.server_retired",
+      { reason: "inventory_retired" },
+    );
+  }
+
+  for (const capability of registry.list()) {
+    if (capability.provider !== "mcp" || capability.type !== "tool") continue;
+    if (capability.metadata?.inventoryId !== entry.id) continue;
+    recordCapabilityProbe(
+      db,
+      registry,
+      entry,
+      capability.id,
+      "retired",
+      ["The owning MCP inventory was explicitly retired locally."],
+      "mcp.tool_retired",
+      { reason: "inventory_retired" },
+    );
   }
 }
 
@@ -478,6 +545,18 @@ export async function discoverConfiguredMcpTools(
   const projected: AbosTool[] = [];
 
   for (const entry of inventory) {
+    if (isRetiredMcpInventory(entry)) {
+      try {
+        retireInventoryCapabilities(db, capabilityRegistry, entry);
+      } catch (error) {
+        logger.warn("Failed to persist MCP retirement evidence", {
+          inventoryId: entry.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      continue;
+    }
+
     const parsed = parseStdioConfig(entry);
     if ("error" in parsed) {
       try {
@@ -504,6 +583,11 @@ export async function discoverConfiguredMcpTools(
       const tools = await listAllTools(client);
       const observedAt = new Date().toISOString();
       const era = client.getProtocolEra();
+      const listedCapabilityIds = new Set(
+        tools
+          .filter((tool) => typeof tool.name === "string" && tool.name.length > 0)
+          .map((tool) => toolCapabilityId(entry, tool.name)),
+      );
 
       registerCapability(
         db,
@@ -538,6 +622,47 @@ export async function discoverConfiguredMcpTools(
         const exposedName = exposedToolName(entry, remoteTool.name, reserved);
         const capabilityId = toolCapabilityId(entry, remoteTool.name);
         const fingerprint = contractFingerprint(remoteTool);
+        let parameters: Record<string, unknown>;
+        try {
+          assertSafeSchemaIdentifier(remoteTool.name);
+          parameters = sanitizedSchema(remoteTool.inputSchema) as Record<string, unknown>;
+        } catch (error) {
+          registerCapability(
+            db,
+            capabilityRegistry,
+            entry,
+            {
+              id: capabilityId,
+              type: "tool",
+              provider: "mcp",
+              description: safeDescription(entry, remoteTool),
+              requirements: [],
+              provides: [exposedName],
+              permissions: [],
+              dependencies: [serverCapabilityId(entry)],
+              compatibility: era ? [`mcp-era:${era}`] : [],
+              available: false,
+              state: "unavailable",
+              observedAt,
+              authority: `mcp-runtime:${entry.id}`,
+              evidence: ["The remote MCP tool schema contained an unsafe identifier and was refused before projection."],
+              metadata: {
+                inventoryId: entry.id,
+                transport: "stdio",
+                remoteToolName: remoteTool.name,
+                remoteToolContractHash: fingerprint,
+              },
+            },
+            "mcp.tool_schema_rejected",
+            { reason: "unsafe_schema_identifier" },
+          );
+          logger.warn("Rejected unsafe MCP tool schema", {
+            inventoryId: entry.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          continue;
+        }
+
         const descriptor: CapabilityDescriptor = {
           id: capabilityId,
           type: "tool",
@@ -558,6 +683,7 @@ export async function discoverConfiguredMcpTools(
           metadata: {
             inventoryId: entry.id,
             transport: "stdio",
+            remoteToolName: remoteTool.name,
             remoteToolContractHash: fingerprint,
           },
         };
@@ -574,7 +700,7 @@ export async function discoverConfiguredMcpTools(
         projected.push({
           name: exposedName,
           description: safeDescription(entry, remoteTool),
-          parameters: sanitizedSchema(remoteTool.inputSchema) as Record<string, unknown>,
+          parameters,
           category: "capability",
           riskLevel: toolRisk(remoteTool),
           externalOutput: true,
@@ -590,6 +716,22 @@ export async function discoverConfiguredMcpTools(
               args,
             ),
         });
+      }
+
+      for (const capability of capabilityRegistry.list()) {
+        if (capability.provider !== "mcp" || capability.type !== "tool") continue;
+        if (capability.metadata?.inventoryId !== entry.id) continue;
+        if (listedCapabilityIds.has(capability.id)) continue;
+        recordCapabilityProbe(
+          db,
+          capabilityRegistry,
+          entry,
+          capability.id,
+          "retired",
+          ["A successful current MCP tools/list no longer contained this previously discovered tool."],
+          "mcp.tool_retired",
+          { reason: "absent_from_successful_tools_list" },
+        );
       }
     } catch (error) {
       try {

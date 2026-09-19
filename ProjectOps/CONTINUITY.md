@@ -4,7 +4,7 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-015
 Active-Segment: continuity/C0011.md
-Active-Intervention: P015_MCP_RUNTIME — DECISION_READY / SOURCE_UNMODIFIED
+Active-Intervention: P015_MCP_RUNTIME — MCP_LIFECYCLE_HARDENING / IMPLEMENTED / VALIDATION_PENDING
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -193,7 +193,7 @@ P015-MCP-Core-Exact-Gate-Head: a5365fe1e721464c442ff92d7db93cc81d2af203
 P015-MCP-Core-CI: 35420000569 SUCCESS / 8_OF_8
 P015-MCP-Core-ProjectOps: 35420000480 SUCCESS
 P015-MCP-Core-State: INTEGRATION_VERIFIED / E3_BRANCH_GREEN
-P015-Source-State: MCP_LIFECYCLE_HARDENING / AUDIT_COMPLETE / SOURCE_UNMODIFIED_SINCE_CORE_GATE
+P015-Source-State: MCP_LIFECYCLE_HARDENING / IMPLEMENTED / VALIDATION_PENDING
 P015-Transition-Merge: 87e256a93a655b1ccce000cd2de3896a8f3f74b5
 P015-Transition-Main-CI: 35418524268 SUCCESS
 P015-Transition-Main-ProjectOps: 35418524330 SUCCESS
@@ -362,3 +362,8 @@ La auditoría posterior al gate detectó tres defectos/enduraciones que impiden 
 3. La sanitización de schema remoto cubre superficies descriptivas, pero todavía debe endurecerse la frontera de identificadores/keys no confiables sin corromper semántica válida de JSON Schema.
 
 Siguiente punto verificable: implementar y validar `MCP_LIFECYCLE_HARDENING` reutilizando las authorities existentes; no avanzar aún a HTTP/auth ni integrar P-015 a `main`.
+
+
+## P-015 — MCP_LIFECYCLE_HARDENING source aplicado
+
+La unidad implementa retiro MCP durable mediante `runtimeTruth=retired`, evita reconectar inventario retirado, retira capabilities sólo cuando un `tools/list` actual exitoso demuestra ausencia, y rechaza identifiers/keys de schema con delimitadores de prompt/control sin mutar valores semánticos `enum/default/pattern`. Estado: IMPLEMENTED / VALIDATION_PENDING; no acredita HTTP/auth ni cierre de P-015.

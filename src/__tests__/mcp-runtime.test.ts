@@ -168,4 +168,87 @@ describe("P-015 MCP_CORE_STDIO", () => {
       db.raw.close();
     }
   });
+
+  it("makes MCP removal durable and prevents retired inventory from reconnecting", async () => {
+    const db = createDatabase(":memory:");
+    try {
+      installFixture(db);
+      const registry = new CapabilityRegistry(new CapabilityStore(db.raw));
+      const initial = await discoverConfiguredMcpTools({ db, capabilityRegistry: registry });
+      const echo = initial.find((tool) => tool.description.includes("deterministic fixture"));
+      expect(echo).toBeDefined();
+      const echoCapability = registry
+        .list()
+        .find((entry) => entry.provides?.includes(echo!.name));
+      expect(echoCapability).toBeDefined();
+
+      db.removeTool("mcp-fixture-1");
+      const retiredInventory = db.getToolInventory()[0];
+      expect(retiredInventory?.enabled).toBe(false);
+      expect(retiredInventory?.config?.runtimeTruth).toBe("retired");
+      expect(typeof retiredInventory?.config?.retiredAt).toBe("string");
+
+      const afterRemoval = await discoverConfiguredMcpTools({ db, capabilityRegistry: registry });
+      expect(afterRemoval).toEqual([]);
+      expect(registry.get("mcp-server:mcp-fixture-1")?.state).toBe("retired");
+      expect(registry.get(echoCapability!.id)?.state).toBe("retired");
+    } finally {
+      db.raw.close();
+    }
+  });
+
+  it("retires a persisted MCP capability only after a successful tools/list proves it disappeared", async () => {
+    const db = createDatabase(":memory:");
+    try {
+      installFixture(db);
+      const registry = new CapabilityRegistry(new CapabilityStore(db.raw));
+      const initial = await discoverConfiguredMcpTools({ db, capabilityRegistry: registry });
+      const echo = initial.find((tool) => tool.description.includes("deterministic fixture"));
+      expect(echo).toBeDefined();
+      const echoCapability = registry
+        .list()
+        .find((entry) => entry.provides?.includes(echo!.name));
+      expect(echoCapability).toBeDefined();
+
+      const inventory = db.getToolInventory()[0]!;
+      db.installTool({
+        ...inventory,
+        config: {
+          ...inventory.config,
+          args: [fixture, "--shrink"],
+          runtimeTruth: "configured_unverified",
+        },
+      });
+
+      const afterShrink = await discoverConfiguredMcpTools({ db, capabilityRegistry: registry });
+      expect(afterShrink.some((tool) => tool.description.includes("deterministic fixture"))).toBe(false);
+      expect(registry.get(echoCapability!.id)?.state).toBe("retired");
+      expect(registry.get("mcp-server:mcp-fixture-1")?.state).toBe("verified_available");
+    } finally {
+      db.raw.close();
+    }
+  });
+
+  it("fails closed on hostile schema identifiers while preserving semantic pattern values", async () => {
+    const db = createDatabase(":memory:");
+    try {
+      installFixture(db);
+      const registry = new CapabilityRegistry(new CapabilityStore(db.raw));
+      const tools = await discoverConfiguredMcpTools({ db, capabilityRegistry: registry });
+      expect(tools.some((tool) => tool.description.includes("deliberately unsafe schema key"))).toBe(false);
+
+      const rejected = registry.list().find(
+        (entry) => entry.metadata?.remoteToolName === "schema_poison",
+      );
+      expect(rejected?.state).toBe("unavailable");
+      expect(rejected?.available).toBe(false);
+      expect(rejected?.evidence?.join(" ")).toContain("unsafe identifier");
+
+      const echo = tools.find((tool) => tool.description.includes("deterministic fixture"));
+      expect(echo).toBeDefined();
+    } finally {
+      db.raw.close();
+    }
+  });
+
 });
