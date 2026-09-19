@@ -213,7 +213,7 @@ Codex OAuth humano, AWS billable, providers externos, saldos/revenue atribuibles
 
 ### 7.4 P-014 activo
 
-P-011 Lifecycle/Health/Restart/Recovery, P-012 transactional self-modification y P-013 Observability/Audit/Evidence Fabric están HECHO / INTEGRATION_VERIFIED para sus objetivos exactos. PR #42 cerró ProjectOps de P-013 en `main 21911888b8271662f1b546bc637f49d76610c132`, revalidado por CI `35410063228` + ProjectOps `35410063240` SUCCESS. P-014 Capability Fabric queda activo en AUDIT_OPEN / SOURCE_UNMODIFIED: debe reutilizar `src/capabilities/` y demostrar authority/lifecycle antes de modificar producto.
+P-011 Lifecycle/Health/Restart/Recovery, P-012 transactional self-modification y P-013 Observability/Audit/Evidence Fabric están HECHO / INTEGRATION_VERIFIED para sus objetivos exactos. PR #43 activó P-014 en `main a8d22778b4cd6f1641efe4bc586711915cd06609`, revalidado por CI `35410702717` + ProjectOps `35410702730` SUCCESS. La auditoría P-014 alcanzó DECISION_READY sin tocar source: `src/capabilities/` permanece la única authority/facade de dominio y se extenderá in-place con persistencia durable y adapters explícitos, sin crear otro registry ni absorber P-015/P-017/P-018.
 
 ## 8. Anti-contaminación entre proyectos
 
