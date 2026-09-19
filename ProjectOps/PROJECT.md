@@ -117,7 +117,7 @@ Invariantes: parent executor != child runtime; parent bookkeeping != child live 
 
 P-012 está integrado y revalidado en `main fe845184fce48c65032f8521ecd0bdfa42e04b77`. Una modificación de source legítima no escribe primero y verifica después: usa candidate aislado, journal/lease v17, verification, exact candidate commit, activation CAS y recovery causal. Código crítico no se trata automáticamente como inmutable; fronteras realmente separadas como constitution, credentials, secrets y runtime state mantienen protección propia.
 
-El main exacto pasó CI `34926393562` y ProjectOps Integrity `34926393570`. Esto acredita E3 del source integrado, no provider/economic LIVE. P-012 permanece PARCIAL / INTEGRATION_VERIFIED hasta que P-013 evidence/correlation transversal quede integrada conforme a su Definition of Done.
+El main exacto pasó CI `34926393562` y ProjectOps Integrity `34926393570`. Esto acredita E3 del source integrado, no provider/economic LIVE. La dependencia evidence/correlation de P-012 quedó materialmente satisfecha por P-013 PR #41 y `main 733eb762596cac019593c6f27d7740da0ab25462` revalidado; P-012 conserva PARCIAL únicamente hasta la transición canónica posterior a este cierre ProjectOps.
 
 ## 4. Invariantes duros ABOS
 
@@ -213,7 +213,7 @@ Codex OAuth humano, AWS billable, providers externos, saldos/revenue atribuibles
 
 ### 7.4 P-013 activo
 
-P-011 Lifecycle/Health/Restart/Recovery está HECHO / INTEGRATION_VERIFIED. P-012 transactional self-modification está integrado en `main fe845184...` y permanece PARCIAL únicamente hasta que la evidence/correlation P-013 requerida por su DoD quede integrada. P-013 Observability/Audit/Evidence Fabric es la intervención activa: el product tree está E3-green y la autoridad/ancestry ProjectOps de `main c94dbeba...` ya fue reconciliada y exact-head gateada; la siguiente frontera es PR/merge + revalidación exacta de `main`.
+P-011 Lifecycle/Health/Restart/Recovery está HECHO / INTEGRATION_VERIFIED. P-012 transactional self-modification está integrado y su dependencia P-013 ya está materialmente satisfecha. P-013 Observability/Audit/Evidence Fabric fue integrado por PR #41 en `main 733eb762596cac019593c6f27d7740da0ab25462` y revalidado por CI `35406990676` + ProjectOps `35406990741` SUCCESS. La intervención activa conserva sólo el cierre canónico ProjectOps; P-014 no se activa hasta integrar y revalidar ese cierre.
 
 ## 8. Anti-contaminación entre proyectos
 
