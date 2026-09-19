@@ -4,7 +4,7 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-015
 Active-Segment: continuity/C0011.md
-Active-Intervention: P015_MCP_RUNTIME — MCP_STREAMABLE_HTTP_BEARER / IMPLEMENTED / VALIDATION_PENDING_EXACT_HEAD
+Active-Intervention: P015_MCP_RUNTIME — TECHNICAL_CLOSURE / E3_BRANCH_GREEN / INTEGRATION_PENDING
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -394,3 +394,23 @@ Pre-source exact gate: `f86ba6efa607ae5aed99e3669bd170db1bdc5662`; CI `354217486
 Implementación: el adapter MCP existente soporta `streamable-http` oficial, bearer por referencia `tokenEnv`, URL trust HTTPS/loopback, clasificación auth 401/403, conexión fresca por invocación y timeout de call con outcome UNKNOWN sin blind retry. `install_mcp_server` fue extendido; HTTP remoto no instala npm ni persiste bearer tokens. OAuth interactivo permanece fuera de esta unidad.
 
 Estado: `IMPLEMENTED / VALIDATION_PENDING_EXACT_HEAD`. Los tests del aplicador deben pasar antes del clean source commit; CI y ProjectOps ordinarios del exact-head siguen siendo obligatorios para E3.
+
+
+## P-015 — MCP_STREAMABLE_HTTP_BEARER — E3 branch green
+
+- clean source: `52436f6550cfbced06a6b7f049a1717155f75968`;
+- exact same-tree gate: `d1e23d9f142d73305f0abbfaea5cff38b8da3608`;
+- custom material validation `35422841692`: SUCCESS — targeted MCP 3 files / 14 tests, typecheck, build, full suite 135 files / 2036 tests, security-focused 25 files / 161 tests, ProjectOps y diff integrity;
+- ordinary CI `35422987928`: SUCCESS, 8/8 jobs incluyendo Node 22/24, Windows 22/24, public distribution 22/24, dependency audit y rebrand;
+- ordinary ProjectOps `35422987933`: SUCCESS;
+- clasificación: `INTEGRATION_VERIFIED / E3_BRANCH_GREEN`.
+
+### P-015 — auditoría final de remanentes
+
+El objetivo técnico de P-015 queda satisfecho en rama: stdio real, Streamable HTTP real, discovery/call bajo Policy, lifecycle/evidence en Capability Fabric, output/schema boundary, retiro/list-shrink, negative auth, timeout/outcome UNKNOWN y reconexión fresca. El runtime descubre MCP al iniciar y cada call reabre conexión + revalida `tools/list`/contract antes del efecto; por ello no depende de una conexión persistente ni de notifications para evitar ejecutar un contrato obsoleto.
+
+OAuth interactivo queda **DEFERRED_BY_OWNERSHIP / NO_CHANGE_P015**. El SDK v2 exige `OAuthClientProvider`, PKCE/verifier, discovery state, tokens persistentes ligados al issuer, callback `state/iss` y reconnect fresco. ABOS ya declara `connection/auth method` como concern separado en `src/ai-connections/`; P-019 posee el model/connection fabric y ya modela OAuth mediante adapters (Codex). Crear dentro de MCP una segunda credential/session authority violaría one-authority-per-concern. P-015 conserva el boundary honesto `UNAUTHORIZED`/unavailable para MCP OAuth hasta que una authority reutilizable de P-019 exista; no persiste secretos en `installed_tools`.
+
+La aceptación contra un servidor MCP externo con cuenta/credencial real pertenece a P-005 cuando exista endpoint/autorización. E3 no se eleva a E5/LIVE por CI.
+
+Estado técnico P-015: `HECHO_SOURCE / E3_BRANCH_GREEN / INTEGRATION_PENDING`. Siguiente paso: integrar la rama exacta en `main`, revalidar `main` y sólo entonces marcar P-015 canónicamente HECHO y activar P-016.
