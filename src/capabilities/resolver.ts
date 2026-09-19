@@ -4,8 +4,8 @@ import type {
   CapabilityResolution,
 } from "./model.js";
 import {
+  capabilityProvides,
   capabilityStateOf,
-  isCapabilityVerifiedAvailable,
 } from "./model.js";
 import type { CapabilityRegistry } from "./registry.js";
 import type { EnvironmentSnapshot } from "../environments/types.js";
@@ -14,32 +14,100 @@ function normalized(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-function supports(capability: CapabilityDescriptor, requirement: string): boolean {
+/** Discovery-only textual matching. Never sufficient for `use_existing`. */
+function discoverySupports(capability: CapabilityDescriptor, requirement: string): boolean {
   const needle = normalized(requirement);
+  if (!needle) return false;
   const haystack = normalized([
     capability.id,
     capability.type,
     capability.provider,
     capability.description,
     ...capability.requirements,
+    ...(capability.provides ?? []),
     ...(capability.inputs ?? []),
     ...(capability.outputs ?? []),
+    ...(capability.effects ?? []),
+    ...(capability.compatibility ?? []),
   ].join(" "));
   return haystack.includes(needle);
 }
 
-function satisfiesRequest(
+function normalizedSet(values: readonly string[] | undefined): Set<string> {
+  return new Set((values ?? []).map(normalized).filter(Boolean));
+}
+
+function includesAll(
+  actual: readonly string[] | undefined,
+  required: readonly string[] | undefined,
+): boolean {
+  const requiredValues = (required ?? []).map(normalized).filter(Boolean);
+  if (requiredValues.length === 0) return true;
+  const actualValues = normalizedSet(actual);
+  return requiredValues.every((entry) => actualValues.has(entry));
+}
+
+function compatibilityClaims(capability: CapabilityDescriptor): string[] {
+  return [
+    ...(capability.compatibility ?? []),
+    ...(capability.version ? [capability.version] : []),
+  ];
+}
+
+function missingContractRequirements(
   capability: CapabilityDescriptor,
   request: CapabilityRequest,
+  registry: CapabilityRegistry,
+): string[] {
+  const missing: string[] = [];
+
+  if (!capabilityProvides(capability, request.requirement)) {
+    missing.push(`provides:${request.requirement}`);
+  }
+
+  const constraints: Array<[string, string[] | undefined, string[] | undefined]> = [
+    ["permission", capability.permissions, request.requiredPermissions],
+    ["input", capability.inputs, request.requiredInputs],
+    ["output", capability.outputs, request.requiredOutputs],
+    ["effect", capability.effects, request.requiredEffects],
+    ["compatibility", compatibilityClaims(capability), request.requiredCompatibility],
+  ];
+  for (const [label, actual, required] of constraints) {
+    const actualValues = normalizedSet(actual);
+    for (const entry of required ?? []) {
+      if (entry.trim() && !actualValues.has(normalized(entry))) {
+        missing.push(`${label}:${entry}`);
+      }
+    }
+  }
+
+  for (const dependency of capability.dependencies ?? []) {
+    if (!registry.isExecutionReady(dependency)) {
+      missing.push(`dependency:${dependency}:not_ready`);
+    }
+  }
+
+  if (request.maxCostCents != null) {
+    if (
+      typeof capability.estimatedCostCents !== "number" ||
+      !Number.isFinite(capability.estimatedCostCents)
+    ) {
+      missing.push("cost:known");
+    } else if (capability.estimatedCostCents > request.maxCostCents) {
+      missing.push(`cost<=${request.maxCostCents}`);
+    }
+  }
+
+  return [...new Set(missing)];
+}
+
+function satisfiesExecutionContract(
+  capability: CapabilityDescriptor,
+  request: CapabilityRequest,
+  registry: CapabilityRegistry,
 ): boolean {
-  const requiredPermissions = request.requiredPermissions ?? [];
-  return supports(capability, request.requirement) &&
-    requiredPermissions.every((permission) =>
-      capability.permissions.includes(permission)
-    ) &&
-    (request.maxCostCents == null ||
-      capability.estimatedCostCents == null ||
-      capability.estimatedCostCents <= request.maxCostCents);
+  return registry.isExecutionReady(capability.id) &&
+    missingContractRequirements(capability, request, registry).length === 0;
 }
 
 function statesOf(capabilities: CapabilityDescriptor[]): string[] {
@@ -56,8 +124,7 @@ export class CapabilityResolver {
     const all = this.registry.list();
 
     const usable = all.filter((capability) =>
-      isCapabilityVerifiedAvailable(capability) &&
-      satisfiesRequest(capability, request)
+      satisfiesExecutionContract(capability, request, this.registry)
     );
 
     const preferred = request.preferredEnvironment
@@ -73,10 +140,10 @@ export class CapabilityResolver {
         candidates: preferred,
         missingRequirements: [],
         rationale: request.preferredEnvironment
-          ? `A VERIFIED_AVAILABLE capability satisfies the requirement in preferred environment "${request.preferredEnvironment}".`
-          : "A VERIFIED_AVAILABLE registered capability satisfies the requirement.",
+          ? `A VERIFIED_AVAILABLE capability satisfies the explicit execution contract in preferred environment "${request.preferredEnvironment}".`
+          : "A VERIFIED_AVAILABLE registered capability satisfies the explicit execution contract.",
         nextActions: [
-          "Select the best candidate using current cost, evidence, observation time, and environment health.",
+          "Select among contract-valid candidates using current observations without weakening the requested constraints.",
         ],
       };
     }
@@ -92,14 +159,16 @@ export class CapabilityResolver {
         candidates: usable,
         missingRequirements: [],
         rationale:
-          "A verified capability exists, but not in the preferred/current environment.",
+          "A verified contract-valid capability exists, but not in the preferred/current environment.",
         nextActions: environmentsWithSupport.map(
-          (environment) => `Evaluate environment "${environment}" for this path using current evidence.`,
+          (environment) => `Evaluate environment "${environment}" through the canonical environment authority.`,
         ),
       };
     }
 
-    const known = all.filter((capability) => satisfiesRequest(capability, request));
+    const known = all.filter((capability) =>
+      discoverySupports(capability, request.requirement)
+    );
     if (known.length > 0) {
       const prohibited = known.filter((capability) =>
         capabilityStateOf(capability) === "prohibited"
@@ -123,7 +192,7 @@ export class CapabilityResolver {
           candidates: prohibited,
           missingRequirements: [request.requirement],
           rationale:
-            "Known candidates for this route are explicitly PROHIBITED. That blocks this route, not necessarily the objective.",
+            "Known discovery candidates for this route are explicitly PROHIBITED. That blocks this route, not necessarily the objective.",
           nextActions: [
             "Do not execute the prohibited route.",
             "Evaluate a materially different legitimate provider, capability, or strategy.",
@@ -153,10 +222,32 @@ export class CapabilityResolver {
           candidates: known,
           missingRequirements: [request.requirement],
           rationale:
-            `ABOS knows candidate capabilities, but none has current VERIFIED_AVAILABLE evidence. States: ${statesOf(known).join(", ")}.`,
+            `ABOS knows discovery candidates, but none has current VERIFIED_AVAILABLE evidence sufficient to prove the requested execution contract. States: ${statesOf(known).join(", ")}.`,
           nextActions: [
             "Probe the most relevant candidate through its authoritative runtime/provider boundary.",
-            "Promote to VERIFIED_AVAILABLE only after current evidence supports the claim.",
+            "Promote to VERIFIED_AVAILABLE only after current authority, evidence, time, and contract claims are explicit.",
+          ],
+        };
+      }
+
+      const verifiedButInsufficient = known.filter((capability) =>
+        capabilityStateOf(capability) === "verified_available" &&
+        missingContractRequirements(capability, request, this.registry).length > 0
+      );
+      if (verifiedButInsufficient.length > 0) {
+        const missing = verifiedButInsufficient.flatMap((capability) =>
+          missingContractRequirements(capability, request, this.registry)
+        );
+        return {
+          kind: "unknown",
+          requirement: request.requirement,
+          candidates: known,
+          missingRequirements: [...new Set(missing)],
+          rationale:
+            "A candidate is runtime-verified, but its declared contract does not prove the requested permissions, I/O, effects, compatibility, dependencies, or budget ceiling. Lexical similarity cannot authorize execution.",
+          nextActions: [
+            "Discover or probe a capability whose explicit contract satisfies the unresolved constraints.",
+            "Do not weaken the request or infer missing contract claims from descriptions.",
           ],
         };
       }
@@ -170,7 +261,7 @@ export class CapabilityResolver {
           `Known capabilities are not currently usable. States: ${statesOf(known).join(", ")}.`,
         nextActions: [
           "Determine whether the missing condition is availability, degradation, installation, configuration, authorization, or retirement.",
-          "Restore/acquire legitimately or evaluate another provider without claiming success early.",
+          "Hand acquisition/construction work to the P-017 capability-gap pipeline rather than claiming success early.",
         ],
       };
     }
@@ -183,6 +274,7 @@ export class CapabilityResolver {
         capability.id,
         capability.description,
         ...capability.requirements,
+        ...(capability.provides ?? []),
       ].join(" "));
       return words.some((word) => text.includes(word));
     });
@@ -194,10 +286,10 @@ export class CapabilityResolver {
         candidates: partial,
         missingRequirements: [request.requirement],
         rationale:
-          "No single verified registered capability satisfies the requirement, but multiple partial capabilities may be composable.",
+          "No single registered capability proves the requested execution contract, but multiple discovery candidates may be composable. This is a planning hint, not executable composition evidence.",
         nextActions: [
-          "Plan an explicit composition with compatible inputs/outputs.",
-          "Probe every material dependency before presenting the composition as executable.",
+          "Hand the candidate set to P-017 for an explicit composition plan with compatible contracts.",
+          "Probe every material dependency before presenting any composition as executable.",
         ],
       };
     }
@@ -206,7 +298,7 @@ export class CapabilityResolver {
       .filter((environment) => environment.availability !== "unavailable")
       .flatMap((environment) =>
         environment.capabilities.filter((capability) =>
-          supports(capability, request.requirement)
+          discoverySupports(capability, request.requirement)
         )
       );
 
@@ -217,10 +309,10 @@ export class CapabilityResolver {
         candidates: environmentHints,
         missingRequirements: [request.requirement],
         rationale:
-          "An inspected environment advertises the required capability, but the generic registry does not yet hold VERIFIED_AVAILABLE evidence for the current path.",
+          "An inspected environment advertises a discovery match, but the generic registry does not yet prove the requested execution contract for the current path.",
         nextActions: [
           "Project the authoritative environment observation into capability state.",
-          "Re-evaluate after current evidence is registered.",
+          "Re-evaluate the explicit contract after current evidence is registered.",
         ],
       };
     }
@@ -231,10 +323,10 @@ export class CapabilityResolver {
       candidates: [],
       missingRequirements: [request.requirement],
       rationale:
-        "No known registered capability currently satisfies the requirement. This is UNKNOWN, not evidence of impossibility.",
+        "No known registered capability currently proves the requirement. This is UNKNOWN, not evidence of impossibility.",
       nextActions: [
-        "Research existing tools, services, SDKs, APIs, or skills.",
-        "If no suitable capability exists, construct a minimal reusable capability and validate it.",
+        "Hand the capability gap to P-017 for research of existing tools, services, SDKs, APIs, or skills.",
+        "If no suitable capability exists, P-017 may construct and validate one through the canonical self-modification authority.",
       ],
     };
   }

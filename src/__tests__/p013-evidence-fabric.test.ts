@@ -34,7 +34,7 @@ function tempDbPath(): string {
 
 describe("P-013 evidence fabric core", () => {
   it("creates schema v18 independently from the compactable memory event stream", () => {
-    expect(SCHEMA_VERSION).toBe(18);
+    expect(SCHEMA_VERSION).toBeGreaterThanOrEqual(18);
     const db = new Database(":memory:");
     db.exec(MIGRATION_V18_EVIDENCE_FABRIC);
 
@@ -47,10 +47,10 @@ describe("P-013 evidence fabric core", () => {
     db.close();
   });
 
-  it("applies v18 on a fresh canonical database", () => {
+  it("includes v18 evidence fabric in a fresh canonical database", () => {
     const database = createDatabase(tempDbPath());
     const version = database.raw.prepare("SELECT MAX(version) AS version FROM schema_version").get() as { version: number };
-    expect(version.version).toBe(18);
+    expect(version.version).toBe(SCHEMA_VERSION);
     expect(
       database.raw.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='evidence_events'").get(),
     ).toBeTruthy();

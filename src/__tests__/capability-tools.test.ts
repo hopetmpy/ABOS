@@ -147,4 +147,47 @@ describe("capability discovery tools", () => {
     expect(result.kind).toBe("construct");
     expect(result.rationale).toContain("UNKNOWN");
   });
+
+  it("passes explicit permission and effect requirements through resolve_capability", async () => {
+    const capabilities = new CapabilityRegistry();
+    const environments = new EnvironmentRegistry();
+    environments.register({
+      id: "remote",
+      async inspect() {
+        return {
+          id: "remote",
+          label: "Remote",
+          availability: "available",
+          evidence: ["remote provider probe passed"],
+          constraints: [],
+          observedAt: "2026-09-19T01:20:00.000Z",
+          capabilities: [{
+            id: "remote:writer",
+            type: "future_writer",
+            provider: "remote",
+            description: "Object writer",
+            requirements: ["object write"],
+            provides: ["object write"],
+            permissions: ["object:write"],
+            effects: ["write"],
+            environment: "remote",
+            available: true,
+          }],
+        };
+      },
+    });
+
+    const tool = createCapabilityTools(capabilities, environments)
+      .find((entry) => entry.name === "resolve_capability")!;
+    const raw = await tool.execute({
+      requirement: "object write",
+      requiredPermissions: ["object:write"],
+      requiredEffects: ["write"],
+    }, {} as any);
+    const result = JSON.parse(raw) as { kind: string; candidates: Array<{ id: string; effects: string[] }> };
+    expect(result.kind).toBe("use_existing");
+    expect(result.candidates[0]?.id).toBe("remote:writer");
+    expect(result.candidates[0]?.effects).toContain("write");
+  });
+
 });

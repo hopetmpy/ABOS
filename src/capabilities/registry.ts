@@ -3,10 +3,15 @@ import type {
   CapabilityState,
 } from "./model.js";
 import {
+  capabilityProvides,
   capabilityStateOf,
   isCapabilityVerifiedAvailable,
 } from "./model.js";
 import type { EnvironmentSnapshot } from "../environments/types.js";
+import {
+  CapabilityStore,
+  capabilityDefinitionFingerprint,
+} from "./store.js";
 
 function unique(values: Array<string | undefined>): string[] {
   return [...new Set(values.filter((value): value is string => Boolean(value)))];
@@ -21,9 +26,8 @@ function normalizeClaimState(capability: CapabilityDescriptor): CapabilityState 
   if (requestedState !== "verified_available") return requestedState;
 
   const hasEvidence = (capability.evidence ?? []).some((entry) => entry.trim().length > 0);
-  if (!hasEvidence || !hasValidObservation(capability.observedAt)) {
-    // A producer may have executed a probe, but without evidence + observation
-    // time the generic registry cannot truthfully advertise current availability.
+  const hasAuthority = typeof capability.authority === "string" && capability.authority.trim().length > 0;
+  if (!hasEvidence || !hasAuthority || !hasValidObservation(capability.observedAt)) {
     return "probed";
   }
   return requestedState;
@@ -43,26 +47,160 @@ function environmentCapabilityState(
   return "unknown";
 }
 
+function cloneCapability(
+  capability: CapabilityDescriptor,
+  state: CapabilityState,
+): CapabilityDescriptor {
+  return {
+    ...capability,
+    state,
+    available: state === "verified_available",
+    requirements: [...capability.requirements],
+    permissions: [...capability.permissions],
+    provides: capability.provides ? [...capability.provides] : undefined,
+    inputs: capability.inputs ? [...capability.inputs] : undefined,
+    outputs: capability.outputs ? [...capability.outputs] : undefined,
+    effects: capability.effects ? [...capability.effects] : undefined,
+    dependencies: capability.dependencies ? [...capability.dependencies] : undefined,
+    compatibility: capability.compatibility ? [...capability.compatibility] : undefined,
+    evidence: capability.evidence ? [...capability.evidence] : undefined,
+    metadata: capability.metadata ? { ...capability.metadata } : undefined,
+  };
+}
+
+function isWeakInventoryAuthority(authority: string | null | undefined): boolean {
+  return authority === "runtime:tool-definition" || authority === "runtime:skill-inventory";
+}
+
+export interface CapabilityProbeObservation {
+  state: CapabilityState;
+  authority: string;
+  evidence: string[];
+  observedAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export class CapabilityRegistry {
   private readonly entries = new Map<string, CapabilityDescriptor>();
+  private readonly fingerprints = new Map<string, string>();
+
+  constructor(private readonly store?: CapabilityStore) {
+    this.hydrate();
+  }
+
+  private hydrate(): void {
+    if (!this.store) return;
+    for (const persisted of this.store.list()) {
+      const computedFingerprint = capabilityDefinitionFingerprint(persisted.capability);
+      const fingerprintMatches = computedFingerprint === persisted.definitionFingerprint;
+      const candidate = fingerprintMatches
+        ? persisted.capability
+        : {
+            ...persisted.capability,
+            state: "discovered_unverified",
+            available: false,
+            authority: "capability-store:definition-mismatch",
+            evidence: unique([
+              ...(persisted.capability.evidence ?? []),
+              "Persisted capability definition fingerprint did not match its descriptor; runtime verification was invalidated.",
+            ]),
+          };
+      const normalized = cloneCapability(candidate, normalizeClaimState(candidate));
+      this.entries.set(normalized.id, normalized);
+      this.fingerprints.set(normalized.id, computedFingerprint);
+
+      if (
+        !fingerprintMatches ||
+        capabilityStateOf(normalized) !== capabilityStateOf(persisted.capability) ||
+        normalized.available !== persisted.capability.available
+      ) {
+        this.store.upsert(normalized, computedFingerprint);
+      }
+    }
+  }
+
+  private storeNormalized(
+    capability: CapabilityDescriptor,
+    definitionFingerprint = capabilityDefinitionFingerprint(capability),
+  ): void {
+    const normalized = cloneCapability(capability, normalizeClaimState(capability));
+    this.entries.set(normalized.id, normalized);
+    this.fingerprints.set(normalized.id, definitionFingerprint);
+    this.store?.upsert(normalized, definitionFingerprint);
+  }
 
   register(capability: CapabilityDescriptor): void {
-    const state = normalizeClaimState(capability);
-    this.entries.set(capability.id, {
+    this.storeNormalized(capability);
+  }
+
+  private registerInventory(capability: CapabilityDescriptor): void {
+    const definitionFingerprint = capabilityDefinitionFingerprint(capability);
+    const existing = this.entries.get(capability.id);
+    const existingFingerprint = this.fingerprints.get(capability.id);
+    const canPreserveEvidenceBackedLifecycle =
+      existing !== undefined &&
+      existingFingerprint === definitionFingerprint &&
+      !isWeakInventoryAuthority(existing.authority) &&
+      (existing.evidence ?? []).some((entry) => entry.trim().length > 0) &&
+      hasValidObservation(existing.observedAt);
+
+    if (!canPreserveEvidenceBackedLifecycle || !existing) {
+      this.storeNormalized(capability, definitionFingerprint);
+      return;
+    }
+
+    this.storeNormalized({
       ...capability,
-      state,
-      available: state === "verified_available",
-      requirements: [...capability.requirements],
-      permissions: [...capability.permissions],
-      inputs: capability.inputs ? [...capability.inputs] : undefined,
-      outputs: capability.outputs ? [...capability.outputs] : undefined,
-      evidence: capability.evidence ? [...capability.evidence] : undefined,
-      metadata: capability.metadata ? { ...capability.metadata } : undefined,
-    });
+      state: capabilityStateOf(existing),
+      available: existing.available,
+      observedAt: existing.observedAt,
+      authority: existing.authority,
+      evidence: existing.evidence ? [...existing.evidence] : undefined,
+      metadata: {
+        ...(capability.metadata ?? {}),
+        ...(existing.metadata ?? {}),
+      },
+    }, definitionFingerprint);
   }
 
   registerMany(capabilities: CapabilityDescriptor[]): void {
     for (const capability of capabilities) this.register(capability);
+  }
+
+  /**
+   * Record an explicit runtime observation/probe against a known definition.
+   * Every transition requires named authority, evidence, and a valid observation
+   * time; state labels remain open-ended so providers are not forced into a
+   * closed business taxonomy.
+   */
+  recordProbe(id: string, observation: CapabilityProbeObservation): CapabilityDescriptor {
+    const current = this.entries.get(id);
+    if (!current) throw new Error(`Cannot record probe for unknown capability: ${id}`);
+
+    const state = observation.state.trim();
+    const authority = observation.authority.trim();
+    const evidence = unique(observation.evidence.map((entry) => entry.trim()).filter(Boolean));
+    const observedAt = observation.observedAt ?? new Date().toISOString();
+    if (!state) throw new Error(`Capability probe state is required for ${id}`);
+    if (!authority) throw new Error(`Capability probe authority is required for ${id}`);
+    if (evidence.length === 0) throw new Error(`Capability probe evidence is required for ${id}`);
+    if (!hasValidObservation(observedAt)) {
+      throw new Error(`Capability probe observedAt must be a valid timestamp for ${id}`);
+    }
+
+    this.register({
+      ...current,
+      state,
+      available: state === "verified_available",
+      observedAt,
+      authority,
+      evidence,
+      metadata: {
+        ...(current.metadata ?? {}),
+        ...(observation.metadata ?? {}),
+      },
+    });
+    return this.entries.get(id)!;
   }
 
   /**
@@ -105,38 +243,37 @@ export class CapabilityRegistry {
     });
   }
 
-  findSupporting(requirement: string): CapabilityDescriptor[] {
-    const needle = requirement.trim().toLowerCase();
-    if (!needle) return [];
-
-    return this.list({ availableOnly: true }).filter((entry) => {
-      const haystack = [
-        entry.id,
-        entry.type,
-        entry.provider,
-        entry.description,
-        ...entry.requirements,
-        ...(entry.inputs ?? []),
-        ...(entry.outputs ?? []),
-      ].join(" ").toLowerCase();
-      return haystack.includes(needle);
-    });
+  /** Verified state plus a fully verified, acyclic declared dependency chain. */
+  isExecutionReady(id: string, trail: ReadonlySet<string> = new Set()): boolean {
+    if (trail.has(id)) return false;
+    const capability = this.entries.get(id);
+    if (!capability || !isCapabilityVerifiedAvailable(capability)) return false;
+    const nextTrail = new Set(trail);
+    nextTrail.add(id);
+    return (capability.dependencies ?? []).every((dependency) =>
+      this.isExecutionReady(dependency, nextTrail)
+    );
   }
 
-  /**
-   * Tool registration proves that a callable surface is known to this runtime,
-   * not that every external dependency behind the tool is currently usable.
-   * Keep it unverified until a producer supplies runtime evidence.
-   */
+  findSupporting(requirement: string): CapabilityDescriptor[] {
+    const needle = requirement.trim();
+    if (!needle) return [];
+    return this.list().filter((entry) =>
+      this.isExecutionReady(entry.id) &&
+      capabilityProvides(entry, needle)
+    );
+  }
+
   ingestTools(tools: Array<{ name: string; description?: string }>): void {
     const observedAt = new Date().toISOString();
     for (const tool of tools) {
-      this.register({
+      this.registerInventory({
         id: `tool:${tool.name}`,
         type: "tool",
         provider: "abos",
         description: tool.description ?? tool.name,
         requirements: [],
+        provides: [tool.name],
         permissions: [],
         available: false,
         state: "discovered_unverified",
@@ -149,19 +286,16 @@ export class CapabilityRegistry {
     }
   }
 
-  /**
-   * `enabled` is an administrative/inventory flag. It is not runtime evidence
-   * that the skill file and all requirements are currently usable.
-   */
   ingestSkills(skills: Array<{ name: string; description?: string; enabled?: boolean }>): void {
     const observedAt = new Date().toISOString();
     for (const skill of skills) {
-      this.register({
+      const descriptor: CapabilityDescriptor = {
         id: `skill:${skill.name}`,
         type: "skill",
         provider: "abos",
         description: skill.description ?? skill.name,
         requirements: [],
+        provides: [skill.name],
         permissions: [],
         available: false,
         state: skill.enabled === false ? "unavailable" : "discovered_unverified",
@@ -172,7 +306,12 @@ export class CapabilityRegistry {
             ? "Skill is disabled in the current inventory."
             : "Skill is enabled in inventory, but inventory state alone is not execution-readiness evidence.",
         ],
-      });
+      };
+      if (skill.enabled === false) {
+        this.register(descriptor);
+      } else {
+        this.registerInventory(descriptor);
+      }
     }
   }
 }

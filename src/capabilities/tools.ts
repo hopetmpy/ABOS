@@ -4,6 +4,17 @@ import { CapabilityResolver } from "./resolver.js";
 import type { EnvironmentRegistry } from "../environments/registry.js";
 import { capabilityStateOf } from "./model.js";
 
+function stringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const result = [...new Set(
+    value
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => entry.trim())
+      .filter(Boolean),
+  )];
+  return result.length > 0 ? result : undefined;
+}
+
 export function createCapabilityTools(
   registry: CapabilityRegistry,
   environments: EnvironmentRegistry,
@@ -12,7 +23,7 @@ export function createCapabilityTools(
     {
       name: "resolve_capability",
       description:
-        "Resolve a required capability across registered tools, skills, services, and execution environments using current evidence. " +
+        "Resolve a required capability across registered tools, skills, services, and execution environments using current evidence and explicit contracts. " +
         "Returns whether to use existing capability, change environment, probe, wait for authorization, acquire, compose, or construct.",
       category: "capability",
       riskLevel: "safe",
@@ -21,7 +32,7 @@ export function createCapabilityTools(
         properties: {
           requirement: {
             type: "string",
-            description: "Outcome/capability requirement, e.g. terraform, object storage, serverless.",
+            description: "Explicit capability/outcome contract required, e.g. terraform, object storage, serverless.",
           },
           preferredEnvironment: {
             type: "string",
@@ -29,7 +40,32 @@ export function createCapabilityTools(
           },
           maxCostCents: {
             type: "number",
-            description: "Optional maximum estimated capability cost.",
+            description: "Optional maximum estimated capability cost. Unknown cost cannot prove this ceiling.",
+          },
+          requiredPermissions: {
+            type: "array",
+            items: { type: "string" },
+            description: "Permissions the capability contract must explicitly declare.",
+          },
+          requiredInputs: {
+            type: "array",
+            items: { type: "string" },
+            description: "Inputs the capability contract must explicitly accept.",
+          },
+          requiredOutputs: {
+            type: "array",
+            items: { type: "string" },
+            description: "Outputs the capability contract must explicitly produce.",
+          },
+          requiredEffects: {
+            type: "array",
+            items: { type: "string" },
+            description: "Effects the capability contract must explicitly declare.",
+          },
+          requiredCompatibility: {
+            type: "array",
+            items: { type: "string" },
+            description: "Version, ABI, protocol, or compatibility claims required by the path.",
           },
         },
         required: ["requirement"],
@@ -54,6 +90,11 @@ export function createCapabilityTools(
               typeof args.maxCostCents === "number" && Number.isFinite(args.maxCostCents)
                 ? args.maxCostCents
                 : null,
+            requiredPermissions: stringArray(args.requiredPermissions),
+            requiredInputs: stringArray(args.requiredInputs),
+            requiredOutputs: stringArray(args.requiredOutputs),
+            requiredEffects: stringArray(args.requiredEffects),
+            requiredCompatibility: stringArray(args.requiredCompatibility),
           },
           snapshots,
         );
@@ -71,6 +112,15 @@ export function createCapabilityTools(
             authority: candidate.authority ?? null,
             evidence: candidate.evidence ?? [],
             description: candidate.description,
+            provides: candidate.provides ?? candidate.requirements,
+            permissions: candidate.permissions,
+            inputs: candidate.inputs ?? [],
+            outputs: candidate.outputs ?? [],
+            effects: candidate.effects ?? [],
+            dependencies: candidate.dependencies ?? [],
+            version: candidate.version ?? null,
+            compatibility: candidate.compatibility ?? [],
+            estimatedCostCents: candidate.estimatedCostCents ?? null,
           })),
         });
       },

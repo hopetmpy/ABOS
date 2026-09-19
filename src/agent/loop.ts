@@ -89,6 +89,7 @@ import { ProviderRegistry } from "../inference/provider-registry.js";
 import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import { isIdleOnlyTool } from "./idle-only-tools.js";
 import { CapabilityRegistry } from "../capabilities/registry.js";
+import { CapabilityStore } from "../capabilities/store.js";
 import { createCapabilityTools } from "../capabilities/tools.js";
 import { EnvironmentRegistry } from "../environments/registry.js";
 import { LocalEnvironmentProvider } from "../environments/local.js";
@@ -343,7 +344,7 @@ export async function runAgentLoop(
   // Unified capability/environment view. Existing tool and skill systems remain
   // authoritative implementations; this registry lets planning reason across
   // them and across execution environments without provider-specific branches.
-  const capabilityRegistry = new CapabilityRegistry();
+  const capabilityRegistry = new CapabilityRegistry(new CapabilityStore(db.raw));
   capabilityRegistry.ingestTools([
     ...builtinTools,
     ...installedTools,

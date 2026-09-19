@@ -10,7 +10,7 @@ Supported-Node-Majors: `22,24`
 Recommended-Node-Major: `22`
 State-Root: `~/.abos`
 Source-Root: repository checkout
-Schema-Version-Observed-In-Source: `18`
+Schema-Version-Observed-In-Source: `19`
 ProjectOps-Protocol: `ProjectOps/system/ABOS_OPERATING_PROTOCOL.md`
 Adaptive-Reasoning: `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md`
 Plan-Authority: `ProjectOps/PLAN.md`
@@ -66,7 +66,7 @@ Checkout source y `~/.abos` son dominios distintos. `~/.abos` contiene estado ru
 
 ### 3.2 Persistencia
 
-`src/state/schema.ts` declara `SCHEMA_VERSION = 18`. v16 extendió `policy_decisions` para lifecycle de policy/authorization; v17 añadió el journal/lease transaccional P-012 (`self_mod_transactions` / `self_mod_leases`); v18 añade `evidence_events` como fabric transversal de causalidad/correlación P-013, separado del `event_stream` comprimible de memoria y sin reemplazar authorities de dominio.
+`src/state/schema.ts` declara `SCHEMA_VERSION = 19`. v16 extendió `policy_decisions` para lifecycle de policy/authorization; v17 añadió el journal/lease transaccional P-012 (`self_mod_transactions` / `self_mod_leases`); v18 añade `evidence_events` como fabric transversal de causalidad/correlación P-013, separado del `event_stream` comprimible de memoria y sin reemplazar authorities de dominio; v19 añade `capability_records` como backing durable del `CapabilityRegistry` canónico P-014, sin convertir inventory en readiness ni reemplazar authorities upstream de environment/probe.
 
 La SQLite canónica conserva identity, turns/tool calls, heartbeat, finanzas, skills, children, registry, memory/soul, orchestration/adaptive/environment state, policy lifecycle, self-mod recovery y migrations acumuladas. P-009 añadió provenance de inbox/turns de forma aditiva; legacy ambiguity degrada a UNKNOWN en vez de inventar trust.
 
@@ -213,7 +213,7 @@ Codex OAuth humano, AWS billable, providers externos, saldos/revenue atribuibles
 
 ### 7.4 P-014 activo
 
-P-011 Lifecycle/Health/Restart/Recovery, P-012 transactional self-modification y P-013 Observability/Audit/Evidence Fabric están HECHO / INTEGRATION_VERIFIED para sus objetivos exactos. PR #42 cerró ProjectOps de P-013 en `main 21911888b8271662f1b546bc637f49d76610c132`, revalidado por CI `35410063228` + ProjectOps `35410063240` SUCCESS. P-014 Capability Fabric queda activo en AUDIT_OPEN / SOURCE_UNMODIFIED: debe reutilizar `src/capabilities/` y demostrar authority/lifecycle antes de modificar producto.
+P-011 Lifecycle/Health/Restart/Recovery, P-012 transactional self-modification y P-013 Observability/Audit/Evidence Fabric están HECHO / INTEGRATION_VERIFIED para sus objetivos exactos. PR #43 activó P-014 en `main a8d22778b4cd6f1641efe4bc586711915cd06609`, revalidado por CI `35410702717` + ProjectOps `35410702730` SUCCESS. La auditoría P-014 alcanzó DECISION_READY sin tocar source: `src/capabilities/` permanece la única authority/facade de dominio y se extenderá in-place con persistencia durable y adapters explícitos, sin crear otro registry ni absorber P-015/P-017/P-018.
 
 ## 8. Anti-contaminación entre proyectos
 
