@@ -2,17 +2,19 @@ from pathlib import Path
 import textwrap
 
 
-def must_replace(path: str, old: str, new: str) -> None:
+def replace_line(path: str, old: str, new: str) -> None:
     p = Path(path)
-    text = p.read_text()
-    if old not in text:
-        raise SystemExit(f"required block not found in {path}: {old[:180]!r}")
-    p.write_text(text.replace(old, new, 1))
+    lines = p.read_text().splitlines()
+    indexes = [i for i, line in enumerate(lines) if line == old]
+    if len(indexes) != 1:
+        raise SystemExit(f"expected exactly one line in {path}: {old!r}; found {len(indexes)}")
+    lines[indexes[0]] = new
+    p.write_text("\n".join(lines) + "\n")
 
-must_replace(
+replace_line(
     "ProjectOps/CONTINUITY.md",
-    "Active-Intervention: P015_MCP_RUNTIME — MCP_STREAMABLE_HTTP_AUTH / AUDIT_OPEN / SOURCE_UNMODIFIED_SINCE_HARDENING_GATE\n",
-    "Active-Intervention: P015_MCP_RUNTIME — MCP_STREAMABLE_HTTP_BEARER / DECISION_READY / SOURCE_UNMODIFIED_SINCE_HARDENING_GATE\n",
+    "Active-Intervention: P015_MCP_RUNTIME — MCP_STREAMABLE_HTTP_AUTH / AUDIT_OPEN / SOURCE_UNMODIFIED_SINCE_HARDENING_GATE",
+    "Active-Intervention: P015_MCP_RUNTIME — MCP_STREAMABLE_HTTP_BEARER / DECISION_READY / SOURCE_UNMODIFIED_SINCE_HARDENING_GATE",
 )
 
 with Path("ProjectOps/CONTINUITY.md").open("a") as f:
@@ -29,10 +31,10 @@ Falsadas: `NO_CHANGE`, runtime HTTP paralelo, reutilizar `ResilientHttpClient` c
 Siguiente punto verificable: implementar Streamable HTTP + bearer referenciado por entorno, negative auth, URL trust, reconnect por nueva conexión y timeout/outcome-unknown; exact-head gates antes de decidir el siguiente remanente P-015.
 '''))
 
-must_replace(
+replace_line(
     "ProjectOps/continuity/C0011.md",
-    "Classification: MCP_CORE_STDIO_E3_GREEN / MCP_LIFECYCLE_HARDENING_E3_GREEN / MCP_STREAMABLE_HTTP_AUTH_AUDIT_OPEN\n",
-    "Classification: MCP_CORE_STDIO_E3_GREEN / MCP_LIFECYCLE_HARDENING_E3_GREEN / MCP_STREAMABLE_HTTP_BEARER_DECISION_READY\n",
+    "Classification: MCP_CORE_STDIO_E3_GREEN / MCP_LIFECYCLE_HARDENING_E3_GREEN / MCP_STREAMABLE_HTTP_AUTH_AUDIT_OPEN",
+    "Classification: MCP_CORE_STDIO_E3_GREEN / MCP_LIFECYCLE_HARDENING_E3_GREEN / MCP_STREAMABLE_HTTP_BEARER_DECISION_READY",
 )
 with Path("ProjectOps/continuity/C0011.md").open("a") as f:
     f.write(textwrap.dedent('''
@@ -60,15 +62,34 @@ Hipótesis:
 Decisión: `EXTEND_EXISTING_ADAPTER / STREAMABLE_HTTP / ENV_BEARER / URL_TRUST_FAIL_CLOSED / FRESH_CONNECTION_RECONCILIATION / NO_EFFECT_RETRY`.
 '''))
 
-must_replace(
+replace_line(
     "ProjectOps/plan/P-015.md",
-    "Evidence-State: MCP_CORE_STDIO_E3_GREEN / MCP_LIFECYCLE_HARDENING_E3_GREEN / MCP_STREAMABLE_HTTP_AUTH_AUDIT_OPEN\n",
-    "Evidence-State: MCP_CORE_STDIO_E3_GREEN / MCP_LIFECYCLE_HARDENING_E3_GREEN / MCP_STREAMABLE_HTTP_BEARER_DECISION_READY\n",
+    "Evidence-State: MCP_CORE_STDIO_E3_GREEN / MCP_LIFECYCLE_HARDENING_E3_GREEN / MCP_STREAMABLE_HTTP_AUTH_AUDIT_OPEN",
+    "Evidence-State: MCP_CORE_STDIO_E3_GREEN / MCP_LIFECYCLE_HARDENING_E3_GREEN / MCP_STREAMABLE_HTTP_BEARER_DECISION_READY",
 )
-must_replace(
+replace_line(
     "ProjectOps/plan/P-015.md",
-    "## MCP_STREAMABLE_HTTP_AUTH — auditoría previa a source\n\nDecision-State: AUDIT_OPEN\nSource-State: SOURCE_UNMODIFIED_SINCE_HARDENING_GATE\n\nInvestigar antes de editar: Streamable HTTP oficial vigente, endpoint trust/SSRF, bearer/OAuth credential authority, 401/403/scope-step-up, session IDs/reconnect/restart, timeout/side-effect uncertainty, tool list change notifications y pruebas deterministas. La auditoría debe alcanzar DECISION_READY antes de implementar.\n",
-    "## MCP_STREAMABLE_HTTP_BEARER — decisión previa a source\n\nDecision-State: DECISION_READY\nSource-State: SOURCE_UNMODIFIED_SINCE_HARDENING_GATE\n\nArquitectura elegida: extender el adapter y `install_mcp_server` existentes para `streamable-http`; HTTPS remoto y HTTP sólo loopback; bearer mediante referencia `tokenEnv` sin persistir secretos; 401/403 se clasifican como auth/access failures; cada call conserva Policy + Capability + Evidence y no se reintenta automáticamente cuando el outcome externo es incierto.\n\nValidación de esta unidad: handler HTTP MCP determinista oficial, auth correcta/ausente/incorrecta, URL trust, discovery/call real, reconnect mediante conexión fresca, timeout/cancel con `outcome_unknown`, targeted + full/security + Node/Windows + exact-head ProjectOps.\n\nOAuth interactivo queda explícitamente fuera de esta unidad y sigue como remanente P-015: necesita credential/provider authority, callback y persistencia segura de discovery/tokens. No se almacenarán secretos MCP en ProjectOps ni `installed_tools`.\n",
+    "## MCP_STREAMABLE_HTTP_AUTH — auditoría previa a source",
+    "## MCP_STREAMABLE_HTTP_BEARER — decisión previa a source",
 )
+replace_line(
+    "ProjectOps/plan/P-015.md",
+    "Decision-State: AUDIT_OPEN",
+    "Decision-State: DECISION_READY",
+)
+replace_line(
+    "ProjectOps/plan/P-015.md",
+    "Investigar antes de editar: Streamable HTTP oficial vigente, endpoint trust/SSRF, bearer/OAuth credential authority, 401/403/scope-step-up, session IDs/reconnect/restart, timeout/side-effect uncertainty, tool list change notifications y pruebas deterministas. La auditoría debe alcanzar DECISION_READY antes de implementar.",
+    "Arquitectura elegida: extender el adapter y `install_mcp_server` existentes para `streamable-http`; HTTPS remoto y HTTP sólo loopback; bearer mediante referencia `tokenEnv` sin persistir secretos; 401/403 son auth/access failures; cada call conserva Policy + Capability + Evidence y no se reintenta automáticamente cuando el outcome externo es incierto.",
+)
+with Path("ProjectOps/plan/P-015.md").open("a") as f:
+    f.write(textwrap.dedent('''
+
+### Alcance verificable MCP_STREAMABLE_HTTP_BEARER
+
+Validar: handler HTTP MCP determinista oficial, auth correcta/ausente/incorrecta, URL trust, discovery/call real, reconnect mediante conexión fresca, timeout/cancel con `outcome_unknown`, targeted + full/security + Node/Windows + exact-head ProjectOps.
+
+OAuth interactivo queda explícitamente fuera de esta unidad y sigue como remanente P-015: necesita credential/provider authority, callback y persistencia segura de discovery/tokens. No se almacenarán secretos MCP en ProjectOps ni `installed_tools`.
+'''))
 
 print("P-015 HTTP bearer decision reconciled")
