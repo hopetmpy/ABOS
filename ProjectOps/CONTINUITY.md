@@ -4,7 +4,7 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-014
 Active-Segment: continuity/C0010.md
-Active-Intervention: P014_CAPABILITY_FABRIC — V19_UNIT_SOURCE_GREEN / EXACT_GATE_PENDING
+Active-Intervention: P014_CAPABILITY_FABRIC — V19_UNIT_INTEGRATION_VERIFIED / CONTRACT_HARDENING_DECISION_READY
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -13,8 +13,8 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p014-capability-fabric
 Host-Head-At-Audit-Open: fe845184fce48c65032f8521ecd0bdfa42e04b77
-Last-Reconciled-Host-Head: a8d22778b4cd6f1641efe4bc586711915cd06609
-Last-Reconciled-Head-Semantics: P014_DECISION_READY_SOURCE_UNMODIFIED
+Last-Reconciled-Host-Head: 435df303be2fe5e7ae72fd24edb4374c68d9ce89
+Last-Reconciled-Head-Semantics: P014_V19_INTEGRATION_VERIFIED_CONTRACT_HARDENING_DECISION_READY
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -156,10 +156,17 @@ P014-Baseline-ProjectOps: 35410702730 SUCCESS
 P014-Decision-State: DECISION_READY
 P014-Decision: EXTEND_IN_PLACE / UNIFY_AUTHORITY / DURABLE_LIFECYCLE
 P014-Source-Modified-At-Decision: NO
+P014-V19-Source-Head: ab863518600848518cd22a922dcd2ef2cfaf20c3
+P014-V19-Exact-Gate-Head: d1ada43674ebcd45a29773d9257352a2e8dbac38
+P014-V19-Exact-Gate-CI: 35413377040 SUCCESS
+P014-V19-Exact-Gate-ProjectOps: 35413376990 SUCCESS
+P014-V19-Unit-State: INTEGRATION_VERIFIED / E3_BRANCH_GREEN
+P014-Contract-Decision-Head: 435df303be2fe5e7ae72fd24edb4374c68d9ce89
+P014-Contract-Decision: EXTEND_MODEL / HARDEN_RESOLUTION / REUSE_P018_BUDGET_SEMANTICS / PRESERVE_P017_P018_OWNERSHIP
 
 ## Semántica del HEAD reconciliado
 
-`Last-Reconciled-Host-Head` es `main a8d22778b4cd6f1641efe4bc586711915cd06609`: PR #43 integró la transición P-012/P-013 → P-014 y el exact merged main pasó CI `35410702717` + ProjectOps `35410702730`. La auditoría P-014 siguió producers/consumers reales y falsificó NO_CHANGE y REPLACE. La decisión es extender el CapabilityRegistry existente como única authority de dominio, con backing durable y adapters explícitos; producto sigue SOURCE_UNMODIFIED hasta este DECISION_READY.
+`Last-Reconciled-Host-Head` es `435df303be2fe5e7ae72fd24edb4374c68d9ce89`: la primera unidad P-014 ya tiene lifecycle durable v19 y gate ordinario exact-head `d1ada43674ebcd45a29773d9257352a2e8dbac38` con CI `35413377040` + ProjectOps `35413376990` SUCCESS. La segunda auditoría falsificó NO_CHANGE, RESOLVER_ONLY y un rewrite del Fabric; la siguiente unidad autorizada es contract hardening sobre el mismo CapabilityRegistry, preservando ownership P-017/P-018.
 
 P-009 permanece HECHO únicamente para su objetivo exacto: authority/provenance/trust boundaries. No eleva Social inbound a autenticación criptográfica LIVE; `relay_asserted` sigue siendo el máximo claim demostrado en esa frontera.
 
@@ -184,7 +191,7 @@ P-012 conserva autonomía de self-modification y sustituye write-before-verify/f
 - P-011: HECHO / INTEGRATION_VERIFIED — integrado por PR #38; cierre documental PR #39; C0007 cerrado.
 - P-012: HECHO / INTEGRATION_VERIFIED / P013_EVIDENCE_SATISFIED — source propio, integración y dependencia P-013 están cerrados; transición canónica respaldada por `main 21911888b8271662f1b546bc637f49d76610c132` CI `35410063228` + ProjectOps `35410063240`.
 - P-013: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED — producto PR #41 y cierre ProjectOps PR #42 integrados/revalidados; no implica E5/E6/E7 LIVE.
-- P-014: EN_EJECUCIÓN / DECISION_READY / SOURCE_UNMODIFIED — Capability Fabric activado/revalidado en `main a8d22778b4cd6f1641efe4bc586711915cd06609`; decisión EXTEND_IN_PLACE/UNIFY_AUTHORITY registrada en C0010 antes de source.
+- P-014: EN_EJECUCIÓN / DECISION_READY / V19_UNIT_INTEGRATION_VERIFIED / CONTRACT_HARDENING_DECISION_READY — lifecycle durable v19 gateado en rama; segunda unidad contractual registrada antes de source.
 - P-015..P-036: ver `ProjectOps/PLAN.md`; permanecen en su estado explícito.
 
 ## P-009 — cierre verificable
@@ -288,18 +295,19 @@ Pendiente exacto antes de HECHO completo: squash/integración en `main` + revali
 
 - GitHub connector + GitHub Actions: DISPONIBLE / AUTORIZADO.
 - CI/E3 no acredita LIVE/E5/E6.
-- P-012 schema v17 está branch-gated; todavía no es autoridad de `main` hasta squash/revalidación.
-- P-004 permanece PLANIFICADO; las reconciliaciones puntuales de este cierre son válidas según su propia regla.
-- P-013 evidence/correlation es dependencia explícita del cierre completo P-012; no se sustituye con más tests P-012 ni con una declaración documental.
+- P-014 primera unidad v19: INTEGRATION_VERIFIED en rama, todavía no integrada en `main`.
+- P-014 segunda unidad contractual: DECISION_READY / SOURCE_UNMODIFIED al registrar la decisión.
+- P-015 MCP, P-017 acquisition/composition/construction y P-018 environment/resource selection permanecen fuera de la unidad activa.
+- No existe bloqueo externo actual para implementar y validar contract hardening.
 
 ## Siguiente punto verificable
 
-1. Gatear la reconciliación documental exact-head con ProjectOps/CI.
-2. Abrir PR P-012 contra `main`, verificar exact-head/mergeability y hacer squash merge.
-3. Revalidar el `main` resultante con CI + ProjectOps antes de cualquier transición.
-4. Activar P-013 desde ese `main` verde y correlacionar decision/request → transaction → verification → activation/recovery/outcome.
-5. Sólo con evidencia P-013 suficiente elevar P-012 a HECHO completo; no reabrir su arquitectura salvo defecto reproducible.
+1. Implementar únicamente la segunda unidad contractual registrada en P-014/C0010.
+2. Atacar substring accidental, authority ausente, budget unknown, contract/permission/effect/I/O/dependency/version mismatch y tipo futuro.
+3. Ejecutar targeted capability/persistence tests, typecheck, build, full suite, security-focused, ProjectOps y `git diff --check`.
+4. Producir clean source head y exigir gate ordinario exact-head antes de ampliar P-014.
+5. No abrir P-015/P-017/P-018 ni marcar P-014 HECHO antes de satisfacer su DoD completo e integración canónica.
 
 ## Política de rotación
 
-`C0006` queda CLOSED / HECHO como historia P-010. `C0007` queda CLOSED / HECHO como historia P-011. `C0008` es el único segmento activo para P-012 hasta integración `main` y dependencia P-013 suficiente para cierre. Nunca se crea un segundo manifest `CONTINUITY.md`.
+`C0006` queda CLOSED / HECHO como historia P-010. `C0007` queda CLOSED / HECHO como historia P-011. `C0008` queda CLOSED / HECHO como historia P-012. `C0009` queda CLOSED / HECHO como historia P-013. `C0010` es el único segmento activo para P-014. Nunca se crea un segundo manifest `CONTINUITY.md`.
