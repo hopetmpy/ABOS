@@ -21,15 +21,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 3
+          fetch-depth: 4
 
       - name: Guard exact source baseline
         shell: bash
         run: |
           set -euo pipefail
           test "${GITHUB_REF_NAME}" = "abos/p015-mcp-runtime"
-          test "$(git rev-parse HEAD^)" = "dfc1a11ec9a081a93f437ec34a52f560e231a11d"
-          test "$(git rev-parse HEAD^^)" = "f86ba6efa607ae5aed99e3669bd170db1bdc5662"
+          test "$(git rev-parse HEAD^)" = "447f466e9033fb0205673b851a41e52392f2adc5"
+          test "$(git rev-parse HEAD^^)" = "dfc1a11ec9a081a93f437ec34a52f560e231a11d"
+          test "$(git rev-parse HEAD^^^)" = "f86ba6efa607ae5aed99e3669bd170db1bdc5662"
           test -f scripts/p015-http-bearer-apply.py
 
       - name: Normalize applicator mechanics
@@ -136,15 +137,15 @@ jobs:
           set -euo pipefail
           node scripts/projectops-integrity-verify.mjs
           git diff --check
-          actual="$(git diff --name-only | sort)"
+          actual="$({ git diff --name-only; git ls-files --others --exclude-standard; } | sort -u)"
           expected="$(printf '%s\n' \
             'ProjectOps/CONTINUITY.md' \
             'ProjectOps/continuity/C0011.md' \
             'ProjectOps/plan/P-015.md' \
+            'scripts/p015-http-bearer-apply.py' \
             'src/__tests__/mcp-http-runtime.test.ts' \
             'src/agent/tools-core.ts' \
-            'src/mcp/runtime.ts' \
-            'scripts/p015-http-bearer-apply.py' | sort)"
+            'src/mcp/runtime.ts' | sort)"
           test "$actual" = "$expected"
 
       - name: Commit clean product source
@@ -154,11 +155,13 @@ jobs:
           rm scripts/p015-http-bearer-apply.py .github/workflows/p015-http-bearer-apply.yml
           node scripts/projectops-integrity-verify.mjs
           git diff --check
-          actual="$(git diff --name-only | sort)"
+          actual="$({ git diff --name-only; git ls-files --others --exclude-standard; } | sort -u)"
           expected="$(printf '%s\n' \
+            '.github/workflows/p015-http-bearer-apply.yml' \
             'ProjectOps/CONTINUITY.md' \
             'ProjectOps/continuity/C0011.md' \
             'ProjectOps/plan/P-015.md' \
+            'scripts/p015-http-bearer-apply.py' \
             'src/__tests__/mcp-http-runtime.test.ts' \
             'src/agent/tools-core.ts' \
             'src/mcp/runtime.ts' | sort)"
