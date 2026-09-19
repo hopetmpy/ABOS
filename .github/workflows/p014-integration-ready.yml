@@ -1,0 +1,54 @@
+name: P014 Integration Ready Reconcile
+
+on:
+  push:
+    branches:
+      - abos/p014-capability-fabric
+    paths:
+      - .github/workflows/p014-integration-ready.yml
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Guard exact starting point
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "9666cc0f26cfd42dee5fbf66a56a5b8ab2729ed1"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/p014-integration-ready.yml"
+          test -f scripts/p014-integration-ready.py
+          grep -Fq 'CONTRACT_UNIT_SOURCE_GREEN / EXACT_GATE_PENDING' ProjectOps/continuity/C0010.md
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Reconcile integration-ready authorities
+        run: python3 scripts/p014-integration-ready.py
+
+      - name: Verify ProjectOps
+        run: node scripts/projectops-integrity-verify.mjs
+
+      - name: Diff integrity
+        run: git diff --check
+
+      - name: Retire helpers and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/p014-integration-ready.yml scripts/p014-integration-ready.py
+          git add ProjectOps/CONTINUITY.md ProjectOps/PLAN.md ProjectOps/continuity/C0010.md ProjectOps/plan/P-014.md
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "docs(projectops): mark P-014 integration ready"
+          git push origin HEAD:abos/p014-capability-fabric
