@@ -1112,6 +1112,7 @@ Model: ${ctx.inference.getDefaultModel()}
           type: "mcp" as const,
           config: {
             ...(args.config ? JSON.parse(args.config as string) : {}),
+            package: pkg,
             runtimeTruth: "configured_unverified",
           },
           installedAt: new Date().toISOString(),
@@ -3735,8 +3736,10 @@ async function executeToolProtected(
       };
     }
 
-    // Sanitize results from external source tools
-    if (EXTERNAL_SOURCE_TOOLS.has(toolName)) {
+    // Sanitize all explicitly external tool surfaces. The legacy name set
+    // remains for existing built-ins; dynamic providers such as MCP declare the
+    // boundary on the tool definition instead of extending a closed allowlist.
+    if (tool.externalOutput === true || EXTERNAL_SOURCE_TOOLS.has(toolName)) {
       result = sanitizeToolResult(result);
     }
 

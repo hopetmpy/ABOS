@@ -308,6 +308,13 @@ export function createDatabase(dbPath: string): AbosDatabase {
     return rows.map(deserializeInstalledTool);
   };
 
+  const getToolInventory = (): InstalledTool[] => {
+    const rows = db
+      .prepare("SELECT * FROM installed_tools ORDER BY installed_at ASC, id ASC")
+      .all() as any[];
+    return rows.map(deserializeInstalledTool);
+  };
+
   const installTool = (tool: InstalledTool): void => {
     db.prepare(
       `INSERT OR REPLACE INTO installed_tools (id, name, type, config, installed_at, enabled)
@@ -583,6 +590,7 @@ export function createDatabase(dbPath: string): AbosDatabase {
     insertTransaction,
     getRecentTransactions,
     getInstalledTools,
+    getToolInventory,
     installTool,
     removeTool,
     insertModification,

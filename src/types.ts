@@ -204,6 +204,8 @@ export interface AbosTool {
   ) => Promise<string>;
   riskLevel: RiskLevel;
   category: ToolCategory;
+  /** External/untrusted tool output must be sanitized before model exposure. */
+  externalOutput?: boolean;
 }
 
 export type ToolCategory =
@@ -762,6 +764,8 @@ export interface AbosDatabase {
 
   // Installed tools
   getInstalledTools(): InstalledTool[];
+  /** Complete durable inventory; `enabled` is not runtime-readiness evidence. */
+  getToolInventory(): InstalledTool[];
   installTool(tool: InstalledTool): void;
   removeTool(id: string): void;
 
