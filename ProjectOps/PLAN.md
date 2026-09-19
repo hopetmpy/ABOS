@@ -23,7 +23,7 @@ Master-Transformation-Plan: P-007
 | P-011 | Hacer reales Lifecycle, Health, Restart y Recovery | HECHO | integrado por PR #38; cierre documental PR #39; baseline P-012 `main 1f1e93f4...` revalidado | plan/P-011.md |
 | P-012 | Convertir self-modification en transacción segura y recuperable | HECHO | source/integration P-012 + evidencia P-013 cerradas; transición canónica respaldada por main `21911888b8271662f1b546bc637f49d76610c132` CI `35410063228` + ProjectOps `35410063240` | plan/P-012.md |
 | P-013 | Unificar Observability, Audit y Evidence Fabric | HECHO | P-008 + P-009; producto PR #41 + cierre PR #42 integrados; main `21911888b8271662f1b546bc637f49d76610c132` CI `35410063228` + ProjectOps `35410063240` green | plan/P-013.md |
-| P-014 | Consolidar Capability Fabric canónico y lifecycle de capacidades | EN_EJECUCIÓN | P-008 + P-009 + P-010 + P-013 HECHOS; `main a8d22778b4cd6f1641efe4bc586711915cd06609` green; DECISION_READY / source aún sin modificar | plan/P-014.md |
+| P-014 | Consolidar Capability Fabric canónico y lifecycle de capacidades | EN_EJECUCIÓN | technical DoD satisfecho; branch exact product gate `267d6dda8a845fbc38ef07e302a6a81f77bda822` CI `35415290448` + ProjectOps `35415290455` SUCCESS; integración/revalidación main pendiente | plan/P-014.md |
 | P-015 | Sustituir MCP nominal por un runtime MCP real y verificable | PLANIFICADO | P-014 + P-009 + P-010 + P-013 | plan/P-015.md |
 | P-016 | Dar a ABOS manos de computadora, browser y GUI mediante providers reales | PLANIFICADO | P-014 + P-009 + P-010 + P-011 + P-013 | plan/P-016.md |
 | P-017 | Implementar discovery, acquisition, composition y construction de capacidades | PLANIFICADO | P-012 + P-014 + P-015 + P-016 + P-013 | plan/P-017.md |
