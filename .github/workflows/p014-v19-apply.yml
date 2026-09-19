@@ -23,7 +23,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "72e8056d90b8dd8cf90f6fdf97ddf9a74bed77e5"
+          test "$(git rev-parse HEAD^)" = "5f27c5c3cafec3dfad5f11172a8cbf7fc66c03c7"
           test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/p014-v19-apply.yml"
           test -f scripts/p014-v19-apply.py
           test ! -e src/capabilities/store.ts
