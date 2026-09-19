@@ -1,0 +1,248 @@
+name: P016 Structured Browser Hardening
+
+on:
+  push:
+    branches:
+      - abos/p016-computer-browser-gui-hands
+    paths:
+      - .github/workflows/p016-structured-browser-hardening.yml
+
+permissions:
+  contents: write
+
+jobs:
+  harden-validate-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v4
+
+      - name: Configure bot commit identity
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Apply adversarial hardening and regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          runtime = Path("src/browser/local-runtime.ts")
+          s = runtime.read_text(encoding="utf-8")
+
+          def once(old: str, new: str) -> None:
+              global s
+              count = s.count(old)
+              if count != 1:
+                  raise SystemExit(f"runtime anchor expected once, found {count}: {old[:90]!r}")
+              s = s.replace(old, new, 1)
+
+          once(
+          '''interface BrowserContextLike {\n  newPage(): Promise<BrowserPageLike>;\n  close(): Promise<void>;\n}\n''',
+          '''interface BrowserRequestLike {\n  url(): string;\n}\n\ninterface BrowserRouteLike {\n  request(): BrowserRequestLike;\n  continue(): Promise<void>;\n  abort(errorCode?: string): Promise<void>;\n}\n\ninterface BrowserContextLike {\n  newPage(): Promise<BrowserPageLike>;\n  route(url: string, handler: (route: BrowserRouteLike) => Promise<void>): Promise<void>;\n  close(): Promise<void>;\n}\n''')
+
+          once(
+          '''  probeCacheMs?: number;\n}\n''',
+          '''  probeCacheMs?: number;\n  downloadRoot?: string;\n}\n''')
+
+          once(
+          '''function semanticLocator(page: BrowserPageLike, target: SemanticBrowserTarget): BrowserLocatorLike {\n''',
+          '''function assertTrustedBrowserRequestUrl(rawUrl: string): void {\n  let parsed: URL;\n  try {\n    parsed = new URL(rawUrl);\n  } catch {\n    throw new Error(`Invalid browser request URL: ${rawUrl}`);\n  }\n\n  if (parsed.protocol === "http:" || parsed.protocol === "https:") {\n    trustedHttpUrl(rawUrl, {\n      allowHttpOnLoopback: true,\n      rejectEmbeddedCredentials: true,\n      stripHash: false,\n    });\n    return;\n  }\n\n  if (parsed.protocol === "data:" || parsed.protocol === "blob:" || parsed.protocol === "about:") {\n    return;\n  }\n\n  throw new Error(`Unsupported browser request scheme: ${parsed.protocol}`);\n}\n\nfunction semanticLocator(page: BrowserPageLike, target: SemanticBrowserTarget): BrowserLocatorLike {\n''')
+
+          once(
+          '''  private readonly probeCacheMs: number;\n''',
+          '''  private readonly probeCacheMs: number;\n  private readonly downloadRoot: string;\n''')
+
+          once(
+          '''    this.probeCacheMs = options.probeCacheMs ?? 30_000;\n''',
+          '''    this.probeCacheMs = options.probeCacheMs ?? 30_000;\n    this.downloadRoot = options.downloadRoot ?? path.join(getHomeDir(), "Downloads", "ABOS");\n''')
+
+          once(
+          '''      context = await browser.newContext({ acceptDownloads: true });\n      const page = await context.newPage();\n''',
+          '''      context = await browser.newContext({ acceptDownloads: true });\n      await context.route("**/*", async (route) => {\n        try {\n          assertTrustedBrowserRequestUrl(route.request().url());\n          await route.continue();\n        } catch {\n          await route.abort("blockedbyclient");\n        }\n      });\n      const page = await context.newPage();\n''')
+
+          once(
+          '''    let context: BrowserContextLike | null = null;\n    try {\n''',
+          '''    let context: BrowserContextLike | null = null;\n    let registeredSessionId: string | null = null;\n    try {\n''')
+
+          once(
+          '''      this.sessions.set(id, session);\n      if (url?.trim()) {\n''',
+          '''      this.sessions.set(id, session);\n      registeredSessionId = id;\n      if (url?.trim()) {\n''')
+
+          once(
+          '''    } catch (error) {\n      try {\n        await context?.close();\n''',
+          '''    } catch (error) {\n      if (registeredSessionId) this.sessions.delete(registeredSessionId);\n      try {\n        await context?.close();\n''')
+
+          once(
+          '''      const stat = fs.statSync(resolved);\n      if (!stat.isFile()) throw new Error(`browser_upload requires a regular file: ${resolved}`);\n      confined.push(resolved);\n''',
+          '''      const lexicalStat = fs.lstatSync(resolved);\n      if (lexicalStat.isSymbolicLink()) {\n        throw new Error(`browser_upload refuses symbolic links: ${resolved}`);\n      }\n      if (!lexicalStat.isFile()) throw new Error(`browser_upload requires a regular file: ${resolved}`);\n      const realPath = fs.realpathSync(resolved);\n      const realConfined = confinePathToLocalHome(realPath, "browser_upload_realpath");\n      if (typeof realConfined === "object") throw new Error(realConfined.error);\n      confined.push(realConfined);\n''')
+
+          once(
+          '''    const outputDir = path.join(getHomeDir(), "Downloads", "ABOS");\n    fs.mkdirSync(outputDir, { recursive: true });\n    const uniqueName = `${Date.now()}-${this.idFactory().slice(0, 12)}-${basename}`;\n    const candidatePath = path.join(outputDir, uniqueName);\n''',
+          '''    fs.mkdirSync(this.downloadRoot, { recursive: true });\n    const realOutputDir = fs.realpathSync(this.downloadRoot);\n    const confinedOutputDir = confinePathToLocalHome(realOutputDir, "browser_download_root");\n    if (typeof confinedOutputDir === "object") throw new Error(confinedOutputDir.error);\n    const uniqueName = `${Date.now()}-${this.idFactory().slice(0, 12)}-${basename}`;\n    const candidatePath = path.join(confinedOutputDir, uniqueName);\n    if (fs.existsSync(candidatePath)) {\n      throw new Error(`browser_download target already exists: ${candidatePath}`);\n    }\n''')
+
+          runtime.write_text(s, encoding="utf-8")
+
+          tests = Path("src/__tests__/p016-local-browser-runtime.test.ts")
+          t = tests.read_text(encoding="utf-8")
+          t = t.replace('import path from "node:path";\n', 'import fs from "node:fs";\nimport os from "node:os";\nimport path from "node:path";\n', 1)
+          t = t.replace(
+          'function fakeBrowser(state: { url: string; snapshot: string; closed: number }) {\n',
+          'function fakeBrowser(state: { url: string; snapshot: string; closed: number; redirectTo?: string; failNavigation?: boolean }) {\n  let routeHandler: ((route: { request(): { url(): string }; continue(): Promise<void>; abort(): Promise<void> }) => Promise<void>) | null = null;\n  const runRoute = async (url: string) => {\n    if (!routeHandler) return;\n    let aborted = false;\n    await routeHandler({\n      request: () => ({ url: () => url }),\n      continue: async () => {},\n      abort: async () => { aborted = true; },\n    });\n    if (aborted) throw new Error(`blockedbyclient:${url}`);\n  };\n',
+          1)
+          t = t.replace(
+          '    goto: async (url: string) => { state.url = url; },\n',
+          '    goto: async (url: string) => {\n      await runRoute(url);\n      if (state.redirectTo) await runRoute(state.redirectTo);\n      if (state.failNavigation) throw new Error("navigation failed");\n      state.url = state.redirectTo ?? url;\n    },\n',
+          1)
+          t = t.replace(
+          '  const context = {\n    newPage: async () => page,\n    close: async () => {},\n  };\n',
+          '  const context = {\n    newPage: async () => page,\n    route: async (_url: string, handler: typeof routeHandler) => { routeHandler = handler; },\n    close: async () => {},\n  };\n',
+          1)
+
+          insert = '''\n\n  it("removes the process-local handle when initial navigation fails", async () => {\n    const state = { url: "about:blank", snapshot: "ok", closed: 0, failNavigation: true };\n    const runtime = new LocalBrowserRuntime({\n      candidates: () => [candidate()],\n      launch: async () => fakeBrowser(state),\n      idFactory: () => "failed-open",\n    });\n    await expect(runtime.open("https://example.com/fail")).rejects.toThrow("navigation failed");\n    expect(runtime.sessionCount()).toBe(0);\n    await expect(runtime.snapshot("browser_failed-open")).rejects.toThrow("STALE_OR_UNKNOWN_BROWSER_SESSION");\n  });\n\n  it("blocks an HTTPS redirect that downgrades to remote HTTP", async () => {\n    const state = {\n      url: "about:blank",\n      snapshot: "ok",\n      closed: 0,\n      redirectTo: "http://example.net/insecure",\n    };\n    const runtime = new LocalBrowserRuntime({\n      candidates: () => [candidate()],\n      launch: async () => fakeBrowser(state),\n      idFactory: () => "redirect",\n    });\n    await expect(runtime.open("https://example.com/start")).rejects.toThrow("blockedbyclient");\n    expect(runtime.sessionCount()).toBe(0);\n  });\n\n  it("rejects an in-home upload symlink before file materialization", async () => {\n    if (process.platform === "win32") return;\n    const state = { url: "about:blank", snapshot: "ok", closed: 0 };\n    const runtime = new LocalBrowserRuntime({\n      candidates: () => [candidate()],\n      launch: async () => fakeBrowser(state),\n      idFactory: () => "symlink-upload",\n    });\n    const opened = await runtime.open();\n    const externalDir = fs.mkdtempSync(path.join(os.tmpdir(), "abos-p016-external-"));\n    const externalFile = path.join(externalDir, "outside.txt");\n    const link = path.join(getHomeDir(), `.abos-p016-upload-link-${process.pid}`);\n    fs.writeFileSync(externalFile, "outside");\n    try {\n      fs.symlinkSync(externalFile, link);\n      await expect(runtime.upload(opened.sessionId, { label: "Upload" }, [link]))\n        .rejects.toThrow("refuses symbolic links");\n    } finally {\n      try { fs.unlinkSync(link); } catch {}\n      fs.rmSync(externalDir, { recursive: true, force: true });\n      await runtime.closeAll();\n    }\n  });\n\n  it("rejects a download root symlink that escapes local HOME", async () => {\n    if (process.platform === "win32") return;\n    const state = { url: "about:blank", snapshot: "ok", closed: 0 };\n    const externalDir = fs.mkdtempSync(path.join(os.tmpdir(), "abos-p016-download-outside-"));\n    const link = path.join(getHomeDir(), `.abos-p016-download-link-${process.pid}`);\n    fs.symlinkSync(externalDir, link, "dir");\n    const runtime = new LocalBrowserRuntime({\n      candidates: () => [candidate()],\n      launch: async () => fakeBrowser(state),\n      idFactory: () => "symlink-download",\n      downloadRoot: link,\n    });\n    try {\n      const opened = await runtime.open();\n      await expect(runtime.download(opened.sessionId, { text: "Download" }))\n        .rejects.toThrow("outside the allowed directory");\n    } finally {\n      await runtime.closeAll();\n      try { fs.unlinkSync(link); } catch {}\n      fs.rmSync(externalDir, { recursive: true, force: true });\n    }\n  });\n'''
+          marker = '\n  it("treats a session from another runtime instance as stale/restart-invalid", async () => {'
+          if marker not in t:
+              raise SystemExit("test insertion marker missing")
+          t = t.replace(marker, insert + marker, 1)
+          tests.write_text(t, encoding="utf-8")
+          PY
+
+      - name: Install frozen dependency graph
+        run: pnpm install --frozen-lockfile
+
+      - name: Run targeted adversarial regressions
+        run: pnpm exec vitest run src/__tests__/p016-local-browser-runtime.test.ts src/__tests__/p016-url-trust.test.ts src/__tests__/p016-browser-upload-policy.test.ts src/__tests__/path-protection.test.ts src/__tests__/http-client.test.ts src/__tests__/mcp-http-runtime.test.ts
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Run full test suite
+        timeout-minutes: 7
+        shell: bash
+        run: |
+          set +e
+          timeout 360 pnpm run test:diagnose
+          RC=$?
+          set -e
+          if [ "$RC" -eq 124 ]; then
+            echo "::error::Full test suite timed out or left active handles"
+          fi
+          exit "$RC"
+
+      - name: Run security-focused regressions
+        timeout-minutes: 4
+        shell: bash
+        run: |
+          set +e
+          timeout 210 pnpm exec vitest run -t "security|injection|policy|financial|symlink|redirect"
+          RC=$?
+          set -e
+          exit "$RC"
+
+      - name: Audit dependency graph
+        run: pnpm audit
+
+      - name: Real browser smoke with network guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import http from "node:http";
+          import { LocalBrowserRuntime } from "./dist/browser/local-runtime.js";
+          const server = http.createServer((req, res) => {
+            if (req.url === "/download") {
+              res.writeHead(200, { "content-type": "text/plain", "content-disposition": 'attachment; filename="artifact.txt"' });
+              res.end("ABOS-P016-hardening");
+              return;
+            }
+            res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+            res.end('<html><body><p>ready</p><button aria-label="Advance">Go</button><a href="/download">Download</a></body></html>');
+          });
+          await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+          const address = server.address();
+          if (!address || typeof address === "string") throw new Error("no fixture address");
+          const runtime = new LocalBrowserRuntime({ probeCacheMs: 0 });
+          try {
+            const probe = await runtime.probe({ force: true });
+            if (!probe.available) {
+              fs.writeFileSync(".p016-hardening-smoke", `UNAVAILABLE:${probe.evidence.join(" | ").replace(/\s+/g, " ").slice(0, 700)}\n`);
+            } else {
+              const opened = await runtime.open(`http://127.0.0.1:${address.port}/`);
+              const snapshot = await runtime.snapshot(opened.sessionId);
+              if (!snapshot.snapshot.includes("ready")) throw new Error("ARIA fixture missing");
+              const download = await runtime.download(opened.sessionId, { text: "Download" });
+              if (download.sizeBytes <= 0) throw new Error("download empty");
+              try { fs.unlinkSync(download.path); } catch {}
+              fs.writeFileSync(".p016-hardening-smoke", `PASS:browserVersion=${probe.browserVersion ?? "unknown"};networkGuard=active;loopbackHttp=allowed;aria=verified;downloadBytes=${download.sizeBytes}\n`);
+            }
+          } finally {
+            await runtime.closeAll();
+            await new Promise((resolve) => server.close(resolve));
+          }
+          NODE
+
+      - name: Reconcile continuity to hardened source checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          smoke = Path(".p016-hardening-smoke").read_text(encoding="utf-8").strip()
+          c = Path("ProjectOps/continuity/C0012.md")
+          text = c.read_text(encoding="utf-8").rstrip()
+          text += f'''\n\n## Adversarial correction checkpoint — STRUCTURED_BROWSER_LOCAL\n\n- Hardening workflow: `{__import__('os').environ['GITHUB_RUN_ID']}`.\n- Findings corrected: failed-open session leak; upload symlink escape; download-root symlink escape; HTTPS→remote-HTTP redirect downgrade via request-level network guard.\n- Targeted regressions, typecheck, build, full suite, security-focused regressions, dependency audit and ProjectOps were required before commit.\n- Real-host smoke: `{smoke}`.\n- Unit remains `EN_EJECUCIÓN / HARDENED_APPLY_VALIDATED / ORDINARY_EXACT_HEAD_CI_PENDING` until the clean committed tree passes ordinary CI + ProjectOps.\n'''
+          c.write_text(text + "\n", encoding="utf-8")
+
+          p = Path("ProjectOps/CONTINUITY.md")
+          s = p.read_text(encoding="utf-8")
+          replacements = {
+            "Active-Intervention: P016_COMPUTER_BROWSER_GUI_HANDS — DECISION_READY / STRUCTURED_BROWSER_LOCAL / SOURCE_UNMODIFIED": "Active-Intervention: P016_COMPUTER_BROWSER_GUI_HANDS — EN_EJECUCIÓN / STRUCTURED_BROWSER_LOCAL_HARDENED / ORDINARY_EXACT_HEAD_CI_PENDING",
+            "Last-Reconciled-Host-Head: b8b91acf5c4445b5bc3c7627387281f0415fcb48": "Last-Reconciled-Host-Head: 0d65e1e60b261af39409900be89f17a5b1983c41",
+            "Last-Reconciled-Head-Semantics: P016_DECISION_READY_STRUCTURED_BROWSER_LOCAL_SOURCE_UNMODIFIED": "Last-Reconciled-Head-Semantics: P016_STRUCTURED_BROWSER_LOCAL_HARDENED_APPLY_VALIDATED_ORDINARY_CI_PENDING",
+          }
+          for old, new in replacements.items():
+            if old not in s:
+              raise SystemExit(f"continuity header anchor missing: {old}")
+            s = s.replace(old, new, 1)
+          lines = [
+            "P016-Decision-Gate-Head: dcda828f00e8b463b0870f915190e41151560171",
+            "P016-Decision-Gate-CI: 35425068374 SUCCESS",
+            "P016-Decision-Gate-ProjectOps: 35425068377 SUCCESS",
+            "P016-Structured-Browser-Source-Head: 0d65e1e60b261af39409900be89f17a5b1983c41",
+            "P016-Structured-Browser-Apply: 35425530526 SUCCESS",
+            f"P016-Structured-Browser-Hardening-Apply: {__import__('os').environ['GITHUB_RUN_ID']} SUCCESS",
+          ]
+          for line in lines:
+            if line not in s:
+              s = s.rstrip() + "\n" + line + "\n"
+          p.write_text(s, encoding="utf-8")
+          PY
+          node scripts/projectops-integrity-verify.mjs
+          git diff --check
+
+      - name: Remove temporary workflow and commit hardened clean tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/p016-structured-browser-hardening.yml .p016-hardening-smoke
+          git add -A
+          git diff --cached --check
+          git status --short
+          git diff --cached --stat
+          git commit -m "fix(p016): harden structured browser trust boundaries"
+          git push origin HEAD:abos/p016-computer-browser-gui-hands
