@@ -1,0 +1,192 @@
+name: P013 P014 Transition Reconciler
+
+on:
+  push:
+    branches:
+      - abos/p013-p014-transition
+    paths:
+      - .github/workflows/p013-p014-transition.yml
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply canonical P-013 closure and P-014 activation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          ROOT = Path('.')
+          BASE = '21911888b8271662f1b546bc637f49d76610c132'
+          CI = '35410063228'
+          OPS = '35410063240'
+
+          def read(path):
+              return (ROOT / path).read_text(encoding='utf-8')
+
+          def write(path, text):
+              (ROOT / path).write_text(text, encoding='utf-8')
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one occurrence, found {count}: {old!r}')
+              return text.replace(old, new, 1)
+
+          # CONTINUITY: close prior macro block and activate P-014/C0010.
+          path = 'ProjectOps/CONTINUITY.md'
+          text = read(path)
+          text = replace_once(text, 'Active-Plan: P-013', 'Active-Plan: P-014', path)
+          text = replace_once(text, 'Active-Segment: continuity/C0009.md', 'Active-Segment: continuity/C0010.md', path)
+          text = replace_once(text, 'Active-Intervention: P013_OBSERVABILITY_EVIDENCE_FABRIC — MAIN_E3_GREEN / TECHNICAL_OBJECTIVE_SATISFIED / CANONICAL_CLOSURE_READY', 'Active-Intervention: P014_CAPABILITY_FABRIC — AUDIT_OPEN / SOURCE_UNMODIFIED', path)
+          text = replace_once(text, 'Current-Host-Branch: abos/p013-main-closure', 'Current-Host-Branch: abos/p013-p014-transition', path)
+          text = replace_once(text, 'Last-Reconciled-Host-Head: 733eb762596cac019593c6f27d7740da0ab25462', f'Last-Reconciled-Host-Head: {BASE}', path)
+          text = replace_once(text, 'Last-Reconciled-Head-Semantics: P013_MAIN_E3_GREEN_CANONICAL_CLOSURE_READY', 'Last-Reconciled-Head-Semantics: P012_P013_HECHO_P014_AUDIT_OPEN', path)
+          marker = 'P012-P013-Dependency-State: SATISFIED / CANONICAL_CLOSURE_PENDING\n'
+          addition = (
+              marker
+              + 'P013-Closure-PR: 42\n'
+              + f'P013-Closure-Merge: {BASE}\n'
+              + f'P013-Closure-Main-CI: {CI} SUCCESS\n'
+              + f'P013-Closure-Main-ProjectOps: {OPS} SUCCESS\n'
+              + 'P012-Canonical-State: HECHO / INTEGRATION_VERIFIED / P013_EVIDENCE_SATISFIED\n'
+              + 'P013-Canonical-State: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED\n'
+              + f'P014-Canonical-Baseline: {BASE}\n'
+              + f'P014-Baseline-CI: {CI} SUCCESS\n'
+              + f'P014-Baseline-ProjectOps: {OPS} SUCCESS\n'
+              + 'P014-Activation-Branch: abos/p013-p014-transition\n'
+          )
+          text = replace_once(text, marker, addition, path)
+          text = replace_once(text,
+              '`Last-Reconciled-Host-Head` es `main 733eb762596cac019593c6f27d7740da0ab25462`: PR #41 fue integrado por squash y el exact merged main pasó CI `35406990676` + ProjectOps `35406990741`. El fixture legacy Policy usa la migration v18 canónica, fail-closed permanece intacto, Operational projections sigue `NO_CHANGE` y el E2E/restart durable satisface el DoD. El objetivo técnico P-013 y la dependencia material de P-012 están satisfechos; ambos conservan estado no terminal únicamente hasta integrar este cierre ProjectOps y ejecutar la transición canónica.',
+              f'`Last-Reconciled-Host-Head` es `main {BASE}`: PR #42 integró el cierre ProjectOps de P-013 y el exact merged main pasó CI `{CI}` + ProjectOps `{OPS}`. P-012 y P-013 satisfacen su Definition of Done exacta y quedan HECHO E3/INTEGRATION_VERIFIED. P-014 queda activado sólo en AUDIT_OPEN / SOURCE_UNMODIFIED; no se atribuye E5/E6/E7 ni se modifica producto antes de DECISION_READY.',
+              path)
+          text = replace_once(text,
+              '- P-012: PARCIAL / INTEGRATION_VERIFIED / P013_EVIDENCE_SATISFIED — source/integration propios siguen verdes y P-013 ya quedó integrado/revalidado en `main 733eb762596cac019593c6f27d7740da0ab25462`; conserva PARCIAL sólo hasta la transición canónica posterior a este cierre.\n- P-013: EN_EJECUCIÓN / MAIN_E3_GREEN / CANONICAL_CLOSURE_READY — PR #41 fue integrado por squash en `main 733eb762596cac019593c6f27d7740da0ab25462` y revalidado por CI `35406990676` + ProjectOps `35406990741` SUCCESS. El objetivo técnico satisface el DoD; falta únicamente integrar este cierre ProjectOps y realizar la transición terminal.\n- P-014..P-036: ver `ProjectOps/PLAN.md`; permanecen en su estado explícito.',
+              f'- P-012: HECHO / INTEGRATION_VERIFIED / P013_EVIDENCE_SATISFIED — source propio, integración y dependencia P-013 están cerrados; transición canónica respaldada por `main {BASE}` CI `{CI}` + ProjectOps `{OPS}`.\n- P-013: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED — producto PR #41 y cierre ProjectOps PR #42 integrados/revalidados; no implica E5/E6/E7 LIVE.\n- P-014: EN_EJECUCIÓN / AUDIT_OPEN / SOURCE_UNMODIFIED — Capability Fabric activado sobre baseline `main {BASE}`; C0010 gobierna la auditoría antes de DECISION_READY.\n- P-015..P-036: ver `ProjectOps/PLAN.md`; permanecen en su estado explícito.',
+              path)
+          write(path, text)
+
+          # PLAN manifest.
+          path = 'ProjectOps/PLAN.md'
+          text = read(path)
+          text = replace_once(text,
+              '| P-012 | Convertir self-modification en transacción segura y recuperable | PARCIAL | source/integration P-012 green; P-013 evidence integrada/revalidada por PR #41; transición canónica de cierre pendiente | plan/P-012.md |',
+              f'| P-012 | Convertir self-modification en transacción segura y recuperable | HECHO | source/integration P-012 + evidencia P-013 cerradas; transición canónica respaldada por main `{BASE}` CI `{CI}` + ProjectOps `{OPS}` | plan/P-012.md |',
+              path)
+          text = replace_once(text,
+              '| P-013 | Unificar Observability, Audit y Evidence Fabric | EN_EJECUCIÓN | P-008 + P-009; PR #41 squash-merged to `733eb76259...`; main CI/ProjectOps green; technical DoD satisfied; canonical closure transition pending | plan/P-013.md |',
+              f'| P-013 | Unificar Observability, Audit y Evidence Fabric | HECHO | P-008 + P-009; producto PR #41 + cierre PR #42 integrados; main `{BASE}` CI `{CI}` + ProjectOps `{OPS}` green | plan/P-013.md |',
+              path)
+          text = replace_once(text,
+              '| P-014 | Consolidar Capability Fabric canónico y lifecycle de capacidades | PLANIFICADO | P-008 + P-009 + P-010 + P-013 | plan/P-014.md |',
+              f'| P-014 | Consolidar Capability Fabric canónico y lifecycle de capacidades | EN_EJECUCIÓN | P-008 + P-009 + P-010 + P-013 HECHOS; baseline `{BASE}` | plan/P-014.md |',
+              path)
+          text = replace_once(text,
+              'La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth, P-009 Authority/Provenance, P-010 Policy/Authorization y P-011 Lifecycle/Recovery están integrados. P-012 transactional self-modification está integrado/revalidado y su dependencia de evidencia P-013 ya quedó materialmente satisfecha. P-013 observability/evidence está integrado/revalidado en main; la intervención activa de Ola 1 sólo conserva el cierre canónico antes de la transición a P-014.',
+              f'La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth, P-009 Authority/Provenance, P-010 Policy/Authorization, P-011 Lifecycle/Recovery, P-012 transactional self-modification y P-013 observability/evidence están HECHO con evidencia E3 exacta. PR #42 cerró canónicamente P-013 en `main {BASE}`; la intervención activa pasa a P-014 Capability Fabric en AUDIT_OPEN / SOURCE_UNMODIFIED.',
+              path)
+          write(path, text)
+
+          # PROJECT baseline.
+          path = 'ProjectOps/PROJECT.md'
+          text = read(path)
+          text = replace_once(text,
+              'El main exacto pasó CI `34926393562` y ProjectOps Integrity `34926393570`. Esto acredita E3 del source integrado, no provider/economic LIVE. La dependencia evidence/correlation de P-012 quedó materialmente satisfecha por P-013 PR #41 y `main 733eb762596cac019593c6f27d7740da0ab25462` revalidado; P-012 conserva PARCIAL únicamente hasta la transición canónica posterior a este cierre ProjectOps.',
+              f'El main exacto pasó CI `34926393562` y ProjectOps Integrity `34926393570`. Esto acredita E3 del source integrado, no provider/economic LIVE. La dependencia evidence/correlation de P-012 quedó materialmente satisfecha por P-013 PR #41; el cierre ProjectOps PR #42 quedó integrado y revalidado en `main {BASE}` por CI `{CI}` + ProjectOps `{OPS}`. P-012 queda HECHO para su objetivo exacto.',
+              path)
+          text = replace_once(text,
+              '### 7.4 P-013 activo\n\nP-011 Lifecycle/Health/Restart/Recovery está HECHO / INTEGRATION_VERIFIED. P-012 transactional self-modification está integrado y su dependencia P-013 ya está materialmente satisfecha. P-013 Observability/Audit/Evidence Fabric fue integrado por PR #41 en `main 733eb762596cac019593c6f27d7740da0ab25462` y revalidado por CI `35406990676` + ProjectOps `35406990741` SUCCESS. La intervención activa conserva sólo el cierre canónico ProjectOps; P-014 no se activa hasta integrar y revalidar ese cierre.',
+              f'### 7.4 P-014 activo\n\nP-011 Lifecycle/Health/Restart/Recovery, P-012 transactional self-modification y P-013 Observability/Audit/Evidence Fabric están HECHO / INTEGRATION_VERIFIED para sus objetivos exactos. PR #42 cerró ProjectOps de P-013 en `main {BASE}`, revalidado por CI `{CI}` + ProjectOps `{OPS}` SUCCESS. P-014 Capability Fabric queda activo en AUDIT_OPEN / SOURCE_UNMODIFIED: debe reutilizar `src/capabilities/` y demostrar authority/lifecycle antes de modificar producto.',
+              path)
+          write(path, text)
+
+          # P-012 terminal state.
+          path = 'ProjectOps/plan/P-012.md'
+          text = read(path)
+          text = replace_once(text, 'State: PARCIAL', 'State: HECHO', path)
+          text = replace_once(text,
+              'Evidence-State: E3_INTEGRATION_VERIFIED / P013_EVIDENCE_SATISFIED / CANONICAL_CLOSURE_READY',
+              'Evidence-State: E3_INTEGRATION_VERIFIED / P013_EVIDENCE_SATISFIED / CANONICAL_CLOSURE_COMPLETE',
+              path)
+          text = replace_once(text,
+              'Dependencies: P-009, P-010, P-011; P-013 evidence satisfecha por PR #41 + main E3, pendiente únicamente de transición canónica de cierre.',
+              f'Dependencies: P-009, P-010, P-011; P-013 evidence satisfecha y cierre canónico integrado/revalidado por PR #42 en main `{BASE}`.',
+              path)
+          text = replace_once(text,
+              '`PARCIAL / INTEGRATION_VERIFIED / P013_EVIDENCE_SATISFIED / CANONICAL_CLOSURE_READY`.\n\nLa arquitectura DECISION_READY fue implementada, integrada y revalidada en `main`; no queda source, merge ni revalidación P-012 pendiente. La dependencia P-013 quedó materialmente satisfecha por PR #41, squash merge `main 733eb762596cac019593c6f27d7740da0ab25462`, CI `35406990676` SUCCESS y ProjectOps `35406990741` SUCCESS. P-012 conserva `PARCIAL` sólo hasta que este cierre ProjectOps se integre y la transición canónica pueda elevarlo a `HECHO`; no reabrir su arquitectura salvo defecto reproducible o incompatibilidad demostrada.',
+              f'`HECHO / INTEGRATION_VERIFIED / P013_EVIDENCE_SATISFIED / CANONICAL_CLOSURE_COMPLETE`.\n\nLa arquitectura DECISION_READY fue implementada, integrada y revalidada en `main`; no queda source, merge ni revalidación P-012 pendiente. La dependencia P-013 quedó materialmente satisfecha por PR #41 y el cierre ProjectOps PR #42 quedó integrado en `main {BASE}`, CI `{CI}` SUCCESS y ProjectOps `{OPS}` SUCCESS. No reabrir su arquitectura salvo defecto reproducible o incompatibilidad demostrada.',
+              path)
+          write(path, text)
+
+          # P-013 terminal state and exact closure evidence.
+          path = 'ProjectOps/plan/P-013.md'
+          text = read(path)
+          text = replace_once(text, 'State: EN_EJECUCIÓN', 'State: HECHO', path)
+          text = replace_once(text,
+              'Evidence-State: E3_MAIN_GREEN / INTEGRATION_VERIFIED / CANONICAL_CLOSURE_READY',
+              'Evidence-State: E3_MAIN_GREEN / INTEGRATION_VERIFIED / CANONICAL_CLOSURE_COMPLETE',
+              path)
+          marker = '- merged main ProjectOps `35406990741`: SUCCESS\n'
+          addition = marker + f'- closure PR #42 squash merge `main`: `{BASE}`\n- closure merged main CI `{CI}`: SUCCESS\n- closure merged main ProjectOps `{OPS}`: SUCCESS\n'
+          text = replace_once(text, marker, addition, path)
+          text = replace_once(text,
+              '- P-013 permanece `EN_EJECUCIÓN / MAIN_E3_GREEN / CANONICAL_CLOSURE_READY`; PR #41, squash merge y exact `main` revalidation ya están verificados. El objetivo técnico satisface su DoD; `HECHO` canónico se difiere únicamente hasta integrar/revalidar este cierre ProjectOps.',
+              f'- P-013 queda `HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED / CANONICAL_CLOSURE_COMPLETE`; PR #41 integró producto y PR #42 integró el cierre ProjectOps. `main {BASE}` pasó CI `{CI}` + ProjectOps `{OPS}`. Esto no eleva el claim a E5/E6/E7.',
+              path)
+          write(path, text)
+
+          # P-014 activation metadata; product source remains untouched.
+          path = 'ProjectOps/plan/P-014.md'
+          text = read(path)
+          text = replace_once(text, 'State: PLANIFICADO', 'State: EN_EJECUCIÓN', path)
+          text = replace_once(text,
+              'Dependencies: P-008, P-009, P-010, P-013.\n\n## Objetivo',
+              f'Dependencies: P-008, P-009, P-010, P-013.\nDecision-State: AUDIT_OPEN\nEvidence-State: SOURCE_UNMODIFIED\nActivation-Baseline:\n- P-013 closure PR: #42\n- canonical baseline `main`: `{BASE}`\n- baseline CI `{CI}`: SUCCESS\n- baseline ProjectOps `{OPS}`: SUCCESS\n- active segment: `ProjectOps/continuity/C0010.md`\n- product source P-014 modified at activation: NO\n\n## Objetivo',
+              path)
+          write(path, text)
+
+          # Close C0009 with exact post-merge evidence.
+          path = 'ProjectOps/continuity/C0009.md'
+          text = read(path)
+          text = replace_once(text, 'State: ACTIVE\nSegment: C0009', 'State: CLOSED\nSegment: C0009\nClosed: 2026-09-18', path)
+          text = replace_once(text,
+              'State: EN_EJECUCIÓN\nClassification: MAIN_E3_GREEN / TECHNICAL_OBJECTIVE_SATISFIED / CANONICAL_CLOSURE_READY',
+              'State: HECHO\nClassification: E3_MAIN_GREEN / INTEGRATION_VERIFIED / CANONICAL_CLOSURE_COMPLETE',
+              path)
+          text += f'''\n\n## Cierre canónico — PR #42\n\n- producto P-013: PR #41, squash merge `733eb762596cac019593c6f27d7740da0ab25462`;\n- cierre ProjectOps: PR #42, squash merge `{BASE}`;\n- exact merged main CI `{CI}`: SUCCESS;\n- exact merged main ProjectOps `{OPS}`: SUCCESS;\n- Node 22/24 full + security, Windows 22/24, public smoke 22/24, dependency audit y rebrand: PASS;\n- P-012 dependency de evidence/correlation: SATISFIED y transición terminal permitida;\n- P-013: HECHO E3 / INTEGRATION_VERIFIED para su objetivo exacto; no claim E5/E6/E7;\n- siguiente macro: P-014 / C0010; product source P-014 permanece NO MODIFICADO al abrir auditoría.\n'''
+          write(path, text)
+
+          # New active continuity segment.
+          c0010 = f'''# ProjectOps — continuity/C0010.md — ABOS\n\nState: ACTIVE\nSegment: C0010\nOpened: 2026-09-18\nHost-Branch: `abos/p013-p014-transition`\n\n## Intervención — P-014 — Consolidar Capability Fabric canónico y lifecycle de capacidades\n\nState: EN_EJECUCIÓN\nClassification: AUDIT_OPEN / SOURCE_UNMODIFIED\n\n### Baseline exacto\n\n- P-013 product PR: #41.\n- P-013 product merge: `733eb762596cac019593c6f27d7740da0ab25462`.\n- P-013 closure PR: #42.\n- P-014 canonical baseline `main`: `{BASE}`.\n- baseline CI `{CI}`: SUCCESS.\n- baseline ProjectOps `{OPS}`: SUCCESS.\n- product source P-014 modificado al abrir: **NO**.\n\n### Objetivo\n\nConsolidar una sola Capability Fabric extensible que represente qué puede hacer ABOS, con contratos I/O, effects, permissions, environment/resources, cost/latency/reliability observations, provenance, dependencies, verifier/probe, lifecycle y compatibilidad de versión, reutilizando `src/capabilities/` en vez de crear un registry paralelo.\n\n### Invariantes de entrada\n\n1. no crear segundo CapabilityRegistry;\n2. install/acquire no equivale a capability verificada;\n3. UNKNOWN/UNAVAILABLE/UNAUTHORIZED/PROHIBITED/IMPOSSIBLE permanecen distintos;\n4. permissions/effects no se infieren sólo de nombres;\n5. matching semántico puede asistir discovery, pero ejecución requiere contratos/evidencia verificables;\n6. P-014 no absorbe prematuramente P-015 MCP, P-016 computer/browser/GUI, P-017 acquisition ni P-018 environments; debe definir adapters/interfaces donde corresponda;\n7. source permanece sin modificar hasta alcanzar `DECISION_READY`.\n\n### Required-Context mínimo\n\n- `AGENTS.md`;\n- `ProjectOps/PROJECT.md`;\n- `src/capabilities/`;\n- `src/agent/tools.ts`;\n- `src/self-mod/`;\n- `src/skills/`;\n- `src/environments/`;\n- `src/state/`;\n- producers/consumers/tests adicionales materialmente conectados.\n\n### Siguiente punto verificable\n\n1. inventariar registries/resolvers/executors/loaders de capabilities/tools/skills/MCP/environments;\n2. seguir producers/consumers y persistencia real;\n3. comparar hipótesis NO_CHANGE / EXTEND / UNIFY / REPLACE con falsación material;\n4. registrar authority y gaps demostrados;\n5. no modificar producto hasta `DECISION_READY`.\n'''
+          cpath = ROOT / 'ProjectOps/continuity/C0010.md'
+          if cpath.exists():
+              raise SystemExit('ProjectOps/continuity/C0010.md already exists')
+          cpath.write_text(c0010, encoding='utf-8')
+          PY
+      - name: Verify ProjectOps transition
+        run: |
+          node scripts/projectops-integrity-verify.mjs
+          git diff --check
+      - name: Commit transition and retire reconciler
+        shell: bash
+        run: |
+          rm .github/workflows/p013-p014-transition.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ProjectOps .github/workflows/p013-p014-transition.yml
+          git diff --cached --check
+          git commit -m "ProjectOps: close P-012/P-013 and activate P-014"
+          git push origin HEAD:abos/p013-p014-transition
