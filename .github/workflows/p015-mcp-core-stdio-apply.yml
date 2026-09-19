@@ -20,15 +20,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 4
+          fetch-depth: 5
 
       - name: Guard exact ancestry and branch
         shell: bash
         run: |
           set -euo pipefail
           test "${GITHUB_REF_NAME}" = "abos/p015-mcp-runtime"
-          test "$(git rev-parse HEAD^)" = "194b9a14007b994ab1274edeb489c55dd75bc941"
-          test "$(git rev-parse HEAD^^)" = "d18fd7ac0bc5ad64abe66aa98624bcbe8572b51c"
+          test "$(git rev-parse HEAD^)" = "faebb6a98657bc38a207db8d2ece56f9630dc8ec"
+          test "$(git rev-parse HEAD^^)" = "194b9a14007b994ab1274edeb489c55dd75bc941"
+          test "$(git rev-parse HEAD^^^)" = "d18fd7ac0bc5ad64abe66aa98624bcbe8572b51c"
           test -f scripts/p015-mcp-core-stdio-apply.py
 
       - uses: pnpm/action-setup@v4
@@ -57,6 +58,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git add -N src/mcp/runtime.ts src/__tests__/fixtures/mcp-stdio-server.mjs src/__tests__/mcp-runtime.test.ts
           node scripts/projectops-integrity-verify.mjs
           git diff --check
           actual="$(git diff --name-only | sort)"
@@ -73,6 +75,7 @@ jobs:
             'src/mcp/runtime.ts' \
             'src/state/database.ts' \
             'src/types.ts' | sort)"
+          printf 'ACTUAL\n%s\nEXPECTED\n%s\n' "$actual" "$expected"
           test "$actual" = "$expected"
 
       - name: Targeted MCP protocol tests
@@ -110,6 +113,7 @@ jobs:
             'src/mcp/runtime.ts' \
             'src/state/database.ts' \
             'src/types.ts' | sort)"
+          printf 'CLEAN ACTUAL\n%s\nCLEAN EXPECTED\n%s\n' "$actual" "$expected"
           test "$actual" = "$expected"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
