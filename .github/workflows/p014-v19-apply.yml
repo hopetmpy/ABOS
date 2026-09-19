@@ -23,12 +23,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "5f27c5c3cafec3dfad5f11172a8cbf7fc66c03c7"
+          test "$(git rev-parse HEAD^)" = "2dc9e08ef344c7a54c244a1fee6d8e04a1400115"
           test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/p014-v19-apply.yml"
           test -f scripts/p014-v19-apply.py
           test ! -e src/capabilities/store.ts
           test ! -e src/__tests__/capability-persistence.test.ts
           grep -Fq 'export const SCHEMA_VERSION = 18;' src/state/schema.ts
+          grep -Fq 'Schema-Version-Observed-In-Source: `18`' ProjectOps/PROJECT.md
 
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
@@ -41,6 +42,24 @@ jobs:
 
       - name: Apply v19 unit
         run: python3 scripts/p014-v19-apply.py apply
+
+      - name: Reconcile canonical project schema baseline
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("ProjectOps/PROJECT.md")
+          text = path.read_text(encoding="utf-8")
+          old_field = "Schema-Version-Observed-In-Source: `18`"
+          new_field = "Schema-Version-Observed-In-Source: `19`"
+          old_line = "`src/state/schema.ts` declara `SCHEMA_VERSION = 18`. v16 extendió `policy_decisions` para lifecycle de policy/authorization; v17 añadió el journal/lease transaccional P-012 (`self_mod_transactions` / `self_mod_leases`); v18 añade `evidence_events` como fabric transversal de causalidad/correlación P-013, separado del `event_stream` comprimible de memoria y sin reemplazar authorities de dominio."
+          new_line = "`src/state/schema.ts` declara `SCHEMA_VERSION = 19`. v16 extendió `policy_decisions` para lifecycle de policy/authorization; v17 añadió el journal/lease transaccional P-012 (`self_mod_transactions` / `self_mod_leases`); v18 añade `evidence_events` como fabric transversal de causalidad/correlación P-013, separado del `event_stream` comprimible de memoria y sin reemplazar authorities de dominio; v19 añade `capability_records` como backing durable del `CapabilityRegistry` canónico P-014, sin convertir inventory en readiness ni reemplazar authorities upstream de environment/probe."
+          if text.count(old_field) != 1:
+              raise SystemExit(f"expected one schema baseline field, found {text.count(old_field)}")
+          if text.count(old_line) != 1:
+              raise SystemExit(f"expected one persistence baseline sentence, found {text.count(old_line)}")
+          path.write_text(text.replace(old_field, new_field, 1).replace(old_line, new_line, 1), encoding="utf-8")
+          PY
 
       - name: Targeted capability and integration tests
         run: >-
