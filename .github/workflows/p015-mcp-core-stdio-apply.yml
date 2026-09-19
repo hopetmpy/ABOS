@@ -20,24 +20,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 4
 
-      - name: Guard exact parent and branch
+      - name: Guard exact ancestry and branch
         shell: bash
         run: |
           set -euo pipefail
           test "${GITHUB_REF_NAME}" = "abos/p015-mcp-runtime"
-          test "$(git rev-parse HEAD^)" = "d18fd7ac0bc5ad64abe66aa98624bcbe8572b51c"
+          test "$(git rev-parse HEAD^)" = "194b9a14007b994ab1274edeb489c55dd75bc941"
+          test "$(git rev-parse HEAD^^)" = "d18fd7ac0bc5ad64abe66aa98624bcbe8572b51c"
           test -f scripts/p015-mcp-core-stdio-apply.py
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.1
 
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: pnpm
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.28.1
 
       - name: Install baseline dependencies
         run: pnpm install --frozen-lockfile
@@ -60,13 +61,11 @@ jobs:
           git diff --check
           actual="$(git diff --name-only | sort)"
           expected="$(printf '%s\n' \
-            '.github/workflows/p015-mcp-core-stdio-apply.yml' \
             'ProjectOps/CONTINUITY.md' \
             'ProjectOps/continuity/C0011.md' \
             'ProjectOps/plan/P-015.md' \
             'package.json' \
             'pnpm-lock.yaml' \
-            'scripts/p015-mcp-core-stdio-apply.py' \
             'src/__tests__/fixtures/mcp-stdio-server.mjs' \
             'src/__tests__/mcp-runtime.test.ts' \
             'src/agent/loop.ts' \
@@ -97,11 +96,13 @@ jobs:
           git diff --check
           actual="$(git diff --name-only | sort)"
           expected="$(printf '%s\n' \
+            '.github/workflows/p015-mcp-core-stdio-apply.yml' \
             'ProjectOps/CONTINUITY.md' \
             'ProjectOps/continuity/C0011.md' \
             'ProjectOps/plan/P-015.md' \
             'package.json' \
             'pnpm-lock.yaml' \
+            'scripts/p015-mcp-core-stdio-apply.py' \
             'src/__tests__/fixtures/mcp-stdio-server.mjs' \
             'src/__tests__/mcp-runtime.test.ts' \
             'src/agent/loop.ts' \
