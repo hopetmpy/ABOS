@@ -17,13 +17,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 3
 
       - name: Guard exact starting point
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "3333aa6099c3274b3c23d6cd3092dad9480f0509"
+          test "$(git rev-parse HEAD^)" = "41f638bacab8067f35fd3174ff51240c6edd27f7"
+          test "$(git rev-parse HEAD^^)" = "3333aa6099c3274b3c23d6cd3092dad9480f0509"
           test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/p015-transition-reconcile.yml"
           test -f scripts/p015-transition-reconcile.py
           test "$(git show HEAD^^:ProjectOps/CONTINUITY.md | sed -n 's/^Active-Plan: //p')" = "P-014"
