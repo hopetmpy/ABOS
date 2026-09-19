@@ -60,13 +60,15 @@ jobs:
           git add ProjectOps
           git diff --cached --name-only | sort > /tmp/staged.txt
           printf '%s\n' \
+            '.github/workflows/p015-p016-transition.yml' \
             'ProjectOps/CONTINUITY.md' \
             'ProjectOps/PLAN.md' \
             'ProjectOps/PROJECT.md' \
             'ProjectOps/continuity/C0011.md' \
             'ProjectOps/continuity/C0012.md' \
             'ProjectOps/plan/P-015.md' \
-            'ProjectOps/plan/P-016.md' | sort > /tmp/expected.txt
+            'ProjectOps/plan/P-016.md' \
+            'scripts/p015-p016-transition.py' | sort > /tmp/expected.txt
           diff -u /tmp/expected.txt /tmp/staged.txt
           node scripts/projectops-integrity-verify.mjs
           git diff --cached --check
