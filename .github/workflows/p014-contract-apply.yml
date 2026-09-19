@@ -1,0 +1,114 @@
+name: P014 Contract Hardening Apply
+
+on:
+  push:
+    branches:
+      - abos/p014-capability-fabric
+    paths:
+      - .github/workflows/p014-contract-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-validate-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      P014_RUN_ID: ${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Guard exact starting point
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "68a223507940846999a1ee191d93ae6907918489"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/p014-contract-apply.yml"
+          test -f scripts/p014-contract-apply.py
+          test ! -e .github/workflows/p014-continuity-reconcile.yml
+          test ! -e scripts/p014-root-reconcile.py
+          grep -Fq 'CONTRACT_HARDENING_DECISION_READY' ProjectOps/continuity/C0010.md
+          grep -Fq 'export type CapabilityType =' src/capabilities/model.ts
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Frozen install
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply contract hardening unit
+        run: python3 scripts/p014-contract-apply.py apply
+
+      - name: Targeted capability and integration tests
+        run: >-
+          pnpm exec vitest run
+          src/__tests__/capability-persistence.test.ts
+          src/__tests__/capability-registry.test.ts
+          src/__tests__/capability-resolver.test.ts
+          src/__tests__/capability-tools.test.ts
+          src/__tests__/installed-tools-runtime-truth.test.ts
+          src/__tests__/skill-runtime-truth.test.ts
+          src/__tests__/environment-registry.test.ts
+          src/__tests__/loop.test.ts
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Full test suite
+        shell: bash
+        run: |
+          set +e
+          timeout 300 pnpm run test:diagnose
+          RC=$?
+          set -e
+          if [ $RC -eq 124 ]; then echo "::error::full suite timed out or left active handles"; fi
+          exit $RC
+
+      - name: Security-focused suite
+        shell: bash
+        run: |
+          set +e
+          timeout 180 pnpm exec vitest run -t "security|injection|policy|financial"
+          RC=$?
+          set -e
+          if [ $RC -eq 124 ]; then echo "::error::security suite timed out or left active handles"; fi
+          exit $RC
+
+      - name: ProjectOps integrity before finalize
+        run: node scripts/projectops-integrity-verify.mjs
+
+      - name: Source diff integrity
+        run: git diff --check
+
+      - name: Finalize recoverable checkpoint
+        run: python3 scripts/p014-contract-apply.py finalize
+
+      - name: ProjectOps integrity after finalize
+        run: node scripts/projectops-integrity-verify.mjs
+
+      - name: Final diff integrity
+        run: git diff --check
+
+      - name: Retire temporary helpers
+        run: git rm .github/workflows/p014-contract-apply.yml scripts/p014-contract-apply.py
+
+      - name: Commit validated source unit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git status --short
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(capabilities): harden execution contracts"
+          git push origin HEAD:abos/p014-capability-fabric
