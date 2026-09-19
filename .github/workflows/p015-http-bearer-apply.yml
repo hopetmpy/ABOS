@@ -1,0 +1,170 @@
+name: P015 Streamable HTTP Bearer Apply
+
+on:
+  push:
+    branches:
+      - abos/p015-mcp-runtime
+    paths:
+      - .github/workflows/p015-http-bearer-apply.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: p015-http-bearer-apply
+  cancel-in-progress: false
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 3
+
+      - name: Guard exact source baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_NAME}" = "abos/p015-mcp-runtime"
+          test "$(git rev-parse HEAD^)" = "dfc1a11ec9a081a93f437ec34a52f560e231a11d"
+          test "$(git rev-parse HEAD^^)" = "f86ba6efa607ae5aed99e3669bd170db1bdc5662"
+          test -f scripts/p015-http-bearer-apply.py
+
+      - name: Normalize applicator mechanics
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("scripts/p015-http-bearer-apply.py")
+          source = p.read_text()
+          old = '''def replace_once(path: str, old: str, new: str) -> None:
+              text = read(path)
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected one occurrence in {path}, found {count}: {old[:160]!r}")
+              write(path, text.replace(old, new, 1))
+          '''
+          new = '''def replace_once(path: str, old: str, new: str) -> None:
+              text = read(path)
+              count = text.count(old)
+              if count == 1:
+                  write(path, text.replace(old, new, 1))
+                  return
+              if count != 0:
+                  raise SystemExit(f"expected one occurrence in {path}, found {count}: {old[:160]!r}")
+
+              source_lines = text.splitlines(keepends=True)
+              target = [line.strip() for line in old.splitlines()]
+              width = len(target)
+              matches = []
+              for index in range(0, len(source_lines) - width + 1):
+                  candidate = source_lines[index:index + width]
+                  if [line.strip() for line in candidate] == target:
+                      matches.append(index)
+              if len(matches) != 1:
+                  raise SystemExit(
+                      f"expected one whitespace-normalized occurrence in {path}, found {len(matches)}: {old[:160]!r}"
+                  )
+
+              index = matches[0]
+              segment = "".join(source_lines[index:index + width])
+              start = sum(len(line) for line in source_lines[:index])
+              end = start + len(segment)
+              first = source_lines[index]
+              indent = first[:len(first) - len(first.lstrip())]
+              replacement_lines = new.splitlines(keepends=True)
+              adjusted = "".join(
+                  (indent + line if line.strip() else line)
+                  for line in replacement_lines
+              )
+              write(path, text[:start] + adjusted + text[end:])
+          '''
+          if source.count(old) != 1:
+              raise SystemExit("replace_once normalizer target drifted")
+          source = source.replace(old, new, 1)
+          if source.count("textwrap.dedent(r'''") != 1:
+              raise SystemExit("raw test literal normalizer target drifted")
+          source = source.replace("textwrap.dedent(r'''", "textwrap.dedent('''", 1)
+          p.write_text(source)
+          PY
+
+      - name: Apply P-015 HTTP bearer source
+        run: python3 scripts/p015-http-bearer-apply.py
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Targeted MCP validation
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          timeout 360 pnpm exec vitest run \
+            src/__tests__/mcp-runtime.test.ts \
+            src/__tests__/mcp-http-runtime.test.ts \
+            src/__tests__/tools-manager-runtime-truth.test.ts
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Full suite
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          timeout 420 pnpm run test:diagnose
+
+      - name: Security focused suite
+        timeout-minutes: 6
+        run: |
+          set -euo pipefail
+          timeout 240 pnpm exec vitest run -t "security|injection|policy|financial"
+
+      - name: ProjectOps and diff validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/projectops-integrity-verify.mjs
+          git diff --check
+          actual="$(git diff --name-only | sort)"
+          expected="$(printf '%s\n' \
+            'ProjectOps/CONTINUITY.md' \
+            'ProjectOps/continuity/C0011.md' \
+            'ProjectOps/plan/P-015.md' \
+            'src/__tests__/mcp-http-runtime.test.ts' \
+            'src/agent/tools-core.ts' \
+            'src/mcp/runtime.ts' \
+            'scripts/p015-http-bearer-apply.py' | sort)"
+          test "$actual" = "$expected"
+
+      - name: Commit clean product source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm scripts/p015-http-bearer-apply.py .github/workflows/p015-http-bearer-apply.yml
+          node scripts/projectops-integrity-verify.mjs
+          git diff --check
+          actual="$(git diff --name-only | sort)"
+          expected="$(printf '%s\n' \
+            'ProjectOps/CONTINUITY.md' \
+            'ProjectOps/continuity/C0011.md' \
+            'ProjectOps/plan/P-015.md' \
+            'src/__tests__/mcp-http-runtime.test.ts' \
+            'src/agent/tools-core.ts' \
+            'src/mcp/runtime.ts' | sort)"
+          test "$actual" = "$expected"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat(mcp): add Streamable HTTP bearer runtime'
+          git push origin HEAD:abos/p015-mcp-runtime
