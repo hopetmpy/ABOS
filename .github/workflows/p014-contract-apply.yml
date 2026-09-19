@@ -25,9 +25,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "68a223507940846999a1ee191d93ae6907918489"
+          test "$(git rev-parse HEAD^)" = "9fa51cc9fb9e3275cbfaa81ee167271294a0cf11"
           test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/p014-contract-apply.yml"
           test -f scripts/p014-contract-apply.py
+          test -f scripts/p014-contract-attempt2.py
           test ! -e .github/workflows/p014-continuity-reconcile.yml
           test ! -e scripts/p014-root-reconcile.py
           grep -Fq 'CONTRACT_HARDENING_DECISION_READY' ProjectOps/continuity/C0010.md
@@ -42,20 +43,28 @@ jobs:
       - name: Frozen install
         run: pnpm install --frozen-lockfile
 
-      - name: Apply contract hardening unit
-        run: python3 scripts/p014-contract-apply.py apply
+      - name: Apply contract hardening unit and attempt-1 corrections
+        run: |
+          python3 scripts/p014-contract-apply.py apply
+          python3 scripts/p014-contract-attempt2.py
 
       - name: Targeted capability and integration tests
-        run: >-
-          pnpm exec vitest run
-          src/__tests__/capability-persistence.test.ts
-          src/__tests__/capability-registry.test.ts
-          src/__tests__/capability-resolver.test.ts
-          src/__tests__/capability-tools.test.ts
-          src/__tests__/installed-tools-runtime-truth.test.ts
-          src/__tests__/skill-runtime-truth.test.ts
-          src/__tests__/environment-registry.test.ts
-          src/__tests__/loop.test.ts
+        shell: bash
+        run: |
+          set +e
+          timeout 180 pnpm exec vitest run \
+            src/__tests__/capability-persistence.test.ts \
+            src/__tests__/capability-registry.test.ts \
+            src/__tests__/capability-resolver.test.ts \
+            src/__tests__/capability-tools.test.ts \
+            src/__tests__/installed-tools-runtime-truth.test.ts \
+            src/__tests__/skill-runtime-truth.test.ts \
+            src/__tests__/environment-registry.test.ts \
+            src/__tests__/loop.test.ts
+          RC=$?
+          set -e
+          if [ $RC -eq 124 ]; then echo "::error::targeted suite timed out or left active handles"; fi
+          exit $RC
 
       - name: Typecheck
         run: pnpm run typecheck
@@ -99,7 +108,7 @@ jobs:
         run: git diff --check
 
       - name: Retire temporary helpers
-        run: git rm .github/workflows/p014-contract-apply.yml scripts/p014-contract-apply.py
+        run: git rm .github/workflows/p014-contract-apply.yml scripts/p014-contract-apply.py scripts/p014-contract-attempt2.py
 
       - name: Commit validated source unit
         shell: bash
