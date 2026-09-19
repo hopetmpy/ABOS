@@ -1,6 +1,9 @@
 name: P015 P016 Transition Reconcile
 
 on:
+  push:
+    branches:
+      - abos/p016-computer-browser-gui-hands
   workflow_dispatch:
 
 permissions:
@@ -8,6 +11,7 @@ permissions:
 
 jobs:
   reconcile:
+    if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, 'ProjectOps: close P-015 and activate P-016 audit')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,8 +27,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git fetch origin main
           test "$(git branch --show-current)" = "abos/p016-computer-browser-gui-hands"
-          test "$(git rev-parse HEAD^^)" = "6e620ffcdddbe630ace58be67d5abb0826ed19b9"
+          test "$(git rev-parse origin/main)" = "6e620ffcdddbe630ace58be67d5abb0826ed19b9"
+          test "$(git merge-base HEAD origin/main)" = "6e620ffcdddbe630ace58be67d5abb0826ed19b9"
           git diff --name-only 6e620ffcdddbe630ace58be67d5abb0826ed19b9...HEAD | sort > /tmp/pre.txt
           printf '%s\n' '.github/workflows/p015-p016-transition.yml' 'scripts/p015-p016-transition.py' | sort > /tmp/expected-pre.txt
           diff -u /tmp/expected-pre.txt /tmp/pre.txt
