@@ -26,7 +26,7 @@ jobs:
         run: |
           set -euo pipefail
           test "${GITHUB_REF_NAME}" = "abos/p015-mcp-runtime"
-          test "$(git rev-parse HEAD^)" = "046aba5e04226593c1f53a5da49d49577ec6ef7a"
+          test "$(git rev-parse HEAD^)" = "447e141a8377c8a61c7e8352443feac94776d9e9"
           test -f scripts/p015-http-decision-reconcile.py
       - name: Apply decision reconciliation
         run: python3 scripts/p015-http-decision-reconcile.py
