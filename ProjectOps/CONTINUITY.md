@@ -2,19 +2,19 @@
 
 Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
-Active-Plan: P-015
-Active-Segment: continuity/C0011.md
-Active-Intervention: P015_MCP_RUNTIME — TECHNICAL_CLOSURE / E3_BRANCH_GREEN / INTEGRATION_PENDING
+Active-Plan: P-016
+Active-Segment: continuity/C0012.md
+Active-Intervention: P016_COMPUTER_BROWSER_GUI_HANDS — AUDIT_OPEN / SOURCE_UNMODIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p015-mcp-runtime
+Current-Host-Branch: abos/p016-computer-browser-gui-hands
 Host-Head-At-Audit-Open: fe845184fce48c65032f8521ecd0bdfa42e04b77
-Last-Reconciled-Host-Head: 622087e9e007c2922020ebd98bee14618f843d14
-Last-Reconciled-Head-Semantics: P015_DECISION_READY_SOURCE_UNMODIFIED_OFFICIAL_SDK_V2
+Last-Reconciled-Host-Head: 6e620ffcdddbe630ace58be67d5abb0826ed19b9
+Last-Reconciled-Head-Semantics: P015_HECHO_P016_AUDIT_OPEN_SOURCE_UNMODIFIED
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -414,3 +414,14 @@ OAuth interactivo queda **DEFERRED_BY_OWNERSHIP / NO_CHANGE_P015**. El SDK v2 ex
 La aceptación contra un servidor MCP externo con cuenta/credencial real pertenece a P-005 cuando exista endpoint/autorización. E3 no se eleva a E5/LIVE por CI.
 
 Estado técnico P-015: `HECHO_SOURCE / E3_BRANCH_GREEN / INTEGRATION_PENDING`. Siguiente paso: integrar la rama exacta en `main`, revalidar `main` y sólo entonces marcar P-015 canónicamente HECHO y activar P-016.
+
+P015-PR: 46
+P015-Merge: 6e620ffcdddbe630ace58be67d5abb0826ed19b9
+P015-Main-CI: 35423685890 SUCCESS
+P015-Main-ProjectOps: 35423685860 SUCCESS
+P015-Canonical-State: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED
+P016-Activation-Branch: abos/p016-computer-browser-gui-hands
+P016-Canonical-Baseline: 6e620ffcdddbe630ace58be67d5abb0826ed19b9
+P016-Baseline-CI: 35423685890 SUCCESS
+P016-Baseline-ProjectOps: 35423685860 SUCCESS
+P016-Activation-State: AUDIT_OPEN / SOURCE_UNMODIFIED

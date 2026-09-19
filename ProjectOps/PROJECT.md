@@ -211,11 +211,11 @@ E3 nunca se promociona a E5/E6 por narrativa.
 
 Codex OAuth humano, AWS billable, providers externos, saldos/revenue atribuibles y otras fronteras E5/E6 requieren evidencia real; CI/source no las autocertifican.
 
-### 7.4 P-015 activo
+### 7.4 P-016 activo
 
-P-011 Lifecycle/Health/Restart/Recovery, P-012 transactional self-modification, P-013 Observability/Audit/Evidence Fabric y P-014 Capability Fabric están HECHO / INTEGRATION_VERIFIED para sus objetivos exactos. P-014 fue integrado por PR #44 y el `main bf9adfd11617a37698ce7095248c1e1228f0d3cf` resultante fue revalidado por CI `35417887204` + ProjectOps `35417887215` SUCCESS.
+P-011 Lifecycle/Health/Restart/Recovery, P-012 transactional self-modification, P-013 Observability/Audit/Evidence Fabric, P-014 Capability Fabric y P-015 MCP runtime están HECHO / INTEGRATION_VERIFIED para sus objetivos exactos. P-015 fue integrado por PR #46 y el `main 6e620ffcdddbe630ace58be67d5abb0826ed19b9` resultante fue revalidado por CI `35423685890` + ProjectOps `35423685860` SUCCESS.
 
-P-015 se activa para sustituir MCP nominal por un runtime real/verificable. `src/capabilities/` continúa como authority de capability lifecycle/contract; P-015 debe adaptar tools MCP reales hacia esa authority, no crear un registry paralelo. La especificación/SDK MCP vigente se verificará antes de cualquier decisión de implementación.
+P-016 se activa para dar a ABOS manos generales sobre una computadora autorizada mediante filesystem/process/shell, integración portable de OS/apps, browser estructurado y GUI/accessibility/input sólo cuando una interfaz más semántica no exista. La activación no modifica product source: primero se auditan las primitives y authorities existentes en agent/capabilities/environments/platform/state para reutilizar o extender sin crear un segundo executor/control plane.
 
 ## 8. Anti-contaminación entre proyectos
 
