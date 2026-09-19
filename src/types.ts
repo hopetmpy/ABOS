@@ -220,7 +220,8 @@ export type ToolCategory =
   | "replication"
   | "memory"
   | "environment"
-  | "capability";
+  | "capability"
+  | "browser";
 
 export interface ToolContext {
   identity: AbosIdentity;

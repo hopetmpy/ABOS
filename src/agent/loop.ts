@@ -94,6 +94,8 @@ import { discoverConfiguredMcpTools } from "../mcp/runtime.js";
 import { createCapabilityTools } from "../capabilities/tools.js";
 import { EnvironmentRegistry } from "../environments/registry.js";
 import { LocalEnvironmentProvider } from "../environments/local.js";
+import { getLocalBrowserRuntime } from "../browser/local-runtime.js";
+import { createStructuredBrowserTools } from "../browser/tools.js";
 import { ConwayEnvironmentProvider } from "../environments/conway.js";
 import { AwsEnvironmentProvider } from "../environments/aws.js";
 import { AwsEc2TaskExecutor } from "../environments/aws-ec2-executor.js";
@@ -186,9 +188,10 @@ export async function runAgentLoop(
   const { identity, config, db, conway, inference, social, skills, policyEngine, spendTracker, onStateChange, onTurnComplete, ollamaBaseUrl } =
     options;
 
+  const localBrowserRuntime = getLocalBrowserRuntime();
   const environmentRegistry = new EnvironmentRegistry();
   const awsEnvironment = new AwsEnvironmentProvider();
-  environmentRegistry.register(new LocalEnvironmentProvider());
+  environmentRegistry.register(new LocalEnvironmentProvider(localBrowserRuntime));
   environmentRegistry.register(new ConwayEnvironmentProvider(conway));
   environmentRegistry.register(awsEnvironment);
 
@@ -335,6 +338,7 @@ export async function runAgentLoop(
   }
 
   const builtinTools = createBuiltinTools(identity.sandboxId);
+  const browserTools = createStructuredBrowserTools(localBrowserRuntime);
   const installedTools = loadInstalledTools(db);
   const environmentTools = createEnvironmentTools(environmentRegistry, {
     selector: environmentSelector,
@@ -348,6 +352,7 @@ export async function runAgentLoop(
   const capabilityRegistry = new CapabilityRegistry(new CapabilityStore(db.raw));
   capabilityRegistry.ingestTools([
     ...builtinTools,
+    ...browserTools,
     ...installedTools,
     ...environmentTools,
   ]);
@@ -364,6 +369,7 @@ export async function runAgentLoop(
     capabilityRegistry,
     reservedToolNames: [
       ...builtinTools,
+      ...browserTools,
       ...installedTools,
       ...environmentTools,
     ].map((tool) => tool.name),
@@ -376,6 +382,7 @@ export async function runAgentLoop(
   capabilityRegistry.ingestTools(capabilityTools);
   const tools = [
     ...builtinTools,
+    ...browserTools,
     ...installedTools,
     ...environmentTools,
     ...mcpTools,

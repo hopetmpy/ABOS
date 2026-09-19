@@ -1,3 +1,4 @@
+
 import os from "node:os";
 import type {
   EnvironmentEstimate,
@@ -9,17 +10,28 @@ import type {
   EnvironmentSatisfaction,
   EnvironmentSnapshot,
 } from "./types.js";
+import {
+  getLocalBrowserRuntime,
+  type LocalBrowserRuntime,
+} from "../browser/local-runtime.js";
 
 export class LocalEnvironmentProvider implements EnvironmentProvider {
   readonly id = "local";
 
+  constructor(
+    private readonly browserRuntime: Pick<LocalBrowserRuntime, "probe"> = getLocalBrowserRuntime(),
+  ) {}
+
   async inspect(): Promise<EnvironmentSnapshot> {
+    const observedAt = new Date().toISOString();
+    const browser = await this.browserRuntime.probe();
     const evidence = [
       `platform=${process.platform}`,
       `arch=${process.arch}`,
       `node=${process.version}`,
       `cpus=${os.cpus().length}`,
       `freeMemoryBytes=${os.freemem()}`,
+      ...browser.evidence.map((entry) => `browser:${entry}`),
     ];
 
     return {
@@ -28,14 +40,19 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
       availability: "available",
       evidence,
       costModel: "host-provided",
-      constraints: [],
-      observedAt: new Date().toISOString(),
+      constraints: browser.available
+        ? []
+        : ["Structured browser is currently unavailable on this host; filesystem/process capabilities remain available."],
+      observedAt,
       metadata: {
         platform: process.platform,
         arch: process.arch,
         cwd: process.cwd(),
         totalMemoryBytes: os.totalmem(),
         freeMemoryBytes: os.freemem(),
+        structuredBrowserAvailable: browser.available,
+        structuredBrowserObservedAt: browser.observedAt,
+        structuredBrowserTarget: browser.target?.label ?? null,
       },
       capabilities: [
         {
@@ -44,6 +61,7 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
           provider: "local",
           description: "Read and write files on the local ABOS host within policy boundaries.",
           requirements: ["filesystem"],
+          provides: ["filesystem"],
           permissions: [],
           environment: "local",
           available: true,
@@ -54,9 +72,30 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
           provider: "local",
           description: "Execute local processes and CLI tools exposed to ABOS.",
           requirements: ["shell", "cli", "process"],
+          provides: ["shell", "cli", "process"],
           permissions: [],
           environment: "local",
           available: true,
+        },
+        {
+          id: "local:structured-browser",
+          type: "browser",
+          provider: "local-browser",
+          description: "Structured semantic browser control using an already-installed local host browser through Playwright Core.",
+          requirements: ["browser", "structured browser", "web interaction"],
+          provides: ["browser", "structured browser", "web interaction"],
+          permissions: ["network", "local-file-upload", "local-file-download"],
+          effects: ["network_navigation", "browser_interaction", "file_upload", "file_download"],
+          environment: "local",
+          available: browser.available,
+          state: browser.available ? "verified_available" : "unavailable",
+          observedAt: browser.observedAt,
+          authority: "local-browser:launch-probe",
+          evidence: [...browser.evidence],
+          metadata: {
+            browserTarget: browser.target?.label ?? null,
+            browserVersion: browser.browserVersion ?? null,
+          },
         },
       ],
     };
@@ -78,6 +117,7 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
           capability.id,
           capability.description,
           ...capability.requirements,
+          ...(capability.provides ?? []),
         ].join(" ").toLowerCase();
         return text.includes(requirement);
       })

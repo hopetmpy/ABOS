@@ -5,7 +5,6 @@
  * Tools are organized by category and exposed to the inference model.
  */
 
-import nodePath from "node:path";
 import { ulid } from "ulid";
 import type {
   AbosTool,
@@ -26,7 +25,8 @@ import { createLogger } from "../observability/logger.js";
 import { appendEvidenceEvent, correlationIdFor, currentEvidenceContext, latestEvidenceByAuthority, runWithEvidenceContext } from "../observability/evidence.js";
 import { isCreditTransferAccepted } from "../conway/credits.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
-import { expandHomePath, getHomeDir, toPosixShellPath } from "../platform/home.js";
+import { toPosixShellPath } from "../platform/home.js";
+import { confinePathToSandbox } from "../platform/path-confinement.js";
 
 const logger = createLogger("tools");
 
@@ -45,71 +45,6 @@ function isExternalEffectOutcomeUnknown(error: unknown): boolean {
     error !== null &&
     (error as { externalEffectOutcomeUnknown?: unknown }).externalEffectOutcomeUnknown === true
   );
-}
-
-// ─── Path Confinement ─────────────────────────────────────────
-// Remote Conway sandboxes are Linux and use /root. Local execution must use
-// the actual host user's home directory and native path semantics.
-const REMOTE_SANDBOX_HOME = "/root";
-
-/**
- * Validate that a file path resolves to within the allowed home directory.
- * Returns the resolved absolute path, or an error string if out of bounds.
- */
-function confinePathToSandbox(
-  filePath: string,
-  sandboxId: string,
-): string | { error: string } {
-  if (sandboxId) {
-    const portableInput = filePath.replace(/\\/g, "/");
-    const expanded = portableInput.startsWith("~")
-      ? nodePath.posix.join(REMOTE_SANDBOX_HOME, portableInput.slice(1))
-      : portableInput;
-    const resolved = nodePath.posix.resolve(REMOTE_SANDBOX_HOME, expanded);
-
-    if (
-      resolved !== REMOTE_SANDBOX_HOME
-      && !resolved.startsWith(REMOTE_SANDBOX_HOME + "/")
-    ) {
-      return {
-        error: `Blocked: write_file path "${filePath}" resolves to "${resolved}" which is outside the allowed directory (${REMOTE_SANDBOX_HOME}). Writes are confined to the sandbox home.`,
-      };
-    }
-
-    return resolved;
-  }
-
-  const localHome = nodePath.resolve(getHomeDir());
-  const portableInput = filePath.replace(/\\/g, "/");
-  let expanded: string;
-
-  if (portableInput === "/root") {
-    expanded = localHome;
-  } else if (portableInput.startsWith("/root/")) {
-    expanded = nodePath.join(
-      localHome,
-      ...portableInput.slice("/root/".length).split("/").filter(Boolean),
-    );
-  } else if (portableInput.startsWith("~")) {
-    expanded = expandHomePath(filePath);
-  } else {
-    expanded = filePath;
-  }
-
-  const resolved = nodePath.isAbsolute(expanded)
-    ? nodePath.resolve(expanded)
-    : nodePath.resolve(localHome, expanded);
-
-  if (
-    resolved !== localHome
-    && !resolved.startsWith(localHome + nodePath.sep)
-  ) {
-    return {
-      error: `Blocked: write_file path "${filePath}" resolves to "${resolved}" which is outside the allowed directory (${localHome}). Writes are confined to the local ABOS home.`,
-    };
-  }
-
-  return resolved;
 }
 
 // Tools whose results come from external sources and need sanitization

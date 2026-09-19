@@ -436,3 +436,4 @@ P016-Decision-State: DECISION_READY
 P016-Decision: REUSE_EXISTING_HANDS / EXTEND_EXISTING_AUTHORITIES / UNIFY_URL_TRUST / STRUCTURED_BROWSER_FIRST / NO_PARALLEL_COMPUTER_CONTROL_PLANE
 P016-First-Unit: STRUCTURED_BROWSER_LOCAL
 P016-Source-Modified-At-Decision: NO
+- P016 structured-browser apply workflow `35425530526`: source implemented; apply validation PASS; real-host smoke `PASS:browserVersion=152.0.7977.82;target=path:google-chrome;snapshot=aria;semanticActions=fill+click;upload=verified;downloadBytes=18`; ordinary exact-head CI/ProjectOps pending.

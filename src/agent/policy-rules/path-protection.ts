@@ -37,6 +37,11 @@ function deny(rule: string, reasonCode: string, humanMessage: string): PolicyRul
 function requestedPaths(request: PolicyRequest): string[] {
   const paths: string[] = [];
   if (typeof request.args.path === "string") paths.push(request.args.path);
+  if (Array.isArray(request.args.paths)) {
+    for (const value of request.args.paths) {
+      if (typeof value === "string") paths.push(value);
+    }
+  }
   if (Array.isArray(request.args.edits)) {
     for (const value of request.args.edits) {
       if (value && typeof value === "object" && typeof (value as Record<string, unknown>).path === "string") {
@@ -113,18 +118,20 @@ function createReadSensitiveRule(): PolicyRule {
     priority: 200,
     appliesTo: {
       by: "name",
-      names: ["read_file"],
+      names: ["read_file", "browser_upload"],
     },
     evaluate(request: PolicyRequest): PolicyRuleResult | null {
-      const filePath = request.args.path as string | undefined;
-      if (!filePath) return null;
+      const paths = requestedPaths(request);
+      if (paths.length === 0) return null;
 
-      if (isSensitiveFile(filePath)) {
-        return deny(
-          "path.read_sensitive",
-          "SENSITIVE_FILE_READ",
-          `Cannot read sensitive file: ${filePath}`,
-        );
+      for (const filePath of paths) {
+        if (isSensitiveFile(filePath)) {
+          return deny(
+            "path.read_sensitive",
+            "SENSITIVE_FILE_READ",
+            `Cannot read sensitive file: ${filePath}`,
+          );
+        }
       }
       return null;
     },
