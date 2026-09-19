@@ -187,8 +187,13 @@ P015-Decision-State: DECISION_READY
 P015-Decision-Gate-Head: 60f460efca0dea5d7d90bd5239813ffdc4e8792e
 P015-Decision-Gate-CI: 35419517700 SUCCESS
 P015-Decision-Gate-ProjectOps: 35419517699 SUCCESS
-P015-Unit: MCP_CORE_STDIO
-P015-Source-State: IMPLEMENTED / VALIDATION_PENDING
+P015-Unit: MCP_LIFECYCLE_HARDENING
+P015-MCP-Core-Source-Head: 2aa5bdea715f395f8a9db332e89c01fcbcb224f1
+P015-MCP-Core-Exact-Gate-Head: a5365fe1e721464c442ff92d7db93cc81d2af203
+P015-MCP-Core-CI: 35420000569 SUCCESS / 8_OF_8
+P015-MCP-Core-ProjectOps: 35420000480 SUCCESS
+P015-MCP-Core-State: INTEGRATION_VERIFIED / E3_BRANCH_GREEN
+P015-Source-State: MCP_LIFECYCLE_HARDENING / AUDIT_COMPLETE / SOURCE_UNMODIFIED_SINCE_CORE_GATE
 P015-Transition-Merge: 87e256a93a655b1ccce000cd2de3896a8f3f74b5
 P015-Transition-Main-CI: 35418524268 SUCCESS
 P015-Transition-Main-ProjectOps: 35418524330 SUCCESS
@@ -344,3 +349,16 @@ Pendiente exacto antes de HECHO completo: squash/integración en `main` + revali
 ## Política de rotación
 
 `C0006` queda CLOSED / HECHO como historia P-010. `C0007` queda CLOSED / HECHO como historia P-011. `C0008` queda CLOSED / HECHO como historia P-012. `C0009` queda CLOSED / HECHO como historia P-013. `C0010` queda CLOSED / HECHO como historia P-014. `C0011` queda ACTIVE para P-015.  Nunca se crea un segundo manifest `CONTINUITY.md`.
+
+
+## P-015 — MCP_CORE_STDIO gate y siguiente frontera
+
+`MCP_CORE_STDIO` quedó validado en exact-head `a5365fe1e721464c442ff92d7db93cc81d2af203`: CI `35420000569` 8/8 SUCCESS y ProjectOps `35420000480` SUCCESS. El source limpio de la unidad es `2aa5bdea715f395f8a9db332e89c01fcbcb224f1`.
+
+La auditoría posterior al gate detectó tres defectos/enduraciones que impiden declarar P-015 HECHO y abren `MCP_LIFECYCLE_HARDENING` sin modificar source todavía:
+
+1. `removeTool()` sólo escribe `enabled=0`, pero MCP configurado ya nace `enabled=false`; por tanto un MCP removido permanece en `getToolInventory()` y sería redescubierto.
+2. Tras un `tools/list` exitoso, una tool que desaparezca del servidor deja de proyectarse al runtime, pero su capability persistida puede conservar estado histórico verificado; debe reconciliarse a `retired`/no-ejecutable sólo cuando una observación actual pruebe la ausencia.
+3. La sanitización de schema remoto cubre superficies descriptivas, pero todavía debe endurecerse la frontera de identificadores/keys no confiables sin corromper semántica válida de JSON Schema.
+
+Siguiente punto verificable: implementar y validar `MCP_LIFECYCLE_HARDENING` reutilizando las authorities existentes; no avanzar aún a HTTP/auth ni integrar P-015 a `main`.
