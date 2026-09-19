@@ -69,7 +69,7 @@ La implementación debe seguir usando `CapabilityRegistry`, Policy y Evidence Fa
 
 must_replace(
     "ProjectOps/continuity/C0011.md",
-    "Classification: AUDIT_OPEN / SOURCE_UNMODIFIED\n",
+    "Classification: DECISION_READY / SOURCE_UNMODIFIED\n",
     "Classification: MCP_CORE_STDIO_E3_GREEN / MCP_LIFECYCLE_HARDENING_OPEN\n",
 )
 
