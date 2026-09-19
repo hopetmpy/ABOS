@@ -79,7 +79,7 @@ replace_line(
 )
 replace_line(
     "ProjectOps/plan/P-015.md",
-    "Investigar antes de editar: Streamable HTTP oficial vigente, endpoint trust/SSRF, bearer/OAuth credential authority, 401/403/scope-step-up, session IDs/reconnect/restart, timeout/side-effect uncertainty, tool list change notifications y pruebas deterministas. La auditoría debe alcanzar DECISION_READY antes de implementar.",
+    "Investigar antes de editar: Streamable HTTP oficial vigente, endpoint trust/SSRF, bearer/OAuth credential authority, 401/403/scope-step-up, session IDs/reconnect/restart, timeout/side-effect uncertainty, tool-list change notifications y pruebas deterministas. La auditoría debe alcanzar DECISION_READY antes de implementar.",
     "Arquitectura elegida: extender el adapter y `install_mcp_server` existentes para `streamable-http`; HTTPS remoto y HTTP sólo loopback; bearer mediante referencia `tokenEnv` sin persistir secretos; 401/403 son auth/access failures; cada call conserva Policy + Capability + Evidence y no se reintenta automáticamente cuando el outcome externo es incierto.",
 )
 with Path("ProjectOps/plan/P-015.md").open("a") as f:
