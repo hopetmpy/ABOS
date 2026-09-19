@@ -117,7 +117,7 @@ Invariantes: parent executor != child runtime; parent bookkeeping != child live 
 
 P-012 está integrado y revalidado en `main fe845184fce48c65032f8521ecd0bdfa42e04b77`. Una modificación de source legítima no escribe primero y verifica después: usa candidate aislado, journal/lease v17, verification, exact candidate commit, activation CAS y recovery causal. Código crítico no se trata automáticamente como inmutable; fronteras realmente separadas como constitution, credentials, secrets y runtime state mantienen protección propia.
 
-El main exacto pasó CI `34926393562` y ProjectOps Integrity `34926393570`. Esto acredita E3 del source integrado, no provider/economic LIVE. La dependencia evidence/correlation de P-012 quedó materialmente satisfecha por P-013 PR #41 y `main 733eb762596cac019593c6f27d7740da0ab25462` revalidado; P-012 conserva PARCIAL únicamente hasta la transición canónica posterior a este cierre ProjectOps.
+El main exacto pasó CI `34926393562` y ProjectOps Integrity `34926393570`. Esto acredita E3 del source integrado, no provider/economic LIVE. La dependencia evidence/correlation de P-012 quedó materialmente satisfecha por P-013 PR #41; el cierre ProjectOps PR #42 quedó integrado y revalidado en `main 21911888b8271662f1b546bc637f49d76610c132` por CI `35410063228` + ProjectOps `35410063240`. P-012 queda HECHO para su objetivo exacto.
 
 ## 4. Invariantes duros ABOS
 
@@ -211,9 +211,9 @@ E3 nunca se promociona a E5/E6 por narrativa.
 
 Codex OAuth humano, AWS billable, providers externos, saldos/revenue atribuibles y otras fronteras E5/E6 requieren evidencia real; CI/source no las autocertifican.
 
-### 7.4 P-013 activo
+### 7.4 P-014 activo
 
-P-011 Lifecycle/Health/Restart/Recovery está HECHO / INTEGRATION_VERIFIED. P-012 transactional self-modification está integrado y su dependencia P-013 ya está materialmente satisfecha. P-013 Observability/Audit/Evidence Fabric fue integrado por PR #41 en `main 733eb762596cac019593c6f27d7740da0ab25462` y revalidado por CI `35406990676` + ProjectOps `35406990741` SUCCESS. La intervención activa conserva sólo el cierre canónico ProjectOps; P-014 no se activa hasta integrar y revalidar ese cierre.
+P-011 Lifecycle/Health/Restart/Recovery, P-012 transactional self-modification y P-013 Observability/Audit/Evidence Fabric están HECHO / INTEGRATION_VERIFIED para sus objetivos exactos. PR #42 cerró ProjectOps de P-013 en `main 21911888b8271662f1b546bc637f49d76610c132`, revalidado por CI `35410063228` + ProjectOps `35410063240` SUCCESS. P-014 Capability Fabric queda activo en AUDIT_OPEN / SOURCE_UNMODIFIED: debe reutilizar `src/capabilities/` y demostrar authority/lifecycle antes de modificar producto.
 
 ## 8. Anti-contaminación entre proyectos
 
