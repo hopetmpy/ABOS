@@ -31,7 +31,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Correct first-attempt transform and apply source
+      - name: Correct prior transform findings and apply source
         shell: bash
         run: |
           set -euo pipefail
@@ -48,8 +48,20 @@ jobs:
           if fragile not in s:
               raise SystemExit("expected fragile path-protection test edit from first attempt")
           s = s.replace(fragile, "", 1)
+          force_probe = '      const probe = await this.probe({ force: true });\n      if (!probe.available || !this.selectedCandidate) {'
+          if force_probe not in s:
+              raise SystemExit("expected re-probe narrowing block from R2")
+          s = s.replace(
+              force_probe,
+              '      const probe = await this.probe({ force: true });\n      if (!probe.available || !probe.target) {',
+              1,
+          )
+          implicit_launch = '      return this.launch(this.selectedCandidate.launchOptions);\n'
+          if s.count(implicit_launch) != 1:
+              raise SystemExit(f"expected one implicit post-reprobe launch, found {s.count(implicit_launch)}")
+          s = s.replace(implicit_launch, '      return this.launch(probe.target.launchOptions);\n', 1)
           p.write_text(s, encoding="utf-8")
-          print(f"corrected {count} raw-dedent prefixes and retired fragile test splice")
+          print(f"corrected {count} raw-dedent prefixes, retired fragile splice, and made re-probe launch explicit")
           PY
           python scripts/p016-structured-browser-apply.py
           cat > src/__tests__/p016-browser-upload-policy.test.ts <<'EOF'
