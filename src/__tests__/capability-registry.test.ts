@@ -110,4 +110,42 @@ describe("CapabilityRegistry", () => {
     expect(capability.available).toBe(false);
     expect(capabilityStateOf(capability)).toBe("degraded");
   });
+
+  it("does not accept verified_available without a named authority", () => {
+    const registry = new CapabilityRegistry();
+    registry.register({
+      id: "claimed:no-authority",
+      type: "future_runtime",
+      provider: "test",
+      description: "Future runtime",
+      requirements: ["future runtime"],
+      permissions: [],
+      available: true,
+      state: "verified_available",
+      observedAt: "2026-09-19T01:00:00.000Z",
+      evidence: ["probe returned ok"],
+    });
+
+    const capability = registry.get("claimed:no-authority")!;
+    expect(capabilityStateOf(capability)).toBe("probed");
+    expect(capability.available).toBe(false);
+  });
+
+  it("accepts future capability types without extending a central union", () => {
+    const registry = new CapabilityRegistry();
+    registry.register({
+      id: "future:gpu-runtime",
+      type: "gpu_runtime",
+      provider: "future",
+      description: "GPU runtime",
+      requirements: ["gpu runtime"],
+      provides: ["gpu runtime"],
+      permissions: [],
+      available: false,
+      state: "discovered_unverified",
+    });
+
+    expect(registry.get("future:gpu-runtime")?.type).toBe("gpu_runtime");
+  });
+
 });

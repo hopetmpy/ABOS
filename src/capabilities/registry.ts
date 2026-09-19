@@ -3,6 +3,7 @@ import type {
   CapabilityState,
 } from "./model.js";
 import {
+  capabilityProvides,
   capabilityStateOf,
   isCapabilityVerifiedAvailable,
 } from "./model.js";
@@ -25,7 +26,8 @@ function normalizeClaimState(capability: CapabilityDescriptor): CapabilityState 
   if (requestedState !== "verified_available") return requestedState;
 
   const hasEvidence = (capability.evidence ?? []).some((entry) => entry.trim().length > 0);
-  if (!hasEvidence || !hasValidObservation(capability.observedAt)) {
+  const hasAuthority = typeof capability.authority === "string" && capability.authority.trim().length > 0;
+  if (!hasEvidence || !hasAuthority || !hasValidObservation(capability.observedAt)) {
     return "probed";
   }
   return requestedState;
@@ -55,8 +57,12 @@ function cloneCapability(
     available: state === "verified_available",
     requirements: [...capability.requirements],
     permissions: [...capability.permissions],
+    provides: capability.provides ? [...capability.provides] : undefined,
     inputs: capability.inputs ? [...capability.inputs] : undefined,
     outputs: capability.outputs ? [...capability.outputs] : undefined,
+    effects: capability.effects ? [...capability.effects] : undefined,
+    dependencies: capability.dependencies ? [...capability.dependencies] : undefined,
+    compatibility: capability.compatibility ? [...capability.compatibility] : undefined,
     evidence: capability.evidence ? [...capability.evidence] : undefined,
     metadata: capability.metadata ? { ...capability.metadata } : undefined,
   };
@@ -237,22 +243,25 @@ export class CapabilityRegistry {
     });
   }
 
-  findSupporting(requirement: string): CapabilityDescriptor[] {
-    const needle = requirement.trim().toLowerCase();
-    if (!needle) return [];
+  /** Verified state plus a fully verified, acyclic declared dependency chain. */
+  isExecutionReady(id: string, trail: ReadonlySet<string> = new Set()): boolean {
+    if (trail.has(id)) return false;
+    const capability = this.entries.get(id);
+    if (!capability || !isCapabilityVerifiedAvailable(capability)) return false;
+    const nextTrail = new Set(trail);
+    nextTrail.add(id);
+    return (capability.dependencies ?? []).every((dependency) =>
+      this.isExecutionReady(dependency, nextTrail)
+    );
+  }
 
-    return this.list({ availableOnly: true }).filter((entry) => {
-      const haystack = [
-        entry.id,
-        entry.type,
-        entry.provider,
-        entry.description,
-        ...entry.requirements,
-        ...(entry.inputs ?? []),
-        ...(entry.outputs ?? []),
-      ].join(" ").toLowerCase();
-      return haystack.includes(needle);
-    });
+  findSupporting(requirement: string): CapabilityDescriptor[] {
+    const needle = requirement.trim();
+    if (!needle) return [];
+    return this.list().filter((entry) =>
+      this.isExecutionReady(entry.id) &&
+      capabilityProvides(entry, needle)
+    );
   }
 
   ingestTools(tools: Array<{ name: string; description?: string }>): void {
@@ -264,6 +273,7 @@ export class CapabilityRegistry {
         provider: "abos",
         description: tool.description ?? tool.name,
         requirements: [],
+        provides: [tool.name],
         permissions: [],
         available: false,
         state: "discovered_unverified",
@@ -285,6 +295,7 @@ export class CapabilityRegistry {
         provider: "abos",
         description: skill.description ?? skill.name,
         requirements: [],
+        provides: [skill.name],
         permissions: [],
         available: false,
         state: skill.enabled === false ? "unavailable" : "discovered_unverified",

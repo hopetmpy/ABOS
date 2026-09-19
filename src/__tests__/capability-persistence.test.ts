@@ -61,7 +61,7 @@ describe("P-014 durable Capability Fabric", () => {
 
       registry.ingestTools([{ name: "exec", description: "Execute a local command" }]);
       expect(capabilityStateOf(registry.get("tool:exec")!)).toBe("verified_available");
-      expect(registry.findSupporting("execute").map((entry) => entry.id)).toContain("tool:exec");
+      expect(registry.findSupporting("exec").map((entry) => entry.id)).toContain("tool:exec");
     } finally {
       second.close();
     }
@@ -127,4 +127,52 @@ describe("P-014 durable Capability Fabric", () => {
       db.close();
     }
   });
+
+  it("invalidates persisted verification when a contract field changes across restart", () => {
+    const dbPath = tempDbPath();
+    const first = createDatabase(dbPath);
+    try {
+      const registry = new CapabilityRegistry(new CapabilityStore(first.raw));
+      registry.register({
+        id: "service:contracted",
+        type: "service",
+        provider: "test",
+        description: "Contracted service",
+        requirements: ["transform"],
+        provides: ["transform"],
+        permissions: [],
+        effects: ["read"],
+        version: "1",
+        available: true,
+        state: "verified_available",
+        authority: "probe:contract",
+        observedAt: "2026-09-19T01:10:00.000Z",
+        evidence: ["contract probe passed"],
+      });
+
+      const row = first.raw.prepare(
+        "SELECT descriptor_json FROM capability_records WHERE id = ?",
+      ).get("service:contracted") as { descriptor_json: string };
+      const changed = JSON.parse(row.descriptor_json) as Record<string, unknown>;
+      changed.effects = ["write"];
+      changed.version = "2";
+      first.raw.prepare(
+        "UPDATE capability_records SET descriptor_json = ? WHERE id = ?",
+      ).run(JSON.stringify(changed), "service:contracted");
+    } finally {
+      first.close();
+    }
+
+    const second = createDatabase(dbPath);
+    try {
+      const registry = new CapabilityRegistry(new CapabilityStore(second.raw));
+      const capability = registry.get("service:contracted")!;
+      expect(capabilityStateOf(capability)).toBe("discovered_unverified");
+      expect(capability.available).toBe(false);
+      expect(capability.authority).toBe("capability-store:definition-mismatch");
+    } finally {
+      second.close();
+    }
+  });
+
 });

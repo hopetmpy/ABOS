@@ -4,7 +4,7 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-014
 Active-Segment: continuity/C0010.md
-Active-Intervention: P014_CAPABILITY_FABRIC — V19_UNIT_INTEGRATION_VERIFIED / CONTRACT_HARDENING_DECISION_READY
+Active-Intervention: P014_CAPABILITY_FABRIC — CONTRACT_UNIT_SOURCE_GREEN / EXACT_GATE_PENDING
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -191,7 +191,7 @@ P-012 conserva autonomía de self-modification y sustituye write-before-verify/f
 - P-011: HECHO / INTEGRATION_VERIFIED — integrado por PR #38; cierre documental PR #39; C0007 cerrado.
 - P-012: HECHO / INTEGRATION_VERIFIED / P013_EVIDENCE_SATISFIED — source propio, integración y dependencia P-013 están cerrados; transición canónica respaldada por `main 21911888b8271662f1b546bc637f49d76610c132` CI `35410063228` + ProjectOps `35410063240`.
 - P-013: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED — producto PR #41 y cierre ProjectOps PR #42 integrados/revalidados; no implica E5/E6/E7 LIVE.
-- P-014: EN_EJECUCIÓN / DECISION_READY / V19_UNIT_INTEGRATION_VERIFIED / CONTRACT_HARDENING_DECISION_READY — lifecycle durable v19 gateado en rama; segunda unidad contractual registrada antes de source.
+- P-014: EN_EJECUCIÓN / CONTRACT_UNIT_SOURCE_GREEN / EXACT_GATE_PENDING — lifecycle durable v19 gateado; contract hardening validado internamente y pendiente de gate ordinario exact-head.
 - P-015..P-036: ver `ProjectOps/PLAN.md`; permanecen en su estado explícito.
 
 ## P-009 — cierre verificable
