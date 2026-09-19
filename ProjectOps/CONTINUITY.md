@@ -4,7 +4,7 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-014
 Active-Segment: continuity/C0010.md
-Active-Intervention: P014_CAPABILITY_FABRIC — DECISION_READY / SOURCE_UNMODIFIED
+Active-Intervention: P014_CAPABILITY_FABRIC — V19_UNIT_SOURCE_GREEN / EXACT_GATE_PENDING
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md

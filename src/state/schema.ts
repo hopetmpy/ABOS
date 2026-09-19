@@ -5,7 +5,7 @@
  * The database IS the abos's memory.
  */
 
-export const SCHEMA_VERSION = 18;
+export const SCHEMA_VERSION = 19;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -1081,4 +1081,29 @@ export const MIGRATION_V18_EVIDENCE_FABRIC = `
     ON evidence_events(tool_call_id, sequence);
   CREATE INDEX IF NOT EXISTS idx_evidence_goal_task
     ON evidence_events(goal_id, task_id, sequence);
+`;
+
+
+
+// === Capability Fabric durable lifecycle v1 (P-014) ===
+// Domain authority for capability readiness across restart. State strings are
+// intentionally open-ended; only the runtime model decides which states are
+// execution-ready. Evidence Fabric remains cross-domain correlation authority.
+export const MIGRATION_V19_CAPABILITY_LIFECYCLE = `
+  CREATE TABLE IF NOT EXISTS capability_records (
+    id TEXT PRIMARY KEY,
+    definition_fingerprint TEXT NOT NULL,
+    descriptor_json TEXT NOT NULL,
+    state TEXT NOT NULL,
+    observed_at TEXT,
+    authority TEXT,
+    evidence_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_capability_records_state
+    ON capability_records(state, updated_at);
+  CREATE INDEX IF NOT EXISTS idx_capability_records_fingerprint
+    ON capability_records(definition_fingerprint);
 `;
