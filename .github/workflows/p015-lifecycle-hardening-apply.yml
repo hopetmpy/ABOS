@@ -1,0 +1,80 @@
+name: P015 Lifecycle Hardening Apply
+
+on:
+  push:
+    branches:
+      - abos/p015-mcp-runtime
+    paths:
+      - .github/workflows/p015-lifecycle-hardening-apply.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: p015-lifecycle-hardening-apply
+  cancel-in-progress: false
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Guard exact parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_NAME}" = "abos/p015-mcp-runtime"
+          test "$(git rev-parse HEAD^)" = "8cfad074b9fc40d3d48cf368935acd250d63b101"
+          test -f scripts/p015-lifecycle-hardening-apply.py
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Apply hardening source
+        run: python3 scripts/p015-lifecycle-hardening-apply.py
+      - name: Validate changed-file boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git diff --name-only | sort)"
+          expected="$(printf '%s\n' \
+            'ProjectOps/CONTINUITY.md' \
+            'ProjectOps/continuity/C0011.md' \
+            'ProjectOps/plan/P-015.md' \
+            'src/__tests__/fixtures/mcp-stdio-server.mjs' \
+            'src/__tests__/mcp-runtime.test.ts' \
+            'src/mcp/runtime.ts' \
+            'src/state/database.ts' | sort)"
+          test "$actual" = "$expected"
+          git diff --check
+      - name: Targeted MCP lifecycle tests
+        run: pnpm exec vitest run src/__tests__/mcp-runtime.test.ts
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Build
+        run: pnpm run build
+      - name: Full suite
+        run: pnpm test
+      - name: Security-focused suite
+        run: pnpm run test:security
+      - name: ProjectOps integrity
+        run: node scripts/projectops-integrity-verify.mjs
+      - name: Commit clean hardening source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm scripts/p015-lifecycle-hardening-apply.py .github/workflows/p015-lifecycle-hardening-apply.yml
+          node scripts/projectops-integrity-verify.mjs
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat(mcp): harden lifecycle retirement and schema boundary'
+          git push origin HEAD:abos/p015-mcp-runtime
