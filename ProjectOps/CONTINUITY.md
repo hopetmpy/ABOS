@@ -4,7 +4,7 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-015
 Active-Segment: continuity/C0011.md
-Active-Intervention: P015_MCP_RUNTIME — MCP_LIFECYCLE_HARDENING / IMPLEMENTED / VALIDATION_PENDING
+Active-Intervention: P015_MCP_RUNTIME — MCP_STREAMABLE_HTTP_AUTH / AUDIT_OPEN / SOURCE_UNMODIFIED_SINCE_HARDENING_GATE
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -193,7 +193,7 @@ P015-MCP-Core-Exact-Gate-Head: a5365fe1e721464c442ff92d7db93cc81d2af203
 P015-MCP-Core-CI: 35420000569 SUCCESS / 8_OF_8
 P015-MCP-Core-ProjectOps: 35420000480 SUCCESS
 P015-MCP-Core-State: INTEGRATION_VERIFIED / E3_BRANCH_GREEN
-P015-Source-State: MCP_LIFECYCLE_HARDENING / IMPLEMENTED / VALIDATION_PENDING
+P015-Source-State: MCP_LIFECYCLE_HARDENING_E3_GREEN / MCP_STREAMABLE_HTTP_AUTH_AUDIT_OPEN
 P015-Transition-Merge: 87e256a93a655b1ccce000cd2de3896a8f3f74b5
 P015-Transition-Main-CI: 35418524268 SUCCESS
 P015-Transition-Main-ProjectOps: 35418524330 SUCCESS
@@ -367,3 +367,10 @@ Siguiente punto verificable: implementar y validar `MCP_LIFECYCLE_HARDENING` reu
 ## P-015 — MCP_LIFECYCLE_HARDENING source aplicado
 
 La unidad implementa retiro MCP durable mediante `runtimeTruth=retired`, evita reconectar inventario retirado, retira capabilities sólo cuando un `tools/list` actual exitoso demuestra ausencia, y rechaza identifiers/keys de schema con delimitadores de prompt/control sin mutar valores semánticos `enum/default/pattern`. Estado: IMPLEMENTED / VALIDATION_PENDING; no acredita HTTP/auth ni cierre de P-015.
+
+
+## P-015 — MCP_LIFECYCLE_HARDENING cerrado; HTTP/auth en auditoría
+
+`MCP_LIFECYCLE_HARDENING` quedó validado en clean source `c111ceb8ddaaae3b55757c36d17a8ab5825a7750` y exact gate `31c524452caf5a702f91f85a5c684dcb0a8544fb`: CI `35421011822` 8/8 SUCCESS y ProjectOps `35421011820` SUCCESS.
+
+La siguiente frontera se abre sólo como auditoría: `MCP_STREAMABLE_HTTP_AUTH`. Product source permanece sin cambios desde el hardening gate mientras se reconstruyen endpoint trust, credential authority, auth flows, reconnect/session semantics y failure matrix vigentes.
