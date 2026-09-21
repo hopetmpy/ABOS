@@ -1,0 +1,114 @@
+name: P016 Unit1 Reconcile
+
+on:
+  push:
+    branches:
+      - abos/p016-computer-browser-gui-hands
+    paths:
+      - .github/workflows/p016-unit1-reconcile.yml
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure bot commit identity
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Reconcile P016 structured-browser evidence and open local-computer audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          c = Path("ProjectOps/continuity/C0012.md")
+          text = c.read_text(encoding="utf-8").rstrip()
+          old = "Classification: DECISION_READY / STRUCTURED_BROWSER_LOCAL / SOURCE_UNMODIFIED"
+          new = "Classification: EN_EJECUCIÓN / LOCAL_COMPUTER_COMPLETION / AUDIT_OPEN"
+          if text.count(old) != 1:
+              raise SystemExit(f"C0012 classification anchor expected once, found {text.count(old)}")
+          text = text.replace(old, new, 1)
+          checkpoint = r'''
+
+## STRUCTURED_BROWSER_LOCAL — E3 branch green / unidad aceptada
+
+- hardening source commit: `d5f31143f6adf53a80bb371dd15629b7d1261a6a`;
+- hardening validation workflow `35645168132`: SUCCESS — patch determinista, targeted adversarial regressions, typecheck, build, full suite, security-focused regressions, dependency audit y smoke con browser real;
+- clean final branch head después de retirar workflows temporales: `92faa53302ede575e6b5c4a8f148ee6ba57b6cd5`;
+- ordinary CI `35645511597`: SUCCESS, 8/8 jobs — Node 22/24, Windows 22/24, public distribution 22/24, dependency audit y rebrand;
+- ProjectOps Integrity `35645511601`: SUCCESS;
+- source reaudit confirma request-level URL trust, rollback del handle si initial navigation falla, upload realpath/symlink confinement y download-root realpath confinement;
+- workflows temporales de aplicación/hardening fueron retirados del árbol final.
+
+Intentos informativos no convertidos en PASS:
+- `35425836333` validó todo el hardening técnico pero terminó FAILURE por una línea en blanco extra generada al EOF de `C0012.md` durante reconciliación; no se aceptó como PASS ni se perdió la evidencia técnica;
+- `35644894154` terminó FAILURE porque `GITHUB_TOKEN` no posee permiso `workflows` para modificar otro workflow. Se descartó esa ruta y se aplicó el mismo patch por una ruta autorizada que no ampliaba permisos.
+
+Clasificación de unidad: **INTEGRATION_VERIFIED / E3_BRANCH_GREEN**. Esto cierra únicamente `STRUCTURED_BROWSER_LOCAL`; no cierra P-016 ni acredita browser/GUI LIVE en el host del usuario.
+
+## LOCAL_COMPUTER_COMPLETION — AUDIT_OPEN
+
+State: EN_EJECUCIÓN / AUDIT_OPEN / SOURCE_UNMODIFIED
+
+Objetivo de la unidad: completar las hands locales existentes sin crear un segundo control plane, reconstruyendo primero ownership y gaps reales de `exec`, filesystem y process lifecycle para decidir REUSE/EXTEND/REFACTOR/NO_CHANGE con evidencia.
+
+Hipótesis de entrada:
+- H0 `NO_CHANGE`: las primitives actuales ya cubren cwd/env, start/wait/kill/cancel y move/rename con semántica suficiente;
+- H1 `EXTEND_EXISTING_LOCAL_HANDS`: faltan capacidades reales, pero deben agregarse sobre Conway/local/builtin tools/Environment authorities existentes;
+- H2 `CREATE_PARALLEL_PROCESS_MANAGER`: una authority nueva sería necesaria;
+- H3 `REUSE_ENVIRONMENT_TASK_EXECUTORS`: parte del lifecycle ya existe en environments y debe reutilizarse en vez de duplicarse.
+
+Invariantes:
+- preservar Policy como frontera de efectos;
+- no confundir local/Conway/cloud/child executors;
+- cwd/env explícitos no pueden degradar path/secret boundaries;
+- cancel/kill deben modelar outcome observado y no fabricar terminación;
+- move/rename debe verificar resultado y no crear filesystem authority paralela;
+- cada capability debe proyectar readiness/evidence real.
+
+Siguiente punto verificable: auditar producers/consumers de `exec`, filesystem y task/process lifecycle, incluyendo tests e historial relevante; falsar hipótesis, alcanzar DECISION_READY y sólo entonces modificar product source.
+'''
+          c.write_text(text + checkpoint.rstrip() + "\n", encoding="utf-8")
+
+          p = Path("ProjectOps/CONTINUITY.md")
+          s = p.read_text(encoding="utf-8")
+          replacements = {
+            "Active-Intervention: P016_COMPUTER_BROWSER_GUI_HANDS — DECISION_READY / STRUCTURED_BROWSER_LOCAL / SOURCE_UNMODIFIED": "Active-Intervention: P016_COMPUTER_BROWSER_GUI_HANDS — EN_EJECUCIÓN / LOCAL_COMPUTER_COMPLETION / AUDIT_OPEN",
+            "Last-Reconciled-Host-Head: b8b91acf5c4445b5bc3c7627387281f0415fcb48": "Last-Reconciled-Host-Head: 92faa53302ede575e6b5c4a8f148ee6ba57b6cd5",
+            "Last-Reconciled-Head-Semantics: P016_DECISION_READY_STRUCTURED_BROWSER_LOCAL_SOURCE_UNMODIFIED": "Last-Reconciled-Head-Semantics: P016_STRUCTURED_BROWSER_LOCAL_E3_GREEN_LOCAL_COMPUTER_COMPLETION_AUDIT_OPEN",
+          }
+          for old, new in replacements.items():
+              if s.count(old) != 1:
+                  raise SystemExit(f"CONTINUITY anchor expected once, found {s.count(old)}: {old}")
+              s = s.replace(old, new, 1)
+          additions = [
+            "P016-Structured-Browser-Hardening-Source: d5f31143f6adf53a80bb371dd15629b7d1261a6a",
+            "P016-Structured-Browser-Hardening-Validation: 35645168132 SUCCESS",
+            "P016-Structured-Browser-Final-Clean-Head: 92faa53302ede575e6b5c4a8f148ee6ba57b6cd5",
+            "P016-Structured-Browser-Final-CI: 35645511597 SUCCESS / 8_OF_8",
+            "P016-Structured-Browser-Final-ProjectOps: 35645511601 SUCCESS",
+            "P016-Structured-Browser-Unit-State: INTEGRATION_VERIFIED / E3_BRANCH_GREEN",
+            "P016-Active-Unit: LOCAL_COMPUTER_COMPLETION",
+            "P016-Active-Unit-State: AUDIT_OPEN / SOURCE_UNMODIFIED",
+          ]
+          for line in additions:
+              if line not in s:
+                  s = s.rstrip() + "\n" + line + "\n"
+          p.write_text(s.rstrip() + "\n", encoding="utf-8")
+          PY
+          node scripts/projectops-integrity-verify.mjs
+          git diff --check
+          git add ProjectOps/CONTINUITY.md ProjectOps/continuity/C0012.md
+          git diff --cached --check
+          git commit -m "docs(p016): accept structured browser and open local hands audit"
+          git push origin HEAD:abos/p016-computer-browser-gui-hands
