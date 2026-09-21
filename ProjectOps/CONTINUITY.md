@@ -4,7 +4,7 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-016
 Active-Segment: continuity/C0012.md
-Active-Intervention: P016_COMPUTER_BROWSER_GUI_HANDS — DECISION_READY / STRUCTURED_BROWSER_LOCAL / SOURCE_UNMODIFIED
+Active-Intervention: P016_COMPUTER_BROWSER_GUI_HANDS — EN_EJECUCIÓN / LOCAL_COMPUTER_COMPLETION / AUDIT_OPEN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -13,8 +13,8 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p016-computer-browser-gui-hands
 Host-Head-At-Audit-Open: fe845184fce48c65032f8521ecd0bdfa42e04b77
-Last-Reconciled-Host-Head: b8b91acf5c4445b5bc3c7627387281f0415fcb48
-Last-Reconciled-Head-Semantics: P016_DECISION_READY_STRUCTURED_BROWSER_LOCAL_SOURCE_UNMODIFIED
+Last-Reconciled-Host-Head: 92faa53302ede575e6b5c4a8f148ee6ba57b6cd5
+Last-Reconciled-Head-Semantics: P016_STRUCTURED_BROWSER_LOCAL_E3_GREEN_LOCAL_COMPUTER_COMPLETION_AUDIT_OPEN
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -437,3 +437,11 @@ P016-Decision: REUSE_EXISTING_HANDS / EXTEND_EXISTING_AUTHORITIES / UNIFY_URL_TR
 P016-First-Unit: STRUCTURED_BROWSER_LOCAL
 P016-Source-Modified-At-Decision: NO
 - P016 structured-browser apply workflow `35425530526`: source implemented; apply validation PASS; real-host smoke `PASS:browserVersion=152.0.7977.82;target=path:google-chrome;snapshot=aria;semanticActions=fill+click;upload=verified;downloadBytes=18`; ordinary exact-head CI/ProjectOps pending.
+P016-Structured-Browser-Hardening-Source: d5f31143f6adf53a80bb371dd15629b7d1261a6a
+P016-Structured-Browser-Hardening-Validation: 35645168132 SUCCESS
+P016-Structured-Browser-Final-Clean-Head: 92faa53302ede575e6b5c4a8f148ee6ba57b6cd5
+P016-Structured-Browser-Final-CI: 35645511597 SUCCESS / 8_OF_8
+P016-Structured-Browser-Final-ProjectOps: 35645511601 SUCCESS
+P016-Structured-Browser-Unit-State: INTEGRATION_VERIFIED / E3_BRANCH_GREEN
+P016-Active-Unit: LOCAL_COMPUTER_COMPLETION
+P016-Active-Unit-State: AUDIT_OPEN / SOURCE_UNMODIFIED
