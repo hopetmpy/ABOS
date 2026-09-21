@@ -1,0 +1,74 @@
+name: P016 Unit2 Apply
+
+on:
+  push:
+    branches:
+      - abos/p016-computer-browser-gui-hands
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    if: github.event.head_commit.message == 'chore(p016): add local-computer apply gate'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Apply deterministic P-016 unit 2 candidate
+        run: python scripts/p016-unit2-apply.py
+      - name: Inspect candidate diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --short
+          git diff --check
+          git diff --stat
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Build
+        run: pnpm run build
+      - name: Full test suite with hang detection
+        shell: bash
+        run: |
+          set +e
+          timeout 360 pnpm run test:diagnose
+          RC=$?
+          set -e
+          if [ $RC -eq 124 ]; then echo "::error::vitest timed out or left active handles"; fi
+          exit $RC
+      - name: Security and policy regressions
+        shell: bash
+        run: |
+          set +e
+          timeout 240 pnpm exec vitest run -t "security|injection|policy|process|filesystem|move|cancel|environment"
+          RC=$?
+          set -e
+          if [ $RC -eq 124 ]; then echo "::error::security/adversarial tests timed out"; fi
+          exit $RC
+      - name: Dependency audit
+        run: pnpm audit
+      - name: ProjectOps integrity
+        run: node scripts/projectops-integrity-verify.mjs
+      - name: Commit validated candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          if git diff --quiet; then
+            echo "::error::Implementation helper produced no source changes"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(p016): complete local computer primitives"
+          git push origin HEAD:${GITHUB_REF_NAME}
