@@ -264,6 +264,7 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
       description: "Start a managed process on the explicit local ABOS host and return an opaque process-local handle.",
       category: "vm",
       riskLevel: "caution",
+      externalOutput: true,
       parameters: {
         type: "object",
         properties: {
@@ -310,7 +311,7 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
     },
     {
       name: "process_cancel",
-      description: "Request graceful SIGTERM cancellation of a managed local process handle and report observed state.",
+      description: "Request cancellation of a managed local process tree and report observed state. POSIX uses SIGTERM on the owned process group; Windows uses host-native forced task-tree termination and is not represented as POSIX-graceful semantics.",
       category: "vm",
       riskLevel: "caution",
       externalOutput: true,
@@ -323,7 +324,7 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
     },
     {
       name: "process_kill",
-      description: "Request forceful termination of a managed local process handle and report observed state. Arbitrary PIDs are not accepted.",
+      description: "Request forceful termination of a managed local process tree and report observed state. Arbitrary PIDs are not accepted.",
       category: "vm",
       riskLevel: "caution",
       externalOutput: true,

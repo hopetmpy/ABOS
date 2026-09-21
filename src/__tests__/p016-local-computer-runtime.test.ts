@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { LocalComputerRuntime } from "../platform/local-computer-runtime.js";
 import { getHomeDir } from "../platform/home.js";
 import { LocalEnvironmentProvider } from "../environments/local.js";
+import { createBuiltinTools } from "../agent/tools-core.js";
 import { redactToolArgumentsForPersistence } from "../agent/sensitive-tool-arguments.js";
 
 const cleanup: string[] = [];
@@ -39,6 +40,29 @@ describe("P016 local computer runtime", () => {
     const runtime = new LocalComputerRuntime();
     const outside = path.parse(getHomeDir()).root;
     expect(() => runtime.exec("pwd", 1_000, { cwd: outside })).toThrow("outside the allowed directory");
+  });
+
+  it("does not claim readiness for an existing shell path that cannot launch", () => {
+    const dir = tempHomeDir();
+    const fakeShell = path.join(dir, process.platform === "win32" ? "fake-bash.exe" : "fake-shell");
+    fs.writeFileSync(fakeShell, "not an executable shell");
+    const previousShell = process.env.SHELL;
+    const previousBash = process.env.ABOS_BASH_PATH;
+
+    if (process.platform === "win32") process.env.ABOS_BASH_PATH = fakeShell;
+    else process.env.SHELL = fakeShell;
+
+    try {
+      const probe = new LocalComputerRuntime().probe();
+      expect(probe.available).toBe(false);
+      expect(probe.shell).toBe(fakeShell);
+      expect(probe.evidence.join(" ")).toContain("failed launch probe");
+    } finally {
+      if (previousShell === undefined) delete process.env.SHELL;
+      else process.env.SHELL = previousShell;
+      if (previousBash === undefined) delete process.env.ABOS_BASH_PATH;
+      else process.env.ABOS_BASH_PATH = previousBash;
+    }
   });
 
   it("starts, observes and waits for a managed process", async () => {
@@ -102,6 +126,51 @@ describe("P016 local computer runtime", () => {
       await runtime.kill(started.id);
     }
   });
+
+  for (const mode of ["kill", "cancel"] as const) {
+    it(`contains descendant processes when ${mode} is requested`, async () => {
+      const runtime = new LocalComputerRuntime(() => `tree-${mode}`);
+      const cwd = tempHomeDir();
+      const marker = path.join(cwd, "descendant-marker.txt");
+      const started = await runtime.start(
+        `node -e "setTimeout(()=>require('fs').writeFileSync('descendant-marker.txt','alive'),700);setTimeout(()=>{},5000)" >/dev/null 2>&1 & wait`,
+        { cwd },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const outcome = mode === "kill"
+        ? await runtime.kill(started.id)
+        : await runtime.cancel(started.id);
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      expect(fs.existsSync(marker)).toBe(false);
+      expect(outcome.waitTimedOut).toBe(false);
+      expect(outcome.state).not.toBe("running");
+    });
+  }
+
+  if (process.platform === "win32") {
+    for (const mode of ["kill", "cancel"] as const) {
+      it(`repeatedly contains Windows descendant processes when ${mode} is requested`, async () => {
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          const runtime = new LocalComputerRuntime(() => `tree-${mode}-${attempt}`);
+          const cwd = tempHomeDir();
+          const markerName = `descendant-marker-${mode}-${attempt}.txt`;
+          const marker = path.join(cwd, markerName);
+          const started = await runtime.start(
+            `node -e "setTimeout(()=>require('fs').writeFileSync('${markerName}','alive'),700);setTimeout(()=>{},5000)" >/dev/null 2>&1 & wait`,
+            { cwd },
+          );
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          const outcome = mode === "kill"
+            ? await runtime.kill(started.id)
+            : await runtime.cancel(started.id);
+          await new Promise((resolve) => setTimeout(resolve, 1_000));
+          expect(fs.existsSync(marker)).toBe(false);
+          expect(outcome.waitTimedOut).toBe(false);
+          expect(outcome.state).not.toBe("running");
+        }
+      });
+    }
+  }
 
   it("treats a handle from another runtime as stale after restart", async () => {
     const first = new LocalComputerRuntime(() => "first");
@@ -175,6 +244,11 @@ describe("P016 local computer runtime", () => {
       "Local process execution/lifecycle is currently unavailable on this host because no usable shell was observed.",
     );
     expect(snapshot.constraints.join(" ")).not.toContain("process capabilities remain available");
+  });
+
+  it("marks process_start output as external so fast stdout/stderr snapshots are sanitized", () => {
+    const processStart = createBuiltinTools("").find((tool) => tool.name === "process_start");
+    expect(processStart?.externalOutput).toBe(true);
   });
 
   it("redacts env values from durable/model-facing arguments while preserving keys", () => {
