@@ -215,12 +215,8 @@ export class LocalComputerRuntime {
     const entry = this.requireProcess(id);
     if (entry.state !== "running") return this.snapshot(entry, false);
     if (timeoutMs <= 0) return this.snapshot(entry, true);
-    let timedOut = false;
-    await Promise.race([
-      entry.completion,
-      new Promise<void>((resolve) => setTimeout(() => { timedOut = true; resolve(); }, timeoutMs)),
-    ]);
-    return this.snapshot(entry, timedOut && entry.state === "running");
+    const timedOut = await this.waitForCompletion(entry, timeoutMs);
+    return this.snapshot(entry, timedOut);
   }
 
   async cancel(id: string): Promise<ManagedProcessSnapshot> {
@@ -347,10 +343,25 @@ export class LocalComputerRuntime {
 
   private async observeTermination(entry: ManagedProcessEntry): Promise<void> {
     if (entry.state !== "running") return;
-    await Promise.race([
-      entry.completion,
-      new Promise<void>((resolve) => setTimeout(resolve, TERMINATION_OBSERVE_MS)),
-    ]);
+    await this.waitForCompletion(entry, TERMINATION_OBSERVE_MS);
+  }
+
+  private async waitForCompletion(
+    entry: ManagedProcessEntry,
+    timeoutMs: number,
+  ): Promise<boolean> {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    try {
+      const winner = await Promise.race([
+        entry.completion.then(() => "completed" as const),
+        new Promise<"timeout">((resolve) => {
+          timer = setTimeout(() => resolve("timeout"), timeoutMs);
+        }),
+      ]);
+      return winner === "timeout" && entry.state === "running";
+    } finally {
+      if (timer !== null) clearTimeout(timer);
+    }
   }
 
   private snapshot(entry: ManagedProcessEntry, waitTimedOut: boolean): ManagedProcessSnapshot {

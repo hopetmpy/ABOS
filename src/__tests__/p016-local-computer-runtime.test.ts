@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { LocalComputerRuntime } from "../platform/local-computer-runtime.js";
 import { getHomeDir } from "../platform/home.js";
+import { LocalEnvironmentProvider } from "../environments/local.js";
 import { redactToolArgumentsForPersistence } from "../agent/sensitive-tool-arguments.js";
 
 const cleanup: string[] = [];
@@ -50,6 +51,34 @@ describe("P016 local computer runtime", () => {
     expect(finished.exitCode).toBe(0);
     expect(finished.stdout).toContain("done");
     expect(finished.waitTimedOut).toBe(false);
+  });
+
+  it("clears the losing wait timer when process completion wins", async () => {
+    const runtime = new LocalComputerRuntime(() => "timer-cleanup");
+    const originalSetTimeout = globalThis.setTimeout;
+    const originalClearTimeout = globalThis.clearTimeout;
+    const tracked = new Set<ReturnType<typeof setTimeout>>();
+    globalThis.setTimeout = ((handler: (...args: any[]) => void, timeout?: number, ...args: any[]) => {
+      const timer = originalSetTimeout(handler, timeout, ...args);
+      if (timeout === 5_000) tracked.add(timer);
+      return timer;
+    }) as typeof setTimeout;
+    globalThis.clearTimeout = ((timer: ReturnType<typeof setTimeout>) => {
+      tracked.delete(timer);
+      return originalClearTimeout(timer);
+    }) as typeof clearTimeout;
+
+    try {
+      const started = await runtime.start(`node -e "process.stdout.write('done')"`);
+      const finished = await runtime.wait(started.id, 5_000);
+      expect(finished.state).toBe("exited");
+      expect(finished.waitTimedOut).toBe(false);
+      expect(tracked.size).toBe(0);
+    } finally {
+      globalThis.setTimeout = originalSetTimeout;
+      globalThis.clearTimeout = originalClearTimeout;
+      for (const timer of tracked) originalClearTimeout(timer);
+    }
   });
 
   it("reports timeout without fabricating termination", async () => {
@@ -115,6 +144,37 @@ describe("P016 local computer runtime", () => {
     const link = path.join(dir, "link.txt");
     fs.symlinkSync(target, link);
     expect(() => runtime.moveFile(link, path.join(dir, "moved.txt"))).toThrow("refuses symbolic-link sources");
+  });
+
+  it("does not claim process availability when the process probe is unavailable", async () => {
+    const provider = new LocalEnvironmentProvider(
+      {
+        probe: async () => ({
+          available: false,
+          observedAt: "2026-09-21T00:00:00.000Z",
+          target: null,
+          browserVersion: null,
+          evidence: ["browser unavailable"],
+        }),
+      } as any,
+      {
+        probe: () => ({
+          available: false,
+          observedAt: "2026-09-21T00:00:00.000Z",
+          shell: null,
+          evidence: ["no shell"],
+        }),
+      } as any,
+    );
+
+    const snapshot = await provider.inspect();
+    const processCapability = snapshot.capabilities.find((entry) => entry.id === "local:process");
+    expect(processCapability?.available).toBe(false);
+    expect(processCapability?.state).toBe("unavailable");
+    expect(snapshot.constraints).toContain(
+      "Local process execution/lifecycle is currently unavailable on this host because no usable shell was observed.",
+    );
+    expect(snapshot.constraints.join(" ")).not.toContain("process capabilities remain available");
   });
 
   it("redacts env values from durable/model-facing arguments while preserving keys", () => {

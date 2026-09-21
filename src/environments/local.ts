@@ -40,6 +40,17 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
       ...browser.evidence.map((entry) => `browser:${entry}`),
       ...computer.evidence.map((entry) => `process:${entry}`),
     ];
+    const constraints: string[] = [];
+    if (!browser.available) {
+      constraints.push(
+        "Structured browser is currently unavailable on this host; other local capabilities are assessed independently.",
+      );
+    }
+    if (!computer.available) {
+      constraints.push(
+        "Local process execution/lifecycle is currently unavailable on this host because no usable shell was observed.",
+      );
+    }
 
     return {
       id: this.id,
@@ -47,9 +58,7 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
       availability: "available",
       evidence,
       costModel: "host-provided",
-      constraints: browser.available
-        ? []
-        : ["Structured browser is currently unavailable on this host; filesystem/process capabilities remain available."],
+      constraints,
       observedAt,
       metadata: {
         platform: process.platform,
