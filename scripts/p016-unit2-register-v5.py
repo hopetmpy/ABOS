@@ -38,4 +38,4 @@ Corrección autorizada:
 
 `LOCAL_COMPUTER_COMPLETION` permanece **NOT_ACCEPTED** hasta esa verificación final.
 '''
-path.write_text(text + append + "\n", encoding="utf-8")
+path.write_text(text + append.rstrip() + "\n", encoding="utf-8")
