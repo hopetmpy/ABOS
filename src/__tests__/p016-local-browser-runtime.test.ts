@@ -1,4 +1,6 @@
 
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { getHomeDir } from "../platform/home.js";
@@ -11,7 +13,18 @@ function candidate(): BrowserCandidate {
   return { label: "fake", launchOptions: { headless: true }, evidence: "fake browser candidate" };
 }
 
-function fakeBrowser(state: { url: string; snapshot: string; closed: number }) {
+function fakeBrowser(state: { url: string; snapshot: string; closed: number; redirectTo?: string; failNavigation?: boolean }) {
+  let routeHandler: ((route: { request(): { url(): string }; continue(): Promise<void>; abort(): Promise<void> }) => Promise<void>) | null = null;
+  const runRoute = async (url: string) => {
+    if (!routeHandler) return;
+    let aborted = false;
+    await routeHandler({
+      request: () => ({ url: () => url }),
+      continue: async () => {},
+      abort: async () => { aborted = true; },
+    });
+    if (aborted) throw new Error(`blockedbyclient:${url}`);
+  };
   const locator = {
     ariaSnapshot: async () => state.snapshot,
     click: async () => {},
@@ -23,7 +36,12 @@ function fakeBrowser(state: { url: string; snapshot: string; closed: number }) {
     setInputFiles: async () => {},
   };
   const page = {
-    goto: async (url: string) => { state.url = url; },
+    goto: async (url: string) => {
+      await runRoute(url);
+      if (state.redirectTo) await runRoute(state.redirectTo);
+      if (state.failNavigation) throw new Error("navigation failed");
+      state.url = state.redirectTo ?? url;
+    },
     url: () => state.url,
     title: async () => "Fake Page",
     locator: () => locator,
@@ -40,6 +58,7 @@ function fakeBrowser(state: { url: string; snapshot: string; closed: number }) {
   };
   const context = {
     newPage: async () => page,
+    route: async (_url: string, handler: typeof routeHandler) => { routeHandler = handler; },
     close: async () => {},
   };
   return {
@@ -112,6 +131,82 @@ describe("P-016 LocalBrowserRuntime", () => {
     const outside = path.resolve(getHomeDir(), "..", "p016-outside.txt");
     await expect(runtime.upload(opened.sessionId, { label: "Upload" }, [outside]))
       .rejects.toThrow("outside the allowed directory");
+  });
+
+
+  it("removes the process-local handle when initial navigation fails", async () => {
+    const state = { url: "about:blank", snapshot: "ok", closed: 0, failNavigation: true };
+    const runtime = new LocalBrowserRuntime({
+      candidates: () => [candidate()],
+      launch: async () => fakeBrowser(state),
+      idFactory: () => "failed-open",
+    });
+    await expect(runtime.open("https://example.com/fail")).rejects.toThrow("navigation failed");
+    expect(runtime.sessionCount()).toBe(0);
+    await expect(runtime.snapshot("browser_failed-open")).rejects.toThrow("STALE_OR_UNKNOWN_BROWSER_SESSION");
+  });
+
+  it("blocks an HTTPS redirect that downgrades to remote HTTP", async () => {
+    const state = {
+      url: "about:blank",
+      snapshot: "ok",
+      closed: 0,
+      redirectTo: "http://example.net/insecure",
+    };
+    const runtime = new LocalBrowserRuntime({
+      candidates: () => [candidate()],
+      launch: async () => fakeBrowser(state),
+      idFactory: () => "redirect",
+    });
+    await expect(runtime.open("https://example.com/start")).rejects.toThrow("blockedbyclient");
+    expect(runtime.sessionCount()).toBe(0);
+  });
+
+  it("rejects an in-home upload symlink before file materialization", async () => {
+    if (process.platform === "win32") return;
+    const state = { url: "about:blank", snapshot: "ok", closed: 0 };
+    const runtime = new LocalBrowserRuntime({
+      candidates: () => [candidate()],
+      launch: async () => fakeBrowser(state),
+      idFactory: () => "symlink-upload",
+    });
+    const opened = await runtime.open();
+    const externalDir = fs.mkdtempSync(path.join(os.tmpdir(), "abos-p016-external-"));
+    const externalFile = path.join(externalDir, "outside.txt");
+    const link = path.join(getHomeDir(), `.abos-p016-upload-link-${process.pid}`);
+    fs.writeFileSync(externalFile, "outside");
+    try {
+      fs.symlinkSync(externalFile, link);
+      await expect(runtime.upload(opened.sessionId, { label: "Upload" }, [link]))
+        .rejects.toThrow("refuses symbolic links");
+    } finally {
+      try { fs.unlinkSync(link); } catch {}
+      fs.rmSync(externalDir, { recursive: true, force: true });
+      await runtime.closeAll();
+    }
+  });
+
+  it("rejects a download root symlink that escapes local HOME", async () => {
+    if (process.platform === "win32") return;
+    const state = { url: "about:blank", snapshot: "ok", closed: 0 };
+    const externalDir = fs.mkdtempSync(path.join(os.tmpdir(), "abos-p016-download-outside-"));
+    const link = path.join(getHomeDir(), `.abos-p016-download-link-${process.pid}`);
+    fs.symlinkSync(externalDir, link, "dir");
+    const runtime = new LocalBrowserRuntime({
+      candidates: () => [candidate()],
+      launch: async () => fakeBrowser(state),
+      idFactory: () => "symlink-download",
+      downloadRoot: link,
+    });
+    try {
+      const opened = await runtime.open();
+      await expect(runtime.download(opened.sessionId, { text: "Download" }))
+        .rejects.toThrow("outside the allowed directory");
+    } finally {
+      await runtime.closeAll();
+      try { fs.unlinkSync(link); } catch {}
+      fs.rmSync(externalDir, { recursive: true, force: true });
+    }
   });
 
   it("treats a session from another runtime instance as stale/restart-invalid", async () => {

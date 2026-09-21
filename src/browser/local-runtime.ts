@@ -43,8 +43,19 @@ interface BrowserPageLike {
   setDefaultNavigationTimeout(timeout: number): void;
 }
 
+interface BrowserRequestLike {
+  url(): string;
+}
+
+interface BrowserRouteLike {
+  request(): BrowserRequestLike;
+  continue(): Promise<void>;
+  abort(errorCode?: string): Promise<void>;
+}
+
 interface BrowserContextLike {
   newPage(): Promise<BrowserPageLike>;
+  route(url: string, handler: (route: BrowserRouteLike) => Promise<void>): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -106,6 +117,7 @@ export interface LocalBrowserRuntimeOptions {
   idFactory?: () => string;
   now?: () => Date;
   probeCacheMs?: number;
+  downloadRoot?: string;
 }
 
 function executableInPath(names: string[]): Array<{ name: string; path: string }> {
@@ -227,6 +239,30 @@ function safeError(error: unknown): string {
   return message.replace(/\s+/g, " ").trim().slice(0, 240);
 }
 
+function assertTrustedBrowserRequestUrl(rawUrl: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new Error(`Invalid browser request URL: ${rawUrl}`);
+  }
+
+  if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+    trustedHttpUrl(rawUrl, {
+      allowHttpOnLoopback: true,
+      rejectEmbeddedCredentials: true,
+      stripHash: false,
+    });
+    return;
+  }
+
+  if (parsed.protocol === "data:" || parsed.protocol === "blob:" || parsed.protocol === "about:") {
+    return;
+  }
+
+  throw new Error(`Unsupported browser request scheme: ${parsed.protocol}`);
+}
+
 function semanticLocator(page: BrowserPageLike, target: SemanticBrowserTarget): BrowserLocatorLike {
   const selectors = [target.role, target.label, target.text, target.placeholder].filter(
     (value) => typeof value === "string" && value.trim().length > 0,
@@ -255,6 +291,7 @@ export class LocalBrowserRuntime {
   private readonly idFactory: () => string;
   private readonly now: () => Date;
   private readonly probeCacheMs: number;
+  private readonly downloadRoot: string;
   private selectedCandidate: BrowserCandidate | null = null;
   private lastProbe: LocalBrowserProbe | null = null;
   private lastProbeAt = 0;
@@ -266,6 +303,7 @@ export class LocalBrowserRuntime {
     this.idFactory = options.idFactory ?? randomUUID;
     this.now = options.now ?? (() => new Date());
     this.probeCacheMs = options.probeCacheMs ?? 30_000;
+    this.downloadRoot = options.downloadRoot ?? path.join(getHomeDir(), "Downloads", "ABOS");
   }
 
   async probe(options: { force?: boolean } = {}): Promise<LocalBrowserProbe> {
@@ -388,8 +426,17 @@ export class LocalBrowserRuntime {
   async open(url?: string): Promise<BrowserSessionView> {
     const browser = await this.launchForSession();
     let context: BrowserContextLike | null = null;
+    let registeredSessionId: string | null = null;
     try {
       context = await browser.newContext({ acceptDownloads: true });
+      await context.route("**/*", async (route) => {
+        try {
+          assertTrustedBrowserRequestUrl(route.request().url());
+          await route.continue();
+        } catch {
+          await route.abort("blockedbyclient");
+        }
+      });
       const page = await context.newPage();
       page.setDefaultTimeout(15_000);
       page.setDefaultNavigationTimeout(30_000);
@@ -402,11 +449,13 @@ export class LocalBrowserRuntime {
         createdAt: this.now().toISOString(),
       };
       this.sessions.set(id, session);
+      registeredSessionId = id;
       if (url?.trim()) {
         await this.navigate(id, url);
       }
       return await this.view(session);
     } catch (error) {
+      if (registeredSessionId) this.sessions.delete(registeredSessionId);
       try {
         await context?.close();
       } catch {}
@@ -485,9 +534,15 @@ export class LocalBrowserRuntime {
     for (const filePath of filePaths) {
       const resolved = confinePathToLocalHome(filePath, "browser_upload");
       if (typeof resolved === "object") throw new Error(resolved.error);
-      const stat = fs.statSync(resolved);
-      if (!stat.isFile()) throw new Error(`browser_upload requires a regular file: ${resolved}`);
-      confined.push(resolved);
+      const lexicalStat = fs.lstatSync(resolved);
+      if (lexicalStat.isSymbolicLink()) {
+        throw new Error(`browser_upload refuses symbolic links: ${resolved}`);
+      }
+      if (!lexicalStat.isFile()) throw new Error(`browser_upload requires a regular file: ${resolved}`);
+      const realPath = fs.realpathSync(resolved);
+      const realConfined = confinePathToLocalHome(realPath, "browser_upload_realpath");
+      if (typeof realConfined === "object") throw new Error(realConfined.error);
+      confined.push(realConfined);
     }
     const session = this.session(sessionId);
     await semanticLocator(session.page, target).setInputFiles(confined);
@@ -508,10 +563,15 @@ export class LocalBrowserRuntime {
     if (!basename || basename === "." || basename === "..") {
       throw new Error("browser_download filename is invalid");
     }
-    const outputDir = path.join(getHomeDir(), "Downloads", "ABOS");
-    fs.mkdirSync(outputDir, { recursive: true });
+    fs.mkdirSync(this.downloadRoot, { recursive: true });
+    const realOutputDir = fs.realpathSync(this.downloadRoot);
+    const confinedOutputDir = confinePathToLocalHome(realOutputDir, "browser_download_root");
+    if (typeof confinedOutputDir === "object") throw new Error(confinedOutputDir.error);
     const uniqueName = `${Date.now()}-${this.idFactory().slice(0, 12)}-${basename}`;
-    const candidatePath = path.join(outputDir, uniqueName);
+    const candidatePath = path.join(confinedOutputDir, uniqueName);
+    if (fs.existsSync(candidatePath)) {
+      throw new Error(`browser_download target already exists: ${candidatePath}`);
+    }
     const confined = confinePathToLocalHome(candidatePath, "browser_download");
     if (typeof confined === "object") throw new Error(confined.error);
     await download.saveAs(confined);
