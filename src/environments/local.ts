@@ -14,17 +14,23 @@ import {
   getLocalBrowserRuntime,
   type LocalBrowserRuntime,
 } from "../browser/local-runtime.js";
+import {
+  getLocalComputerRuntime,
+  type LocalComputerRuntime,
+} from "../platform/local-computer-runtime.js";
 
 export class LocalEnvironmentProvider implements EnvironmentProvider {
   readonly id = "local";
 
   constructor(
     private readonly browserRuntime: Pick<LocalBrowserRuntime, "probe"> = getLocalBrowserRuntime(),
+    private readonly computerRuntime: Pick<LocalComputerRuntime, "probe"> = getLocalComputerRuntime(),
   ) {}
 
   async inspect(): Promise<EnvironmentSnapshot> {
     const observedAt = new Date().toISOString();
     const browser = await this.browserRuntime.probe();
+    const computer = this.computerRuntime.probe();
     const evidence = [
       `platform=${process.platform}`,
       `arch=${process.arch}`,
@@ -32,6 +38,7 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
       `cpus=${os.cpus().length}`,
       `freeMemoryBytes=${os.freemem()}`,
       ...browser.evidence.map((entry) => `browser:${entry}`),
+      ...computer.evidence.map((entry) => `process:${entry}`),
     ];
 
     return {
@@ -53,6 +60,9 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
         structuredBrowserAvailable: browser.available,
         structuredBrowserObservedAt: browser.observedAt,
         structuredBrowserTarget: browser.target?.label ?? null,
+        localProcessAvailable: computer.available,
+        localProcessObservedAt: computer.observedAt,
+        localProcessShell: computer.shell,
       },
       capabilities: [
         {
@@ -70,12 +80,18 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
           id: "local:process",
           type: "executor",
           provider: "local",
-          description: "Execute local processes and CLI tools exposed to ABOS.",
-          requirements: ["shell", "cli", "process"],
-          provides: ["shell", "cli", "process"],
+          description: "Execute and manage local processes and CLI tools exposed to ABOS.",
+          requirements: ["shell", "cli", "process", "process lifecycle"],
+          provides: ["shell", "cli", "process", "process lifecycle", "cwd", "environment overrides"],
           permissions: [],
+          effects: ["process_execution", "process_termination"],
           environment: "local",
-          available: true,
+          available: computer.available,
+          state: computer.available ? "verified_available" : "unavailable",
+          observedAt: computer.observedAt,
+          authority: "local-computer-runtime:process-probe",
+          evidence: [...computer.evidence],
+          metadata: { shell: computer.shell },
         },
         {
           id: "local:structured-browser",

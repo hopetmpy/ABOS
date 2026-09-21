@@ -455,7 +455,12 @@ export interface InferenceToolDefinition {
 // ─── Conway Client ───────────────────────────────────────────────
 
 export interface ConwayClient {
-  exec(command: string, timeout?: number): Promise<ExecResult>;
+  exec(command: string, timeout?: number, options?: ExecOptions): Promise<ExecResult>;
+  startProcess(command: string, options?: ManagedProcessStartOptions): Promise<ManagedProcessSnapshot>;
+  waitProcess(handle: string, timeoutMs?: number): Promise<ManagedProcessSnapshot>;
+  cancelProcess(handle: string): Promise<ManagedProcessSnapshot>;
+  killProcess(handle: string): Promise<ManagedProcessSnapshot>;
+  moveFile(source: string, destination: string): Promise<MoveResult>;
   writeFile(path: string, content: string): Promise<void>;
   readFile(path: string): Promise<string>;
   exposePort(port: number): Promise<PortInfo>;
@@ -504,6 +509,37 @@ export interface ExecResult {
   stdout: string;
   stderr: string;
   exitCode: number;
+}
+
+export interface ExecOptions {
+  cwd?: string;
+  /** Explicit environment overrides. Persistence surfaces must redact values. */
+  env?: Record<string, string>;
+}
+
+export interface ManagedProcessStartOptions extends ExecOptions {}
+
+export interface ManagedProcessSnapshot {
+  id: string;
+  pid: number | null;
+  state: "running" | "exited" | "failed";
+  exitCode: number | null;
+  signal: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  cwd: string;
+  stdout: string;
+  stderr: string;
+  stdoutTruncated: boolean;
+  stderrTruncated: boolean;
+  cancelRequested: boolean;
+  killRequested: boolean;
+  waitTimedOut: boolean;
+}
+
+export interface MoveResult {
+  source: string;
+  destination: string;
 }
 
 export interface PortInfo {

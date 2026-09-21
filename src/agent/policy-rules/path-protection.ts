@@ -37,6 +37,8 @@ function deny(rule: string, reasonCode: string, humanMessage: string): PolicyRul
 function requestedPaths(request: PolicyRequest): string[] {
   const paths: string[] = [];
   if (typeof request.args.path === "string") paths.push(request.args.path);
+  if (typeof request.args.source === "string") paths.push(request.args.source);
+  if (typeof request.args.destination === "string") paths.push(request.args.destination);
   if (Array.isArray(request.args.paths)) {
     for (const value of request.args.paths) {
       if (typeof value === "string") paths.push(value);
@@ -81,7 +83,7 @@ function createProtectedFilesRule(): PolicyRule {
     priority: 200,
     appliesTo: {
       by: "name",
-      names: ["write_file", "edit_own_file"],
+      names: ["write_file", "edit_own_file", "move_file"],
     },
     evaluate(request: PolicyRequest): PolicyRuleResult | null {
       const paths = requestedPaths(request);
@@ -92,9 +94,11 @@ function createProtectedFilesRule(): PolicyRule {
       const transactionalBoundary = toolName === "edit_own_file" || localWrite;
 
       for (const filePath of paths) {
-        const blocked = transactionalBoundary
-          ? isImmutableFile(filePath)
-          : isProtectedFile(filePath);
+        const blocked = toolName === "move_file"
+          ? isProtectedFile(filePath)
+          : transactionalBoundary
+            ? isImmutableFile(filePath)
+            : isProtectedFile(filePath);
         if (blocked) {
           return deny(
             "path.protected_files",

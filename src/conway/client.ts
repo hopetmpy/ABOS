@@ -6,12 +6,15 @@
  * Adapted from @aiws/sdk patterns.
  */
 
-import { execFileSync, execSync } from "child_process";
 import fs from "fs";
 import nodePath from "path";
 import type {
   ConwayClient,
   ExecResult,
+  ExecOptions,
+  ManagedProcessSnapshot,
+  ManagedProcessStartOptions,
+  MoveResult,
   PortInfo,
   CreateSandboxOptions,
   SandboxInfo,
@@ -28,7 +31,8 @@ import { keccak256, toHex } from "viem";
 import type { Address, PrivateKeyAccount } from "viem";
 import { randomUUID } from "crypto";
 import type { ChainType, ChainIdentity } from "../identity/chain.js";
-import { expandHomePath, getHomeDir, toPosixShellPath } from "../platform/home.js";
+import { expandHomePath, getHomeDir } from "../platform/home.js";
+import { getLocalComputerRuntime } from "../platform/local-computer-runtime.js";
 
 interface ConwayClientOptions {
   apiUrl: string;
@@ -109,98 +113,22 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
 
   const isLocal = !sandboxId;
 
-  let cachedGitBash: string | null | undefined;
-
-  const findGitBash = (): string | null => {
-    if (process.platform !== "win32") return null;
-    if (cachedGitBash !== undefined) return cachedGitBash;
-
-    const candidates = [
-      process.env.ABOS_BASH_PATH,
-      process.env.ProgramFiles
-        ? nodePath.join(process.env.ProgramFiles, "Git", "bin", "bash.exe")
-        : undefined,
-      process.env["ProgramFiles(x86)"]
-        ? nodePath.join(process.env["ProgramFiles(x86)"], "Git", "bin", "bash.exe")
-        : undefined,
-      process.env.LOCALAPPDATA
-        ? nodePath.join(process.env.LOCALAPPDATA, "Programs", "Git", "bin", "bash.exe")
-        : undefined,
-    ].filter((value): value is string => Boolean(value));
-
-    try {
-      const gitLocations = execFileSync("where.exe", ["git.exe"], {
-        encoding: "utf-8",
-        windowsHide: true,
-      })
-        .split(/\r?\n/)
-        .map((value) => value.trim())
-        .filter(Boolean);
-
-      for (const gitPath of gitLocations) {
-        const gitRoot = nodePath.dirname(nodePath.dirname(gitPath));
-        candidates.unshift(nodePath.join(gitRoot, "bin", "bash.exe"));
-      }
-    } catch {
-      // Git may be unavailable or not discoverable through PATH.
-    }
-
-    cachedGitBash =
-      candidates.find((candidate) => fs.existsSync(candidate)) ?? null;
-    return cachedGitBash;
-  };
-
-  const execLocal = (command: string, timeout?: number): ExecResult => {
-    try {
-      const commonOptions = {
-        timeout: timeout || 30_000,
-        encoding: "utf-8" as const,
-        maxBuffer: 10 * 1024 * 1024,
-        cwd: getHomeDir(),
-      };
-
-      let stdout: string;
-      if (process.platform === "win32") {
-        const bash = findGitBash();
-        if (!bash) {
-          return {
-            stdout: "",
-            stderr:
-              "ABOS local execution on Windows requires Git Bash. Install Git for Windows or set ABOS_BASH_PATH to bash.exe.",
-            exitCode: 127,
-          };
-        }
-
-        stdout = execFileSync(bash, ["-lc", command], {
-          ...commonOptions,
-          windowsHide: true,
-          env: {
-            ...process.env,
-            HOME: toPosixShellPath(getHomeDir()),
-          },
-        });
-      } else {
-        stdout = execSync(command, commonOptions);
-      }
-
-      return { stdout: stdout || "", stderr: "", exitCode: 0 };
-    } catch (err: any) {
-      return {
-        stdout: err.stdout || "",
-        stderr: err.stderr || err.message || "",
-        exitCode: err.status ?? 1,
-      };
-    }
-  };
+  const localComputer = getLocalComputerRuntime();
 
   const exec = async (
     command: string,
     timeout?: number,
+    options: ExecOptions = {},
   ): Promise<ExecResult> => {
-    if (isLocal) return execLocal(command, timeout);
+    if (isLocal) return localComputer.exec(command, timeout, options);
+    if (options.cwd || options.env) {
+      throw new Error(
+        "Explicit cwd/env are currently a local-host capability. Remote Conway exec keeps its provider contract instead of pretending local equivalence.",
+      );
+    }
 
     // Remote sandboxes default to / as cwd. Wrap commands to run from /root
-    // (matching local exec behavior) unless the command already sets a directory.
+    // (matching historical remote exec behavior).
     const wrappedCommand = `cd /root && ${command}`;
 
     try {
@@ -216,9 +144,6 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
         exitCode: result.exit_code ?? result.exitCode ?? -1,
       };
     } catch (err: any) {
-      // SECURITY: Never silently fall back to local execution on auth failure.
-      // A 403 indicates a credentials mismatch — falling back to local exec
-      // would bypass the sandbox security boundary entirely.
       if (err?.status === 403) {
         throw new Error(
           `Conway API authentication failed (403). Sandbox exec refused. ` +
@@ -228,6 +153,45 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
       }
       throw err;
     }
+  };
+
+  const requireLocalProcessLifecycle = (): void => {
+    if (!isLocal) {
+      throw new Error(
+        "Managed process lifecycle is currently available only on the explicit local host; remote Conway sandboxes remain a separate execution authority.",
+      );
+    }
+  };
+
+  const startProcess = async (
+    command: string,
+    options: ManagedProcessStartOptions = {},
+  ): Promise<ManagedProcessSnapshot> => {
+    requireLocalProcessLifecycle();
+    return localComputer.start(command, options);
+  };
+
+  const waitProcess = async (
+    handle: string,
+    timeoutMs?: number,
+  ): Promise<ManagedProcessSnapshot> => {
+    requireLocalProcessLifecycle();
+    return localComputer.wait(handle, timeoutMs);
+  };
+
+  const cancelProcess = async (handle: string): Promise<ManagedProcessSnapshot> => {
+    requireLocalProcessLifecycle();
+    return localComputer.cancel(handle);
+  };
+
+  const killProcess = async (handle: string): Promise<ManagedProcessSnapshot> => {
+    requireLocalProcessLifecycle();
+    return localComputer.kill(handle);
+  };
+
+  const moveFile = async (source: string, destination: string): Promise<MoveResult> => {
+    requireLocalProcessLifecycle();
+    return localComputer.moveFile(source, destination);
   };
 
   const resolveLocalPath = (filePath: string): string => {
@@ -673,6 +637,11 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
 
   const client: ConwayClient = {
     exec,
+    startProcess,
+    waitProcess,
+    cancelProcess,
+    killProcess,
+    moveFile,
     writeFile,
     readFile,
     exposePort,

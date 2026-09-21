@@ -14,6 +14,7 @@ const SHELL_METACHAR_RE = /[;|&$`\n(){}<>]/;
 // Tools whose arguments may be interpolated into shell commands
 const SHELL_INTERPOLATED_TOOLS = new Set([
   "exec",
+  "process_start",
   "pull_upstream",
   "install_npm_package",
   "install_mcp_server",
@@ -25,6 +26,7 @@ const SHELL_INTERPOLATED_TOOLS = new Set([
 // Fields per tool that get interpolated into shell commands
 const SHELL_FIELDS: Record<string, string[]> = {
   exec: [], // exec is the shell itself, handled by forbidden_patterns
+  process_start: [], // process_start is the shell itself, handled by forbidden_patterns
   pull_upstream: ["commit"],
   install_npm_package: ["package"],
   install_mcp_server: ["package", "name"],
@@ -132,7 +134,7 @@ function createForbiddenPatternsRule(): PolicyRule {
     priority: 300,
     appliesTo: {
       by: "name",
-      names: ["exec"],
+      names: ["exec", "process_start"],
     },
     evaluate(request: PolicyRequest): PolicyRuleResult | null {
       const command = request.args.command as string | undefined;

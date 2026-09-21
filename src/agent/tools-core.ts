@@ -27,6 +27,7 @@ import { isCreditTransferAccepted } from "../conway/credits.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
 import { toPosixShellPath } from "../platform/home.js";
 import { confinePathToSandbox } from "../platform/path-confinement.js";
+import { redactToolArgumentsForPersistence } from "./sensitive-tool-arguments.js";
 
 const logger = createLogger("tools");
 
@@ -50,6 +51,9 @@ function isExternalEffectOutcomeUnknown(error: unknown): boolean {
 // Tools whose results come from external sources and need sanitization
 const EXTERNAL_SOURCE_TOOLS = new Set([
   "exec",
+  "process_wait",
+  "process_cancel",
+  "process_kill",
   "web_fetch",
   "check_social_inbox",
 ]);
@@ -125,6 +129,15 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
             type: "number",
             description: "Timeout in milliseconds (default: 30000)",
           },
+          cwd: {
+            type: "string",
+            description: "Explicit local working directory confined to the ABOS host home. Remote Conway exec does not pretend this local capability.",
+          },
+          env: {
+            type: "object",
+            additionalProperties: { type: "string" },
+            description: "Explicit environment overrides. Values are redacted from durable/model-facing tool argument records.",
+          },
         },
         required: ["command"],
       },
@@ -136,6 +149,12 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
         const result = await ctx.conway.exec(
           command,
           (args.timeout as number) || 30000,
+          {
+            cwd: typeof args.cwd === "string" ? args.cwd : undefined,
+            env: args.env && typeof args.env === "object" && !Array.isArray(args.env)
+              ? args.env as Record<string, string>
+              : undefined,
+          },
         );
         return `exit_code: ${result.exitCode}\nstdout: ${result.stdout}\nstderr: ${result.stderr}`;
       },
@@ -211,6 +230,109 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
           return result.stdout;
         }
       },
+    },
+    {
+      name: "move_file",
+      description: "Move or rename a local file/directory inside the authorized ABOS home and verify the outcome. Remote Conway move is currently unavailable rather than emulated.",
+      category: "vm",
+      riskLevel: "caution",
+      parameters: {
+        type: "object",
+        properties: {
+          source: { type: "string", description: "Existing source path" },
+          destination: { type: "string", description: "New destination path; overwrite is refused" },
+        },
+        required: ["source", "destination"],
+      },
+      execute: async (args, ctx) => {
+        const source = args.source as string;
+        const destination = args.destination as string;
+        const sourceConfined = confinePathToSandbox(source, sandboxId, "move_file source");
+        if (typeof sourceConfined === "object") return sourceConfined.error;
+        const destinationConfined = confinePathToSandbox(destination, sandboxId, "move_file destination");
+        if (typeof destinationConfined === "object") return destinationConfined.error;
+        const { isProtectedFile } = await import("../self-mod/code.js");
+        if (isProtectedFile(sourceConfined) || isProtectedFile(destinationConfined)) {
+          return "Blocked: Cannot move or rename a protected file through the raw computer primitive.";
+        }
+        const moved = await ctx.conway.moveFile(sourceConfined, destinationConfined);
+        return `Moved: ${moved.source} -> ${moved.destination}`;
+      },
+    },
+    {
+      name: "process_start",
+      description: "Start a managed process on the explicit local ABOS host and return an opaque process-local handle.",
+      category: "vm",
+      riskLevel: "caution",
+      parameters: {
+        type: "object",
+        properties: {
+          command: { type: "string", description: "Shell command to start" },
+          cwd: { type: "string", description: "Working directory confined to the local ABOS home" },
+          env: {
+            type: "object",
+            additionalProperties: { type: "string" },
+            description: "Environment overrides; values are redacted from durable/model-facing argument records",
+          },
+        },
+        required: ["command"],
+      },
+      execute: async (args, ctx) => {
+        const command = args.command as string;
+        const forbidden = isForbiddenCommand(command, ctx.identity.sandboxId);
+        if (forbidden) return forbidden;
+        const snapshot = await ctx.conway.startProcess(command, {
+          cwd: typeof args.cwd === "string" ? args.cwd : undefined,
+          env: args.env && typeof args.env === "object" && !Array.isArray(args.env)
+            ? args.env as Record<string, string>
+            : undefined,
+        });
+        return JSON.stringify(snapshot);
+      },
+    },
+    {
+      name: "process_wait",
+      description: "Wait for or inspect a managed local process handle. A timeout reports waitTimedOut without claiming termination.",
+      category: "vm",
+      riskLevel: "safe",
+      externalOutput: true,
+      parameters: {
+        type: "object",
+        properties: {
+          handle: { type: "string", description: "Opaque process handle returned by process_start" },
+          timeout: { type: "number", description: "Maximum wait in milliseconds; 0 performs a status observation" },
+        },
+        required: ["handle"],
+      },
+      execute: async (args, ctx) => JSON.stringify(
+        await ctx.conway.waitProcess(args.handle as string, typeof args.timeout === "number" ? args.timeout : undefined),
+      ),
+    },
+    {
+      name: "process_cancel",
+      description: "Request graceful SIGTERM cancellation of a managed local process handle and report observed state.",
+      category: "vm",
+      riskLevel: "caution",
+      externalOutput: true,
+      parameters: {
+        type: "object",
+        properties: { handle: { type: "string", description: "Opaque managed process handle" } },
+        required: ["handle"],
+      },
+      execute: async (args, ctx) => JSON.stringify(await ctx.conway.cancelProcess(args.handle as string)),
+    },
+    {
+      name: "process_kill",
+      description: "Request forceful termination of a managed local process handle and report observed state. Arbitrary PIDs are not accepted.",
+      category: "vm",
+      riskLevel: "caution",
+      externalOutput: true,
+      parameters: {
+        type: "object",
+        properties: { handle: { type: "string", description: "Opaque managed process handle" } },
+        required: ["handle"],
+      },
+      execute: async (args, ctx) => JSON.stringify(await ctx.conway.killProcess(args.handle as string)),
     },
     {
       name: "expose_port",
@@ -3571,6 +3693,7 @@ async function executeToolProtected(
   turnContext?: PolicyRequest["turnContext"],
   preEvaluatedDecision?: PolicyDecision,
 ): Promise<ToolCallResult> {
+  const persistedArgs = redactToolArgumentsForPersistence(toolName, args);
   const tool = tools.find((t) => t.name === toolName);
   const startTime = Date.now();
 
@@ -3578,7 +3701,7 @@ async function executeToolProtected(
     return {
       id: ulid(),
       name: toolName,
-      arguments: args,
+      arguments: persistedArgs,
       result: "",
       durationMs: 0,
       error: `Unknown tool: ${toolName}`,
@@ -3590,7 +3713,7 @@ async function executeToolProtected(
     return {
       id: ulid(),
       name: toolName,
-      arguments: args,
+      arguments: persistedArgs,
       result: "",
       durationMs: Date.now() - startTime,
       error: "Policy context required: protected tool execution refused without PolicyEngine and turn context",
@@ -3603,7 +3726,7 @@ async function executeToolProtected(
     return {
       id: ulid(),
       name: toolName,
-      arguments: args,
+      arguments: persistedArgs,
       result: "",
       durationMs: Date.now() - startTime,
       error: "Policy evaluation failed closed: durable decision id missing",
@@ -3631,7 +3754,7 @@ async function executeToolProtected(
     return {
       id: ulid(),
       name: toolName,
-      arguments: args,
+      arguments: persistedArgs,
       result: "",
       durationMs: Date.now() - startTime,
       error: `Policy persistence failed closed: ${error instanceof Error ? error.message : String(error)}`,
@@ -3642,7 +3765,7 @@ async function executeToolProtected(
     return {
       id: ulid(),
       name: toolName,
-      arguments: args,
+      arguments: persistedArgs,
       result: "",
       durationMs: Date.now() - startTime,
       error: `Policy denied: ${decision.reasonCode} — ${decision.humanMessage}`,
@@ -3656,7 +3779,7 @@ async function executeToolProtected(
       return {
         id: ulid(),
         name: toolName,
-        arguments: args,
+        arguments: persistedArgs,
         result: "",
         durationMs: Date.now() - startTime,
         error: `Policy authorization required: decision=${decision.id} — ${decision.reasonCode} — ${decision.humanMessage}`,
@@ -3669,7 +3792,7 @@ async function executeToolProtected(
       return {
         id: ulid(),
         name: toolName,
-        arguments: args,
+        arguments: persistedArgs,
         result: "",
         durationMs: Date.now() - startTime,
         error: `Policy authorization consumption failed closed: ${error instanceof Error ? error.message : String(error)}`,
@@ -3685,7 +3808,7 @@ async function executeToolProtected(
     return {
       id: ulid(),
       name: toolName,
-      arguments: args,
+      arguments: persistedArgs,
       result: "",
       durationMs: Date.now() - startTime,
       error: `Policy execution claim failed closed: ${error instanceof Error ? error.message : String(error)}`,
@@ -3712,7 +3835,7 @@ async function executeToolProtected(
         return {
           id: ulid(),
           name: toolName,
-          arguments: args,
+          arguments: persistedArgs,
           result: "",
           durationMs: Date.now() - startTime,
           error: `${err.message} External effect may already have occurred; do not retry blindly.`,
@@ -3726,7 +3849,7 @@ async function executeToolProtected(
       return {
         id: ulid(),
         name: toolName,
-        arguments: args,
+        arguments: persistedArgs,
         result: "",
         durationMs: Date.now() - startTime,
         error: err?.message || String(err),
@@ -3747,7 +3870,7 @@ async function executeToolProtected(
       return {
         id: ulid(),
         name: toolName,
-        arguments: args,
+        arguments: persistedArgs,
         result,
         durationMs: Date.now() - startTime,
         error: `Policy execution outcome UNKNOWN after tool effect; do not retry blindly: ${error instanceof Error ? error.message : String(error)}`,
@@ -3757,7 +3880,7 @@ async function executeToolProtected(
     return {
       id: ulid(),
       name: toolName,
-      arguments: args,
+      arguments: persistedArgs,
       result,
       durationMs: Date.now() - startTime,
     };
@@ -3765,7 +3888,7 @@ async function executeToolProtected(
     return {
       id: ulid(),
       name: toolName,
-      arguments: args,
+      arguments: persistedArgs,
       result: "",
       durationMs: Date.now() - startTime,
       error: err.message || String(err),
