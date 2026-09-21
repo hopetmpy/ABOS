@@ -25,6 +25,19 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Apply deterministic P-016 unit 2 candidate
         run: python scripts/p016-unit2-apply.py
+      - name: Align command-safety regression with the new shell surface
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/__tests__/command-injection.test.ts')
+          text = path.read_text(encoding='utf-8')
+          old = 'expect(forbiddenRule.appliesTo).toEqual({ by: "name", names: ["exec"] });'
+          new = 'expect(forbiddenRule.appliesTo).toEqual({ by: "name", names: ["exec", "process_start"] });'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one stale command-safety metadata assertion, found {text.count(old)}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
       - name: Inspect candidate diff
         shell: bash
         run: |
