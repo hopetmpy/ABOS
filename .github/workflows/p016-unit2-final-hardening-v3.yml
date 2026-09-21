@@ -1,4 +1,4 @@
-name: P016 Unit2 Final Hardening V2
+name: P016 Unit2 Final Hardening V3
 
 on:
   push:
@@ -20,8 +20,8 @@ jobs:
           node-version: 22
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
-      - name: Apply deterministic v2 candidate
-        run: python scripts/p016-unit2-final-hardening-v2.py
+      - name: Apply deterministic v3 candidate
+        run: python scripts/p016-unit2-final-hardening-v3.py
       - name: Inspect candidate diff
         shell: bash
         run: |
@@ -69,8 +69,8 @@ jobs:
           node-version: 22
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
-      - name: Apply deterministic v2 candidate
-        run: python scripts/p016-unit2-final-hardening-v2.py
+      - name: Apply deterministic v3 candidate
+        run: python scripts/p016-unit2-final-hardening-v3.py
       - run: pnpm run typecheck
       - run: pnpm run build
       - name: Windows unit2 regressions
@@ -93,8 +93,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Apply validated v2 candidate
-        run: python scripts/p016-unit2-final-hardening-v2.py
+      - name: Apply validated v3 candidate
+        run: python scripts/p016-unit2-final-hardening-v3.py
       - name: Verify ProjectOps remains intact
         run: node scripts/projectops-integrity-verify.mjs
       - name: Commit validated source
