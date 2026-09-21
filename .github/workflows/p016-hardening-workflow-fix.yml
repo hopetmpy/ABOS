@@ -1,0 +1,46 @@
+name: P016 Hardening Workflow Fix
+
+on:
+  push:
+    branches:
+      - abos/p016-computer-browser-gui-hands
+    paths:
+      - .github/workflows/p016-hardening-workflow-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair-and-retrigger:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure bot commit identity
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Repair reconciliation newline and retrigger hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          workflow = Path(".github/workflows/p016-structured-browser-hardening.yml")
+          text = workflow.read_text(encoding="utf-8")
+          old = '          c.write_text(text + "\\n", encoding="utf-8")\n'
+          new = '          c.write_text(text.rstrip() + "\\n", encoding="utf-8")\n'
+          if text.count(old) != 1:
+              raise SystemExit(f"expected exactly one reconciliation newline anchor, found {text.count(old)}")
+          workflow.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+          rm -f .github/workflows/p016-hardening-workflow-fix.yml
+          git add -A
+          git diff --cached --check
+          git diff --cached --stat
+          git commit -m "fix(p016): repair hardening reconciliation workflow"
+          git push origin HEAD:abos/p016-computer-browser-gui-hands
