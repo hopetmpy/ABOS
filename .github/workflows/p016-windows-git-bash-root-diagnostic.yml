@@ -1,0 +1,63 @@
+name: P016 Windows Git Bash Root Diagnostic
+
+on:
+  push:
+    branches:
+      - abos/p016-computer-browser-gui-hands
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Compare bin bash and usr bash roots repeatedly
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          @'
+          import { spawn, spawnSync } from "node:child_process";
+          import fs from "node:fs";
+          import os from "node:os";
+          import path from "node:path";
+
+          const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+          const roots = [
+            "C:/Program Files/Git/bin/bash.exe",
+            "C:/Program Files/Git/usr/bin/bash.exe",
+          ];
+
+          let failures = 0;
+          for (const root of roots) {
+            console.log(`ROOT=${root} exists=${fs.existsSync(root)}`);
+            for (let i = 0; i < 8; i++) {
+              const dir = fs.mkdtempSync(path.join(os.homedir(), `.abos-root-${i}-`));
+              const marker = path.join(dir, "marker.txt").replace(/\\/g, "/");
+              const command = `node -e "setTimeout(()=>require('fs').writeFileSync('${marker}','alive'),700);setTimeout(()=>{},5000)" >/dev/null 2>&1 & wait`;
+              const child = spawn(root, ["-lc", command], {
+                cwd: dir,
+                env: process.env,
+                windowsHide: true,
+                detached: true,
+                stdio: ["ignore", "pipe", "pipe"],
+              });
+              await new Promise((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
+              await sleep(150);
+              const before = spawnSync("tasklist.exe", ["/FI", `PID eq ${child.pid}`], { encoding: "utf8" });
+              const kill = spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], { encoding: "utf8" });
+              await sleep(1000);
+              const survived = fs.existsSync(marker);
+              console.log(`ITER root=${path.dirname(root)} i=${i} pid=${child.pid} before=${before.stdout.includes(String(child.pid))} rc=${kill.status} survived=${survived} out=${JSON.stringify(kill.stdout)} err=${JSON.stringify(kill.stderr)}`);
+              if (kill.status !== 0 || survived) failures++;
+            }
+          }
+          console.log(`ROOT_DIAG_FAILURES=${failures}`);
+          if (failures > 0) process.exit(45);
+          '@ | node --input-type=module
