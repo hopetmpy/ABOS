@@ -1,0 +1,151 @@
+name: P016 GUI Capability Diagnostic
+
+on:
+  push:
+    branches:
+      - abos/p016-computer-browser-gui-hands
+    paths:
+      - .github/workflows/p016-gui-capability-diagnostic.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-native-gui-probe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe Windows desktop, accessibility, screen and input primitives
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $result = [ordered]@{
+            platform = [Environment]::OSVersion.VersionString
+            userInteractive = [Environment]::UserInteractive
+            sessionName = $env:SESSIONNAME
+            processSessionId = (Get-Process -Id $PID).SessionId
+            interactiveWindowCount = 0
+            uiAutomationAssembly = $false
+            automationRoot = $false
+            automationRootName = $null
+            allScreensCount = 0
+            virtualScreen = $null
+            screenCapture = $false
+            screenCaptureError = $null
+            user32DesktopWindow = $false
+            cursorReadable = $false
+            inputApiLoadable = $false
+            notepadWindow = $false
+            notepadAutomationElement = $false
+          }
+          $result.interactiveWindowCount = @([System.Diagnostics.Process]::GetProcesses() | Where-Object { $_.MainWindowHandle -ne 0 }).Count
+
+          try {
+            Add-Type -AssemblyName UIAutomationClient
+            Add-Type -AssemblyName UIAutomationTypes
+            $result.uiAutomationAssembly = $true
+            $root = [System.Windows.Automation.AutomationElement]::RootElement
+            $result.automationRoot = $null -ne $root
+            if ($root) { $result.automationRootName = $root.Current.Name }
+          } catch {
+            $result.uiAutomationError = $_.Exception.Message
+          }
+
+          try {
+            Add-Type -AssemblyName System.Windows.Forms
+            Add-Type -AssemblyName System.Drawing
+            $screens = [System.Windows.Forms.Screen]::AllScreens
+            $result.allScreensCount = @($screens).Count
+            $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+            $result.virtualScreen = "$($bounds.X),$($bounds.Y),$($bounds.Width),$($bounds.Height)"
+            if ($bounds.Width -gt 0 -and $bounds.Height -gt 0) {
+              $bmp = New-Object System.Drawing.Bitmap 16,16
+              $graphics = [System.Drawing.Graphics]::FromImage($bmp)
+              try {
+                $graphics.CopyFromScreen($bounds.X, $bounds.Y, 0, 0, (New-Object System.Drawing.Size 16,16))
+                $result.screenCapture = $true
+              } finally {
+                $graphics.Dispose()
+                $bmp.Dispose()
+              }
+            }
+          } catch {
+            $result.screenCaptureError = $_.Exception.Message
+          }
+
+          Add-Type -TypeDefinition @'
+          using System;
+          using System.Runtime.InteropServices;
+          public static class AbosGuiProbe {
+            [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X; public int Y; }
+            [DllImport("user32.dll")] public static extern IntPtr GetDesktopWindow();
+            [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT point);
+            [DllImport("user32.dll", SetLastError=true)] public static extern uint SendInput(uint nInputs, IntPtr pInputs, int cbSize);
+          }
+          '@
+          $result.user32DesktopWindow = [AbosGuiProbe]::GetDesktopWindow() -ne [IntPtr]::Zero
+          $point = New-Object AbosGuiProbe+POINT
+          $result.cursorReadable = [AbosGuiProbe]::GetCursorPos([ref]$point)
+          $result.inputApiLoadable = $true
+          $result.cursor = "$($point.X),$($point.Y)"
+
+          $notepad = $null
+          try {
+            $notepad = Start-Process notepad.exe -PassThru
+            for ($i = 0; $i -lt 40 -and $notepad.MainWindowHandle -eq 0; $i++) {
+              Start-Sleep -Milliseconds 100
+              $notepad.Refresh()
+            }
+            $result.notepadWindow = $notepad.MainWindowHandle -ne 0
+            if ($result.automationRoot) {
+              $condition = New-Object System.Windows.Automation.PropertyCondition(
+                [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
+                $notepad.Id
+              )
+              $element = $root.FindFirst([System.Windows.Automation.TreeScope]::Children, $condition)
+              $result.notepadAutomationElement = $null -ne $element
+              if ($element) { $result.notepadAutomationName = $element.Current.Name }
+            }
+          } catch {
+            $result.notepadError = $_.Exception.Message
+          } finally {
+            if ($notepad -and -not $notepad.HasExited) { Stop-Process -Id $notepad.Id -Force -ErrorAction SilentlyContinue }
+          }
+
+          'ABOS_GUI_DIAGNOSTIC=' + ($result | ConvertTo-Json -Compress -Depth 4)
+
+  linux-native-gui-probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe Linux display, accessibility and input primitives
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ABOS_GUI_DIAGNOSTIC_PLATFORM=$(uname -a)"
+          echo "DISPLAY=${DISPLAY-}"
+          echo "WAYLAND_DISPLAY=${WAYLAND_DISPLAY-}"
+          echo "XDG_SESSION_TYPE=${XDG_SESSION_TYPE-}"
+          echo "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS-}"
+          for cmd in xdotool ydotool wmctrl xprop scrot gnome-screenshot import grim slurp busctl gdbus; do
+            if command -v "$cmd" >/dev/null 2>&1; then
+              echo "tool:$cmd=$(command -v "$cmd")"
+            else
+              echo "tool:$cmd=UNAVAILABLE"
+            fi
+          done
+          if [ -e /dev/uinput ]; then
+            if [ -r /dev/uinput ] && [ -w /dev/uinput ]; then
+              echo "uinput=READ_WRITE"
+            else
+              echo "uinput=PRESENT_UNAUTHORIZED"
+            fi
+          else
+            echo "uinput=UNAVAILABLE"
+          fi
+          if [ -n "${DISPLAY-}" ] || [ -n "${WAYLAND_DISPLAY-}" ]; then
+            echo "display_session=DECLARED"
+          else
+            echo "display_session=UNAVAILABLE"
+          fi
