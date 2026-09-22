@@ -1,4 +1,4 @@
-name: P016 Windows Git Bash Root Diagnostic
+name: P016 Windows Job Object Diagnostic V7
 
 on:
   push:
@@ -6,58 +6,53 @@ on:
       - abos/p016-computer-browser-gui-hands
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  diagnose:
+  register:
     if: github.actor != 'github-actions[bot]'
-    runs-on: windows-latest
-    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Compare bin bash and usr bash roots repeatedly
-        shell: pwsh
+      - name: Register v6 falsification and v7 diagnostic before execution
+        run: python scripts/p016-unit2-register-v5.py
+      - name: Verify ProjectOps before checkpoint
         run: |
-          $ErrorActionPreference = "Stop"
-          @'
-          import { spawn, spawnSync } from "node:child_process";
-          import fs from "node:fs";
-          import os from "node:os";
-          import path from "node:path";
+          git diff --check
+          node scripts/projectops-integrity-verify.mjs
+      - name: Commit recoverable diagnostic checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add ProjectOps/continuity/C0012.md
+          if git diff --cached --quiet; then
+            echo "v7 diagnostic checkpoint already present"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "docs(projectops): register P016 Windows job diagnostic"
+          git push origin HEAD:${GITHUB_REF_NAME}
 
-          const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-          const roots = [
-            "C:/Program Files/Git/bin/bash.exe",
-            "C:/Program Files/Git/usr/bin/bash.exe",
-          ];
-
-          let failures = 0;
-          for (const root of roots) {
-            console.log(`ROOT=${root} exists=${fs.existsSync(root)}`);
-            for (let i = 0; i < 8; i++) {
-              const dir = fs.mkdtempSync(path.join(os.homedir(), `.abos-root-${i}-`));
-              const marker = path.join(dir, "marker.txt").replace(/\\/g, "/");
-              const command = `node -e "setTimeout(()=>require('fs').writeFileSync('${marker}','alive'),700);setTimeout(()=>{},5000)" >/dev/null 2>&1 & wait`;
-              const child = spawn(root, ["-lc", command], {
-                cwd: dir,
-                env: process.env,
-                windowsHide: true,
-                detached: true,
-                stdio: ["ignore", "pipe", "pipe"],
-              });
-              await new Promise((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
-              await sleep(150);
-              const before = spawnSync("tasklist.exe", ["/FI", `PID eq ${child.pid}`], { encoding: "utf8" });
-              const kill = spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], { encoding: "utf8" });
-              await sleep(1000);
-              const survived = fs.existsSync(marker);
-              console.log(`ITER root=${path.dirname(root)} i=${i} pid=${child.pid} before=${before.stdout.includes(String(child.pid))} rc=${kill.status} survived=${survived} out=${JSON.stringify(kill.stdout)} err=${JSON.stringify(kill.stderr)}`);
-              if (kill.status !== 0 || survived) failures++;
-            }
-          }
-          console.log(`ROOT_DIAG_FAILURES=${failures}`);
-          if (failures > 0) process.exit(45);
-          '@ | node --input-type=module
+  diagnose:
+    if: github.actor != 'github-actions[bot]'
+    needs: register
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Prove Windows Job Object containment and stdio
+        run: node scripts/p016-unit2-windows-orphan-diagnostic.mjs
+      - name: ProjectOps integrity remains valid
+        run: node scripts/projectops-integrity-verify.mjs
