@@ -1,0 +1,150 @@
+name: P016 Continuity Reconcile
+
+on:
+  push:
+    branches:
+      - abos/p016-computer-browser-gui-hands
+    paths:
+      - .github/workflows/p016-continuity-reconcile.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: abos/p016-computer-browser-gui-hands
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Reconcile P016 local-computer completion and open GUI audit
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          segment = Path('ProjectOps/continuity/C0012.md')
+          marker = '## LOCAL_COMPUTER_COMPLETION — source integrated / E3 branch green'
+          addition = r'''
+
+## LOCAL_COMPUTER_COMPLETION — source integrated / E3 branch green
+
+State: INTEGRATION_VERIFIED / E3_BRANCH_GREEN / UNIT_ACCEPTED
+
+Source e integración:
+- source de partida recuperado para esta ejecución: `fb1f23142fa5b5f08758e8a20f5b909f2ce7265c`;
+- commit de producto `77420d3fea935945c8b31c39461e01915e2cf440` (`fix(p016): own Windows process trees with Job Objects`);
+- el primer exact-head CI `35689205676` falsó la traslación inicial: Windows Node 22/24 alcanzó typecheck/build/smoke pero el probe P-016 quedó unavailable;
+- causa raíz: el helper Win32 había omitido `STARTUPINFO.dwFlags`, desplazando el layout de marshalling respecto del prototipo Job Object ya validado; esto falsó `JOB_OBJECT_DESIGN_INVALID` y confirmó `MARSHAL_LAYOUT_TRANSFER_DEFECT`;
+- corrección `a999ac704c2eeb6a9fc3c66e42db4598934ce55c` (`fix(p016): restore Win32 STARTUPINFO layout`).
+
+Authority final:
+- `LocalComputerRuntime` permanece como única authority de process lifecycle local;
+- POSIX conserva detached process-group ownership;
+- Windows usa un owner provider-native con Job Object `KILL_ON_JOB_CLOSE`; el shell se crea `CREATE_SUSPENDED`, se asigna al Job antes de `ResumeThread`, y `start()` no publica handle antes de readiness;
+- `exec()` Windows usa el mismo ownership, por lo que timeout cierra el Job en lugar de dejar descendientes sin authority;
+- canonical Git Bash se resuelve antes del probe y se reutiliza por probe/exec/start;
+- no existe process manager paralelo ni `taskkill` como authority de lifecycle.
+
+Validación exact-head de `a999ac704c2eeb6a9fc3c66e42db4598934ce55c`:
+- ProjectOps Integrity `35689461025`: SUCCESS;
+- ordinary CI `35689461026`: SUCCESS, 8/8 jobs;
+- Linux Node 22/24: typecheck PASS, build PASS, full tests PASS y security tests PASS;
+- Windows Server 2025 Node 22/24: typecheck PASS, build PASS, CLI/state smoke PASS y portability regressions PASS;
+- public distribution smoke Node 22/24: PASS;
+- dependency/security audit: PASS;
+- Windows Node 24 P-016 targeted: 24/24 PASS; el conjunto de portability seleccionado fue 303/303 PASS.
+
+Adversarial demostrado en Windows:
+- false shell readiness negativo;
+- canonical shell probe = managed shell;
+- stdout/stderr sin contaminación del protocolo del provider;
+- cancel/kill contienen descendientes;
+- cancel/kill inmediato después de readiness contienen descendientes;
+- repeated descendant containment para cancel/kill;
+- cierre natural del shell contiene background work;
+- timeout de `exec()` contiene descendant work;
+- stale handle después de restart no se fabrica como válido;
+- wait timeout no fabrica terminación;
+- output retenido permanece acotado.
+
+No demostrado por esta unidad:
+- no se afirma equivalencia POSIX graceful en Windows;
+- no se afirma persistencia de process handles a través de restart;
+- no se afirma control GUI/accessibility ni desktop interactivo;
+- no se eleva esta evidencia de CI a E5 externo/usuario.
+
+Hipótesis cerradas:
+- `TASKKILL_TREE_AUTHORITY_SUFFICIENT`: FALSADA por la evidencia v6 previa;
+- `WINDOWS_JOB_OBJECT_OWNER`: CONFIRMADA para la frontera validada;
+- `JOB_OBJECT_DESIGN_INVALID`: FALSADA por la corrección de layout + exact-head green;
+- `MARSHAL_LAYOUT_TRANSFER_DEFECT`: CONFIRMADA y CORREGIDA;
+- `PARALLEL_PROCESS_MANAGER_REQUIRED`: FALSADA.
+
+Decisión: `LOCAL_COMPUTER_COMPLETION` queda aceptada como unidad E3 de rama. El plan P-016 no cambia: la siguiente frontera elegible es `GUI_ACCESSIBILITY`.
+
+## GUI_ACCESSIBILITY — audit open / source unmodified
+
+State: EN_EJECUCIÓN / AUDIT_OPEN / SOURCE_UNMODIFIED
+
+Dependencia de entrada: `LOCAL_COMPUTER_COMPLETION` satisfecha con exact-head E3 arriba. No se abre source GUI antes de mapear equivalentes y discriminar soporte real por host.
+
+Evidencia inicial de repo:
+- `src/environments/local.ts` publica hoy únicamente `local:filesystem`, `local:process` y `local:structured-browser`; no existe capability GUI general;
+- `src/browser/` contiene el provider semántico estructurado y accessibility snapshot del DOM/browser, pero no constituye authority de OS desktop/window/input;
+- `src/platform/` contiene filesystem/process/home/path confinement y el helper Job Object subordinado; no existe adapter GUI/accessibility general;
+- `src/capabilities/` ya ofrece lifecycle/evidence abierto y debe reutilizarse; `verified_available` sigue siendo el único claim execution-ready;
+- `package.json` no contiene dependencia nativa de desktop automation. P-016 no adquiere silenciosamente paquetes/providers: ausencia del soporte real debe resultar `UNAVAILABLE`.
+
+Hipótesis iniciales:
+- H0 `NO_CHANGE`: ABIERTA hasta probar si el DoD puede satisfacerse sólo con mechanisms ya existentes; no se presume falsa por nombre de archivo.
+- H1 `REUSE_STRUCTURED_BROWSER_AS_OS_GUI`: FALSADA semánticamente; browser DOM/accessibility es una frontera superior distinta y no prueba desktop/window/input.
+- H2 `EXTEND_LOCAL_ENVIRONMENT_WITH_PROVIDER_NATIVE_GUI_PROBE_AND_TOOLS`: SUPPORTED, pendiente de discriminar qué primitives existen realmente en hosts autorizados.
+- H3 `SILENTLY_INSTALL_GUI_AUTOMATION_DEPENDENCIES`: REJECTED por ownership y por la regla de no provisioning/adquisición implícita.
+- H4 `MONOLITHIC_GUI_AVAILABLE_BOOLEAN`: REJECTED si observation/accessibility/input divergen; los claims deberán seguir evidencia por primitive/capability.
+
+Siguiente punto verificable:
+- discriminar Windows/Linux disponibles en CI mediante probes inocuos y provider-native, incluyendo interactive/headless state, window/accessibility observation, screen capture e input authority;
+- mapear wiring exacto de tool registration, Policy, Capability y LocalEnvironment antes de crear cualquier runtime GUI;
+- alcanzar `DECISION_READY` para la frontera GUI sólo cuando la evidencia restante ya no pueda cambiar materialmente la arquitectura.
+'''
+          text = segment.read_text(encoding='utf-8')
+          if marker not in text:
+              segment.write_text(text.rstrip() + addition + '\n', encoding='utf-8')
+
+          root = Path('ProjectOps/CONTINUITY.md')
+          text = root.read_text(encoding='utf-8')
+          replacements = {
+              'Active-Intervention: P016_COMPUTER_BROWSER_GUI_HANDS — EN_EJECUCIÓN / LOCAL_COMPUTER_COMPLETION / DECISION_READY / SOURCE_UNMODIFIED':
+                  'Active-Intervention: P016_COMPUTER_BROWSER_GUI_HANDS — EN_EJECUCIÓN / GUI_ACCESSIBILITY / AUDIT_OPEN / SOURCE_UNMODIFIED',
+              'Last-Reconciled-Host-Head: 92faa53302ede575e6b5c4a8f148ee6ba57b6cd5':
+                  'Last-Reconciled-Host-Head: a999ac704c2eeb6a9fc3c66e42db4598934ce55c',
+              'Last-Reconciled-Head-Semantics: P016_STRUCTURED_BROWSER_LOCAL_E3_GREEN_LOCAL_COMPUTER_COMPLETION_AUDIT_OPEN':
+                  'Last-Reconciled-Head-Semantics: P016_LOCAL_COMPUTER_COMPLETION_E3_GREEN_GUI_ACCESSIBILITY_AUDIT_OPEN',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'expected canonical continuity line missing: {old}')
+              text = text.replace(old, new, 1)
+          root.write_text(text, encoding='utf-8')
+          PY
+      - name: Verify canonical ProjectOps after reconciliation
+        run: node scripts/projectops-integrity-verify.mjs
+      - name: Commit reconciliation and remove temporary workflow
+        shell: bash
+        run: |
+          rm .github/workflows/p016-continuity-reconcile.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add ProjectOps/CONTINUITY.md ProjectOps/continuity/C0012.md .github/workflows/p016-continuity-reconcile.yml
+          if git diff --cached --quiet; then
+            echo 'No reconciliation changes required.'
+            exit 0
+          fi
+          git commit -m 'docs(p016): reconcile local computer completion'
+          git push origin HEAD:abos/p016-computer-browser-gui-hands
