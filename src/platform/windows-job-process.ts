@@ -1,6 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 
-const WINDOWS_JOB_READY_PREFIX = "ABOS_JOB_READY pid=";
 const WINDOWS_JOB_BOOTSTRAP_GRACE_MS = 20_000;
 
 const WINDOWS_JOB_OWNER_SOURCE = String.raw`
@@ -75,6 +74,7 @@ public static class AbosWindowsJobRunner
         public int dwXCountChars;
         public int dwYCountChars;
         public int dwFillAttribute;
+        public int dwFlags;
         public short wShowWindow;
         public short cbReserved2;
         public IntPtr lpReserved2;
