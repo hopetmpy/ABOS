@@ -28,11 +28,13 @@ jobs:
           p = Path('scripts/projectops-integrity-verify.mjs')
           s = p.read_text(encoding='utf-8')
           s = s.replace('import {createHash} from "node:crypto";\n', 'import {execFileSync} from "node:child_process";\n')
-          old = 'const gitBlobSha=content=>{const b=Buffer.from(content,"utf8");return createHash("sha1").update(Buffer.from(`blob ${b.length}\\0`)).update(b).digest("hex")};\nconst requireBlob=(path,expected)=>{const actual=gitBlobSha(read(path));if(actual!==expected)fail(`${path} blob drift: expected ${expected}, got ${actual}`)};'
-          new = 'const gitBlobSha=path=>execFileSync("git",["hash-object",`--path=${path}`,path],{cwd:root,encoding:"utf8"}).trim();\nconst requireBlob=(path,expected)=>{const actual=gitBlobSha(path);if(actual!==expected)fail(`${path} blob drift: expected ${expected}, got ${actual}`)};'
-          if old not in s:
+          old1 = 'const gitBlobSha=content=>{const b=Buffer.from(content,"utf8");return createHash("sha1").update(Buffer.from(`blob ${b.length}\\0`)).update(b).digest("hex")};'
+          new1 = 'const gitBlobSha=path=>execFileSync("git",["hash-object",`--path=${path}`,path],{cwd:root,encoding:"utf8"}).trim();'
+          old2 = 'const requireBlob=(path,expected)=>{const actual=gitBlobSha(read(path));if(actual!==expected)fail(`${path} blob drift: expected ${expected}, got ${actual}`)};'
+          new2 = 'const requireBlob=(path,expected)=>{const actual=gitBlobSha(path);if(actual!==expected)fail(`${path} blob drift: expected ${expected}, got ${actual}`)};'
+          if old1 not in s or old2 not in s:
               raise SystemExit('ProjectOps candidate anchor missing')
-          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          p.write_text(s.replace(old1, new1, 1).replace(old2, new2, 1), encoding='utf-8')
           PY
           git diff --check
           node scripts/projectops-integrity-verify.mjs
@@ -58,12 +60,13 @@ jobs:
           $s = Get-Content -Raw $p
           $oldImport = 'import {createHash} from "node:crypto";'
           $newImport = 'import {execFileSync} from "node:child_process";'
-          if (-not $s.Contains($oldImport)) { throw 'ProjectOps import anchor missing' }
-          $s = $s.Replace($oldImport, $newImport)
-          $old = 'const gitBlobSha=content=>{const b=Buffer.from(content,"utf8");return createHash("sha1").update(Buffer.from(`blob ${b.length}\0`)).update(b).digest("hex")};' + "`n" + 'const requireBlob=(path,expected)=>{const actual=gitBlobSha(read(path));if(actual!==expected)fail(`${path} blob drift: expected ${expected}, got ${actual}`)};'
-          $new = 'const gitBlobSha=path=>execFileSync("git",["hash-object",`--path=${path}`,path],{cwd:root,encoding:"utf8"}).trim();' + "`n" + 'const requireBlob=(path,expected)=>{const actual=gitBlobSha(path);if(actual!==expected)fail(`${path} blob drift: expected ${expected}, got ${actual}`)};'
-          if (-not $s.Contains($old)) { throw 'ProjectOps hash anchor missing' }
-          Set-Content -Path $p -Value ($s.Replace($old, $new)) -NoNewline
+          $old1 = 'const gitBlobSha=content=>{const b=Buffer.from(content,"utf8");return createHash("sha1").update(Buffer.from(`blob ${b.length}\0`)).update(b).digest("hex")};'
+          $new1 = 'const gitBlobSha=path=>execFileSync("git",["hash-object",`--path=${path}`,path],{cwd:root,encoding:"utf8"}).trim();'
+          $old2 = 'const requireBlob=(path,expected)=>{const actual=gitBlobSha(read(path));if(actual!==expected)fail(`${path} blob drift: expected ${expected}, got ${actual}`)};'
+          $new2 = 'const requireBlob=(path,expected)=>{const actual=gitBlobSha(path);if(actual!==expected)fail(`${path} blob drift: expected ${expected}, got ${actual}`)};'
+          if (-not $s.Contains($oldImport) -or -not $s.Contains($old1) -or -not $s.Contains($old2)) { throw 'ProjectOps candidate anchor missing' }
+          $s = $s.Replace($oldImport, $newImport).Replace($old1, $new1).Replace($old2, $new2)
+          Set-Content -Path $p -Value $s -NoNewline
           node scripts/projectops-integrity-verify.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $changed = git diff --name-only
@@ -87,11 +90,13 @@ jobs:
           p = Path('scripts/projectops-integrity-verify.mjs')
           s = p.read_text(encoding='utf-8')
           s = s.replace('import {createHash} from "node:crypto";\n', 'import {execFileSync} from "node:child_process";\n')
-          old = 'const gitBlobSha=content=>{const b=Buffer.from(content,"utf8");return createHash("sha1").update(Buffer.from(`blob ${b.length}\\0`)).update(b).digest("hex")};\nconst requireBlob=(path,expected)=>{const actual=gitBlobSha(read(path));if(actual!==expected)fail(`${path} blob drift: expected ${expected}, got ${actual}`)};'
-          new = 'const gitBlobSha=path=>execFileSync("git",["hash-object",`--path=${path}`,path],{cwd:root,encoding:"utf8"}).trim();\nconst requireBlob=(path,expected)=>{const actual=gitBlobSha(path);if(actual!==expected)fail(`${path} blob drift: expected ${expected}, got ${actual}`)};'
-          if old not in s:
+          old1 = 'const gitBlobSha=content=>{const b=Buffer.from(content,"utf8");return createHash("sha1").update(Buffer.from(`blob ${b.length}\\0`)).update(b).digest("hex")};'
+          new1 = 'const gitBlobSha=path=>execFileSync("git",["hash-object",`--path=${path}`,path],{cwd:root,encoding:"utf8"}).trim();'
+          old2 = 'const requireBlob=(path,expected)=>{const actual=gitBlobSha(read(path));if(actual!==expected)fail(`${path} blob drift: expected ${expected}, got ${actual}`)};'
+          new2 = 'const requireBlob=(path,expected)=>{const actual=gitBlobSha(path);if(actual!==expected)fail(`${path} blob drift: expected ${expected}, got ${actual}`)};'
+          if old1 not in s or old2 not in s:
               raise SystemExit('ProjectOps candidate anchor missing')
-          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          p.write_text(s.replace(old1, new1, 1).replace(old2, new2, 1), encoding='utf-8')
           PY
           git diff --check
           node scripts/projectops-integrity-verify.mjs
