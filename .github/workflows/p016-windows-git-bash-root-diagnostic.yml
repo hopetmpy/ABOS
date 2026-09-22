@@ -52,19 +52,32 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Remove diagnostic inventory self-match
+      - name: Harden diagnostic instrumentation only
         shell: pwsh
         run: |
           $path = 'scripts/p016-unit2-windows-orphan-diagnostic.mjs'
           $text = Get-Content -Raw $path
-          $old = '  return Array.isArray(parsed) ? parsed : [parsed];'
-          $new = @'
+          $oldInventory = '  return Array.isArray(parsed) ? parsed : [parsed];'
+          $newInventory = @'
           const values = Array.isArray(parsed) ? parsed : [parsed];
           return values.filter((proc) => !String(proc.CommandLine ?? "").includes("Get-CimInstance Win32_Process"));
           '@.Trim()
-          if (-not $text.Contains($old)) { throw 'diagnostic patch anchor missing' }
-          Set-Content -Path $path -Value ($text.Replace($old, $new)) -NoNewline
-      - name: Prove Windows Job Object containment and stdio
+          if (-not $text.Contains($oldInventory)) { throw 'diagnostic inventory patch anchor missing' }
+          $text = $text.Replace($oldInventory, $newInventory)
+          $oldProgress = '$ErrorActionPreference = ''Stop'''
+          $newProgress = "$oldProgress`n`$ProgressPreference = 'SilentlyContinue'"
+          if (-not $text.Contains($oldProgress)) { throw 'diagnostic progress patch anchor missing' }
+          $text = $text.Replace($oldProgress, $newProgress)
+          Set-Content -Path $path -Value $text -NoNewline
+      - name: Prove Windows Job Object containment and clean stdio
         run: node scripts/p016-unit2-windows-orphan-diagnostic.mjs
-      - name: ProjectOps integrity remains valid
-        run: node scripts/projectops-integrity-verify.mjs
+      - name: Discriminate ProjectOps Windows blob hashing
+        shell: pwsh
+        run: |
+          $p = 'ProjectOps/system/ABOS_OPERATING_PROTOCOL.md'
+          Write-Host "core.autocrlf=$(git config --get core.autocrlf)"
+          Write-Host "head_blob=$(git rev-parse HEAD:$p)"
+          Write-Host "raw_worktree_blob=$(git hash-object --no-filters $p)"
+          Write-Host "filtered_worktree_blob=$(git hash-object --path=$p $p)"
+          if ((git rev-parse HEAD:$p) -ne 'ba0d546c704d7078fb1471107c29c7174379d134') { throw 'committed protocol blob drifted' }
+          if ((git hash-object --path=$p $p) -ne 'ba0d546c704d7078fb1471107c29c7174379d134') { throw 'clean-filtered worktree does not reconstruct canonical protocol blob' }
