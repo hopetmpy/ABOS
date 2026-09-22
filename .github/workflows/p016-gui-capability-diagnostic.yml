@@ -25,23 +25,73 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
-          import base64
           from pathlib import Path
 
           segment = Path('ProjectOps/continuity/C0012.md')
           marker = '## GUI_ACCESSIBILITY — host discrimination complete / decision ready'
-          addition = base64.b64decode('CgojIyBHVUlfQUNDRVNTSUJJTElUWSDigJQgaG9zdCBkaXNjcmltaW5hdGlvbiBjb21wbGV0ZSAvIGRlY2lzaW9uIHJlYWR5CgpTdGF0ZTogRU5fRUpFQ1VDScOTTiAvIERFQ0lTSU9OX1JFQURZIC8gU09VUkNFX1VOTU9ESUZJRUQKCkRpc2NyaW1pbmFjacOzbiBtYXRlcmlhbDoKLSBkaWFnbm9zdGljIGNvbW1pdDogYGM0MmJkZjU4NGFiYjA5OTZlZTdlYmJmZDUyODY1Yjc3YzQ5ZDljMjJgOwotIGRpYWdub3N0aWMgd29ya2Zsb3cgYDM1NjkwMjY5NzQyYDogU1VDQ0VTUyBlbiBXaW5kb3dzIFNlcnZlciAyMDI1IHkgVWJ1bnR1IDI0LjA0OwotIFdpbmRvd3M6IGB1c2VySW50ZXJhY3RpdmU9dHJ1ZWAsIHNlc3Npb24gaWQgMiwgdmVudGFuYXMgaW50ZXJhY3RpdmFzIHByZXNlbnRlcywgVUlBdXRvbWF0aW9uIGFzc2VtYmxpZXMgY2FyZ2FibGVzLCBgQXV0b21hdGlvbkVsZW1lbnQuUm9vdEVsZW1lbnRgIG9ic2VydmFibGUsIDEgcGFudGFsbGEgMTAyNHg3NjgsIGBDb3B5RnJvbVNjcmVlbmAgZnVuY2lvbmFsLCBgdXNlcjMyYCBkZXNrdG9wL2N1cnNvciBvYnNlcnZhYmxlIHkgQVBJIGRlIGlucHV0IGNhcmdhYmxlOwotIE5vdGVwYWQgcmVhbCBzZSBsYW56w7MgY29uIGBNYWluV2luZG93SGFuZGxlICE9IDBgIHkgZnVlIGVuY29udHJhZG8gcG9yIFVJQXV0b21hdGlvbiBjb21vIGBVbnRpdGxlZCAtIE5vdGVwYWRgOwotIFVidW50dSBDSTogYERJU1BMQVlgLCBgV0FZTEFORF9ESVNQTEFZYCwgYFhER19TRVNTSU9OX1RZUEVgIHkgc2Vzc2lvbiBEQnVzIGF1c2VudGVzOyB4ZG90b29sL3lkb3Rvb2wvd21jdHJsL3hwcm9wL3Njcm90L2dub21lLXNjcmVlbnNob3QvaW1wb3J0L2dyaW0vc2x1cnAgYXVzZW50ZXM7IGAvZGV2L3VpbnB1dGAgcHJlc2VudGUgcGVybyBzaW4gcmVhZC93cml0ZTsgcG9yIHRhbnRvIGVsIHJ1bm5lciBMaW51eCBvYnNlcnZhZG8gZXMgR1VJIGBVTkFWQUlMQUJMRWAgeSBsb3ctbGV2ZWwgaW5wdXQgYFVOQVVUSE9SSVpFRGAsIG5vIGBJTVBPU1NJQkxFYC4KCkhpcMOzdGVzaXM6Ci0gSDAgYE5PX0NIQU5HRWA6IEZBTFNBREEg4oCUIFAtMDE2IGV4aWdlIEdVSS9hY2Nlc3NpYmlsaXR5IGN1YW5kbyBlbCBob3N0IGxvIHBlcm1pdGUgeSBXaW5kb3dzIENJIGRlbXVlc3RyYSBwcmltaXRpdmVzIHByb3ZpZGVyLW5hdGl2ZSByZWFsZXMgcXVlIGVsIHNvdXJjZSBhY3R1YWwgbm8gZXhwb25lLgotIEgxIGBSRVVTRV9TVFJVQ1RVUkVEX0JST1dTRVJfQVNfT1NfR1VJYDogcGVybWFuZWNlIEZBTFNBREEg4oCUIERPTS9hY2Nlc3NpYmlsaXR5IGJyb3dzZXIgbm8gcG9zZWUgZGVza3RvcC93aW5kb3cvaW5wdXQuCi0gSDIgYEVYVEVORF9MT0NBTF9FTlZJUk9OTUVOVF9XSVRIX1BST1ZJREVSX05BVElWRV9HVUlfUFJPQkVfQU5EX1RPT0xTYDogQ09ORklSTUFEQS4KLSBIMyBgU0lMRU5UTFlfSU5TVEFMTF9HVUlfQVVUT01BVElPTl9ERVBFTkRFTkNJRVNgOiBSRUpFQ1RFRCDigJQgbm8gZXMgbmVjZXNhcmlvIGVuIFdpbmRvd3MgeSB2aW9sYXLDrWEgb3duZXJzaGlwL3Byb3Zpc2lvbmluZy4KLSBINCBgTU9OT0xJVEhJQ19HVUlfQVZBSUxBQkxFX0JPT0xFQU5gOiBGQUxTQURBIOKAlCBMaW51eCBkZW11ZXN0cmEgcXVlIGRpc3BsYXkvYWNjZXNzaWJpbGl0eS9zY3JlZW4vaW5wdXQgcHVlZGVuIGRpdmVyZ2lyLgotIEg1IGBQRVJTSVNUX1VJQVVUT01BVElPTl9FTEVNRU5UX0hBTkRMRVNfQUNST1NTX0NBTExTYDogUkVKRUNURUQg4oCUIHJlc3RhcnQvc3RhbGUtZWxlbWVudCByaXNrOyBsYXMgYWNjaW9uZXMgZGViZW4gcmUtcmVzb2x2ZXIgdGFyZ2V0cyBkZXNkZSBldmlkZW5jaWEgYWN0dWFsLgotIEg2IGBTRU1BTlRJQ19GSVJTVF9XSVRIX0VYUExJQ0lUX0NPT1JESU5BVEVfRkFMTEJBQ0tgOiBDT05GSVJNQURBIOKAlCBVSUF1dG9tYXRpb24gZXMgbGEgcnV0YSBtZW5vcyBmcsOhZ2lsOyBjb29yZGluYXRlIGlucHV0IHPDs2xvIHNlcsOhIHVuYSB0b29sIGV4cGzDrWNpdGEsIG51bmNhIGZhbGxiYWNrIHNpbGVuY2lvc28uCgpEZWNpc2nDs24gY2Fuw7NuaWNhOgpgRVhURU5EX0VYSVNUSU5HX0xPQ0FMX0VOVklST05NRU5UIC8gV0lORE9XU19QUk9WSURFUl9OQVRJVkVfVUlBVVRPTUFUSU9OX1BMVVNfVVNFUjMyIC8gU1BMSVRfR1VJX09CU0VSVkFUSU9OX1NDUkVFTl9JTlBVVF9DQVBBQklMSVRJRVMgLyBTRU1BTlRJQ19GSVJTVCAvIEVYUExJQ0lUX0xPV19MRVZFTF9JTlBVVCAvIE5PX1BFUlNJU1RFRF9VSV9FTEVNRU5UX0hBTkRMRVMgLyBOT05fV0lORE9XU19GQUlMX0NMT1NFRCAvIE5PX0FDUVVJU0lUSU9OYC4KCkFycXVpdGVjdHVyYSBwcmV2aXN0YToKMS4gdW5hIMO6bmljYSBgTG9jYWxHdWlSdW50aW1lYCBzdWJvcmRpbmFkYSBhbCBlbnZpcm9ubWVudCBsb2NhbCwgY29uIHByb2JlIHBvciBwcmltaXRpdmU7CjIuIFdpbmRvd3MgdXNhIFBvd2VyU2hlbGwvLk5FVC9XaW4zMiBwcmVzZW50ZXMgZW4gZWwgaG9zdDsgbm8gZGVwZW5kZW5jaWEgbnBtL25hdGl2YSBudWV2YTsKMy4gYGd1aV9zbmFwc2hvdGAgZGV2dWVsdmUgb2JzZXJ2YWNpw7NuIGFjY2Vzc2liaWxpdHkvd2luZG93IGFjb3RhZGEgeSBzZSBtYXJjYSBleHRlcm5hbC91bnRydXN0ZWQgb3V0cHV0Owo0LiBgZ3VpX2NhcHR1cmVgIG1hdGVyaWFsaXphIFBORyBzw7NsbyBkZW50cm8gZGVsIGhvbWUgbG9jYWwgeSByZXBvcnRhIHBhdGgvZXZpZGVuY2lhOwo1LiBgZ3VpX2FjdGAgcmVzdWVsdmUgdW4gc2VsZWN0b3Igc2Vtw6FudGljbyBhY3R1YWwgeSBmYWxsYSBhbnRlIGNlcm8gbyBtw7psdGlwbGVzIG1hdGNoZXM7IHNvcG9ydGEgcGF0dGVybnMgZXhwbMOtY2l0b3Mgc2luIGNsaWNrIHBvciBjb29yZGVuYWRhIGltcGzDrWNpdG87CjYuIGBndWlfaW5wdXRgIGV4cG9uZSBsb3ctbGV2ZWwgcG9pbnRlci9rZXlib2FyZCBzw7NsbyBkZSBmb3JtYSBleHBsw61jaXRhIHBhcmEgbGFzdC1yZXNvcnQgR1VJIGlucHV0Owo3LiBgTG9jYWxFbnZpcm9ubWVudFByb3ZpZGVyYCBwdWJsaWNhIGNhcGFiaWxpdGllcyBzZXBhcmFkYXMgcGFyYSBvYnNlcnZhdGlvbi9hY2Nlc3NpYmlsaXR5LCBzY3JlZW4gY2FwdHVyZSBlIGlucHV0IHNlZ8O6biBwcm9iZSByZWFsOwo4LiBgcnVuQWdlbnRMb29wYCByZWdpc3RyYSBsYXMgR1VJIHRvb2xzIGVuIGVsIG1pc21vIENhcGFiaWxpdHlSZWdpc3RyeS9yZXNlcnZlZC1uYW1lL2ZpbmFsLXRvb2wgcGlwZWxpbmUgeWEgZXhpc3RlbnRlOwo5LiBob3N0cyBzaW4gcHJvdmlkZXIgdmFsaWRhZG8gc2UgbWFudGllbmVuIGBVTkFWQUlMQUJMRWA7IGF1c2VuY2lhIGRlIGRpc3BsYXkvcGVybWlzbyBubyBzZSB0cmFkdWNlIGEg4oCcaW1wb3NzaWJsZeKAnS4KCkludmFyaWFudGVzL2FkdmVyc2FyaWFsIG9ibGlnYXRvcmlvczoKLSBubyBpbnB1dCBkdXJhbnRlIHByb2JlOwotIG5vIHNpbGVudCBzZW1hbnRpY+KGkmNvb3JkaW5hdGUgZmFsbGJhY2s7Ci0gbm8gc3RhbGUgcGVyc2lzdGVkIFVJIGVsZW1lbnQgaGFuZGxlczsKLSB0YXJnZXQgc2Vtw6FudGljbyBhbWJpZ3VvIGZhbGxhIGNlcnJhZG87Ci0gYm91bmRzL2Nvb3JkaW5hdGVzIHNlIHZhbGlkYW4gY29udHJhIHBhbnRhbGxhIG9ic2VydmFkYTsKLSBzY3JlZW5zaG90cyBubyBlc2NhcGFuIGRlbCBob21lOwotIGFjY2Vzc2liaWxpdHkvd2luZG93IHRleHQgc2UgdHJhdGEgY29tbyBleHRlcm5hbCB1bnRydXN0ZWQgY29udGVudDsKLSBubyBzZSBjb25mdW5kZSBBUEkgY2FyZ2FibGUgY29uIGlucHV0IHJlYWxtZW50ZSBwZXJtaXRpZG87Ci0gY2FwYWJpbGl0eSBzdGF0ZSBkZXJpdmEgZGVsIHByb2JlIGFjdHVhbCwgbm8gZGUgdG9vbCByZWdpc3RyYXRpb247Ci0gcmVzdGFydCB2dWVsdmUgYSByZXNvbHZlciBkZXNrdG9wL3RhcmdldHM7Ci0gTGludXgvaGVhZGxlc3Mgbm8gZmFicmljYSBkaXNwb25pYmlsaWRhZDsKLSB0ZXN0cyByZWFsZXMgV2luZG93cyBkZWJlbiBsYW56YXIgdW5hIGFwcCBjb250cm9sYWRhLCBvYnNlcnZhcmxhLCBhY3R1YXIgc2Vtw6FudGljYW1lbnRlIHkgcG9yIGlucHV0IGV4cGzDrWNpdG8sIGNhcHR1cmFyIHBhbnRhbGxhIHkgbGltcGlhciBlbCBwcm9jZXNvLgoKU2lndWllbnRlIHBhc286IGltcGxlbWVudGFyIGVzdGEgYXJxdWl0ZWN0dXJhIGVuIGxhIGF1dGhvcml0eSBsb2NhbCBleGlzdGVudGUsIGF0YWNhciBjb24gcmVncmVzaW9uZXMgV2luZG93cy9oZWFkbGVzcyB5IHPDs2xvIGRlc3B1w6lzIHByb21vdmVyIGV2aWRlbmNpYS4K').decode('utf-8')
+          addition = '''
+
+          ## GUI_ACCESSIBILITY — host discrimination complete / decision ready
+
+          State: EN_EJECUCIÓN / DECISION_READY / SOURCE_UNMODIFIED
+
+          Discriminación material:
+          - diagnostic commit: `c42bdf584abb0996ee7ebbfd52865b77c49d9c22`;
+          - diagnostic workflow `35690269742`: SUCCESS en Windows Server 2025 y Ubuntu 24.04;
+          - Windows: `userInteractive=true`, session id 2, ventanas interactivas presentes, UIAutomation RootElement observable, 1 pantalla 1024x768, CopyFromScreen funcional, user32 desktop/cursor observable y API de input cargable;
+          - Notepad real abrió MainWindowHandle y fue encontrado por UIAutomation como `Untitled - Notepad`;
+          - Ubuntu CI: DISPLAY/WAYLAND/XDG session y session DBus ausentes; xdotool/ydotool/wmctrl/screenshot tools ausentes; `/dev/uinput` presente sin read/write. GUI observado = UNAVAILABLE e input low-level = UNAUTHORIZED, no IMPOSSIBLE.
+
+          Hipótesis:
+          - H0 `NO_CHANGE`: FALSADA; Windows demuestra primitives provider-native reales que P-016 exige y el source actual no expone.
+          - H1 `REUSE_STRUCTURED_BROWSER_AS_OS_GUI`: FALSADA; DOM/accessibility browser no prueba desktop/window/input.
+          - H2 `EXTEND_LOCAL_ENVIRONMENT_WITH_PROVIDER_NATIVE_GUI_PROBE_AND_TOOLS`: CONFIRMADA.
+          - H3 `SILENTLY_INSTALL_GUI_AUTOMATION_DEPENDENCIES`: REJECTED; no es necesario en Windows y violaría ownership/provisioning.
+          - H4 `MONOLITHIC_GUI_AVAILABLE_BOOLEAN`: FALSADA; observation/accessibility/screen/input pueden divergir.
+          - H5 `PERSIST_UIAUTOMATION_ELEMENT_HANDLES_ACROSS_CALLS`: REJECTED por stale/restart risk.
+          - H6 `SEMANTIC_FIRST_WITH_EXPLICIT_COORDINATE_FALLBACK`: CONFIRMADA.
+
+          Decisión canónica:
+          `EXTEND_EXISTING_LOCAL_ENVIRONMENT / WINDOWS_PROVIDER_NATIVE_UIAUTOMATION_PLUS_USER32 / SPLIT_GUI_OBSERVATION_SCREEN_INPUT_CAPABILITIES / SEMANTIC_FIRST / EXPLICIT_LOW_LEVEL_INPUT / NO_PERSISTED_UI_ELEMENT_HANDLES / NON_WINDOWS_FAIL_CLOSED / NO_ACQUISITION`.
+
+          Arquitectura prevista:
+          1. una única `LocalGuiRuntime` subordinada al environment local, con probe por primitive;
+          2. Windows reutiliza PowerShell/.NET/Win32 ya presentes; no se agrega dependencia npm/native;
+          3. `gui_snapshot` entrega observación window/accessibility acotada y external/untrusted;
+          4. `gui_capture` materializa PNG únicamente dentro del home local;
+          5. `gui_act` re-resuelve selector semántico actual y falla cerrado ante cero o múltiples matches; no hace click por coordenada implícito;
+          6. `gui_input` expone low-level pointer/keyboard sólo de forma explícita;
+          7. `LocalEnvironmentProvider` publica capabilities separadas para accessibility/semantic action, screen capture e input desde probe real;
+          8. `runAgentLoop` registra las GUI tools en el CapabilityRegistry/reserved-name/final-tool pipeline existente;
+          9. hosts sin provider validado permanecen UNAVAILABLE; ausencia de display/permiso no se convierte en IMPOSSIBLE.
+
+          Invariantes/adversarial obligatorios:
+          - probe sin input ni side effects;
+          - no silent semantic→coordinate fallback;
+          - no stale persisted UI element handles;
+          - selector ambiguo falla cerrado;
+          - coordenadas validadas contra pantalla observada;
+          - screenshots confinados al home;
+          - texto accessibility/window tratado como external/untrusted;
+          - API cargable no equivale a input realmente permitido;
+          - capability state deriva del probe, no de tool registration;
+          - restart vuelve a resolver desktop/targets;
+          - headless no fabrica disponibilidad;
+          - Windows real debe lanzar app controlada, observarla, actuar semánticamente, ejecutar input explícito, capturar pantalla y limpiar proceso.
+
+          Siguiente paso: implementar esta arquitectura en la authority local existente y atacar con regresiones Windows/headless antes de promover evidencia.
+          '''
+          addition = '\n'.join(line[10:] if line.startswith('          ') else line for line in addition.splitlines())
           text = segment.read_text(encoding='utf-8')
           if marker not in text:
-              segment.write_text(text.rstrip() + addition + '\n', encoding='utf-8')
-          text = segment.read_text(encoding='utf-8')
-          old_class = 'Classification: P016_COMPUTER_BROWSER_GUI_HANDS / EN_EJECUCIÓN / LOCAL_COMPUTER_COMPLETION / DECISION_READY / SOURCE_UNMODIFIED'
-          new_class = 'Classification: P016_COMPUTER_BROWSER_GUI_HANDS / EN_EJECUCIÓN / GUI_ACCESSIBILITY / DECISION_READY / SOURCE_UNMODIFIED'
+              text = text.rstrip() + addition + '\n'
+          old_class = 'Classification: EN_EJECUCIÓN / LOCAL_COMPUTER_COMPLETION / DECISION_READY / SOURCE_UNMODIFIED'
+          new_class = 'Classification: EN_EJECUCIÓN / GUI_ACCESSIBILITY / DECISION_READY / SOURCE_UNMODIFIED'
           if old_class in text:
               text = text.replace(old_class, new_class, 1)
-              segment.write_text(text, encoding='utf-8')
           elif new_class not in text:
               raise SystemExit('expected C0012 classification line missing')
+          segment.write_text(text, encoding='utf-8')
 
           root = Path('ProjectOps/CONTINUITY.md')
           text = root.read_text(encoding='utf-8')
