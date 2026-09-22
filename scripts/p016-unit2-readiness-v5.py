@@ -10,6 +10,8 @@ def replace_once(path: str, old: str, new: str) -> None:
     p.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 
+# v5: one canonical Windows shell is selected before readiness probing and is
+# then reused by exec/start. Evidence publishes the actual selected route.
 replace_once(
     "src/platform/local-computer-runtime.ts",
     '''            process.platform === "win32"
@@ -70,5 +72,55 @@ replace_once(
   }
 
   it("starts, observes and waits for a managed process", async () => {
+''',
+)
+
+# v6: taskkill exit status is not lifecycle authority, but an observed running
+# stable root after the first bounded observation is material evidence that the
+# termination did not converge. Retry the same provider-native tree operation
+# once and remain truthful if the second observation is still non-terminal.
+replace_once(
+    "src/platform/local-computer-runtime.ts",
+    '''    entry.cancelRequested = true;
+    this.terminateProcessTree(entry, "cancel");
+    await this.observeTermination(entry);
+    return this.snapshot(entry, entry.state === "running");
+''',
+    '''    entry.cancelRequested = true;
+    await this.terminateAndObserveProcessTree(entry, "cancel");
+    return this.snapshot(entry, entry.state === "running");
+''',
+)
+
+replace_once(
+    "src/platform/local-computer-runtime.ts",
+    '''    entry.killRequested = true;
+    this.terminateProcessTree(entry, "kill");
+    await this.observeTermination(entry);
+    return this.snapshot(entry, entry.state === "running");
+''',
+    '''    entry.killRequested = true;
+    await this.terminateAndObserveProcessTree(entry, "kill");
+    return this.snapshot(entry, entry.state === "running");
+''',
+)
+
+replace_once(
+    "src/platform/local-computer-runtime.ts",
+    '''  private terminateProcessTree(entry: ManagedProcessEntry, mode: "cancel" | "kill"): void {
+''',
+    '''  private async terminateAndObserveProcessTree(
+    entry: ManagedProcessEntry,
+    mode: "cancel" | "kill",
+  ): Promise<void> {
+    this.terminateProcessTree(entry, mode);
+    await this.observeTermination(entry);
+    if (process.platform === "win32" && entry.state === "running") {
+      this.terminateProcessTree(entry, mode);
+      await this.observeTermination(entry);
+    }
+  }
+
+  private terminateProcessTree(entry: ManagedProcessEntry, mode: "cancel" | "kill"): void {
 ''',
 )
