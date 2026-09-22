@@ -4,7 +4,7 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-016
 Active-Segment: continuity/C0012.md
-Active-Intervention: P016_COMPUTER_BROWSER_GUI_HANDS — EN_EJECUCIÓN / GUI_ACCESSIBILITY / AUDIT_OPEN / SOURCE_UNMODIFIED
+Active-Intervention: P016_COMPUTER_BROWSER_GUI_HANDS — EN_EJECUCIÓN / GUI_ACCESSIBILITY / DECISION_READY / SOURCE_UNMODIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -13,8 +13,8 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p016-computer-browser-gui-hands
 Host-Head-At-Audit-Open: fe845184fce48c65032f8521ecd0bdfa42e04b77
-Last-Reconciled-Host-Head: a999ac704c2eeb6a9fc3c66e42db4598934ce55c
-Last-Reconciled-Head-Semantics: P016_LOCAL_COMPUTER_COMPLETION_E3_GREEN_GUI_ACCESSIBILITY_AUDIT_OPEN
+Last-Reconciled-Host-Head: c42bdf584abb0996ee7ebbfd52865b77c49d9c22
+Last-Reconciled-Head-Semantics: P016_GUI_ACCESSIBILITY_DECISION_READY_SOURCE_UNMODIFIED
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
