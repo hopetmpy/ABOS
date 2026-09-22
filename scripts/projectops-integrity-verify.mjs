@@ -1,4 +1,4 @@
-import {createHash} from "node:crypto";
+import {execFileSync} from "node:child_process";
 import {existsSync,readFileSync,statSync} from "node:fs";
 import {dirname,resolve} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -11,8 +11,8 @@ const requirePath=path=>{if(!existsSync(at(path)))fail(`required path missing: $
 const requireText=(content,needle,label)=>{if(!content.includes(needle))fail(label)};
 const forbidFile=path=>{if(existsSync(at(path)))fail(`forbidden competing root authority exists: ${path}`)};
 const lineCount=content=>content.length?content.split(/\r?\n/).length:0;
-const gitBlobSha=content=>{const b=Buffer.from(content,"utf8");return createHash("sha1").update(Buffer.from(`blob ${b.length}\0`)).update(b).digest("hex")};
-const requireBlob=(path,expected)=>{const actual=gitBlobSha(read(path));if(actual!==expected)fail(`${path} blob drift: expected ${expected}, got ${actual}`)};
+const gitBlobSha=path=>execFileSync("git",["hash-object",`--path=${path}`,path],{cwd:root,encoding:"utf8"}).trim();
+const requireBlob=(path,expected)=>{const actual=gitBlobSha(path);if(actual!==expected)fail(`${path} blob drift: expected ${expected}, got ${actual}`)};
 const field=(content,name)=>{const m=content.match(new RegExp(`^${name}:\\s*(.+)$`,"m"));if(!m)fail(`manifest field missing: ${name}`);return m[1].trim()};
 const stateOf=content=>{const m=content.match(/^State:\s*(.+)$/m);if(!m)fail("plan module missing State");return m[1].trim()};
 const validPlanStates=new Set(["ABIERTO","EN_EJECUCIÓN","PARCIAL","BLOQUEADO","HECHO","DESCARTADO","PLANIFICADO"]);
