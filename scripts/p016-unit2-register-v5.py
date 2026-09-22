@@ -2,45 +2,56 @@ from pathlib import Path
 
 path = Path("ProjectOps/continuity/C0012.md")
 text = path.read_text(encoding="utf-8").rstrip()
-marker = "## LOCAL_COMPUTER_COMPLETION — v6 falsified / Windows Job Object diagnostic"
+marker = "## LOCAL_COMPUTER_COMPLETION — v7 confirmed / Job Object DECISION_READY"
 if marker in text:
     raise SystemExit(0)
 
 append = r'''
 
 
-## LOCAL_COMPUTER_COMPLETION — v6 falsified / Windows Job Object diagnostic
+## LOCAL_COMPUTER_COMPLETION — v7 confirmed / Job Object DECISION_READY
 
-State: EN_EJECUCIÓN / CORRECTION_REQUIRED / DIAGNOSTIC_REQUIRED / NOT_ACCEPTED
+State: EN_EJECUCIÓN / DECISION_READY / SOURCE_UNMODIFIED / NOT_ACCEPTED
 
-Evidencia nueva que invalida v6:
-- gate v6 `35685170971` sobre el checkpoint recuperable `527206934699fc333607bf46ecdbafbefa9dd6cb`;
-- Ubuntu candidate: deterministic apply PASS, targeted PASS, typecheck PASS, build PASS, full suite PASS, security/policy PASS, dependency audit PASS y ProjectOps PASS;
-- Windows Server 2025 / Node 22.23.2: apply/typecheck/build PASS;
-- stress Windows: pases 1, 2 y 3 = **193/193 PASS** cada uno;
-- pase 4 = **192/193 PASS**. Falló exclusivamente `repeatedly contains Windows descendant processes when cancel is requested`: el marker descendiente no apareció, pero `outcome.waitTimedOut=true`, por lo que la raíz gestionada continuaba observable como `running` incluso después del segundo intento acotado;
-- cleanup del runner terminó un `bash` huérfano. El commit de producto fue correctamente SKIPPED;
-- diagnóstico directo concurrente `35685170939`: `Git\\bin\\bash.exe` dejó materializar el marker en 3/8 intentos aun con `taskkill rc=0`; `Git\\usr\\bin\\bash.exe` evitó el marker en 8/8, pero `taskkill` devolvió 128/255 por descendants MSYS y el cleanup del job todavía encontró procesos `git/bash`. Por tanto ausencia del marker no demuestra containment completo.
+Evidencia discriminante cerrada antes de product source:
+- Job Object diagnostic corregido `35686044564`, Windows Server 2025 / Node 22.23.2: **SUCCESS**;
+- provider smoke preservó output exacto: `probeOut="ABOS_JOB_STDOUT\n"`, `probeErr="ABOS_JOB_STDERR\n"` después de fijar `$ProgressPreference='SilentlyContinue'`; no quedó CLIXML/host-noise mezclado con stderr del comando;
+- termination ownership: 16/16 intentos matando únicamente el wrapper owner terminaron con `marker=false` y `related=[]`;
+- natural-close ownership: 8/8 intentos donde Git Bash salió dejando un background descendant terminaron con `marker=false` y `related=[]`; cerrar el último Job Object handle eliminó el trabajo background;
+- post-job cleanup no reportó ningún `Terminate orphan process`; la ejecución no dejó un survivor material conocido;
+- `CreateProcessW(..., CREATE_SUSPENDED)` + `AssignProcessToJobObject` ocurre antes de `ResumeThread`, por lo que la pertenencia queda fijada antes de permitir ejecución del shell;
+- primera inicialización fría del provider fue observable (~5 s incluyendo compilación/host startup); iteraciones posteriores fueron materialmente menores. P-016 no define SLA de startup. El product design debe cachear readiness por runtime y no ejecutar el probe frío por cada operación;
+- no existe requisito de mantener background work después de que el shell managed termina; por el contrario, la evidencia adversarial vigente exige ausencia de descendants/orphans fuera del managed lifecycle.
 
-Hipótesis discriminadas:
-- H0 `V6_ROOT_RETRY_IS_SUFFICIENT`: **FALSADA**. Repetir `taskkill /T /F` sobre la misma raíz Node no impide que MSYS pierda membresía de árbol observable.
-- H1 `DIRECT_CANONICAL_USR_BASH_IS_SUFFICIENT`: **NO ACEPTADA**. Mejora el marker test, pero la evidencia de cleanup demuestra que un tree walk/PID root por sí solo no alcanza todavía el contrato de no-orphans.
-- H2 `MORE_TASKKILL_RETRIES_OR_LONGER_TIMEOUT`: **REJECTED**. Repite una relación padre/hijo que ya demostró ser inestable y no crea una frontera de pertenencia durable.
-- H3 `WINDOWS_JOB_OBJECT_OWNERSHIP`: **HIPÓTESIS PRINCIPAL / DIAGNOSTIC_REQUIRED**. Un Job Object con `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, proceso shell creado suspendido, asignado antes de resume y sin breakaway ofrece una frontera OS-native independiente de reparenting; debe probarse en el runner real antes de product source.
-- H4 `NO_CHANGE`: **FALSADA** por el orphan observado.
+Hipótesis:
+- H0 `TASKKILL_TREE_IS_SUFFICIENT`: **FALSADA** por v4/v5/v6 y survivors MSYS.
+- H1 `MORE_TASKKILL_RETRIES`: **FALSADA/REJECTED**.
+- H2 `DIRECT_USR_BASH_WITH_TASKKILL`: **FALSADA COMO SUFICIENTE**; mejoró marker evidence pero no impidió cleanup survivors.
+- H3 `WINDOWS_JOB_OBJECT_OWNERSHIP`: **CONFIRMADA / DECISION_READY** en runner Windows real para containment, natural close y output propagation.
+- H4 `NO_CHANGE`: **FALSADA**.
 
-Decisión de investigación:
-`DO_NOT_PROMOTE_V6 / DO_NOT_RELAX_TEST / PROBE_WINDOWS_JOB_OBJECT_CONTAINMENT_BEFORE_SOURCE`.
+Decisión de producto:
+`CORRECT_EXISTING_LOCAL_COMPUTER_RUNTIME / CANONICAL_GIT_USR_BASH / WINDOWS_JOB_OBJECT_OWNER / NO_TASKKILL_TREE_AUTHORITY / POSIX_GROUP_SEMANTICS_UNCHANGED / NO_PARALLEL_PROCESS_MANAGER`.
 
-Prueba discriminante autorizada, sin product source:
-1. crear un Job Object Windows con `KILL_ON_JOB_CLOSE`;
-2. crear Git Bash suspendido, asignarlo al Job Object antes de ejecutarlo y luego reanudarlo;
-3. mantener el handle del Job Object únicamente en un wrapper provider-native;
-4. comprobar herencia real de stdout/stderr;
-5. matar sólo el wrapper owner y demostrar repetidamente que ningún descendant materializa marker ni sobrevive por command-line evidence;
-6. comprobar también cierre natural del shell con trabajo background: al cerrarse el último Job Object handle, ese background debe morir;
-7. si el runner no permite nested Job Objects, si output no se conserva o si aparece cualquier survivor, rechazar esta ruta y no implementarla.
+Invariantes de implementación:
+1. Windows managed execution usa el mismo canonical Git Bash que readiness y evidence; no probe/start divergence;
+2. Job Object usa `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`; shell se crea suspendido, se asigna y sólo después se reanuda;
+3. `start()` no entrega un handle utilizable hasta recibir readiness del wrapper **después de la asignación**; esto cierra la carrera immediate-cancel antes de membership;
+4. wrapper host progress se silencia sin filtrar stderr del comando; command stdout/stderr permanecen íntegros y bounded por la runtime existente;
+5. shell/command no se exponen en una segunda authority ni en logs ProjectOps; el wrapper es detalle provider-native de `LocalComputerRuntime`;
+6. `exec()` Windows debe consumir la misma ownership primitive para que timeout/natural-close no deje background descendants por una ruta síncrona paralela;
+7. cancel/kill terminan al owner; el cierre del Job handle es la autoridad kernel de descendants. El estado reportado sigue viniendo del managed owner observado; no se fabrica success;
+8. POSIX conserva detached process-group + group signal existente;
+9. provider readiness es real y cacheada por runtime; si PowerShell/Job Object/shell no son utilizables, Windows local process es UNAVAILABLE. No fallback silencioso a taskkill tree;
+10. agregar regresiones para immediate cancel/kill, repeated descendant containment, natural shell close con background child, stdout/stderr exactos, timeout containment, stale handles y false readiness.
 
-El objetivo/orden de P-016 no cambia. `LOCAL_COMPUTER_COMPLETION` permanece NOT_ACCEPTED y `GUI_ACCESSIBILITY` no se abre todavía.
+Divergencia ProjectOps descubierta durante la validación Windows:
+- el fallo `PROJECTOPS_INTEGRITY_VERIFY ... blob drift` del run `35685858695` **NO era drift canónico**;
+- evidencia `35686044564`: `core.autocrlf=true`, `HEAD:ProjectOps/system/ABOS_OPERATING_PROTOCOL.md=ba0d546c...`, raw worktree hash CRLF=`6355570e...`, `git hash-object --path`=`ba0d546c...`;
+- H `AUTHORITY_BLOB_DRIFT`: **FALSADA**;
+- H `VERIFIER_HASHES_PLATFORM_WORKTREE_BYTES_INSTEAD_OF_GIT_CANONICAL_BLOB`: **CONFIRMADA**;
+- decisión: `CORRECT` el verificador para calcular pinned blob identity mediante el clean filter de Git (`git hash-object --path`) y validarlo en Ubuntu + Windows antes de usar ProjectOps como gate Windows. Esta corrección es una dependencia de validación del mismo P-016, no una fase nueva.
+
+El plan P-016 no cambia. `LOCAL_COMPUTER_COMPLETION` sigue NOT_ACCEPTED hasta source + integración + adversarial + exact-head ordinary CI/ProjectOps. `GUI_ACCESSIBILITY` permanece cerrado.
 '''
 path.write_text(text + append.rstrip() + "\n", encoding="utf-8")
