@@ -11,38 +11,18 @@ import type {
 } from "../types.js";
 import { getHomeDir, toPosixShellPath } from "./home.js";
 import { confinePathToLocalHome } from "./path-confinement.js";
+import {
+  runWindowsJobProcessSync,
+  spawnWindowsJobProcess,
+  WINDOWS_JOB_READY_TIMEOUT_MS,
+} from "./windows-job-process.js";
 
 const DEFAULT_EXEC_TIMEOUT_MS = 30_000;
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 const TERMINATION_OBSERVE_MS = 2_000;
 const MAX_STREAM_BYTES = 1024 * 1024;
 const MAX_RETAINED_PROCESSES = 128;
-
-// Windows Git Bash may interpose/re-parent multiple bash.exe processes. The
-// managed handle therefore owns a stable Node root and keeps Git Bash below
-// it. taskkill /T can then terminate the entire tree from one durable PID.
-const WINDOWS_PROCESS_WRAPPER_SOURCE = String.raw`
-const { spawn } = require("node:child_process");
-const shell = process.argv[1];
-const command = process.argv[2];
-if (!shell || command === undefined) {
-  process.stderr.write("ABOS managed-process wrapper missing shell/command\n");
-  process.exit(2);
-}
-const child = spawn(shell, ["-lc", command], {
-  cwd: process.cwd(),
-  env: process.env,
-  windowsHide: true,
-  stdio: ["ignore", "inherit", "inherit"],
-});
-child.once("error", (error) => {
-  process.stderr.write("ABOS managed shell launch failed: " + error.message + "\n");
-  process.exit(127);
-});
-child.once("close", (code, signal) => {
-  process.exit(typeof code === "number" ? code : signal ? 1 : 0);
-});
-`;
+const WINDOWS_PROBE_TIMEOUT_MS = 5_000;
 
 export interface LocalComputerProbe {
   available: boolean;
@@ -100,14 +80,17 @@ function validateEnv(env: Record<string, string> | undefined): Record<string, st
 export class LocalComputerRuntime {
   private readonly processes = new Map<string, ManagedProcessEntry>();
   private cachedGitBash: string | null | undefined;
+  private cachedProbe: LocalComputerProbe | null = null;
 
   constructor(private readonly idFactory: () => string = randomUUID) {}
 
   probe(): LocalComputerProbe {
+    if (this.cachedProbe) return this.cachedProbe;
+
     const observedAt = new Date().toISOString();
     const shell = this.resolveShell();
     if (!shell) {
-      return {
+      this.cachedProbe = {
         available: false,
         observedAt,
         shell: null,
@@ -117,35 +100,80 @@ export class LocalComputerRuntime {
             : "No usable local shell was found for ABOS process execution.",
         ],
       };
+      return this.cachedProbe;
+    }
+
+    if (process.platform === "win32") {
+      const result = runWindowsJobProcessSync({
+        shell,
+        command: ":",
+        cwd: getHomeDir(),
+        env: this.buildEnvironment(),
+        timeoutMs: WINDOWS_PROBE_TIMEOUT_MS,
+      });
+      const available = result.exitCode === 0 && !result.providerTimedOut;
+      this.cachedProbe = {
+        available,
+        observedAt,
+        shell,
+        evidence: available
+          ? [
+              `local process shell launch verified through Windows Job Object owner: ${shell}`,
+              "local process lifecycle authority=local-computer-runtime",
+              "process handles are process-local and are invalid after runtime restart",
+              "windows managed-process owner=kernel-job-object; limit=KILL_ON_JOB_CLOSE; shell is assigned before resume",
+            ]
+          : [
+              `local process Windows Job Object readiness probe failed for shell: ${shell}`,
+              "Local process readiness remains unavailable until PowerShell, Job Object ownership and the selected shell complete an inert probe.",
+            ],
+      };
+      return this.cachedProbe;
     }
 
     const launchable = this.probeShellLaunch(shell);
-    return {
+    this.cachedProbe = {
       available: launchable,
       observedAt,
       shell,
       evidence: launchable
         ? [
             `local process shell launch verified: ${shell}`,
-            `local process lifecycle authority=local-computer-runtime`,
-            `process handles are process-local and are invalid after runtime restart`,
-            process.platform === "win32"
-              ? "windows managed-process shell=normalized-git-usr-bash; root=stable-node-wrapper; termination request=taskkill-tree; observed root state is outcome authority"
-              : "posix managed-process root=detached-process-group",
+            "local process lifecycle authority=local-computer-runtime",
+            "process handles are process-local and are invalid after runtime restart",
+            "posix managed-process root=detached-process-group",
           ]
         : [
             `local process shell candidate failed launch probe: ${shell}`,
             "Local process readiness remains unavailable until the selected shell can execute an inert -lc probe.",
           ],
     };
+    return this.cachedProbe;
   }
 
   exec(command: string, timeout?: number, options: ExecOptions = {}): ExecResult {
     const shell = this.requireShell();
     const cwd = this.resolveWorkingDirectory(options.cwd);
     const env = this.buildEnvironment(options.env);
+    const effectiveTimeout = timeout || DEFAULT_EXEC_TIMEOUT_MS;
+
+    if (process.platform === "win32") {
+      const result = runWindowsJobProcessSync({
+        shell,
+        command,
+        cwd,
+        env,
+        timeoutMs: effectiveTimeout,
+      });
+      return {
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+      };
+    }
+
     const commonOptions = {
-      timeout: timeout || DEFAULT_EXEC_TIMEOUT_MS,
+      timeout: effectiveTimeout,
       encoding: "utf-8" as const,
       maxBuffer: 10 * 1024 * 1024,
       cwd,
@@ -153,15 +181,7 @@ export class LocalComputerRuntime {
     };
 
     try {
-      let stdout: string;
-      if (process.platform === "win32") {
-        stdout = execFileSync(shell, ["-lc", command], {
-          ...commonOptions,
-          windowsHide: true,
-        });
-      } else {
-        stdout = execSync(command, commonOptions);
-      }
+      const stdout = execSync(command, commonOptions);
       return { stdout: stdout || "", stderr: "", exitCode: 0 };
     } catch (error: any) {
       return {
@@ -178,12 +198,26 @@ export class LocalComputerRuntime {
     const cwd = this.resolveWorkingDirectory(options.cwd);
     const env = this.buildEnvironment(options.env);
     const id = `process_${this.idFactory()}`;
-    const managedShell = this.resolveManagedShell(shell);
-    const [executable, args] = process.platform === "win32"
-      ? [process.execPath, ["-e", WINDOWS_PROCESS_WRAPPER_SOURCE, managedShell, command]]
-      : [managedShell, ["-lc", command]];
 
-    const child = spawn(executable, args, {
+    let entry: ManagedProcessEntry | null = null;
+    let earlyStderr = "";
+    let earlyStderrTruncated = false;
+    const appendStderr = (chunk: Buffer | string): void => {
+      if (!entry) {
+        const appended = boundedAppend(earlyStderr, chunk);
+        earlyStderr = appended.value;
+        earlyStderrTruncated ||= appended.truncated;
+        return;
+      }
+      const appended = boundedAppend(entry.stderr, chunk);
+      entry.stderr = appended.value;
+      entry.stderrTruncated ||= appended.truncated;
+    };
+
+    const windowsOwned = process.platform === "win32"
+      ? spawnWindowsJobProcess({ shell, command, cwd, env, onStderr: appendStderr })
+      : null;
+    const child = windowsOwned?.child ?? spawn(shell, ["-lc", command], {
       cwd,
       env,
       windowsHide: true,
@@ -193,7 +227,7 @@ export class LocalComputerRuntime {
 
     let resolveCompletion!: () => void;
     const completion = new Promise<void>((resolve) => { resolveCompletion = resolve; });
-    const entry: ManagedProcessEntry = {
+    entry = {
       id,
       child,
       command,
@@ -205,50 +239,52 @@ export class LocalComputerRuntime {
       exitCode: null,
       signal: null,
       stdout: "",
-      stderr: "",
+      stderr: earlyStderr,
       stdoutTruncated: false,
-      stderrTruncated: false,
+      stderrTruncated: earlyStderrTruncated,
       cancelRequested: false,
       killRequested: false,
       completion,
     };
-    this.processes.set(id, entry);
+    const managedEntry = entry;
+    this.processes.set(id, managedEntry);
 
     child.stdout?.on("data", (chunk: Buffer | string) => {
-      const appended = boundedAppend(entry.stdout, chunk);
-      entry.stdout = appended.value;
-      entry.stdoutTruncated ||= appended.truncated;
+      const appended = boundedAppend(managedEntry.stdout, chunk);
+      managedEntry.stdout = appended.value;
+      managedEntry.stdoutTruncated ||= appended.truncated;
     });
-    child.stderr?.on("data", (chunk: Buffer | string) => {
-      const appended = boundedAppend(entry.stderr, chunk);
-      entry.stderr = appended.value;
-      entry.stderrTruncated ||= appended.truncated;
-    });
+    if (!windowsOwned) {
+      child.stderr?.on("data", (chunk: Buffer | string) => appendStderr(chunk));
+    }
 
     child.once("error", (error) => {
-      entry.state = "failed";
-      entry.finishedAt = new Date().toISOString();
-      entry.stderr = boundedAppend(entry.stderr, error.message).value;
+      managedEntry.state = "failed";
+      managedEntry.finishedAt = new Date().toISOString();
+      const appended = boundedAppend(managedEntry.stderr, error.message);
+      managedEntry.stderr = appended.value;
+      managedEntry.stderrTruncated ||= appended.truncated;
       resolveCompletion();
     });
     child.once("close", (code, signal) => {
-      if (entry.state !== "failed") entry.state = "exited";
-      entry.exitCode = code;
-      entry.signal = signal;
-      entry.finishedAt = new Date().toISOString();
+      if (managedEntry.state !== "failed") managedEntry.state = "exited";
+      managedEntry.exitCode = code;
+      managedEntry.signal = signal;
+      managedEntry.finishedAt = new Date().toISOString();
       resolveCompletion();
     });
 
-    await new Promise<void>((resolve, reject) => {
-      child.once("spawn", resolve);
-      child.once("error", reject);
-    }).catch((error) => {
+    try {
+      await this.waitForSpawn(child);
+      if (windowsOwned) await this.waitForWindowsJobReady(windowsOwned.ready, child);
+    } catch (error) {
       this.processes.delete(id);
+      if (child.exitCode === null && child.signalCode === null) child.kill();
       throw error;
-    });
+    }
 
-    entry.pid = child.pid ?? entry.pid;
-    return this.snapshot(entry, false);
+    managedEntry.pid = child.pid ?? managedEntry.pid;
+    return this.snapshot(managedEntry, false);
   }
 
   async wait(id: string, timeoutMs = DEFAULT_WAIT_TIMEOUT_MS): Promise<ManagedProcessSnapshot> {
@@ -315,6 +351,7 @@ export class LocalComputerRuntime {
       return fs.existsSync("/bin/sh") ? "/bin/sh" : null;
     }
     if (this.cachedGitBash !== undefined) return this.cachedGitBash;
+
     const candidates = [
       process.env.ABOS_BASH_PATH,
       process.env.ProgramFiles ? path.join(process.env.ProgramFiles, "Git", "bin", "bash.exe") : undefined,
@@ -330,33 +367,34 @@ export class LocalComputerRuntime {
         candidates.push(path.join(path.dirname(path.dirname(gitPath)), "bin", "bash.exe"));
       }
     } catch {}
-    this.cachedGitBash = candidates.find((candidate) => fs.existsSync(candidate)) ?? null;
-    return this.cachedGitBash;
+
+    for (const rawCandidate of candidates) {
+      const candidate = this.canonicalizeWindowsShell(rawCandidate);
+      if (fs.existsSync(candidate)) {
+        this.cachedGitBash = candidate;
+        return candidate;
+      }
+    }
+    this.cachedGitBash = null;
+    return null;
   }
 
-  private resolveManagedShell(shell: string): string {
-    if (process.platform !== "win32") return shell;
+  private canonicalizeWindowsShell(shell: string): string {
     const normalized = path.normalize(shell);
-    const parent = path.basename(path.dirname(normalized)).toLowerCase();
-    if (parent !== "bin") return normalized;
-
-    const candidate = path.join(path.dirname(path.dirname(normalized)), "usr", "bin", "bash.exe");
-    // Git\bin\bash.exe is a launcher that can interpose/re-parent another
-    // bash.exe. Git\usr\bin\bash.exe is the actual MSYS runtime root and
-    // was the only variant that prevented descendant marker escape in the
-    // repeated Windows host diagnostic. Preserve an explicit non-Git bash if
-    // no matching runtime binary exists.
-    return fs.existsSync(candidate) ? candidate : normalized;
+    if (path.basename(normalized).toLowerCase() !== "bash.exe") return normalized;
+    if (path.basename(path.dirname(normalized)).toLowerCase() !== "bin") return normalized;
+    const runtimeShell = path.join(path.dirname(path.dirname(normalized)), "usr", "bin", "bash.exe");
+    return fs.existsSync(runtimeShell) ? runtimeShell : normalized;
   }
 
   private requireShell(): string {
-    const shell = this.resolveShell();
-    if (!shell || !this.probeShellLaunch(shell)) {
+    const probe = this.probe();
+    if (!probe.available || !probe.shell) {
       throw new Error(process.platform === "win32"
-        ? "ABOS local execution on Windows requires launchable Git Bash. Install Git for Windows or set ABOS_BASH_PATH to a working bash.exe."
+        ? "ABOS local execution on Windows requires launchable Git Bash plus an operational PowerShell/Job Object provider."
         : "ABOS local execution requires a launchable shell that supports -lc.");
     }
-    return shell;
+    return probe.shell;
   }
 
   private probeShellLaunch(shell: string): boolean {
@@ -380,23 +418,15 @@ export class LocalComputerRuntime {
     }
 
     if (process.platform === "win32") {
-      try {
-        // Windows has no POSIX process-group signal contract in Node. The
-        // stable Node root created by start() owns Git Bash and every command
-        // descendant, so taskkill /T /F is the provider-native tree action.
-        execFileSync("taskkill.exe", ["/PID", String(entry.pid), "/T", "/F"], {
-          windowsHide: true,
-          stdio: "ignore",
-        });
-        return;
-      } catch {
-        // Git-for-Windows/MSYS can return 128/255 even after taskkill has
-        // terminated the Windows root and prevented descendant work. The
-        // request exit code is therefore not the lifecycle authority. The
-        // caller immediately observes the stable managed root and reports
-        // running/exited from that evidence instead of fabricating success.
-        return;
+      // The PowerShell provider process is the sole owner of a kernel Job
+      // Object configured with KILL_ON_JOB_CLOSE. Terminating that owner closes
+      // the Job handle; Windows then terminates every process assigned to the
+      // Job independent of MSYS re-parenting. No PID tree walk is authoritative.
+      const requested = entry.child.kill();
+      if (!requested && entry.state === "running") {
+        throw new Error(`Process ${entry.id} ${mode} Job Object owner termination request was not accepted`);
       }
+      return;
     }
 
     const signal = mode === "kill" ? "SIGKILL" : "SIGTERM";
@@ -445,6 +475,34 @@ export class LocalComputerRuntime {
     const entry = this.processes.get(id);
     if (!entry) throw new Error(`STALE_OR_UNKNOWN_PROCESS_HANDLE: ${id}`);
     return entry;
+  }
+
+  private async waitForSpawn(child: ChildProcess): Promise<void> {
+    if (child.pid) return;
+    await new Promise<void>((resolve, reject) => {
+      child.once("spawn", resolve);
+      child.once("error", reject);
+    });
+  }
+
+  private async waitForWindowsJobReady(ready: Promise<number>, child: ChildProcess): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    try {
+      await Promise.race([
+        ready,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`Windows Job Object owner did not become ready within ${WINDOWS_JOB_READY_TIMEOUT_MS}ms`)),
+            WINDOWS_JOB_READY_TIMEOUT_MS,
+          );
+        }),
+      ]);
+    } catch (error) {
+      if (child.exitCode === null && child.signalCode === null) child.kill();
+      throw error;
+    } finally {
+      if (timer !== null) clearTimeout(timer);
+    }
   }
 
   private async observeTermination(entry: ManagedProcessEntry): Promise<void> {

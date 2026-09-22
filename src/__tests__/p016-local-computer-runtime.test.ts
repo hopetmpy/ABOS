@@ -56,7 +56,9 @@ describe("P016 local computer runtime", () => {
       const probe = new LocalComputerRuntime().probe();
       expect(probe.available).toBe(false);
       expect(probe.shell).toBe(fakeShell);
-      expect(probe.evidence.join(" ")).toContain("failed launch probe");
+      expect(probe.evidence.join(" ")).toContain(
+        process.platform === "win32" ? "readiness probe failed" : "failed launch probe",
+      );
     } finally {
       if (previousShell === undefined) delete process.env.SHELL;
       else process.env.SHELL = previousShell;
@@ -64,6 +66,16 @@ describe("P016 local computer runtime", () => {
       else process.env.ABOS_BASH_PATH = previousBash;
     }
   });
+
+  if (process.platform === "win32") {
+    it("probes the same canonical Git runtime shell through Job Object ownership", () => {
+      const probe = new LocalComputerRuntime().probe();
+      expect(probe.available).toBe(true);
+      expect(probe.shell?.replace(/\\/g, "/").toLowerCase()).toContain("/usr/bin/bash.exe");
+      expect(probe.evidence.join(" ")).toContain("kernel-job-object");
+      expect(probe.evidence.join(" ")).toContain("assigned before resume");
+    });
+  }
 
   it("starts, observes and waits for a managed process", async () => {
     const runtime = new LocalComputerRuntime(() => "waitable");
@@ -75,6 +87,17 @@ describe("P016 local computer runtime", () => {
     expect(finished.exitCode).toBe(0);
     expect(finished.stdout).toContain("done");
     expect(finished.waitTimedOut).toBe(false);
+  });
+
+  it("preserves managed stdout and stderr without provider protocol noise", async () => {
+    const runtime = new LocalComputerRuntime(() => "streams");
+    const started = await runtime.start(`printf 'P016_STDOUT\\n'; printf 'P016_STDERR\\n' >&2`);
+    const finished = await runtime.wait(started.id, 10_000);
+    expect(finished.state).toBe("exited");
+    expect(finished.exitCode).toBe(0);
+    expect(finished.stdout).toBe("P016_STDOUT\n");
+    expect(finished.stderr).toBe("P016_STDERR\n");
+    expect(finished.stderr).not.toContain("ABOS_JOB_READY");
   });
 
   it("clears the losing wait timer when process completion wins", async () => {
@@ -149,6 +172,24 @@ describe("P016 local computer runtime", () => {
 
   if (process.platform === "win32") {
     for (const mode of ["kill", "cancel"] as const) {
+      it(`contains Windows descendants when ${mode} is requested immediately after start readiness`, async () => {
+        const runtime = new LocalComputerRuntime(() => `immediate-${mode}`);
+        const cwd = tempHomeDir();
+        const markerName = `immediate-${mode}.txt`;
+        const marker = path.join(cwd, markerName);
+        const started = await runtime.start(
+          `node -e "setTimeout(()=>require('fs').writeFileSync('${markerName}','alive'),700);setTimeout(()=>{},5000)" >/dev/null 2>&1 & wait`,
+          { cwd },
+        );
+        const outcome = mode === "kill"
+          ? await runtime.kill(started.id)
+          : await runtime.cancel(started.id);
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        expect(fs.existsSync(marker)).toBe(false);
+        expect(outcome.waitTimedOut).toBe(false);
+        expect(outcome.state).not.toBe("running");
+      });
+
       it(`repeatedly contains Windows descendant processes when ${mode} is requested`, async () => {
         for (let attempt = 0; attempt < 4; attempt += 1) {
           const runtime = new LocalComputerRuntime(() => `tree-${mode}-${attempt}`);
@@ -170,6 +211,35 @@ describe("P016 local computer runtime", () => {
         }
       });
     }
+
+    it("contains background descendants when the managed shell exits naturally", async () => {
+      const runtime = new LocalComputerRuntime(() => "natural-close");
+      const cwd = tempHomeDir();
+      const marker = path.join(cwd, "natural-close-marker.txt");
+      const started = await runtime.start(
+        `node -e "setTimeout(()=>require('fs').writeFileSync('natural-close-marker.txt','alive'),700);setTimeout(()=>{},5000)" >/dev/null 2>&1 & exit 0`,
+        { cwd },
+      );
+      const finished = await runtime.wait(started.id, 10_000);
+      expect(finished.state).toBe("exited");
+      expect(finished.exitCode).toBe(0);
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      expect(fs.existsSync(marker)).toBe(false);
+    });
+
+    it("contains descendant work when synchronous exec times out", async () => {
+      const runtime = new LocalComputerRuntime(() => "exec-timeout");
+      const cwd = tempHomeDir();
+      const marker = path.join(cwd, "exec-timeout-marker.txt");
+      const result = runtime.exec(
+        `node -e "setTimeout(()=>require('fs').writeFileSync('exec-timeout-marker.txt','alive'),700);setTimeout(()=>{},5000)" >/dev/null 2>&1 & wait`,
+        150,
+        { cwd },
+      );
+      expect(result.exitCode).not.toBe(0);
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      expect(fs.existsSync(marker)).toBe(false);
+    });
   }
 
   it("treats a handle from another runtime as stale after restart", async () => {
