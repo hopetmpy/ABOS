@@ -52,6 +52,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Remove diagnostic inventory self-match
+        shell: pwsh
+        run: |
+          $path = 'scripts/p016-unit2-windows-orphan-diagnostic.mjs'
+          $text = Get-Content -Raw $path
+          $old = '  return Array.isArray(parsed) ? parsed : [parsed];'
+          $new = @'
+          const values = Array.isArray(parsed) ? parsed : [parsed];
+          return values.filter((proc) => !String(proc.CommandLine ?? "").includes("Get-CimInstance Win32_Process"));
+          '@.Trim()
+          if (-not $text.Contains($old)) { throw 'diagnostic patch anchor missing' }
+          Set-Content -Path $path -Value ($text.Replace($old, $new)) -NoNewline
       - name: Prove Windows Job Object containment and stdio
         run: node scripts/p016-unit2-windows-orphan-diagnostic.mjs
       - name: ProjectOps integrity remains valid
