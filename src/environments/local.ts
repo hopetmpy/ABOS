@@ -1,4 +1,3 @@
-
 import os from "node:os";
 import type {
   EnvironmentEstimate,
@@ -18,6 +17,10 @@ import {
   getLocalComputerRuntime,
   type LocalComputerRuntime,
 } from "../platform/local-computer-runtime.js";
+import {
+  getLocalGuiRuntime,
+  type LocalGuiRuntime,
+} from "../gui/local-runtime.js";
 
 export class LocalEnvironmentProvider implements EnvironmentProvider {
   readonly id = "local";
@@ -25,12 +28,14 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
   constructor(
     private readonly browserRuntime: Pick<LocalBrowserRuntime, "probe"> = getLocalBrowserRuntime(),
     private readonly computerRuntime: Pick<LocalComputerRuntime, "probe"> = getLocalComputerRuntime(),
+    private readonly guiRuntime: Pick<LocalGuiRuntime, "probe"> = getLocalGuiRuntime(),
   ) {}
 
   async inspect(): Promise<EnvironmentSnapshot> {
     const observedAt = new Date().toISOString();
     const browser = await this.browserRuntime.probe();
     const computer = this.computerRuntime.probe();
+    const gui = this.guiRuntime.probe();
     const evidence = [
       `platform=${process.platform}`,
       `arch=${process.arch}`,
@@ -39,6 +44,9 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
       `freeMemoryBytes=${os.freemem()}`,
       ...browser.evidence.map((entry) => `browser:${entry}`),
       ...computer.evidence.map((entry) => `process:${entry}`),
+      ...gui.accessibility.evidence.map((entry) => `gui-accessibility:${entry}`),
+      ...gui.screen.evidence.map((entry) => `gui-screen:${entry}`),
+      ...gui.input.evidence.map((entry) => `gui-input:${entry}`),
     ];
     const constraints: string[] = [];
     if (!browser.available) {
@@ -49,6 +57,21 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
     if (!computer.available) {
       constraints.push(
         "Local process execution/lifecycle is currently unavailable on this host because no usable shell was observed.",
+      );
+    }
+    if (!gui.accessibility.available) {
+      constraints.push(
+        "Local desktop accessibility/semantic GUI control is currently unavailable on this host; screen and input capabilities are assessed independently.",
+      );
+    }
+    if (!gui.screen.available) {
+      constraints.push(
+        "Local screen capture is currently unavailable on this host.",
+      );
+    }
+    if (!gui.input.available) {
+      constraints.push(
+        "Local low-level GUI input is currently unavailable or not authorized on this host.",
       );
     }
 
@@ -72,6 +95,11 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
         localProcessAvailable: computer.available,
         localProcessObservedAt: computer.observedAt,
         localProcessShell: computer.shell,
+        guiAccessibilityAvailable: gui.accessibility.available,
+        guiScreenAvailable: gui.screen.available,
+        guiInputAvailable: gui.input.available,
+        guiObservedAt: gui.observedAt,
+        guiScreenBounds: gui.screen.bounds,
       },
       capabilities: [
         {
@@ -121,6 +149,55 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
             browserTarget: browser.target?.label ?? null,
             browserVersion: browser.browserVersion ?? null,
           },
+        },
+        {
+          id: "local:gui-accessibility",
+          type: "executor",
+          provider: "local-gui",
+          description: "Observe the local desktop accessibility tree and perform semantic GUI actions against uniquely re-resolved UI elements.",
+          requirements: ["desktop", "gui", "accessibility", "semantic gui interaction"],
+          provides: ["desktop accessibility", "gui observation", "semantic gui interaction"],
+          permissions: ["desktop-observation", "desktop-interaction"],
+          effects: ["desktop_observation", "desktop_semantic_interaction"],
+          environment: "local",
+          available: gui.accessibility.available,
+          state: gui.accessibility.available ? "verified_available" : "unavailable",
+          observedAt: gui.observedAt,
+          authority: "local-gui-runtime:accessibility-probe",
+          evidence: [...gui.accessibility.evidence],
+        },
+        {
+          id: "local:gui-screen",
+          type: "executor",
+          provider: "local-gui",
+          description: "Capture the observed local virtual screen to verified PNG evidence confined to the ABOS home.",
+          requirements: ["screen", "screenshot", "gui observation"],
+          provides: ["screen capture", "screenshot", "visual gui observation"],
+          permissions: ["screen-capture", "local-file-write"],
+          effects: ["screen_capture", "file_write"],
+          environment: "local",
+          available: gui.screen.available,
+          state: gui.screen.available ? "verified_available" : "unavailable",
+          observedAt: gui.observedAt,
+          authority: "local-gui-runtime:screen-probe",
+          evidence: [...gui.screen.evidence],
+          metadata: { bounds: gui.screen.bounds },
+        },
+        {
+          id: "local:gui-input",
+          type: "executor",
+          provider: "local-gui",
+          description: "Send explicit low-level pointer or keyboard input to the current local interactive desktop. This is never a silent semantic fallback.",
+          requirements: ["gui input", "mouse", "keyboard", "desktop interaction"],
+          provides: ["pointer input", "keyboard input", "explicit gui input"],
+          permissions: ["desktop-input"],
+          effects: ["desktop_low_level_input"],
+          environment: "local",
+          available: gui.input.available,
+          state: gui.input.available ? "verified_available" : "unavailable",
+          observedAt: gui.observedAt,
+          authority: "local-gui-runtime:input-probe",
+          evidence: [...gui.input.evidence],
         },
       ],
     };
