@@ -30,6 +30,7 @@ describe("P018 provider readiness reconciliation", () => {
     expect(selection.candidates[0]?.missingCapabilities).toContain(
       "remote compute",
     );
+    expect(await registry.findForCapability("remote compute")).toEqual([]);
   });
 
   it("does not elevate AWS CLI plus successful STS identity into service readiness", async () => {
@@ -75,6 +76,7 @@ describe("P018 provider readiness reconciliation", () => {
 
     expect(selection.selected).toBeNull();
     expect(selection.candidates[0]?.missingCapabilities).toContain("ec2");
+    expect(await registry.findForCapability("ec2")).toEqual([]);
   });
 
   it("projects full capability lifecycle truth through environment_capabilities", async () => {
@@ -116,6 +118,12 @@ describe("P018 provider readiness reconciliation", () => {
         observedAt: "2026-09-23T19:00:00.000Z",
       }),
     });
+
+    expect(await registry.findForCapability("legacy")).toEqual([]);
+    const verifiedRoutes = await registry.findForCapability("verified");
+    expect(verifiedRoutes.map((snapshot) => snapshot.id)).toEqual([
+      "projection-test",
+    ]);
 
     const tool = createEnvironmentTools(registry).find(
       (candidate) => candidate.name === "environment_capabilities",
