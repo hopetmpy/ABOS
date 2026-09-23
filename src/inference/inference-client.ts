@@ -154,48 +154,36 @@ export class UnifiedInferenceClient {
       throw new Error(`No providers available for tier '${params.tier}'`);
     }
 
-    const failedProviders: string[] = [];
-    let totalRetries = 0;
-    const trace = this.resolveTrace(params.trace);
-
-    for (const resolved of candidates) {
-      if (this.isProviderCircuitOpen(resolved.provider.id)) {
-        failedProviders.push(resolved.provider.id);
-        continue;
-      }
-
-      try {
-        const attempt = await this.executeWithRetries(resolved, params, params.tier, trace);
-        this.markProviderSuccess(resolved.provider.id);
-
-        return {
-          ...attempt.result,
-          metadata: {
-            ...attempt.result.metadata,
-            retries: totalRetries + attempt.retries,
-            failedProviders,
-          },
-        };
-      } catch (error) {
-        if (!(error instanceof ProviderAttemptError)) {
-          throw error;
-        }
-
-        totalRetries += error.retries;
-        failedProviders.push(resolved.provider.id);
-        this.markProviderFailure(resolved.provider.id);
-
-        if (error.retryable) {
-          continue;
-        }
-
-        throw this.unwrapError(error.originalError);
-      }
+    // Compatibility callers may still ask the legacy registry to select a
+    // candidate, but once a provider/model boundary is selected this call may
+    // not silently cross it after dispatch. A provider change requires a new
+    // orchestration decision/call.
+    const resolved = candidates[0]!;
+    if (this.isProviderCircuitOpen(resolved.provider.id)) {
+      throw new Error(`Provider '${resolved.provider.id}' circuit is open`);
     }
 
-    throw new Error(
-      `All providers failed for tier '${params.tier}'. Failed providers: ${failedProviders.join(", ")}`,
-    );
+    const trace = this.resolveTrace(params.trace);
+    try {
+      const attempt = await this.executeWithRetries(resolved, params, params.tier, trace);
+      this.markProviderSuccess(resolved.provider.id);
+
+      return {
+        ...attempt.result,
+        metadata: {
+          ...attempt.result.metadata,
+          retries: attempt.retries,
+          failedProviders: [],
+        },
+      };
+    } catch (error) {
+      if (!(error instanceof ProviderAttemptError)) {
+        throw error;
+      }
+
+      this.markProviderFailure(resolved.provider.id);
+      throw this.unwrapError(error.originalError);
+    }
   }
 
   async chatDirect(params: UnifiedChatDirectParams): Promise<UnifiedInferenceResult> {
