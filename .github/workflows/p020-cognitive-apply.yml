@@ -19,29 +19,23 @@ jobs:
           ref: abos/p020-cognitive-fabric
           fetch-depth: 0
 
-      - name: Apply P-020 source changes
-        shell: bash
-        run: |
-          python3 scripts/p020-apply.py
-          python3 scripts/p020-reconcile-test.py
+      - name: Apply P-020 adversarial fix
+        run: python3 scripts/p020-adversarial-fix.py
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Install and validate focused cognitive fabric
+      - name: Validate tool protocol fix
         shell: bash
         run: |
           corepack enable
           pnpm install --frozen-lockfile
-          pnpm exec vitest run \
-            src/__tests__/memory/knowledge-store.test.ts \
-            src/__tests__/memory/enhanced-retriever.test.ts \
-            src/__tests__/memory/context-manager.test.ts
+          pnpm exec vitest run src/__tests__/memory/context-manager.test.ts
           pnpm run typecheck
           pnpm run build
 
-      - name: Commit source changes
+      - name: Commit source fix
         shell: bash
         run: |
           if git diff --quiet; then
@@ -50,6 +44,6 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src
-          git commit -m "P-020: activate cognitive fabric in agent runtime"
+          git add src/memory/context-manager.ts src/__tests__/memory/context-manager.test.ts
+          git commit -m "P-020: preserve tool-only turn protocol"
           git push origin HEAD:abos/p020-cognitive-fabric
