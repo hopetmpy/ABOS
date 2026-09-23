@@ -1,0 +1,138 @@
+name: P016 GUI Launch Recovery
+
+on:
+  push:
+    branches:
+      - abos/p016-computer-browser-gui-hands
+    paths:
+      - .github/workflows/p016-gui-launch-recovery.yml
+
+permissions:
+  contents: write
+
+jobs:
+  register-fix-and-linux-validate:
+    runs-on: ubuntu-24.04
+    outputs:
+      source_sha: ${{ steps.commit.outputs.source_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: abos/p016-computer-browser-gui-hands
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+      - uses: pnpm/action-setup@v4
+
+      - name: Register Windows material failure before source correction
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          p = Path('ProjectOps/continuity/C0012.md')
+          text = p.read_text().rstrip() + '\n\n'
+          text += f'''## GUI_ACCESSIBILITY — Windows material failure discriminated\n\nState: EN_EJECUCIÓN / SOURCE_PARTIAL / MATERIAL_FAIL_RECOVERABLE / DECISION_READY\n\nCheckpoint-Head: `{os.environ['GITHUB_SHA']}`\n\nEvidence:\n- source correction SHA `7de8cef519baac7c68c9c9861d84ad28a5791ccb` passed Linux typecheck/build/P-016 regressions/security/ProjectOps in workflow `35803151173`;\n- the Windows material job checked out that exact SHA and passed install/typecheck/build plus 202 non-GUI assertions, but the real GUI E2E failed before GUI provider execution;\n- diagnostic workflow `35803423245` independently proved `UserInteractive=True`, session 2, `UIAutomation RootElement=True`, virtual screen `1024x768` and `CopyFromScreen=true`;\n- the same run showed `LocalGuiRuntime.probe()` returned `Windows GUI provider launch failed: spawnSync powershell.exe ENAMETOOLONG`;\n- root cause: the full provider script was transported as a Windows `-EncodedCommand`, exceeding the process command-line limit. This falsifies `GUI_PRIMITIVES_UNAVAILABLE` and confirms `PROVIDER_TRANSPORT_TOO_LARGE`.\n\nDecision:\n- `NO_CHANGE`: FALSADA.\n- `REDUCE_PROVIDER_CAPABILITY_TO_FIT_COMMAND_LINE`: REJECTED; would create an arbitrary capability limit.\n- `WRITE_EPHEMERAL_PROVIDER_SCRIPT_AND_PASS_PROTOCOL_ON_STDIN`: CONFIRMADA / DECISION_READY. The provider semantics stay unchanged; only the transport changes. The script must use a random OS temp directory, exclusive create, cleanup in `finally`, and must not place protocol data on the command line.\n'''
+          p.write_text(text)
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ProjectOps/continuity/C0012.md
+          git commit -m 'docs(p016): record Windows GUI launch failure'
+          git push origin HEAD:abos/p016-computer-browser-gui-hands
+
+      - name: Correct provider launch transport
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/gui/local-runtime.ts')
+          text = p.read_text()
+          old_import = 'import fs from "node:fs";\nimport path from "node:path";'
+          new_import = 'import fs from "node:fs";\nimport os from "node:os";\nimport path from "node:path";'
+          if old_import not in text:
+              raise SystemExit('expected import block not found')
+          text = text.replace(old_import, new_import, 1)
+          encoded = 'const WINDOWS_GUI_PROVIDER_ENCODED = Buffer.from(WINDOWS_GUI_PROVIDER, "utf16le").toString("base64");\n\n'
+          if encoded not in text:
+              raise SystemExit('encoded provider constant not found')
+          text = text.replace(encoded, '', 1)
+          old = '''  private runWindows(protocol: Record<string, unknown>, timeoutMs = GUI_PROVIDER_TIMEOUT_MS): WindowsProviderResult {
+    if (process.platform !== "win32") throw new Error(`Local GUI provider is unavailable on platform ${process.platform}`);
+    const result = spawnSync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", WINDOWS_GUI_PROVIDER_ENCODED], {
+      input: JSON.stringify(protocol), encoding: "utf8", windowsHide: true, timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024,
+    });
+    if (result.error) throw new Error(`Windows GUI provider launch failed: ${result.error.message}`);
+    if (typeof result.status === "number" && result.status !== 0) throw new Error(`Windows GUI provider exited ${result.status}: ${result.stderr || "no stderr"}`);
+    return parseProviderJson(result.stdout || "");
+  }'''
+          new = '''  private runWindows(protocol: Record<string, unknown>, timeoutMs = GUI_PROVIDER_TIMEOUT_MS): WindowsProviderResult {
+    if (process.platform !== "win32") throw new Error(`Local GUI provider is unavailable on platform ${process.platform}`);
+    const invocationDir = fs.mkdtempSync(path.join(os.tmpdir(), "abos-gui-provider-"));
+    const scriptPath = path.join(invocationDir, "provider.ps1");
+    fs.writeFileSync(scriptPath, WINDOWS_GUI_PROVIDER, { encoding: "utf8", flag: "wx", mode: 0o600 });
+    try {
+      const result = spawnSync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath], {
+        input: JSON.stringify(protocol), encoding: "utf8", windowsHide: true, timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024,
+      });
+      if (result.error) throw new Error(`Windows GUI provider launch failed: ${result.error.message}`);
+      if (typeof result.status === "number" && result.status !== 0) throw new Error(`Windows GUI provider exited ${result.status}: ${result.stderr || "no stderr"}`);
+      return parseProviderJson(result.stdout || "");
+    } finally {
+      fs.rmSync(invocationDir, { recursive: true, force: true });
+    }
+  }'''
+          if old not in text:
+              raise SystemExit('runWindows block not found')
+          p.write_text(text.replace(old, new, 1))
+          PY
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm run build
+      - name: Targeted regression and security
+        run: |
+          pnpm exec vitest run src/__tests__/p016-local-gui-runtime.test.ts src/__tests__/p016-local-computer-runtime.test.ts src/__tests__/capability-registry.test.ts
+          pnpm run test:security
+          node scripts/projectops-integrity-verify.mjs
+          git diff --check
+
+      - name: Commit corrected transport
+        id: commit
+        shell: bash
+        run: |
+          git add src/gui/local-runtime.ts
+          git commit -m 'fix(p016): avoid Windows GUI command-line overflow'
+          SOURCE_SHA=$(git rev-parse HEAD)
+          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          git push origin HEAD:abos/p016-computer-browser-gui-hands
+
+  windows-material-validate:
+    needs: register-fix-and-linux-validate
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.register-fix-and-linux-validate.outputs.source_sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+      - uses: pnpm/action-setup@v4
+      - name: Assert exact source SHA
+        shell: pwsh
+        run: |
+          $expected = '${{ needs.register-fix-and-linux-validate.outputs.source_sha }}'
+          $actual = git rev-parse HEAD
+          if ($actual -ne $expected) { throw "expected source head $expected but checked out $actual" }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm run build
+      - name: Real Windows GUI and security regressions
+        shell: pwsh
+        run: pnpm exec vitest run src/__tests__/p016-local-gui-runtime.test.ts src/__tests__/p016-local-computer-runtime.test.ts src/__tests__/tools-security.test.ts src/__tests__/command-injection.test.ts
+      - name: ProjectOps integrity
+        shell: pwsh
+        run: node scripts/projectops-integrity-verify.mjs
