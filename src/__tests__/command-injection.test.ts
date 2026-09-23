@@ -163,7 +163,7 @@ describe("command.forbidden_patterns rule", () => {
   it("exists and has correct metadata", () => {
     expect(forbiddenRule).toBeDefined();
     expect(forbiddenRule.priority).toBe(300);
-    expect(forbiddenRule.appliesTo).toEqual({ by: "name", names: ["exec"] });
+    expect(forbiddenRule.appliesTo).toEqual({ by: "name", names: ["exec", "process_start"] });
   });
 
   // Self-destruction patterns

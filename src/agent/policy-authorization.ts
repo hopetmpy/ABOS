@@ -5,6 +5,7 @@ import { insertPolicyDecision, type PolicyDecisionRow } from "../state/database.
 import { detectChainType, normalizeAddress, verifySignedMessage } from "../identity/chain.js";
 import type { PolicyDecision, PolicyRequest } from "../types.js";
 import { appendEvidenceEvent, currentEvidenceContext } from "../observability/evidence.js";
+import { redactToolArgumentsForPersistence } from "./sensitive-tool-arguments.js";
 
 export type PolicyLifecycleState =
   | "legacy"
@@ -234,7 +235,10 @@ export function persistPolicyDecisionLifecycle(
            required_authority = ?, authorization_json = ?, constitution_result = ?
        WHERE id = ?`,
     ).run(
-      canonicalPolicyJson({ toolName: request.tool.name, args: request.args }),
+      canonicalPolicyJson({
+        toolName: request.tool.name,
+        args: redactToolArgumentsForPersistence(request.tool.name, request.args),
+      }),
       provenanceJson,
       lifecycleState,
       decision.scopeHash,

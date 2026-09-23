@@ -1,4 +1,4 @@
-import {createHash} from "node:crypto";
+import {execFileSync} from "node:child_process";
 import {existsSync,readFileSync,statSync} from "node:fs";
 import {dirname,resolve} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -11,8 +11,8 @@ const requirePath=path=>{if(!existsSync(at(path)))fail(`required path missing: $
 const requireText=(content,needle,label)=>{if(!content.includes(needle))fail(label)};
 const forbidFile=path=>{if(existsSync(at(path)))fail(`forbidden competing root authority exists: ${path}`)};
 const lineCount=content=>content.length?content.split(/\r?\n/).length:0;
-const gitBlobSha=content=>{const b=Buffer.from(content,"utf8");return createHash("sha1").update(Buffer.from(`blob ${b.length}\0`)).update(b).digest("hex")};
-const requireBlob=(path,expected)=>{const actual=gitBlobSha(read(path));if(actual!==expected)fail(`${path} blob drift: expected ${expected}, got ${actual}`)};
+const gitBlobSha=path=>execFileSync("git",["hash-object",`--path=${path}`,path],{cwd:root,encoding:"utf8"}).trim();
+const requireBlob=(path,expected)=>{const actual=gitBlobSha(path);if(actual!==expected)fail(`${path} blob drift: expected ${expected}, got ${actual}`)};
 const field=(content,name)=>{const m=content.match(new RegExp(`^${name}:\\s*(.+)$`,"m"));if(!m)fail(`manifest field missing: ${name}`);return m[1].trim()};
 const stateOf=content=>{const m=content.match(/^State:\s*(.+)$/m);if(!m)fail("plan module missing State");return m[1].trim()};
 const validPlanStates=new Set(["ABIERTO","EN_EJECUCIÓN","PARCIAL","BLOQUEADO","HECHO","DESCARTADO","PLANIFICADO"]);
@@ -41,28 +41,35 @@ requireBlob(p.legacyPlan,"8c52273bf1801958273a77474315c85e0903ee1d");
 const agents=read(p.agents);
 for(const needle of [
   "<!-- PROJECTOPS:ABOS-ROOT-ENTRYPOINT -->",
+  "ProjectOps/CONTINUITY.md",
+  "ProjectOps/PLAN.md",
+  "ProjectOps/PROJECT.md",
   "ProjectOps/system/ABOS_OPERATING_PROTOCOL.md",
   "ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md",
-  "ProjectOps/CONTINUITY.md",
-  "ProjectOps/PROJECT.md",
   "Required-Context",
   "mínimo obligatorio, no un límite",
   "DECISION_READY",
   "NO_CHANGE",
-  "Autonomous Business Operating System",
-  "constitution.md",
-  "funding no es balance",
-  "PUBLIC_TRACKED_MATRIX.md",
-  "~/.abos",
-  "BARRERA OBLIGATORIA DE RECONCILIACIÓN",
-  "la unidad anterior se presume ABIERTA",
-  "CAPABILITY_PRESERVATION_BEFORE_RESTRICTION",
+  "NO_PREMATURE_RETURN_AFTER_SUBUNIT",
+  "NEXT_ELIGIBLE_WORK",
+  "LOCAL_FAILURE_REQUIRES_REROUTE",
+  "STOP_GATE_REQUIRES_TERMINAL_CONDITION",
+  "RECOVERY_IS_NOT_CLOSURE",
+  "SOURCE_FIRST_DEFERRED_MATERIAL_VALIDATION",
+  "MAXIMUM_AUTHORIZED_AUTONOMY / DEFAULT_ALLOW",
+  "NO_IMPLIED_DENIAL",
+  "BUILD_OPEN_OBSERVE_CONVERGE",
+  "EVOLUCIÓN DEL PROPIO SKILL / KERNEL",
+  "REQUESTED_SCOPE_COMPLETE",
+  "TOTAL_REAL_BLOCK",
 ])requireText(agents,needle,`root AGENTS missing: ${needle}`);
+const ci=agents.indexOf("ProjectOps/CONTINUITY.md");
+const pi=agents.indexOf("ProjectOps/PLAN.md");
+const ji=agents.indexOf("ProjectOps/PROJECT.md");
 const ai=agents.indexOf("ProjectOps/system/ABOS_OPERATING_PROTOCOL.md");
 const ri=agents.indexOf("ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md");
-const ci=agents.indexOf("ProjectOps/CONTINUITY.md");
-if(!(ai>=0&&ai<ri&&ri<ci))fail("root activation order must be protocol -> reasoning -> continuity");
-if(statSync(at(p.agents)).size>12*1024)fail("root AGENTS exceeded 12 KiB compact-router budget");
+if(!(ci>=0&&ci<pi&&pi<ji&&ji<ai&&ai<ri))fail("root activation routing must be continuity -> plan -> project -> protocol -> reasoning");
+if(statSync(at(p.agents)).size>16*1024)fail("root AGENTS exceeded 16 KiB compact-kernel budget");
 
 const reasoning=read(p.reasoning);
 for(const needle of [

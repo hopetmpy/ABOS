@@ -4,7 +4,7 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 Active-Plan: P-016
 Active-Segment: continuity/C0012.md
-Active-Intervention: P016_COMPUTER_BROWSER_GUI_HANDS — AUDIT_OPEN / SOURCE_UNMODIFIED
+Active-Intervention: P016_COMPUTER_BROWSER_GUI_HANDS — EN_EJECUCIÓN / TECHNICAL_OBJECTIVE_SATISFIED / E3_BRANCH_GREEN / MAIN_INTEGRATION_PENDING
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -13,8 +13,8 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p016-computer-browser-gui-hands
 Host-Head-At-Audit-Open: fe845184fce48c65032f8521ecd0bdfa42e04b77
-Last-Reconciled-Host-Head: 6e620ffcdddbe630ace58be67d5abb0826ed19b9
-Last-Reconciled-Head-Semantics: P015_HECHO_P016_AUDIT_OPEN_SOURCE_UNMODIFIED
+Last-Reconciled-Host-Head: 28c449fc98d63f4b5a9450db3d399f2d60302c77
+Last-Reconciled-Head-Semantics: P016_TECHNICAL_OBJECTIVE_SATISFIED_E3_BRANCH_GREEN_MAIN_INTEGRATION_PENDING
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -425,3 +425,28 @@ P016-Canonical-Baseline: 6e620ffcdddbe630ace58be67d5abb0826ed19b9
 P016-Baseline-CI: 35423685890 SUCCESS
 P016-Baseline-ProjectOps: 35423685860 SUCCESS
 P016-Activation-State: AUDIT_OPEN / SOURCE_UNMODIFIED
+
+P016-Canonical-Baseline: d5f752e2223fc312296ba2b6d93899a195f4f1d9
+P016-Baseline-CI: 35424357812 SUCCESS
+P016-Baseline-ProjectOps: 35424357798 SUCCESS
+P016-Reconciled-Branch-Head: b8b91acf5c4445b5bc3c7627387281f0415fcb48
+P016-Reconciled-Branch-CI: 35424486214 SUCCESS
+P016-Reconciled-Branch-ProjectOps: 35424486211 SUCCESS
+P016-Decision-State: DECISION_READY
+P016-Decision: REUSE_EXISTING_HANDS / EXTEND_EXISTING_AUTHORITIES / UNIFY_URL_TRUST / STRUCTURED_BROWSER_FIRST / NO_PARALLEL_COMPUTER_CONTROL_PLANE
+P016-First-Unit: STRUCTURED_BROWSER_LOCAL
+P016-Source-Modified-At-Decision: NO
+- P016 structured-browser apply workflow `35425530526`: source implemented; apply validation PASS; real-host smoke `PASS:browserVersion=152.0.7977.82;target=path:google-chrome;snapshot=aria;semanticActions=fill+click;upload=verified;downloadBytes=18`; ordinary exact-head CI/ProjectOps pending.
+P016-Structured-Browser-Hardening-Source: d5f31143f6adf53a80bb371dd15629b7d1261a6a
+P016-Structured-Browser-Hardening-Validation: 35645168132 SUCCESS
+P016-Structured-Browser-Final-Clean-Head: 92faa53302ede575e6b5c4a8f148ee6ba57b6cd5
+P016-Structured-Browser-Final-CI: 35645511597 SUCCESS / 8_OF_8
+P016-Structured-Browser-Final-ProjectOps: 35645511601 SUCCESS
+P016-Structured-Browser-Unit-State: INTEGRATION_VERIFIED / E3_BRANCH_GREEN
+P016-Active-Unit: LOCAL_COMPUTER_COMPLETION
+P016-Active-Unit-State: AUDIT_OPEN / SOURCE_UNMODIFIED
+P016-Local-Computer-Baseline-Head: 7febcc921d7abed3f826ff8320f45fd8bbcd267d
+P016-Local-Computer-Baseline-CI: 35646198066 SUCCESS / 8_OF_8
+P016-Local-Computer-Baseline-ProjectOps: 35646198284 SUCCESS
+P016-Local-Computer-State: DECISION_READY / SOURCE_UNMODIFIED
+P016-Local-Computer-Decision: REFACTOR_LOCAL_EXEC_INTO_SHARED_LOCAL_COMPUTER_RUNTIME / EXTEND_EXISTING_TOOL_SURFACE / KEEP_ENVIRONMENT_TASK_LIFECYCLE_SEPARATE / REDACT_ENV_PERSISTENCE / EVIDENCE_BACK_LOCAL_PROCESS_CAPABILITY

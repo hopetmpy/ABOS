@@ -16,6 +16,7 @@ import {
   currentEvidenceContext,
 } from "../observability/evidence.js";
 import { createLogger } from "../observability/logger.js";
+import { trustedHttpUrl } from "../network/url-trust.js";
 
 const logger = createLogger("mcp-runtime");
 const CLIENT_INFO = { name: "abos-mcp-client", version: "0.3.0" } as const;
@@ -95,7 +96,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-const MCP_LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 const MCP_TOKEN_ENV_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const MCP_HTTP_SECRET_KEYS = new Set([
   "token",
@@ -112,32 +112,30 @@ function mcpTransport(entry: InstalledTool): string {
     : "stdio";
 }
 
+
 function trustedMcpHttpUrl(rawUrl: unknown): string | { error: string } {
   if (typeof rawUrl !== "string" || !rawUrl.trim()) {
     return { error: "streamable-http url is not configured" };
   }
 
-  let parsed: URL;
   try {
-    parsed = new URL(rawUrl.trim());
-  } catch {
+    return trustedHttpUrl(rawUrl.trim(), {
+      allowHttpOnLoopback: true,
+      rejectEmbeddedCredentials: true,
+      stripHash: true,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("must not embed credentials")) {
+      return { error: "streamable-http url must not embed credentials" };
+    }
+    if (message.includes("HTTPS required")) {
+      return {
+        error: "HTTPS is required for remote MCP endpoints; HTTP is allowed only on loopback",
+      };
+    }
     return { error: "streamable-http url is invalid" };
   }
-
-  if (parsed.username || parsed.password) {
-    return { error: "streamable-http url must not embed credentials" };
-  }
-
-  const protocol = parsed.protocol.toLowerCase();
-  const host = parsed.hostname.toLowerCase();
-  if (protocol !== "https:" && !(protocol === "http:" && MCP_LOOPBACK_HOSTS.has(host))) {
-    return {
-      error: "HTTPS is required for remote MCP endpoints; HTTP is allowed only on loopback",
-    };
-  }
-
-  parsed.hash = "";
-  return parsed.toString();
 }
 
 export function validateMcpHttpConfig(
