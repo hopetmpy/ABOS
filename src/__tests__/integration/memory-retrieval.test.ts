@@ -4,7 +4,6 @@ import { createInMemoryDb } from "../orchestration/test-db.js";
 import {
   EnhancedRetriever,
   enhanceQuery,
-  recordRetrievalFeedback,
   calculateMemoryBudget,
   type ScoredMemoryRetrievalResult,
 } from "../../memory/enhanced-retriever.js";
@@ -282,8 +281,9 @@ describe("integration/memory-retrieval", () => {
 
       const retrievedIds = result.entries.map((e) => e.entry.id as string);
 
-      // Record zero-match feedback
-      recordRetrievalFeedback({
+      // Record zero-match feedback on the same retriever instance so the
+      // precision signal cannot leak across agents/databases.
+      retriever.recordRetrievalFeedback({
         turnId: "turn-miss",
         retrieved: retrievedIds,
         matched: [],
