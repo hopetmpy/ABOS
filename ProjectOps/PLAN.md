@@ -29,8 +29,8 @@ Master-Transformation-Plan: P-007
 | P-017 | Implementar discovery, acquisition, composition y construction de capacidades | HECHO | PR #51 integrado; `main c5c5ae856923ba74c943cc26beca26ea38de0dcc` revalidado por CI `35904429871` + ProjectOps `35904429875` SUCCESS | plan/P-017.md |
 | P-018 | Reconciliar Environment y Resource Fabric provider-neutral | HECHO | PR #52 integrado; `main 9bf05ce5be0e5497a56b28f1584678c1f15b3994` revalidado por CI `35908965085` + ProjectOps `35908964855` SUCCESS | plan/P-018.md |
 | P-019 | Mantener model/connection fabric abierto y añadir adaptive inference | HECHO | PR #53 integrado; `main 3e8c0eb31652175b0f3b22ff0296d52c16e758f1` revalidado por CI `35918621864` + ProjectOps `35918621868` SUCCESS | plan/P-019.md |
-| P-020 | Unificar Cognitive Fabric: memory, context, knowledge y activation | EN_EJECUCIÓN | P-008 + P-013 + P-019 HECHO; activado desde main `3e8c0eb3...` E3 green | plan/P-020.md |
-| P-021 | Construir Skill Evolution Engine sobre experiencia verificable | PLANIFICADO | P-014 + P-020 + P-013 | plan/P-021.md |
+| P-020 | Unificar Cognitive Fabric: memory, context, knowledge y activation | HECHO | PR #54 integrado; `main c07a1eb10c34792e2490c51196063fbac15df91c` revalidado por CI `35929847027` + ProjectOps `35929847097` SUCCESS | plan/P-020.md |
+| P-021 | Construir Skill Evolution Engine sobre experiencia verificable | EN_EJECUCIÓN | P-014 + P-020 + P-013 HECHO; activado desde `main c07a1eb1...` E3 green | plan/P-021.md |
 | P-022 | Implementar World Model, beliefs e hipótesis falsables | PLANIFICADO | P-020 + P-021 + P-013 | plan/P-022.md |
 | P-023 | Cerrar loop Prediction → Outcome → Error → Learning | PLANIFICADO | P-013 + P-020 + P-022 | plan/P-023.md |
 | P-024 | Crear Simulation, Counterfactual y Experiment Workspace | PLANIFICADO | P-022 + P-023 + P-014 + P-018 | plan/P-024.md |
@@ -52,8 +52,8 @@ Master-Transformation-Plan: P-007
 - `ProjectOps/CONTINUITY.md` posee exclusivamente `Active-Plan`, `Active-Segment` y la intervención viva.
 - Este manifest posee IDs, estados, dependencias/condiciones, campaña y rutas de módulos.
 - Cada módulo posee objetivo, semántica, `Required-Context`, interrogación, validation y Definition of Done.
-- `plan/LEGACY_FULL_PLAN.md` es historia preservada; no es autoridad viva.
-- Los IDs no se reutilizan ni se renumeran para “ordenar” la campaña.
+- `plan/LEGACY_FULL_PLAN.md` es historia preservada; no es authority viva.
+- Los IDs no se reutilizan ni se renumeran para ordenar la campaña.
 - Un estado HECHO acredita únicamente el objetivo exacto de su módulo.
 - Un PR/branch/source escrito no equivale a integración en `main`.
 - El grafo de dependencias gobierna más que el número. P-004/P-005 son tracks transversales/finales aunque tengan IDs antiguos.
@@ -79,7 +79,7 @@ Cada bloque puede poseer componentes especializados, pero debe conservar una aut
 1. **P-006 — HECHO**: security-audit restaurado sin debilitar gate e integrado en `main` por PR #32.
 2. **P-003 — HECHO**: child capital semantics reconciliadas por PR #33, integradas y revalidadas en `main`.
 
-La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth, P-009 Authority/Provenance, P-010 Policy/Authorization, P-011 Lifecycle/Recovery, P-012 transactional self-modification y P-013 observability/evidence están HECHO con evidencia E3 exacta. PR #42 cerró canónicamente P-013 en `main 21911888b8271662f1b546bc637f49d76610c132`; P-014..P-019 también están integradas y revalidadas; la intervención activa es P-020 Cognitive Fabric.
+La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth, P-009 Authority/Provenance, P-010 Policy/Authorization, P-011 Lifecycle/Recovery, P-012 transactional self-modification y P-013 observability/evidence están HECHO con evidencia E3 exacta. PR #42 cerró canónicamente P-013 en `main 21911888b8271662f1b546bc637f49d76610c132`; P-014..P-020 también están integradas y revalidadas; la intervención activa es P-021 Skill Evolution Engine.
 
 ### Ola 1 — verdad, autoridad y recovery
 
