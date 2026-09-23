@@ -28,8 +28,8 @@ Master-Transformation-Plan: P-007
 | P-016 | Dar a ABOS manos de computadora, browser y GUI mediante providers reales | HECHO | PR #48 integrado; `main 08b7a5cce8f18c57c52e6a2f43048b6f1c214e50` revalidado por CI `35809162263` + ProjectOps `35809162403` SUCCESS; GUI material Windows E2E validado sin promover E3/E4 a E5 | plan/P-016.md |
 | P-017 | Implementar discovery, acquisition, composition y construction de capacidades | HECHO | PR #51 integrado; `main c5c5ae856923ba74c943cc26beca26ea38de0dcc` revalidado por CI `35904429871` + ProjectOps `35904429875` SUCCESS | plan/P-017.md |
 | P-018 | Reconciliar Environment y Resource Fabric provider-neutral | HECHO | PR #52 integrado; `main 9bf05ce5be0e5497a56b28f1584678c1f15b3994` revalidado por CI `35908965085` + ProjectOps `35908964855` SUCCESS | plan/P-018.md |
-| P-019 | Mantener model/connection fabric abierto y añadir adaptive inference | EN_EJECUCIÓN | P-008 + P-009 + P-010 + P-013 HECHO; activado tras P-018 main E3 green | plan/P-019.md |
-| P-020 | Unificar Cognitive Fabric: memory, context, knowledge y activation | PLANIFICADO | P-008 + P-013 + P-019 | plan/P-020.md |
+| P-019 | Mantener model/connection fabric abierto y añadir adaptive inference | HECHO | PR #53 integrado; `main 3e8c0eb31652175b0f3b22ff0296d52c16e758f1` revalidado por CI `35918621864` + ProjectOps `35918621868` SUCCESS | plan/P-019.md |
+| P-020 | Unificar Cognitive Fabric: memory, context, knowledge y activation | EN_EJECUCIÓN | P-008 + P-013 + P-019 HECHO; activado desde main `3e8c0eb3...` E3 green | plan/P-020.md |
 | P-021 | Construir Skill Evolution Engine sobre experiencia verificable | PLANIFICADO | P-014 + P-020 + P-013 | plan/P-021.md |
 | P-022 | Implementar World Model, beliefs e hipótesis falsables | PLANIFICADO | P-020 + P-021 + P-013 | plan/P-022.md |
 | P-023 | Cerrar loop Prediction → Outcome → Error → Learning | PLANIFICADO | P-013 + P-020 + P-022 | plan/P-023.md |
@@ -60,7 +60,7 @@ Master-Transformation-Plan: P-007
 
 ## 2. Objetivo global de esta campaña
 
-Dejar ABOS **code-complete e integrado** como Autonomous Business Operating System amplio y extensible: todo lo que diga saber, recordar, decidir, adquirir, ejecutar, modificar, delegar o administrar debe corresponder a una autoridad real, una capacidad funcional y evidencia proporcional al claim.
+Dejar ABOS **code-complete e integrado** como Autonomous Business Operating System amplio y extensible: todo lo que diga saber, recordar, decidir, adquirir, ejecutar, modificar, delegar o administrar debe corresponder a una authority real, una capacidad funcional y evidencia proporcional al claim.
 
 La campaña no promete que toda frontera externa sea LIVE verificable sin cuentas, credenciales, dinero, hardware o autorización. Sí exige que esa frontera quede preparada en source/integration y clasificada como `LIVE_VERIFIED` o `LIVE_BLOCKED_EXTERNAL` de forma concreta.
 
@@ -70,7 +70,7 @@ Una sola mente, no subsistemas que compiten:
 
 **OBJECTIVE → CONTEXT ACTIVATION → WORLD MODEL/BELIEFS → ALTERNATIVES → PREDICT/SIMULATE → DECIDE/REVIEW → AUTHORITY/POLICY → CAPABILITY → ENVIRONMENT/ACTOR/MODEL → EXECUTE → OBSERVE → EVALUATE → LEARN → MEMORY/SKILL → ECONOMIC ACCOUNTING → NEXT DECISION**
 
-Cada bloque puede poseer componentes especializados, pero debe conservar una autoridad canónica por responsabilidad y correlation/evidence entre bloques.
+Cada bloque puede poseer componentes especializados, pero debe conservar una authority canónica por responsabilidad y correlation/evidence entre bloques.
 
 ## 4. Secuencia por olas
 
@@ -79,7 +79,7 @@ Cada bloque puede poseer componentes especializados, pero debe conservar una aut
 1. **P-006 — HECHO**: security-audit restaurado sin debilitar gate e integrado en `main` por PR #32.
 2. **P-003 — HECHO**: child capital semantics reconciliadas por PR #33, integradas y revalidadas en `main`.
 
-La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth, P-009 Authority/Provenance, P-010 Policy/Authorization, P-011 Lifecycle/Recovery, P-012 transactional self-modification y P-013 observability/evidence están HECHO con evidencia E3 exacta. PR #42 cerró canónicamente P-013 en `main 21911888b8271662f1b546bc637f49d76610c132`; las fases P-014..P-018 también están integradas y revalidadas; la intervención activa es P-019 model/connection/adaptive inference.
+La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth, P-009 Authority/Provenance, P-010 Policy/Authorization, P-011 Lifecycle/Recovery, P-012 transactional self-modification y P-013 observability/evidence están HECHO con evidencia E3 exacta. PR #42 cerró canónicamente P-013 en `main 21911888b8271662f1b546bc637f49d76610c132`; P-014..P-019 también están integradas y revalidadas; la intervención activa es P-020 Cognitive Fabric.
 
 ### Ola 1 — verdad, autoridad y recovery
 
