@@ -1,0 +1,126 @@
+name: P016 Recovery Register
+
+on:
+  push:
+    branches:
+      - abos/p016-computer-browser-gui-hands
+    paths:
+      - .github/workflows/p016-recovery-register.yml
+
+permissions:
+  contents: write
+
+jobs:
+  register-and-reconcile-projectops-verifier:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: abos/p016-computer-browser-gui-hands
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+
+      - name: Register recovered divergence before technical correction
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+
+          manifest = Path('ProjectOps/CONTINUITY.md')
+          text = manifest.read_text()
+          old = 'Active-Intervention: P016_COMPUTER_BROWSER_GUI_HANDS — EN_EJECUCIÓN / GUI_ACCESSIBILITY / DECISION_READY / SOURCE_UNMODIFIED'
+          new = 'Active-Intervention: P016_COMPUTER_BROWSER_GUI_HANDS — EN_EJECUCIÓN / GUI_ACCESSIBILITY / SOURCE_PARTIAL / CORRECTION_REQUIRED / DECISION_READY'
+          if old not in text:
+              raise SystemExit('expected stale Active-Intervention checkpoint not found')
+          manifest.write_text(text.replace(old, new, 1))
+
+          segment = Path('ProjectOps/continuity/C0012.md')
+          s = segment.read_text().rstrip() + '\n\n'
+          s += f'''## GUI_ACCESSIBILITY — recovered source divergence / correction checkpoint\n\nState: EN_EJECUCIÓN / SOURCE_PARTIAL / CORRECTION_REQUIRED / DECISION_READY / NOT_ACCEPTED\n\nRecovery-Head: `{os.environ['GITHUB_SHA']}`\n\nRealidad recuperada antes de modificar source adicional:\n- el checkpoint documental `SOURCE_UNMODIFIED` quedó stale: commits posteriores ya añadieron `src/gui/local-runtime.ts`, `src/gui/tools.ts` y proyección GUI en `src/environments/local.ts`;\n- **HARD — TOOL_WIRING_MISSING**: las cuatro tools GUI existen pero no están incorporadas al catálogo canónico ejecutable del agent loop;\n- **HARD — CAPTURE_REALPATH_ESCAPE**: `gui_capture` confina lexicalmente pero no reconcilia el directorio materializado por `realpath`, a diferencia del browser local;\n- **HARD — INPUT_OUTCOME_TRUTH**: pointer click usa una API sin resultado verificable y key/modifier cleanup puede dejar input presionado ante fallo parcial;\n- **HARD — INPUT_READINESS_OVERCLAIM**: cargar user32 y leer cursor no demuestra aceptación de low-level input; el probe no debe emitir input y debe conservar `probed` hasta una acción explícita exitosa;\n- **HARD — CAPABILITY_STATE_COLLAPSE**: `CapabilityRegistry.registerEnvironmentSnapshot()` colapsa estados explícitos de primitive bajo environment `available`, perdiendo `probed/unauthorized/unknown`;\n- **HARD — PROJECTOPS_VERIFIER_DRIFT PREEXISTENTE**: el run ProjectOps `35800363605` del HEAD previo `0cf9b9b9...` falló porque `scripts/projectops-integrity-verify.mjs` todavía exige contenido ABOS-specific retirado deliberadamente del root kernel por el commit `0cf9b9b9...`; el mismo verificador también conserva el orden de activación anterior;\n- el intento temporal `35802336982` no creó jobs ni modificó producto y su workflow inválido ya fue retirado; por tanto no aporta PASS técnico.\n\nHipótesis discriminadas:\n- `NO_CHANGE`: FALSADA por wiring, path/input truth y verifier drift demostrados.\n- `REPLACE_GUI_RUNTIME`: REJECTED; la authority/arquitectura decidida sigue siendo válida y corresponde `CORRECT/EXTEND` en sitio.\n- `RESTORE_OLD_ROOT_AGENTS_SEMANTICS_TO_SATISFY_VERIFIER`: REJECTED; Git demuestra que `0cf9b9b9...` retiró deliberadamente ese contenido del root y lo dejó en authorities especializadas.\n- `CORRECT_STALE_VERIFIER_THEN_CORRECT_EXISTING_GUI_RUNTIME`: CONFIRMADA / DECISION_READY.\n\nPlan inmediato:\n1. reconciliar el verificador ProjectOps contra el contrato vigente del root `AGENTS.md`, sin reinyectar semántica retirada;\n2. corregir/wirear el runtime GUI existente;\n3. añadir regresiones negativas y E2E Windows controlado;\n4. ejecutar typecheck/build/tests/security/audit/ProjectOps y validación Windows material disponible;\n5. reauditar y reconciliar P-016 sin fabricar HECHO si queda evidencia material pendiente.\n'''
+          segment.write_text(s)
+          PY
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ProjectOps/CONTINUITY.md ProjectOps/continuity/C0012.md
+          git commit -m 'docs(p016): recover partial GUI intervention state'
+          git push origin HEAD:abos/p016-computer-browser-gui-hands
+
+      - name: Reconcile ProjectOps verifier with current root-kernel contract
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/projectops-integrity-verify.mjs')
+          text = p.read_text()
+          old = '''const agents=read(p.agents);
+          for(const needle of [
+            "<!-- PROJECTOPS:ABOS-ROOT-ENTRYPOINT -->",
+            "ProjectOps/system/ABOS_OPERATING_PROTOCOL.md",
+            "ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md",
+            "ProjectOps/CONTINUITY.md",
+            "ProjectOps/PROJECT.md",
+            "Required-Context",
+            "mínimo obligatorio, no un límite",
+            "DECISION_READY",
+            "NO_CHANGE",
+            "Autonomous Business Operating System",
+            "constitution.md",
+            "funding no es balance",
+            "PUBLIC_TRACKED_MATRIX.md",
+            "~/.abos",
+            "BARRERA OBLIGATORIA DE RECONCILIACIÓN",
+            "la unidad anterior se presume ABIERTA",
+            "CAPABILITY_PRESERVATION_BEFORE_RESTRICTION",
+          ])requireText(agents,needle,`root AGENTS missing: ${needle}`);
+          const ai=agents.indexOf("ProjectOps/system/ABOS_OPERATING_PROTOCOL.md");
+          const ri=agents.indexOf("ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md");
+          const ci=agents.indexOf("ProjectOps/CONTINUITY.md");
+          if(!(ai>=0&&ai<ri&&ri<ci))fail("root activation order must be protocol -> reasoning -> continuity");
+          if(statSync(at(p.agents)).size>12*1024)fail("root AGENTS exceeded 12 KiB compact-router budget");'''.replace('          ','')
+          new = '''const agents=read(p.agents);
+          for(const needle of [
+            "<!-- PROJECTOPS:ABOS-ROOT-ENTRYPOINT -->",
+            "ProjectOps/CONTINUITY.md",
+            "ProjectOps/PLAN.md",
+            "ProjectOps/PROJECT.md",
+            "ProjectOps/system/ABOS_OPERATING_PROTOCOL.md",
+            "ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md",
+            "Required-Context",
+            "mínimo obligatorio, no un límite",
+            "DECISION_READY",
+            "NO_CHANGE",
+            "NO_PREMATURE_RETURN_AFTER_SUBUNIT",
+            "NEXT_ELIGIBLE_WORK",
+            "LOCAL_FAILURE_REQUIRES_REROUTE",
+            "STOP_GATE_REQUIRES_TERMINAL_CONDITION",
+            "RECOVERY_IS_NOT_CLOSURE",
+            "SOURCE_FIRST_DEFERRED_MATERIAL_VALIDATION",
+            "MAXIMUM_AUTHORIZED_AUTONOMY / DEFAULT_ALLOW",
+            "NO_IMPLIED_DENIAL",
+            "BUILD_OPEN_OBSERVE_CONVERGE",
+            "EVOLUCIÓN DEL PROPIO SKILL / KERNEL",
+            "REQUESTED_SCOPE_COMPLETE",
+            "TOTAL_REAL_BLOCK",
+          ])requireText(agents,needle,`root AGENTS missing: ${needle}`);
+          const ci=agents.indexOf("ProjectOps/CONTINUITY.md");
+          const pi=agents.indexOf("ProjectOps/PLAN.md");
+          const ji=agents.indexOf("ProjectOps/PROJECT.md");
+          const ai=agents.indexOf("ProjectOps/system/ABOS_OPERATING_PROTOCOL.md");
+          const ri=agents.indexOf("ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md");
+          if(!(ci>=0&&ci<pi&&pi<ji&&ji<ai&&ai<ri))fail("root activation routing must be continuity -> plan -> project -> protocol -> reasoning");
+          if(statSync(at(p.agents)).size>16*1024)fail("root AGENTS exceeded 16 KiB compact-kernel budget");'''.replace('          ','')
+          if old not in text:
+              raise SystemExit('stale root AGENTS verifier block not found')
+          p.write_text(text.replace(old, new, 1))
+          PY
+
+          node scripts/projectops-integrity-verify.mjs
+          git diff --check
+          git add scripts/projectops-integrity-verify.mjs
+          git commit -m 'fix(projectops): reconcile root kernel verifier'
+          git push origin HEAD:abos/p016-computer-browser-gui-hands
