@@ -9,6 +9,8 @@ import {
   appendEvidenceEvent,
   correlationIdFor,
 } from "../observability/evidence.js";
+import { UnifiedInferenceClient } from "./inference-client.js";
+import { ProviderRegistry } from "./provider-registry.js";
 import type { InferenceRouter } from "./router.js";
 import type {
   OrchestrationInferenceClient,
@@ -30,90 +32,100 @@ export interface RouterBackedOrchestrationInferenceOptions {
 /**
  * Compatibility surface for planner/worker inference backed by the same
  * ModelRegistry + InferenceRouter + runtime connection authority as main turns.
- * It deliberately has no provider registry or cross-provider failover policy.
+ *
+ * Extending UnifiedInferenceClient is intentionally only a type/runtime
+ * compatibility bridge for older planner/orchestrator constructors. The empty
+ * legacy ProviderRegistry passed to super is never consulted by this override;
+ * provider/model authority remains exclusively in InferenceRouter.
  */
 export class RouterBackedOrchestrationInferenceClient
+  extends UnifiedInferenceClient
   implements OrchestrationInferenceClient {
   constructor(
-    private readonly options: RouterBackedOrchestrationInferenceOptions,
-  ) {}
+    private readonly canonical: RouterBackedOrchestrationInferenceOptions,
+  ) {
+    super(new ProviderRegistry([]));
+  }
 
-  async chat(
-    params: OrchestrationInferenceRequest,
-  ): Promise<OrchestrationInferenceResult> {
-    const connectionProvider = this.options.getConnectionProvider();
+  override bindEvidenceDatabase(_db: BetterSqlite3.Database): void {
+    // Canonical InferenceRouter was constructed with its durable DB already.
+  }
+
+  override async chat(params: any): Promise<any> {
+    const request = params as OrchestrationInferenceRequest;
+    const connectionProvider = this.canonical.getConnectionProvider();
     if (!connectionProvider) {
       throw new Error(
         "Orchestration inference has no explicit active connection provider. Reconfigure an AI connection before planning or worker inference.",
       );
     }
 
-    const turnId = params.trace?.turnId || ulid();
+    const turnId = request.trace?.turnId || ulid();
     const correlationId =
-      params.trace?.correlationId || correlationIdFor("turn", turnId);
-    const taskType = normalizeTaskType(params.trace?.taskType);
-    const tier = mapTier(params.tier);
-    const tools = params.toolChoice === "none"
+      request.trace?.correlationId || correlationIdFor("turn", turnId);
+    const taskType = normalizeTaskType(request.trace?.taskType);
+    const tier = mapTier(request.tier);
+    const tools = request.toolChoice === "none"
       ? []
-      : params.tools;
+      : request.tools;
 
-    appendEvidenceEvent(this.options.db, {
+    appendEvidenceEvent(this.canonical.db, {
       correlationId,
-      causationId: params.trace?.causationId ?? null,
+      causationId: request.trace?.causationId ?? null,
       eventType: "inference.orchestration_route_requested",
       domain: "inference",
       authorityType: "inference_route",
       authorityId: turnId,
-      goalId: params.trace?.goalId ?? null,
-      taskId: params.trace?.taskId ?? null,
+      goalId: request.trace?.goalId ?? null,
+      taskId: request.trace?.taskId ?? null,
       turnId,
       epistemicStatus: "observation",
       payload: {
-        requestedTier: params.tier,
+        requestedTier: request.tier,
         mappedSurvivalTier: tier,
         taskType,
         connectionProvider,
-        responseFormat: params.responseFormat?.type ?? null,
-        toolChoice: typeof params.toolChoice === "string"
-          ? params.toolChoice
-          : params.toolChoice
+        responseFormat: request.responseFormat?.type ?? null,
+        toolChoice: typeof request.toolChoice === "string"
+          ? request.toolChoice
+          : request.toolChoice
             ? "named"
             : "auto",
       },
       provenance: { source: "RouterBackedOrchestrationInferenceClient" },
     });
 
-    const result = await this.options.router.route(
+    const result = await this.canonical.router.route(
       {
-        messages: params.messages,
+        messages: request.messages,
         taskType,
         connectionProvider,
         tier,
         sessionId:
-          params.trace?.sessionId ||
-          this.options.getSessionId?.() ||
+          request.trace?.sessionId ||
+          this.canonical.getSessionId?.() ||
           "orchestration",
         turnId,
-        maxTokens: params.maxTokens,
+        maxTokens: request.maxTokens,
         tools,
-        dailyBudgetCents: this.options.getDailyBudgetCents?.(),
+        dailyBudgetCents: this.canonical.getDailyBudgetCents?.(),
       },
       (messages, routeOptions) =>
-        this.options.runtime.chat(messages, {
+        this.canonical.runtime.chat(messages, {
           model: routeOptions.model,
           connectionProvider: routeOptions.connectionProvider,
           maxTokens: routeOptions.maxTokens,
-          temperature: params.temperature,
+          temperature: request.temperature,
           tools: routeOptions.tools,
           signal: routeOptions.signal,
         }),
     );
 
-    if (params.responseFormat?.type === "json_object") {
+    if (request.responseFormat?.type === "json_object") {
       assertJsonObject(result.content);
     }
     if (
-      params.toolChoice === "required" &&
+      request.toolChoice === "required" &&
       (!Array.isArray(result.toolCalls) || result.toolCalls.length === 0)
     ) {
       throw new Error(
@@ -121,7 +133,7 @@ export class RouterBackedOrchestrationInferenceClient
       );
     }
 
-    return {
+    const response: OrchestrationInferenceResult = {
       content: result.content,
       toolCalls: result.toolCalls as OrchestrationInferenceResult["toolCalls"],
       usage: {
@@ -135,12 +147,13 @@ export class RouterBackedOrchestrationInferenceClient
       metadata: {
         providerId: result.provider,
         modelId: result.model,
-        tier: params.tier,
+        tier: request.tier,
         latencyMs: result.latencyMs,
         retries: 0,
         failedProviders: [],
       },
     };
+    return response;
   }
 }
 
