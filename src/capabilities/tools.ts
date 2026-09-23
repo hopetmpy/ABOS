@@ -6,6 +6,10 @@ import { capabilityStateOf, type CapabilityRequest, type CapabilityResolution } 
 import { CapabilityAcquisitionCoordinator } from "./acquisition.js";
 import { createCapabilityAcquisitionEvidenceSink } from "./acquisition-evidence.js";
 import { createMcpFunctionalProbeRoute } from "./routes/mcp-functional-probe.js";
+import {
+  createP012ConstructionRoute,
+  type P012ConstructionPlan,
+} from "./routes/p012-construction.js";
 
 export const CAPABILITY_TOOL_NAMES = [
   "resolve_capability",
@@ -27,6 +31,54 @@ function stringArray(value: unknown): string[] | undefined {
 function recordObject(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   return value as Record<string, unknown>;
+}
+
+function constructionPlan(value: unknown): P012ConstructionPlan | undefined {
+  const record = recordObject(value);
+  if (!record) return undefined;
+  const description = typeof record.description === "string" ? record.description : "";
+  const edits = Array.isArray(record.edits)
+    ? record.edits
+        .filter((entry): entry is Record<string, unknown> =>
+          Boolean(entry) && typeof entry === "object" && !Array.isArray(entry)
+        )
+        .map((entry) => ({
+          path: typeof entry.path === "string" ? entry.path : "",
+          content: typeof entry.content === "string" ? entry.content : "",
+        }))
+    : [];
+  const rawContract = recordObject(record.contract);
+  const contract = rawContract
+    ? {
+        ...(typeof rawContract.description === "string"
+          ? { description: rawContract.description }
+          : {}),
+        ...(stringArray(rawContract.permissions)
+          ? { permissions: stringArray(rawContract.permissions)! }
+          : {}),
+        ...(stringArray(rawContract.inputs)
+          ? { inputs: stringArray(rawContract.inputs)! }
+          : {}),
+        ...(stringArray(rawContract.outputs)
+          ? { outputs: stringArray(rawContract.outputs)! }
+          : {}),
+        ...(stringArray(rawContract.effects)
+          ? { effects: stringArray(rawContract.effects)! }
+          : {}),
+        ...(stringArray(rawContract.dependencies)
+          ? { dependencies: stringArray(rawContract.dependencies)! }
+          : {}),
+        ...(stringArray(rawContract.compatibility)
+          ? { compatibility: stringArray(rawContract.compatibility)! }
+          : {}),
+      }
+    : undefined;
+
+  return {
+    description,
+    edits,
+    ...(contract ? { contract } : {}),
+  };
 }
 
 function requestFromArgs(args: Record<string, unknown>): CapabilityRequest | null {
@@ -154,9 +206,10 @@ export function createCapabilityTools(
     {
       name: "remediate_capability",
       description:
-        "Execute the P-017 capability-gap lifecycle over evidence-backed acquisition routes, then re-resolve the original contract through the canonical CapabilityRegistry. " +
-        "It never treats install/configuration success as readiness. For a P-015-discovered MCP tool, optional probeArguments are the real intended operation and are executed only by re-entering that tool's own protected Policy boundary. " +
-        "Omit probeArguments to inspect the remediation path without inventing a side-effecting probe.",
+        "Execute the P-017 capability-gap lifecycle over evidence-backed routes, then re-resolve the original contract through the canonical CapabilityRegistry. " +
+        "It never treats install/configuration/build success as readiness. For a P-015-discovered MCP tool, optional probeArguments are the real intended operation and are executed only by re-entering that tool's own protected Policy boundary. " +
+        "When the resolver returns construct, an optional constructionPlan delegates source edits to the dangerous P-012 edit_own_file authority and can advance only to ACQUIRED/probe-pending in the current process. " +
+        "Omit effect arguments/plans to inspect the remediation path without inventing side effects.",
       category: "capability",
       riskLevel: "caution",
       parameters: {
@@ -167,7 +220,39 @@ export function createCapabilityTools(
             type: "object",
             additionalProperties: true,
             description:
-              "Optional exact arguments for a real functional probe/use of an already P-015-discovered MCP candidate. The selected inner tool is evaluated by its own Policy; no synthetic no-op arguments are invented.",
+              "Optional exact arguments for a real functional probe/use of an already P-015-discovered MCP candidate. The selected inner tool is evaluated by its own Policy; no synthetic no-op arguments are invented. Values are redacted from outer durable records.",
+          },
+          constructionPlan: {
+            type: "object",
+            description:
+              "Optional explicit P-012 source construction plan used only when the canonical resolver says construct. Source contents are redacted from outer durable records; the inner edit_own_file call still passes its own dangerous Policy/P-012 gates.",
+            properties: {
+              description: { type: "string" },
+              edits: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    path: { type: "string" },
+                    content: { type: "string" },
+                  },
+                  required: ["path", "content"],
+                },
+              },
+              contract: {
+                type: "object",
+                properties: {
+                  description: { type: "string" },
+                  permissions: { type: "array", items: { type: "string" } },
+                  inputs: { type: "array", items: { type: "string" } },
+                  outputs: { type: "array", items: { type: "string" } },
+                  effects: { type: "array", items: { type: "string" } },
+                  dependencies: { type: "array", items: { type: "string" } },
+                  compatibility: { type: "array", items: { type: "string" } },
+                },
+              },
+            },
+            required: ["description", "edits"],
           },
         },
         required: ["requirement"],
@@ -187,6 +272,7 @@ export function createCapabilityTools(
             createMcpFunctionalProbeRoute({
               probeArguments: recordObject(args.probeArguments),
             }),
+            createP012ConstructionRoute(constructionPlan(args.constructionPlan)),
           ],
           createCapabilityAcquisitionEvidenceSink(ctx.db.raw),
         );
