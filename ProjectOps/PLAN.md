@@ -26,8 +26,8 @@ Master-Transformation-Plan: P-007
 | P-014 | Consolidar Capability Fabric canónico y lifecycle de capacidades | HECHO | PR #44 integrado; `main bf9adfd11617a37698ce7095248c1e1228f0d3cf` revalidado por CI `35417887204` + ProjectOps `35417887215` SUCCESS | plan/P-014.md |
 | P-015 | Sustituir MCP nominal por un runtime MCP real y verificable | HECHO | PR #46 integrado; `main 6e620ffcdddbe630ace58be67d5abb0826ed19b9` revalidado por CI `35423685890` + ProjectOps `35423685860` SUCCESS; OAuth MCP interactivo permanece delegado por ownership a P-019 connection/auth fabric | plan/P-015.md |
 | P-016 | Dar a ABOS manos de computadora, browser y GUI mediante providers reales | HECHO | PR #48 integrado; `main 08b7a5cce8f18c57c52e6a2f43048b6f1c214e50` revalidado por CI `35809162263` + ProjectOps `35809162403` SUCCESS; GUI material Windows E2E validado sin promover E3/E4 a E5 | plan/P-016.md |
-| P-017 | Implementar discovery, acquisition, composition y construction de capacidades | EN_EJECUCIÓN | P-012 + P-014 + P-015 + P-016 + P-013 HECHO; activado tras cierre canónico P-016 | plan/P-017.md |
-| P-018 | Reconciliar Environment y Resource Fabric provider-neutral | PLANIFICADO | P-009 + P-010 + P-011 + P-013 + P-014 | plan/P-018.md |
+| P-017 | Implementar discovery, acquisition, composition y construction de capacidades | HECHO | PR #51 integrado; `main c5c5ae856923ba74c943cc26beca26ea38de0dcc` revalidado por CI `35904429871` + ProjectOps `35904429875` SUCCESS | plan/P-017.md |
+| P-018 | Reconciliar Environment y Resource Fabric provider-neutral | EN_EJECUCIÓN | P-009 + P-010 + P-011 + P-013 + P-014 HECHO; activado tras P-017 main E3 green | plan/P-018.md |
 | P-019 | Mantener model/connection fabric abierto y añadir adaptive inference | PLANIFICADO | P-008 + P-009 + P-010 + P-013 | plan/P-019.md |
 | P-020 | Unificar Cognitive Fabric: memory, context, knowledge y activation | PLANIFICADO | P-008 + P-013 + P-019 | plan/P-020.md |
 | P-021 | Construir Skill Evolution Engine sobre experiencia verificable | PLANIFICADO | P-014 + P-020 + P-013 | plan/P-021.md |
@@ -79,7 +79,7 @@ Cada bloque puede poseer componentes especializados, pero debe conservar una aut
 1. **P-006 — HECHO**: security-audit restaurado sin debilitar gate e integrado en `main` por PR #32.
 2. **P-003 — HECHO**: child capital semantics reconciliadas por PR #33, integradas y revalidadas en `main`.
 
-La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth, P-009 Authority/Provenance, P-010 Policy/Authorization, P-011 Lifecycle/Recovery, P-012 transactional self-modification y P-013 observability/evidence están HECHO con evidencia E3 exacta. PR #42 cerró canónicamente P-013 en `main 21911888b8271662f1b546bc637f49d76610c132`; la intervención activa pasa a P-014 Capability Fabric en AUDIT_OPEN / SOURCE_UNMODIFIED.
+La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth, P-009 Authority/Provenance, P-010 Policy/Authorization, P-011 Lifecycle/Recovery, P-012 transactional self-modification y P-013 observability/evidence están HECHO con evidencia E3 exacta. PR #42 cerró canónicamente P-013 en `main 21911888b8271662f1b546bc637f49d76610c132`; las fases P-014..P-017 también están integradas y revalidadas; la intervención activa es P-018 Environment/Resource Fabric.
 
 ### Ola 1 — verdad, autoridad y recovery
 
@@ -225,11 +225,11 @@ P-004 puede corregir drift puntual antes, pero su cierre final ocurre después d
 
 P-005 es un track incremental: Codex OAuth real, AWS billable, MCP/provider externo, economic/child/resource claims y futuras fronteras que requieran E5/E6. No toda capability local requiere E5: una computer/browser E4 realista puede cerrar integración local. Si falta autorización/credencial/dinero, registrar `LIVE_BLOCKED_EXTERNAL` y continuar source.
 
-## 16. Estado actual — P-015 activo
+## 16. Estado actual — P-018 activo
 
-P-008 a P-014 están HECHO para sus objetivos exactos e integrados/revalidados. P-014 Capability Fabric cerró por PR #44; `main bf9adfd11617a37698ce7095248c1e1228f0d3cf` pasó CI `35417887204` y ProjectOps `35417887215` SUCCESS.
+P-008 a P-017 están HECHO para sus objetivos exactos e integrados/revalidados. P-017 Capability Acquisition cerró por PR #51; `main c5c5ae856923ba74c943cc26beca26ea38de0dcc` pasó CI `35904429871` y ProjectOps `35904429875` SUCCESS.
 
-P-015 queda `EN_EJECUCIÓN / AUDIT_OPEN / SOURCE_UNMODIFIED` en `abos/p015-mcp-runtime`. La primera unidad no está decidida todavía: debe auditar la implementación MCP existente y contrastarla con la especificación/SDK oficial vigente antes de `DECISION_READY`. No se adelantan P-016/P-017/P-018 ni se interpreta source/CI como MCP LIVE.
+P-018 está `EN_EJECUCIÓN / DECISION_READY` en `abos/p018-environment-resource-fabric`. La primera unidad reconcilia Environment selection con la authority de readiness P-014 y evita elevar discovery/auth global a capability execution-ready. Lifecycle, resource store y mobility existentes se reutilizan; no se abre un segundo environment system.
 
 ## 17. Cierre de campaña
 
@@ -237,4 +237,4 @@ P-036 no significa “todo el universo futuro de ABOS está terminado”. Signif
 
 ## 18. Siguiente trabajo recuperable
 
-`P-015 — reconstruir el runtime MCP actual desde source/evidencia, verificar protocolo/SDK oficial vigente, discriminar alternativas y alcanzar DECISION_READY antes de modificar producto.`
+`P-018 — endurecer capability-readiness provider-neutral, reconciliar descriptors/runtime truth de environments y gatear la primera unidad antes de ampliar P-018.`
