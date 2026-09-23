@@ -1,4 +1,12 @@
-import type { EnvironmentOperation, EnvironmentProvider, EnvironmentSnapshot } from "./types.js";
+import {
+  capabilityProvides,
+  isCapabilityVerifiedAvailable,
+} from "../capabilities/model.js";
+import type {
+  EnvironmentOperation,
+  EnvironmentProvider,
+  EnvironmentSnapshot,
+} from "./types.js";
 
 export class EnvironmentRegistry {
   private readonly providers = new Map<string, EnvironmentProvider>();
@@ -99,19 +107,22 @@ export class EnvironmentRegistry {
     return snapshots;
   }
 
+  /**
+   * Execution-oriented lookup over the same P-014 capability contract used by
+   * the selector. Provider discovery text and legacy available=true are not
+   * sufficient to return a route as usable.
+   */
   async findForCapability(requirement: string): Promise<EnvironmentSnapshot[]> {
-    const needle = requirement.trim().toLowerCase();
+    const needle = requirement.trim();
+    if (!needle) return [];
+
     const snapshots = await this.inspectAll();
     return snapshots.filter((snapshot) =>
-      snapshot.availability !== "unavailable" &&
-      snapshot.capabilities.some((capability) => {
-        const text = [
-          capability.id,
-          capability.description,
-          ...capability.requirements,
-        ].join(" ").toLowerCase();
-        return text.includes(needle);
-      }),
+      ["available", "degraded"].includes(snapshot.availability) &&
+      snapshot.capabilities.some((capability) =>
+        isCapabilityVerifiedAvailable(capability) &&
+        capabilityProvides(capability, needle)
+      ),
     );
   }
 }
