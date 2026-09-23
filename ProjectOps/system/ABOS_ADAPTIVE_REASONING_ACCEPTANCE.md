@@ -6,157 +6,61 @@ Does-Not-Schedule: true
 Subject: `AGENTS.md` + `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md`
 Baseline-Protocol: `ProjectOps/system/ABOS_OPERATING_PROTOCOL.md`
 Project: ABOS
-Behavioral-State: RETEST_IN_PROGRESS_AFTER_OBSERVED_OUTPUT_REGRESSION
+Behavioral-State: RETEST_PASS_OBSERVED_2026-09-23
 
 ## 1. Alcance
 
 Esta acceptance valida comportamiento observable del agente bajo el **single operating system** de ABOS. No crea scheduler, gate, workflow, handoff ni authority paralela. `AGENTS.md` sigue siendo la única authority de cadencia.
 
-No se considera PASS por existir documentación. Un comportamiento sólo se acredita cuando fue observado o cuando una prueba ejecutada verifica el contrato exacto.
+Un PASS conductual acredita únicamente lo observado durante la intervención y los contratos ejecutados. No significa que la plataforma/UI nunca pueda interrumpir físicamente una respuesta futura.
 
-## 2. Baseline comparativo verificado
+## 2. Baseline comparativo y defecto encontrado
 
-- ZeroIQ usa `AGENTS.md` como único kernel de ejecución; Operating Protocol y Adaptive Reasoning son referencias non-scheduler.
-- ZeroIQ ejecutó su acceptance conductual y registró 8/8 escenarios aceptados después de encontrar y corregir un defecto real de verifier.
-- ABOS ya había restaurado la misma topología single-kernel, pero su acceptance seguía `BEHAVIORAL_SUITE_NOT_YET_EXECUTED`.
-- El verifier ABOS además exigía literalmente ese estado, por lo que una futura ejecución real de la suite no podía registrarse sin romper ProjectOps Integrity.
-- La identidad/invariantes ABOS están preservadas por `ProjectOps/PROJECT.md` y `constitution.md`; no necesitan duplicarse como scheduler o capa de razonamiento adicional.
+- ZeroIQ usa `AGENTS.md` como único kernel; Operating Protocol y Adaptive Reasoning son referencias non-scheduler.
+- ZeroIQ había ejecutado su acceptance conductual y registrado 8/8 escenarios aceptados tras corregir un defecto real de verifier.
+- ABOS ya había restaurado la misma topología single-kernel, pero su acceptance permanecía `BEHAVIORAL_SUITE_NOT_YET_EXECUTED`.
+- El verifier ABOS exigía literalmente ese estado, por lo que una acceptance ejecutada no podía registrarse sin romper ProjectOps Integrity.
+- El 2026-09-23 el usuario aportó una captura donde una ejecución extensa quedó sin reporte/recovery visible al final de la cadena de tools. Se registró como `FAIL OBSERVADO`, no como fallo supuesto de source.
 
-## 3. Escenarios
+## 3. Corrección
 
-### A — Falso bug por documentación desactualizada
+- `AGENTS.md`: `NO_CHANGE`; ya contenía `NEXT_ELIGIBLE_WORK`, `RECOVERY_IS_NOT_CLOSURE`, `LOCAL_FAILURE_REQUIRES_REROUTE` y `STOP_GATE_REQUIRES_TERMINAL_CONDITION`.
+- `scripts/projectops-integrity-verify.mjs`: corregido para verificar el contrato single-kernel real y dejar de congelar la acceptance en `NOT_YET_EXECUTED`.
+- Operating Protocol y Adaptive Reasoning: alineados al patrón estándar reference-only/non-scheduler, sin importar identidad, thresholds ni dominio de ZeroIQ.
+- `PROJECT.md` y `constitution.md`: conservan identidad, wallet/children/economía, evidence ladder y fronteras propias de ABOS.
+- no se creó scheduler, layer, state machine, workflow permanente ni authority paralela.
 
-PASS esperado:
-- seguir source/Git/tests;
-- identificar drift documental;
-- no modificar runtime únicamente para hacerlo coincidir con narrativa vieja.
+## 4. Retest observado
 
-Estado actual: PENDIENTE_DE_RETEST_CONDUCTUAL.
+| Escenario | Resultado | Evidencia observada |
+|---|---|---|
+| A — source vs documentación stale | PASS | el estado ProjectOps stale fue reconciliado contra Git/source/tests, no al revés |
+| B — Required-Context como piso | PASS | P-019 siguió legacy inference hasta `agent/loop.ts`, workers y Orchestrator |
+| C — failure estratégico vs retry | PASS | el cross-provider se trató como boundary/replan, no como retry cosmético |
+| D — equivalentes antes de crear | PASS | se rechazó otro provider manager y se extendió ModelRegistry/InferenceRouter |
+| E — no silent provider switch | PASS | runtime canónico + compatibility client fail-closed; regresiones exactas verdes |
+| F — UNKNOWN no es imposible | PASS | compatibilidad de conexión sólo excluye `false` conocido; unknown permanece abierto |
+| G — source/CI != LIVE | PASS | P-019 mantiene E5/E6 fuera de claim |
+| H — material diferible | PASS | source independiente continuó sin fabricar provider LIVE |
+| I — single-kernel authority | PASS | ProjectOps Integrity exacto pasó después de la corrección |
+| J — unit done no es handoff | PASS | tras fixes/tests se resolvió siguiente trabajo y se continuó hasta macro reconciliation |
+| K — failure local reroute | PASS | CI rojo P-019 se discriminó en tests stale + bypass real; se corrigió y retesteó |
+| L — recovery/salida visible | PASS OBSERVADO | una ejecución posterior a la corrección entregó checkpoint visible con branch, HEAD, gates, pendientes y siguiente punto |
+| M — identidad ABOS preservada | PASS | rebrand/ProjectOps gates verdes y PROJECT/constitution permanecen authority de identidad |
+| N — acceptance evoluciona | PASS | verifier acepta este estado ejecutado/evidence-only sin adquirir cadence authority |
 
-### B — Dependencia fuera de Required-Context
+## 5. Evidencia exacta del retest
 
-PASS esperado:
-- tratar Required-Context como piso;
-- seguir productores/consumidores/authority material fuera de la lista cuando la evidencia lo exija.
+- verifier correction: `2c09c924549c6307b0c3e68b913f0c33918a2531`;
+- kernel/reference alignment: `cc0b8cebea4326df5ddb9f653d12248c0853b415` + `a0edac7971a4125c870dc34a10258410c3d75231`;
+- acceptance failure registration: `882de06765cde7a2dc96b83aa44c2d851c016307`;
+- unused one-shot workflow removed: `99377ee479265316314d0fa2662ac9b023239d03`;
+- exact ProjectOps on `99377ee4...`: run `35914410210` SUCCESS;
+- exact CI on `99377ee4...`: run `35914410125` SUCCESS;
+- P-019 final branch product head audited before macro reconciliation: `2745589a74b483d5a4accb9797714cbc7a8d44c0`;
+- exact P-019 CI: `35917049846` SUCCESS, including Node 22/24, Windows 22/24, security, public distribution and identity checks;
+- exact P-019 ProjectOps: `35917049861` SUCCESS.
 
-Estado actual: OBSERVADO_EN_P019 — el consumer audit siguió `ProviderRegistry`/`UnifiedInferenceClient` hasta `agent/loop.ts`, workers y Orchestrator antes de decidir migración.
+## 6. Límite del PASS
 
-### C — Failure estratégico disfrazado de retry
-
-PASS esperado:
-- no repetir una ruta equivalente sin cambio material;
-- registrar evidencia y replan cuando cambie la hipótesis.
-
-Estado actual: OBSERVADO_EN_P019 — el provider boundary se trató como semántica de routing, no como retry cosmético.
-
-### D — Implementación parecida bajo otro nombre
-
-PASS esperado:
-- auditar equivalencia;
-- reutilizar/extender/unificar antes de crear otra authority.
-
-Estado actual: OBSERVADO_EN_P019 — se rechazó crear otro adaptive provider manager y se extendió `InferenceRouter`/`ModelRegistry`.
-
-### E — Executor/provider alterno tras fallo
-
-PASS esperado:
-- conservar el fallo real de la ruta seleccionada;
-- no cruzar silenciosamente de provider/executor dentro del mismo acto;
-- una nueva ruta requiere nueva decisión/replan.
-
-Estado actual: IMPLEMENTADO_EN_SOURCE / RETEST_CI_PENDIENTE para compatibility client; runtime canónico ya migrado al router con conexión explícita.
-
-### F — UNKNOWN no se convierte en cero/imposible
-
-PASS esperado:
-- preservar UNKNOWN/UNAVAILABLE/UNAUTHORIZED/PROHIBITED/IMPOSSIBLE como estados distintos.
-
-Estado actual: PENDIENTE_DE_RETEST_CONDUCTUAL.
-
-### G — Source/CI versus LIVE
-
-PASS esperado:
-- source/CI sólo acredita lo ejecutado;
-- provider/OAuth/cloud/economic LIVE requiere evidencia material real.
-
-Estado actual: OBSERVADO — P-019 conserva E5/E6 como no acreditados por CI.
-
-### H — Validación material diferible
-
-PASS esperado:
-- una validación física ausente bloquea únicamente la frontera cuya siguiente decisión depende de ella;
-- source independiente puede continuar con claims limitados.
-
-Estado actual: OBSERVADO en el flujo P-017→P-019.
-
-### I — Single-kernel authority
-
-PASS esperado:
-- `AGENTS.md` posee cadence/chaining/recovery/closure;
-- Protocol/Reasoning/Acceptance no programan ejecución;
-- no reaparecen static closure layer, scheduler contract o authority paralela.
-
-Estado actual: SOURCE_ALIGNED; ProjectOps Integrity debe retestear el HEAD exacto.
-
-### J — Unit done no es handoff
-
-PASS esperado:
-- terminar test/commit/subunidad resuelve `NEXT_ELIGIBLE_WORK` antes de devolver control;
-- un update de progreso no se interpreta como cierre.
-
-Estado actual: PENDIENTE_DE_RETEST_CONDUCTUAL.
-
-### K — Tool failure local no mata la cadena
-
-PASS esperado:
-- fallo/timeout de una tool limita esa ruta;
-- si existe trabajo alternativo elegible, se continúa;
-- no se declara TOTAL_REAL_BLOCK sin capability audit.
-
-Estado actual: PENDIENTE_DE_RETEST_CONDUCTUAL.
-
-### L — Interrupción real deja recovery visible
-
-Caso observado el 2026-09-23: durante una ejecución extensa, la UI mostró una cadena de tool calls y la respuesta terminó sin reporte final/recovery visible. El usuario tuvo que preguntar repetidamente si el agente se había “bugueado”.
-
-Resultado inicial: **FAIL OBSERVADO**.
-
-PASS esperado después de corrección:
-- si la plataforma/sesión permite todavía emitir salida, una interrupción global real produce un checkpoint/reporte visible;
-- branch/HEAD, trabajo completado, validaciones, pendientes y siguiente punto exacto quedan explícitos;
-- no se presenta la interrupción como cierre del macro.
-
-Corrección aplicada:
-- `AGENTS.md`: NO_CHANGE; el contrato ya existía.
-- verifier: dejó de congelar acceptance y exige explícitamente recovery/final-output contract.
-- Operating Protocol y Adaptive Reasoning: alineados al patrón estándar non-scheduler, reduciendo deriva subordinada.
-
-Estado actual: **RETEST_IN_PROGRESS**. No se promueve a PASS hasta observar una salida de cierre/recovery correcta bajo el kernel corregido.
-
-### M — Identidad ABOS no se pierde al estandarizar
-
-PASS esperado:
-- `PROJECT.md`/`constitution.md` mantienen identidad, wallet/children/economía, evidence ladder y fronteras ABOS;
-- el protocolo estándar no importa OOS/IQ/trading/thresholds de ZeroIQ.
-
-Estado actual: SOURCE_ALIGNED; verifier conserva checks de identidad ABOS.
-
-### N — Acceptance puede evolucionar
-
-PASS esperado:
-- ProjectOps Integrity exige que acceptance sea evidence-only;
-- no obliga a permanecer eternamente `NOT_YET_EXECUTED`;
-- el estado puede cambiar cuando exista evidencia real.
-
-Estado actual: CORREGIDO_EN_SOURCE; retest de ProjectOps Integrity pendiente sobre HEAD exacto.
-
-## 4. Criterio de promoción
-
-`Behavioral-State` sólo podrá pasar a `RETEST_PASS` cuando:
-
-1. ProjectOps Integrity pase sobre el HEAD exacto con la topología estándar;
-2. los escenarios source-verificables no tengan HARD abierto;
-3. al menos una ejecución completa posterior a la corrección termine con salida visible/recovery conforme a `AGENTS.md`;
-4. no se haya introducido scheduler/layer/authority paralela para lograrlo.
-
-Hasta entonces el estado correcto es `RETEST_IN_PROGRESS_AFTER_OBSERVED_OUTPUT_REGRESSION`.
+`RETEST_PASS_OBSERVED_2026-09-23` demuestra que el kernel/reference/verifier corregidos soportaron el flujo observado y que la regresión reportada produjo recovery visible en una ejecución posterior. No afirma que una interrupción física de la app, red, proceso o plataforma sea imposible. Si una interrupción futura permite todavía emitir salida, `AGENTS.md` exige nuevamente un recovery checkpoint visible.
