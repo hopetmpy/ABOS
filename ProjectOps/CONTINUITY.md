@@ -2,19 +2,19 @@
 
 Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
-Active-Plan: P-019
-Active-Segment: continuity/C0015.md
-Active-Intervention: P019_ADAPTIVE_INFERENCE — SOURCE_COMPLETE / BRANCH_E3_GREEN / PR_READY
+Active-Plan: P-020
+Active-Segment: continuity/C0016.md
+Active-Intervention: P020_COGNITIVE_FABRIC — AUDIT_IN_PROGRESS / SOURCE_UNMODIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p019-adaptive-inference
-Host-Head-At-Audit-Open: 9bf05ce5be0e5497a56b28f1584678c1f15b3994
-Last-Reconciled-Host-Head: 2745589a74b483d5a4accb9797714cbc7a8d44c0
-Last-Reconciled-Head-Semantics: P019_BRANCH_GREEN_PRE_MACRO_RECONCILIATION_COMMIT
+Current-Host-Branch: abos/p020-cognitive-fabric
+Host-Head-At-Audit-Open: 3e8c0eb31652175b0f3b22ff0296d52c16e758f1
+Last-Reconciled-Host-Head: 3e8c0eb31652175b0f3b22ff0296d52c16e758f1
+Last-Reconciled-Head-Semantics: P019_MAIN_GREEN_P020_AUDIT_OPEN
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -42,8 +42,9 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 - P-016: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
 - P-017: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
 - P-018: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
-- P-019: EN_EJECUCIÓN / SOURCE_COMPLETE / BRANCH_E3_GREEN / PR_READY.
-- P-020..P-036: ver estado explícito en `ProjectOps/PLAN.md`.
+- P-019: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
+- P-020: EN_EJECUCIÓN / AUDIT_IN_PROGRESS / SOURCE_UNMODIFIED.
+- P-021..P-036: ver estado explícito en `ProjectOps/PLAN.md`.
 
 ## Evidencia reciente de integración
 
@@ -66,51 +67,45 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 ### P-018
 - PR #52; merge `9bf05ce5be0e5497a56b28f1584678c1f15b3994`.
 - main CI `35908965085`: SUCCESS; ProjectOps `35908964855`: SUCCESS.
+
+### P-019
+- PR #53; squash merge `3e8c0eb31652175b0f3b22ff0296d52c16e758f1`.
+- main CI `35918621864`: SUCCESS 8/8; ProjectOps `35918621868`: SUCCESS.
 - estado: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
 
-## Intervención viva — P-019
+## Intervención viva — P-020
 
-Authority detail: `ProjectOps/continuity/C0015.md`.
-Plan module: `ProjectOps/plan/P-019.md`.
-Working branch: `abos/p019-adaptive-inference`.
-Baseline exacto: `main 9bf05ce5be0e5497a56b28f1584678c1f15b3994`.
+Authority detail: `ProjectOps/continuity/C0016.md`.
+Plan module: `ProjectOps/plan/P-020.md`.
+Working branch: `abos/p020-cognitive-fabric`.
+Baseline exacto: `main 3e8c0eb31652175b0f3b22ff0296d52c16e758f1`.
 
-Estado: `SOURCE_COMPLETE / BRANCH_E3_GREEN / PR_READY`.
+Estado: `AUDIT_IN_PROGRESS / SOURCE_UNMODIFIED`.
 
-Hecho en branch:
-- static model baseline dejó de poseer lifecycle de modelos dinámicos same-provider;
-- workers/planner/Orchestrator migrados al `InferenceRouter` + active connection canónicos;
-- compatibility inference ya no cruza provider silenciosamente tras error ni por circuit local;
-- circuit breaker legacy queda client-local, sin mutar ProviderRegistry como side effect;
-- manual lock real (`enableModelFallback=false`) y adaptive mode configurable quedan preservados;
-- candidate discovery permanece open-world dentro de conexión/compatibilidad/policy/budget;
-- no se creó segundo provider manager ni spend/evidence ledger;
-- kernel ProjectOps fue comparado con ZeroIQ y corregido sin añadir layers: `AGENTS.md` quedó NO_CHANGE, verifier/reference/acceptance reconciliados.
+Findings iniciales verificables:
+- `src/agent/loop.ts` usa `MemoryRetriever` básico y `buildContextMessages()` como camino principal;
+- `ContextManager` y `EnhancedRetriever` avanzados existen y tienen tests dedicados, pero no gobiernan ese camino;
+- `KnowledgeStore` cierra categorías en cinco literals aunque SQLite persiste `category` como TEXT abierto;
+- `EnhancedRetriever` usa categorías conocidas como filtros, pudiendo invisibilizar knowledge futuro;
+- P-013 Evidence Fabric, `src/intelligence/` y `src/skills/` ya poseen authorities que P-020 debe reutilizar;
+- Required-Context histórico `src/agent/context/` era drift; source real es `src/agent/context.ts`.
 
-Evidencia exacta pre-reconciliación:
-- branch product head: `2745589a74b483d5a4accb9797714cbc7a8d44c0`;
-- CI `35917049846`: SUCCESS 8/8;
-- ProjectOps `35917049861`: SUCCESS;
-- branch compare: ahead 28 / behind 0 de `main`; merge-base exacto `9bf05ce5...`;
-- PR P-019 abierto: NO al momento de esta reconciliación.
+Hipótesis principal: `EXTEND_AND_WIRE_EXISTING_MEMORY_CONTEXT_FABRIC`; no se crea un nuevo cognitive manager antes de completar consumer/persistence/restart audit y alcanzar DECISION_READY.
 
 ## Límites / claims
 
-- CI/E3 no acredita provider/OAuth LIVE E5 ni economic LIVE E6.
-- Provider/model IDs siguen abiertos; compatibilidad `unknown` no se convierte en `false`.
-- Legacy ProviderRegistry/UnifiedInferenceClient quedan compatibility-only hasta cleanup P-035; no son runtime authority canónica.
-- Cognitive cost learned routing/effort optimization pertenece a P-026, no se adelanta dentro de P-019.
-- Kernel behavioral acceptance quedó `RETEST_PASS_OBSERVED_2026-09-23`; no equivale a promesa de que app/red/plataforma nunca puedan interrumpirse físicamente.
+- P-020 aún no modifica product source.
+- No se declara activa una pieza sólo porque exista y tenga tests.
+- Open knowledge no autoriza duplicar persistence/evidence/skills/intelligence authorities.
+- Una migration nueva sólo se abre si relations/temporal/provenance requieren estado durable que las authorities actuales no puedan representar sin semántica falsa.
 
 ## Siguiente punto verificable
 
-1. Gatear este commit de reconciliación macro.
-2. Abrir PR P-019 contra `main`.
-3. Validar PR checks/mergeability.
-4. Integrar y validar exact-main CI + ProjectOps.
-5. Cerrar P-019 sólo con main verde.
-6. Crear rama P-020 desde ese main, activar C0016 y continuar Cognitive Fabric.
+1. Completar authority/consumer/persistence/restart audit de memory/context/knowledge.
+2. Discriminar reuse/extend vs migration para relations/provenance/temporal facts.
+3. Registrar DECISION_READY en C0016 antes de product source.
+4. Ejecutar la primera unidad coherente sin crear otra memoria.
 
 ## Política de rotación
 
-`C0000-legacy.md` conserva historia pre-cutover. `C0001`..`C0014` son segmentos históricos cerrados según sus fases; `C0015` es el único segmento ACTIVE mientras P-019 no esté integrado. Nunca se crea un segundo `CONTINUITY.md`.
+`C0000-legacy.md` conserva historia pre-cutover. `C0001`..`C0015` son segmentos históricos cerrados; `C0016` es el único segmento ACTIVE mientras P-020 siga abierto. Nunca se crea un segundo `CONTINUITY.md`.

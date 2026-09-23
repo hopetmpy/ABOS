@@ -79,6 +79,33 @@ function estimateTurnTokens(turn: AgentTurn): number {
   return total;
 }
 
+export function buildAntiRepetitionMessage(
+  recentTurns: AgentTurn[],
+): ChatMessage | undefined {
+  const analysisWindow = recentTurns.slice(-5);
+  if (analysisWindow.length < 3) return undefined;
+
+  const toolFrequency: Record<string, number> = {};
+  for (const turn of analysisWindow) {
+    for (const tc of turn.toolCalls) {
+      toolFrequency[tc.name] = (toolFrequency[tc.name] || 0) + 1;
+    }
+  }
+
+  const repeatedTools = Object.entries(toolFrequency)
+    .filter(([, count]) => count >= 3)
+    .map(([name]) => name);
+  if (repeatedTools.length === 0) return undefined;
+
+  return {
+    role: "user",
+    content:
+      `[system] WARNING: You have been calling ${repeatedTools.join(", ")} repeatedly in recent turns. ` +
+      `You already have this information. Move on to BUILDING something. ` +
+      `Write code, create files, set up a service. Do not check status again.`,
+  };
+}
+
 /**
  * Build the message array for the next inference call.
  * Includes system prompt + recent conversation history.
@@ -198,27 +225,9 @@ export function buildContextMessages(
   }
 
   // ── Anti-Repetition Warning ──
-  // Analyze the last 5 turns for repeated tool usage
-  const analysisWindow = recentTurns.slice(-5);
-  if (analysisWindow.length >= 3) {
-    const toolFrequency: Record<string, number> = {};
-    for (const turn of analysisWindow) {
-      for (const tc of turn.toolCalls) {
-        toolFrequency[tc.name] = (toolFrequency[tc.name] || 0) + 1;
-      }
-    }
-    const repeatedTools = Object.entries(toolFrequency)
-      .filter(([, count]) => count >= 3)
-      .map(([name]) => name);
-    if (repeatedTools.length > 0) {
-      messages.push({
-        role: "user",
-        content:
-          `[system] WARNING: You have been calling ${repeatedTools.join(", ")} repeatedly in recent turns. ` +
-          `You already have this information. Move on to BUILDING something. ` +
-          `Write code, create files, set up a service. Do not check status again.`,
-      });
-    }
+  const antiRepetitionMessage = buildAntiRepetitionMessage(recentTurns);
+  if (antiRepetitionMessage) {
+    messages.push(antiRepetitionMessage);
   }
 
   // Add pending input if any

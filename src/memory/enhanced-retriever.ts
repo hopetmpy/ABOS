@@ -86,10 +86,6 @@ const CATEGORY_KEYWORDS: Record<KnowledgeCategory, string[]> = {
   operational: ["process", "runbook", "incident", "handoff", "workflow", "sla"],
 };
 
-const feedbackPrecisionWindow: number[] = [];
-const feedbackByTurn = new Map<string, RetrievalFeedback>();
-let lastRollingPrecision: number | undefined;
-let feedbackDb: Database | null = null;
 
 export interface ScoredMemoryEntry {
   entry: any; // MemoryEntry-like object (knowledge/memory tier entry)
@@ -175,49 +171,18 @@ export function enhanceQuery(params: {
   };
 }
 
-export function recordRetrievalFeedback(feedback: RetrievalFeedback): void {
-  const retrieved = dedupeStrings(feedback.retrieved).filter((id) => id.length > 0);
-  const retrievedSet = new Set(retrieved);
-
-  let matched = dedupeStrings(feedback.matched).filter((id) => retrievedSet.has(id));
-
-  // If DB context is available, perform substring matching against the turn response.
-  if (feedbackDb && retrieved.length > 0) {
-    const response = getTurnResponse(feedbackDb, feedback.turnId);
-    if (response.length > 0) {
-      const autoMatched = matchRetrievedKnowledgeInResponse(feedbackDb, retrieved, response);
-      if (autoMatched.length > 0) {
-        matched = dedupeStrings([...matched, ...autoMatched]).filter((id) => retrievedSet.has(id));
-        incrementKnowledgeAccessCount(feedbackDb, autoMatched);
-      }
-    }
-  }
-
-  const retrievalPrecision = retrieved.length === 0
-    ? 0
-    : matched.length / retrieved.length;
-  const rollingPrecision = pushRollingPrecision(retrievalPrecision);
-
-  feedbackByTurn.set(feedback.turnId, {
-    turnId: feedback.turnId,
-    retrieved,
-    matched,
-    retrievalPrecision,
-    rollingPrecision,
-  });
-}
-
 export class EnhancedRetriever extends MemoryRetriever {
   private readonly db: Database;
   private readonly knowledgeStore: KnowledgeStore;
   private readonly taskStore?: any;
+  private readonly feedbackPrecisionWindow: number[] = [];
+  private lastRollingPrecision: number | undefined;
 
   constructor(db: Database, budget?: MemoryBudget, taskStore?: any) {
     super(db, budget);
     this.db = db;
     this.taskStore = taskStore;
     this.knowledgeStore = new KnowledgeStore(db);
-    feedbackDb = db;
   }
 
   retrieveScored(params: {
@@ -289,7 +254,44 @@ export class EnhancedRetriever extends MemoryRetriever {
   }
 
   recordRetrievalFeedback(feedback: RetrievalFeedback): void {
-    recordRetrievalFeedback(feedback);
+    const retrieved = dedupeStrings(feedback.retrieved).filter((id) => id.length > 0);
+    const retrievedSet = new Set(retrieved);
+    let matched = dedupeStrings(feedback.matched).filter((id) => retrievedSet.has(id));
+
+    if (retrieved.length > 0) {
+      const response = getTurnResponse(this.db, feedback.turnId);
+      if (response.length > 0) {
+        const autoMatched = matchRetrievedKnowledgeInResponse(
+          this.db,
+          retrieved,
+          response,
+        );
+        if (autoMatched.length > 0) {
+          matched = dedupeStrings([...matched, ...autoMatched]).filter((id) =>
+            retrievedSet.has(id)
+          );
+          incrementKnowledgeAccessCount(this.db, autoMatched);
+        }
+      }
+    }
+
+    const retrievalPrecision = retrieved.length === 0
+      ? 0
+      : matched.length / retrieved.length;
+    this.pushRollingPrecision(retrievalPrecision);
+  }
+
+  private pushRollingPrecision(precision: number): number {
+    this.feedbackPrecisionWindow.push(clamp01(precision));
+    while (this.feedbackPrecisionWindow.length > MAX_ROLLING_FEEDBACK_WINDOW) {
+      this.feedbackPrecisionWindow.shift();
+    }
+
+    const total = this.feedbackPrecisionWindow.reduce((sum, value) => sum + value, 0);
+    this.lastRollingPrecision = this.feedbackPrecisionWindow.length > 0
+      ? total / this.feedbackPrecisionWindow.length
+      : undefined;
+    return this.lastRollingPrecision ?? 0;
   }
 
   private buildResult(
@@ -303,8 +305,8 @@ export class EnhancedRetriever extends MemoryRetriever {
       truncated,
     };
 
-    if (lastRollingPrecision !== undefined) {
-      result.retrievalPrecision = lastRollingPrecision;
+    if (this.lastRollingPrecision !== undefined) {
+      result.retrievalPrecision = this.lastRollingPrecision;
     }
 
     return result;
@@ -314,22 +316,22 @@ export class EnhancedRetriever extends MemoryRetriever {
     const byId = new Map<string, KnowledgeEntry>();
 
     if (query.terms.length === 0) {
-      for (const category of query.categories) {
-        for (const entry of this.knowledgeStore.getByCategory(category)) {
-          byId.set(entry.id, entry);
-        }
+      for (const entry of this.knowledgeStore.search("", undefined, KNOWLEDGE_SEARCH_LIMIT)) {
+        byId.set(entry.id, entry);
       }
     } else {
       for (const term of query.terms) {
-        const results = this.searchTermAcrossCategories(term, query.categories);
-        for (const entry of results) {
+        for (const entry of this.knowledgeStore.search(
+          term,
+          undefined,
+          KNOWLEDGE_SEARCH_LIMIT,
+        )) {
           byId.set(entry.id, entry);
         }
       }
     }
 
     let entries = [...byId.values()];
-
     if (query.timeRange?.since) {
       const sinceMs = Date.parse(query.timeRange.since);
       if (!Number.isNaN(sinceMs)) {
@@ -341,25 +343,6 @@ export class EnhancedRetriever extends MemoryRetriever {
     }
 
     return entries;
-  }
-
-  private searchTermAcrossCategories(
-    term: string,
-    categories: KnowledgeCategory[],
-  ): KnowledgeEntry[] {
-    if (term.trim().length === 0) return [];
-
-    if (categories.length === 0) {
-      return this.knowledgeStore.search(term, undefined, KNOWLEDGE_SEARCH_LIMIT);
-    }
-
-    const results: KnowledgeEntry[] = [];
-    for (const category of categories) {
-      results.push(
-        ...this.knowledgeStore.search(term, category, KNOWLEDGE_SEARCH_LIMIT),
-      );
-    }
-    return results;
   }
 
   private computeScoringFactors(
@@ -648,23 +631,6 @@ function getTurnResponse(db: Database, turnId: string): string {
     .prepare("SELECT thinking FROM turns WHERE id = ?")
     .get(turnId) as { thinking: string } | undefined;
   return typeof row?.thinking === "string" ? row.thinking : "";
-}
-
-function pushRollingPrecision(precision: number): number {
-  feedbackPrecisionWindow.push(clamp01(precision));
-
-  while (feedbackPrecisionWindow.length > MAX_ROLLING_FEEDBACK_WINDOW) {
-    feedbackPrecisionWindow.shift();
-  }
-
-  if (feedbackPrecisionWindow.length === 0) {
-    lastRollingPrecision = undefined;
-    return 0;
-  }
-
-  const total = feedbackPrecisionWindow.reduce((sum, value) => sum + value, 0);
-  lastRollingPrecision = total / feedbackPrecisionWindow.length;
-  return lastRollingPrecision;
 }
 
 function dedupeStrings(values: string[]): string[] {
