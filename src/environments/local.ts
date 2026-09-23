@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import os from "node:os";
 import type {
   EnvironmentEstimate,
@@ -9,6 +10,10 @@ import type {
   EnvironmentSatisfaction,
   EnvironmentSnapshot,
 } from "./types.js";
+import {
+  capabilityProvides,
+  isCapabilityVerifiedAvailable,
+} from "../capabilities/model.js";
 import {
   getLocalBrowserRuntime,
   type LocalBrowserRuntime,
@@ -36,12 +41,14 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
     const browser = await this.browserRuntime.probe();
     const computer = this.computerRuntime.probe();
     const gui = this.guiRuntime.probe();
+    const filesystem = probeLocalFilesystem();
     const evidence = [
       `platform=${process.platform}`,
       `arch=${process.arch}`,
       `node=${process.version}`,
       `cpus=${os.cpus().length}`,
       `freeMemoryBytes=${os.freemem()}`,
+      ...filesystem.evidence.map((entry) => `filesystem:${entry}`),
       ...browser.evidence.map((entry) => `browser:${entry}`),
       ...computer.evidence.map((entry) => `process:${entry}`),
       ...gui.accessibility.evidence.map((entry) => `gui-accessibility:${entry}`),
@@ -49,6 +56,11 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
       ...gui.input.evidence.map((entry) => `gui-input:${entry}`),
     ];
     const constraints: string[] = [];
+    if (!filesystem.available) {
+      constraints.push(
+        "The current ABOS working directory is not confirmed readable/writable; filesystem capability remains unavailable until a fresh probe succeeds.",
+      );
+    }
     if (!browser.available) {
       constraints.push(
         "Structured browser is currently unavailable on this host; other local capabilities are assessed independently.",
@@ -93,6 +105,7 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
         cwd: process.cwd(),
         totalMemoryBytes: os.totalmem(),
         freeMemoryBytes: os.freemem(),
+        localFilesystemAvailable: filesystem.available,
         structuredBrowserAvailable: browser.available,
         structuredBrowserObservedAt: browser.observedAt,
         structuredBrowserTarget: browser.target?.label ?? null,
@@ -111,12 +124,21 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
           id: "local:filesystem",
           type: "executor",
           provider: "local",
-          description: "Read and write files on the local ABOS host within policy boundaries.",
+          description: "Read and write files on the local ABOS host within policy and path-specific permission boundaries.",
           requirements: ["filesystem"],
           provides: ["filesystem"],
           permissions: [],
+          effects: ["file_read", "file_write"],
           environment: "local",
-          available: true,
+          available: filesystem.available,
+          state: filesystem.available ? "verified_available" : "unavailable",
+          observedAt,
+          authority: "local-environment:cwd-filesystem-probe",
+          evidence: filesystem.evidence,
+          metadata: {
+            cwd: process.cwd(),
+            scope: "current-working-directory-probe; operation-specific paths remain subject to runtime policy/permissions",
+          },
         },
         {
           id: "local:process",
@@ -214,19 +236,18 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
   ): Promise<EnvironmentSatisfaction> {
     const observed = snapshot ?? await this.inspect();
     const required = requirements.requiredCapabilities
-      .map((entry) => entry.trim().toLowerCase())
+      .map(normalize)
+      .filter(Boolean);
+    const requiredPermissions = (requirements.requiredPermissions ?? [])
+      .map(normalize)
       .filter(Boolean);
 
     const missing = required.filter((requirement) =>
       !observed.capabilities.some((capability) => {
-        if (!capability.available) return false;
-        const text = [
-          capability.id,
-          capability.description,
-          ...capability.requirements,
-          ...(capability.provides ?? []),
-        ].join(" ").toLowerCase();
-        return text.includes(requirement);
+        if (!isCapabilityVerifiedAvailable(capability)) return false;
+        if (!capabilityProvides(capability, requirement)) return false;
+        const permissions = new Set(capability.permissions.map(normalize));
+        return requiredPermissions.every((permission) => permissions.has(permission));
       })
     );
 
@@ -237,7 +258,7 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
         : (required.length - missing.length) / required.length,
       missingCapabilities: missing,
       evidence: [
-        `local capability fit=${required.length - missing.length}/${required.length}`,
+        `local P-014 verified capability fit=${required.length - missing.length}/${required.length}`,
       ],
     };
   }
@@ -332,4 +353,30 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
       ],
     };
   }
+}
+
+function probeLocalFilesystem(): { available: boolean; evidence: string[] } {
+  const cwd = process.cwd();
+  try {
+    fs.accessSync(cwd, fs.constants.R_OK | fs.constants.W_OK);
+    return {
+      available: true,
+      evidence: [
+        `cwd=${cwd}`,
+        "current working directory read/write access probe succeeded",
+      ],
+    };
+  } catch (error) {
+    return {
+      available: false,
+      evidence: [
+        `cwd=${cwd}`,
+        `current working directory read/write access probe failed: ${error instanceof Error ? error.message : String(error)}`,
+      ],
+    };
+  }
+}
+
+function normalize(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
