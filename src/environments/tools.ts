@@ -3,6 +3,7 @@ import type { EnvironmentLifecycleManager } from "./lifecycle.js";
 import type { EnvironmentRegistry } from "./registry.js";
 import type { EnvironmentSelector } from "./selector.js";
 import type { EnvironmentMobilityCoordinator } from "./mobility.js";
+import { capabilityStateOf } from "../capabilities/model.js";
 
 const MAX_PROVIDER_OUTPUT_CHARS = 64_000;
 
@@ -130,7 +131,7 @@ export function createEnvironmentTools(
       name: "environment_capabilities",
       description:
         "Inspect every registered environment and its currently supported lifecycle/provider-native operations. " +
-        "The operation set is discoverable and open-ended; absence means not currently exposed, not impossible.",
+        "Capability lifecycle state, authority and evidence are exposed explicitly; discovery/available booleans do not imply execution readiness.",
       category: "environment",
       riskLevel: "safe",
       parameters: { type: "object", properties: {} },
@@ -144,9 +145,20 @@ export function createEnvironmentTools(
             operations: registry.getSupportedOperations(snapshot.id),
             capabilities: snapshot.capabilities.map((capability) => ({
               id: capability.id,
+              type: capability.type,
+              provider: capability.provider,
               description: capability.description,
               available: capability.available,
+              state: capabilityStateOf(capability),
+              observedAt: capability.observedAt ?? null,
+              authority: capability.authority ?? null,
               requirements: capability.requirements,
+              provides: capability.provides ?? [],
+              permissions: capability.permissions,
+              dependencies: capability.dependencies ?? [],
+              compatibility: capability.compatibility ?? [],
+              estimatedCostCents: capability.estimatedCostCents ?? null,
+              evidence: capability.evidence ?? [],
             })),
             constraints: snapshot.constraints,
             evidence: snapshot.evidence,

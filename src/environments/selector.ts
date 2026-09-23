@@ -7,6 +7,10 @@ import type {
   EnvironmentSnapshot,
 } from "./types.js";
 import type { EnvironmentRegistry } from "./registry.js";
+import {
+  capabilityProvides,
+  isCapabilityVerifiedAvailable,
+} from "../capabilities/model.js";
 
 export interface EnvironmentSelectionWeights {
   capabilityFit: number;
@@ -201,6 +205,11 @@ export class EnvironmentSelector {
           ? `missing capabilities: ${missingCapabilities.join(", ")}`
           : "provider reports request unsatisfied",
       );
+    } else if (
+      requirements.requiredCapabilities.length > 0 &&
+      satisfaction.satisfiable !== true
+    ) {
+      blockers.push("capability satisfaction is not proven execution-ready");
     }
     if (missingOperations.length > 0) {
       blockers.push(`unsupported operations: ${missingOperations.join(", ")}`);
@@ -270,17 +279,18 @@ function genericSatisfaction(
     };
   }
 
+  const requiredPermissions = (requirements.requiredPermissions ?? [])
+    .map(normalize)
+    .filter(Boolean);
   const matched: string[] = [];
   const missing: string[] = [];
   for (const requirement of required) {
-    const found = snapshot.capabilities.some(
-      (capability) =>
-        capability.available &&
-        capabilityMatches(capability, requirement) &&
-        (requirements.requiredPermissions ?? []).every((permission) =>
-          capability.permissions.includes(permission)
-        ),
-    );
+    const found = snapshot.capabilities.some((capability) => {
+      if (!isCapabilityVerifiedAvailable(capability)) return false;
+      if (!capabilityProvides(capability, requirement)) return false;
+      const permissions = new Set(capability.permissions.map(normalize));
+      return requiredPermissions.every((permission) => permissions.has(permission));
+    });
 
     (found ? matched : missing).push(requirement);
   }
@@ -291,31 +301,9 @@ function genericSatisfaction(
     capabilityFit: fit,
     missingCapabilities: missing,
     evidence: [
-      `generic capability fit=${matched.length}/${required.length}`,
+      `P-014 verified capability fit=${matched.length}/${required.length}`,
     ],
   };
-}
-
-function capabilityMatches(
-  capability: EnvironmentSnapshot["capabilities"][number],
-  requirement: string,
-): boolean {
-  const haystack = normalize([
-    capability.id,
-    capability.type,
-    capability.provider,
-    capability.description,
-    ...capability.requirements,
-    ...(capability.inputs ?? []),
-    ...(capability.outputs ?? []),
-  ].join(" "));
-
-  const needle = normalize(requirement);
-  if (!needle) return true;
-  if (haystack.includes(needle)) return true;
-
-  const terms = needle.split(/[^a-z0-9]+/u).filter((term) => term.length >= 3);
-  return terms.length > 0 && terms.every((term) => haystack.includes(term));
 }
 
 async function safeSatisfaction(
@@ -326,11 +314,40 @@ async function safeSatisfaction(
 ): Promise<EnvironmentSatisfaction> {
   try {
     const result = await provider.canSatisfy!(requirements, snapshot);
+    const missing = [
+      ...new Set([
+        ...(fallback.missingCapabilities ?? []),
+        ...(result.missingCapabilities ?? []),
+      ]),
+    ];
+
+    let satisfiable: boolean | null;
+    if (
+      fallback.satisfiable === false ||
+      result.satisfiable === false ||
+      missing.length > 0
+    ) {
+      satisfiable = false;
+    } else if (fallback.satisfiable === true && result.satisfiable === true) {
+      satisfiable = true;
+    } else if (
+      requirements.requiredCapabilities.length === 0 &&
+      result.satisfiable === true
+    ) {
+      satisfiable = true;
+    } else {
+      satisfiable = null;
+    }
+
     return {
       ...fallback,
       ...result,
-      missingCapabilities:
-        result.missingCapabilities ?? fallback.missingCapabilities ?? [],
+      satisfiable,
+      capabilityFit: Math.min(
+        fallback.capabilityFit ?? 1,
+        result.capabilityFit ?? 1,
+      ),
+      missingCapabilities: missing,
       evidence: [
         ...(fallback.evidence ?? []),
         ...(result.evidence ?? []),
@@ -339,7 +356,8 @@ async function safeSatisfaction(
   } catch (error) {
     return {
       ...fallback,
-      satisfiable: null,
+      satisfiable:
+        requirements.requiredCapabilities.length > 0 ? null : fallback.satisfiable,
       evidence: [
         ...(fallback.evidence ?? []),
         `provider canSatisfy failed: ${error instanceof Error ? error.message : String(error)}`,

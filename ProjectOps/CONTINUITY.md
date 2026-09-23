@@ -2,19 +2,19 @@
 
 Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
-Active-Plan: P-017
-Active-Segment: continuity/C0013.md
-Active-Intervention: P017_CAPABILITY_DISCOVERY_ACQUISITION — AUDIT_OPEN / SOURCE_UNMODIFIED
+Active-Plan: P-018
+Active-Segment: continuity/C0014.md
+Active-Intervention: P018_ENVIRONMENT_RESOURCE_FABRIC — DECISION_READY / SOURCE_IN_PROGRESS
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p017-capability-acquisition
-Host-Head-At-Audit-Open: fe845184fce48c65032f8521ecd0bdfa42e04b77
-Last-Reconciled-Host-Head: 08b7a5cce8f18c57c52e6a2f43048b6f1c214e50
-Last-Reconciled-Head-Semantics: P016_HECHO_P017_AUDIT_OPEN_SOURCE_UNMODIFIED
+Current-Host-Branch: abos/p018-environment-resource-fabric
+Host-Head-At-Audit-Open: c5c5ae856923ba74c943cc26beca26ea38de0dcc
+Last-Reconciled-Host-Head: c5c5ae856923ba74c943cc26beca26ea38de0dcc
+Last-Reconciled-Head-Semantics: P017_HECHO_P018_DECISION_READY_SOURCE_IN_PROGRESS
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -230,8 +230,12 @@ P-012 conserva autonomía de self-modification y sustituye write-before-verify/f
 - P-011: HECHO / INTEGRATION_VERIFIED — integrado por PR #38; cierre documental PR #39; C0007 cerrado.
 - P-012: HECHO / INTEGRATION_VERIFIED / P013_EVIDENCE_SATISFIED — source propio, integración y dependencia P-013 están cerrados; transición canónica respaldada por `main 21911888b8271662f1b546bc637f49d76610c132` CI `35410063228` + ProjectOps `35410063240`.
 - P-013: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED — producto PR #41 y cierre ProjectOps PR #42 integrados/revalidados; no implica E5/E6/E7 LIVE.
-- P-014: EN_EJECUCIÓN / TECHNICAL_OBJECTIVE_SATISFIED / INTEGRATION_VERIFIED_EN_RAMA / MAIN_INTEGRATION_PENDING — lifecycle durable + contract hardening gateados; cierre técnico NO_CHANGE; falta integración/revalidación main.
-- P-015..P-036: ver `ProjectOps/PLAN.md`; permanecen en su estado explícito.
+- P-014: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
+- P-015: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
+- P-016: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
+- P-017: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
+- P-018: EN_EJECUCIÓN / DECISION_READY / SOURCE_IN_PROGRESS.
+- P-019..P-036: ver `ProjectOps/PLAN.md`; permanecen en su estado explícito.
 
 ## P-009 — cierre verificable
 
@@ -334,22 +338,20 @@ Pendiente exacto antes de HECHO completo: squash/integración en `main` + revali
 
 - GitHub connector + GitHub Actions: DISPONIBLE / AUTORIZADO.
 - CI/E3 no acredita LIVE/E5/E6.
-- P-014: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
-- P-015: EN_EJECUCIÓN / DECISION_READY / SOURCE_UNMODIFIED.
-- MCP spec/SDK oficial vigente ya fue verificado; la decisión usa SDK TypeScript v2 y no un protocolo manual.
-- P-016/P-017/P-018 permanecen fuera de scope de esta intervención.
+- P-017: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
+- P-018: EN_EJECUCIÓN / DECISION_READY / SOURCE_IN_PROGRESS.
+- No hay bloqueo externo para la primera unidad source de P-018.
 
 ## Siguiente punto verificable
 
-1. Gatear esta reconciliación `DECISION_READY` sobre `abos/p015-mcp-runtime`.
-2. Implementar únicamente la primera unidad P-015: inventory adapter + SDK client core + stdio discovery/call + bridge Policy/Capability/Evidence, sin absorber HTTP/auth avanzado ni P-017.
-3. Ejecutar fake deterministic MCP protocol tests, targeted regressions, typecheck, build, full/security, ProjectOps y diff integrity.
-4. Producir clean source head y gate ordinario exact-head antes de ampliar a Streamable HTTP/auth/reconnect.
+1. Gatear la unificación Environment↔P-014 readiness y sus regresiones.
+2. Reconciliar descriptors/provider claims Local/Conway/AWS sin elevar auth/credits a service readiness.
+3. Exponer state/authority/evidence/provides en `environment_capabilities`.
+4. Validar targeted + full/security + Windows + ProjectOps antes de continuar con la siguiente unidad P-018.
 
 ## Política de rotación
 
-`C0006` queda CLOSED / HECHO como historia P-010. `C0007` queda CLOSED / HECHO como historia P-011. `C0008` queda CLOSED / HECHO como historia P-012. `C0009` queda CLOSED / HECHO como historia P-013. `C0010` queda CLOSED / HECHO como historia P-014. `C0011` queda ACTIVE para P-015.  Nunca se crea un segundo manifest `CONTINUITY.md`.
-
+`C0006` queda CLOSED / HECHO como historia P-010. `C0007` queda CLOSED / HECHO como historia P-011. `C0008` queda CLOSED / HECHO como historia P-012. `C0009` queda CLOSED / HECHO como historia P-013. `C0010` queda CLOSED / HECHO como historia P-014. `C0011` queda CLOSED / HECHO como historia P-015. `C0012` queda CLOSED / HECHO como historia P-016. `C0013` queda CLOSED / HECHO como historia P-017. `C0014` queda ACTIVE para P-018. Nunca se crea un segundo manifest `CONTINUITY.md`.
 
 ## P-015 — MCP_CORE_STDIO gate y siguiente frontera
 
@@ -363,18 +365,15 @@ La auditoría posterior al gate detectó tres defectos/enduraciones que impiden 
 
 Siguiente punto verificable: implementar y validar `MCP_LIFECYCLE_HARDENING` reutilizando las authorities existentes; no avanzar aún a HTTP/auth ni integrar P-015 a `main`.
 
-
 ## P-015 — MCP_LIFECYCLE_HARDENING source aplicado
 
 La unidad implementa retiro MCP durable mediante `runtimeTruth=retired`, evita reconectar inventario retirado, retira capabilities sólo cuando un `tools/list` actual exitoso demuestra ausencia, y rechaza identifiers/keys de schema con delimitadores de prompt/control sin mutar valores semánticos `enum/default/pattern`. Estado: IMPLEMENTED / VALIDATION_PENDING; no acredita HTTP/auth ni cierre de P-015.
-
 
 ## P-015 — MCP_LIFECYCLE_HARDENING cerrado; HTTP/auth en auditoría
 
 `MCP_LIFECYCLE_HARDENING` quedó validado en clean source `c111ceb8ddaaae3b55757c36d17a8ab5825a7750` y exact gate `31c524452caf5a702f91f85a5c684dcb0a8544fb`: CI `35421011822` 8/8 SUCCESS y ProjectOps `35421011820` SUCCESS.
 
 La siguiente frontera se abre sólo como auditoría: `MCP_STREAMABLE_HTTP_AUTH`. Product source permanece sin cambios desde el hardening gate mientras se reconstruyen endpoint trust, credential authority, auth flows, reconnect/session semantics y failure matrix vigentes.
-
 
 ## P-015 — MCP_STREAMABLE_HTTP_BEARER — DECISION_READY
 
@@ -386,7 +385,6 @@ Falsadas: `NO_CHANGE`, runtime HTTP paralelo, reutilizar `ResilientHttpClient` c
 
 Siguiente punto verificable: implementar Streamable HTTP + bearer referenciado por entorno, negative auth, URL trust, reconnect por nueva conexión y timeout/outcome-unknown; exact-head gates antes de decidir el siguiente remanente P-015.
 
-
 ## P-015 — MCP_STREAMABLE_HTTP_BEARER — source implementado
 
 Pre-source exact gate: `f86ba6efa607ae5aed99e3669bd170db1bdc5662`; CI `35421748654` SUCCESS 8/8; ProjectOps `35421748651` SUCCESS.
@@ -394,7 +392,6 @@ Pre-source exact gate: `f86ba6efa607ae5aed99e3669bd170db1bdc5662`; CI `354217486
 Implementación: el adapter MCP existente soporta `streamable-http` oficial, bearer por referencia `tokenEnv`, URL trust HTTPS/loopback, clasificación auth 401/403, conexión fresca por invocación y timeout de call con outcome UNKNOWN sin blind retry. `install_mcp_server` fue extendido; HTTP remoto no instala npm ni persiste bearer tokens. OAuth interactivo permanece fuera de esta unidad.
 
 Estado: `IMPLEMENTED / VALIDATION_PENDING_EXACT_HEAD`. Los tests del aplicador deben pasar antes del clean source commit; CI y ProjectOps ordinarios del exact-head siguen siendo obligatorios para E3.
-
 
 ## P-015 — MCP_STREAMABLE_HTTP_BEARER — E3 branch green
 
@@ -461,3 +458,17 @@ P017-Canonical-Baseline: 08b7a5cce8f18c57c52e6a2f43048b6f1c214e50
 P017-Baseline-CI: 35809162263 SUCCESS
 P017-Baseline-ProjectOps: 35809162403 SUCCESS
 P017-Activation-State: AUDIT_OPEN / SOURCE_UNMODIFIED
+
+P017-PR: 51
+P017-Merge: c5c5ae856923ba74c943cc26beca26ea38de0dcc
+P017-Main-CI: 35904429871 SUCCESS
+P017-Main-ProjectOps: 35904429875 SUCCESS
+P017-Canonical-State: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED
+P018-Activation-Branch: abos/p018-environment-resource-fabric
+P018-Canonical-Baseline: c5c5ae856923ba74c943cc26beca26ea38de0dcc
+P018-Baseline-CI: 35904429871 SUCCESS
+P018-Baseline-ProjectOps: 35904429875 SUCCESS
+P018-Decision-State: DECISION_READY
+P018-Decision: EXTEND_EXISTING_ENVIRONMENT_FABRIC / UNIFY_WITH_P014_READINESS / PRESERVE_PROVIDER_OPENNESS
+P018-Active-Unit: CAPABILITY_READINESS_RECONCILIATION
+P018-Active-Unit-State: SOURCE_IN_PROGRESS
