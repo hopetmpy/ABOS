@@ -172,7 +172,7 @@ describe("P016 local GUI runtime", () => {
         return snapshot.elements.find((entry) => entry.name === inputName && entry.processId === formElement.processId) ?? null;
       });
       expect(inputElement.bounds).not.toBeNull();
-      runtime.act("focus", { name: title, processId: formElement.processId });
+      runtime.act("focus", { name: inputName, processId: formElement.processId });
       const b = inputElement.bounds!;
       const lowLevel = runtime.input({
         action: "pointer_click",
