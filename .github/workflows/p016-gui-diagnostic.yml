@@ -38,3 +38,5 @@ jobs:
       - name: ProjectOps integrity on source SHA
         shell: pwsh
         run: node scripts/projectops-integrity-verify.mjs
+
+# Retriggered after removing the invalid recovery workflow; product source remains pinned above.
