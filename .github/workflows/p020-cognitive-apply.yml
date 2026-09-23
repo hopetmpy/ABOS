@@ -20,7 +20,32 @@ jobs:
           fetch-depth: 0
 
       - name: Apply P-020 source changes
-        run: python3 scripts/p020-apply.py
+        shell: bash
+        run: |
+          python3 scripts/p020-apply.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("src/__tests__/memory/context-manager.test.ts")
+          text = p.read_text()
+          old = '''    const assembled = manager.assembleContext({
+      systemPrompt: "sys",
+      todoMd: "todo",
+      recentTurns: [makeTurn(1), makeTurn(2), makeTurn(3)],
+      modelContextWindow: 80,
+      reserveTokens: 40,
+    });'''
+          new = '''    const assembled = manager.assembleContext({
+      systemPrompt: "sys",
+      todoMd: "todo",
+      recentTurns: [makeTurn(1), makeTurn(2), makeTurn(3)],
+      tailMessages: [{ role: "user", content: "mandatory-input" }],
+      modelContextWindow: 80,
+      reserveTokens: 40,
+    });'''
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one emergency fixture, found {text.count(old)}")
+          p.write_text(text.replace(old, new, 1))
+          PY
 
       - uses: actions/setup-node@v4
         with:
