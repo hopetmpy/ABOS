@@ -27,9 +27,17 @@ function provider(input: {
         provider: input.id,
         description: capability,
         requirements: [capability],
+        provides: [capability],
         permissions: [],
         environment: input.id,
         available: (input.availability ?? "available") !== "unavailable",
+        state:
+          (input.availability ?? "available") === "unavailable"
+            ? "unavailable"
+            : "verified_available",
+        observedAt: new Date().toISOString(),
+        authority: "environment-selector-test",
+        evidence: ["test capability verified"],
       })),
       evidence: [],
       constraints: [],
@@ -245,5 +253,117 @@ describe("EnvironmentSelector", () => {
     expect(result.candidates.find((entry) =>
       entry.environmentId === "candidate-a"
     )?.blockers.join(" ")).toContain("policy");
+  });
+
+  it("does not elevate legacy available=true to execution-ready", async () => {
+    const registry = new EnvironmentRegistry();
+    registry.register({
+      id: "legacy",
+      inspect: async () => ({
+        id: "legacy",
+        label: "legacy",
+        availability: "available",
+        capabilities: [{
+          id: "legacy:compute",
+          type: "cloud_resource",
+          provider: "legacy",
+          description: "Legacy compute advertisement",
+          requirements: ["compute"],
+          provides: ["compute"],
+          permissions: [],
+          available: true,
+        }],
+        evidence: ["legacy provider advertised compute"],
+        constraints: [],
+        observedAt: new Date().toISOString(),
+      }),
+      canSatisfy: async () => ({ satisfiable: true, missingCapabilities: [] }),
+    });
+
+    const result = await new EnvironmentSelector(registry).select({
+      requiredCapabilities: ["compute"],
+    });
+
+    expect(result.selected).toBeNull();
+    expect(result.candidates[0]?.missingCapabilities).toContain("compute");
+  });
+
+  it("does not treat free-form description text as an execution contract", async () => {
+    const registry = new EnvironmentRegistry();
+    registry.register({
+      id: "fuzzy",
+      inspect: async () => ({
+        id: "fuzzy",
+        label: "fuzzy",
+        availability: "available",
+        capabilities: [{
+          id: "fuzzy:generic",
+          type: "service",
+          provider: "fuzzy",
+          description: "This description mentions privileged remote compute but does not contractually provide it.",
+          requirements: ["generic service"],
+          provides: ["generic service"],
+          permissions: [],
+          available: true,
+          state: "verified_available",
+          observedAt: new Date().toISOString(),
+          authority: "test",
+          evidence: ["generic service probed"],
+        }],
+        evidence: [],
+        constraints: [],
+        observedAt: new Date().toISOString(),
+      }),
+      canSatisfy: async () => ({ satisfiable: true, missingCapabilities: [] }),
+    });
+
+    const result = await new EnvironmentSelector(registry).select({
+      requiredCapabilities: ["remote compute"],
+    });
+
+    expect(result.selected).toBeNull();
+    expect(result.candidates[0]?.missingCapabilities).toContain("remote compute");
+  });
+
+  it("does not let provider canSatisfy override canonical readiness", async () => {
+    const registry = new EnvironmentRegistry();
+    registry.register({
+      id: "optimistic",
+      inspect: async () => ({
+        id: "optimistic",
+        label: "optimistic",
+        availability: "available",
+        capabilities: [{
+          id: "optimistic:compute",
+          type: "cloud_resource",
+          provider: "optimistic",
+          description: "Compute discovered but not functionally verified.",
+          requirements: ["compute"],
+          provides: ["compute"],
+          permissions: [],
+          available: true,
+          state: "discovered_unverified",
+          observedAt: new Date().toISOString(),
+          authority: "provider-discovery",
+          evidence: ["service listed"],
+        }],
+        evidence: [],
+        constraints: [],
+        observedAt: new Date().toISOString(),
+      }),
+      canSatisfy: async () => ({
+        satisfiable: true,
+        capabilityFit: 1,
+        missingCapabilities: [],
+        evidence: ["provider claims yes"],
+      }),
+    });
+
+    const result = await new EnvironmentSelector(registry).select({
+      requiredCapabilities: ["compute"],
+    });
+
+    expect(result.selected).toBeNull();
+    expect(result.candidates[0]?.satisfaction.satisfiable).toBe(false);
   });
 });
