@@ -1,0 +1,139 @@
+name: P019 Runtime Migration Apply
+
+on:
+  push:
+    branches:
+      - abos/p019-adaptive-inference
+    paths:
+      - .github/workflows/p019-runtime-migration.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: abos/p019-adaptive-inference
+          fetch-depth: 0
+
+      - name: Patch live orchestration inference wiring
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("src/agent/loop.ts")
+          text = path.read_text(encoding="utf-8")
+
+          old_imports = '''import { ProviderRegistry } from "../inference/provider-registry.js";
+          import { UnifiedInferenceClient } from "../inference/inference-client.js";'''.replace("          ", "")
+          new_imports = '''import { RouterBackedOrchestrationInferenceClient } from "../inference/router-orchestration-client.js";'''
+          if text.count(old_imports) != 1:
+            raise SystemExit(f"expected exactly one legacy inference import block, found {text.count(old_imports)}")
+          text = text.replace(old_imports, new_imports)
+
+          old_block = '''      // Bridge abos config API keys to env vars for the provider registry.
+                // The registry reads keys from process.env; the abos config may have
+                // them from config.json or Conway provisioning.
+                if (config.openaiApiKey && !process.env.OPENAI_API_KEY) {
+                  process.env.OPENAI_API_KEY = config.openaiApiKey;
+                }
+                if (config.anthropicApiKey && !process.env.ANTHROPIC_API_KEY) {
+                  process.env.ANTHROPIC_API_KEY = config.anthropicApiKey;
+                }
+                // Conway Compute API is OpenAI-compatible. Use it as fallback when no
+                // direct OpenAI key is available. The conwayApiKey is always present
+                // (required for sandbox operations), so this ensures the orchestrator
+                // can always make inference calls.
+                if (config.conwayApiKey && !process.env.CONWAY_API_KEY) {
+                  process.env.CONWAY_API_KEY = config.conwayApiKey;
+                }
+                // If no OpenAI key is set but Conway key is available, use Conway as
+                // the OpenAI provider (Conway Compute is OpenAI API-compatible).
+                if (!process.env.OPENAI_API_KEY && config.conwayApiKey) {
+                  process.env.OPENAI_API_KEY = config.conwayApiKey;
+                  process.env.OPENAI_BASE_URL = `${config.conwayApiUrl}/v1`;
+                }
+
+                const providersPath = path.join(
+                  getHomeDir(),
+                  ".abos",
+                  "inference-providers.json",
+                );
+                const registry = ProviderRegistry.fromConfig(providersPath);
+
+                // If OPENAI_BASE_URL was set (Conway fallback), update the default
+                // provider's baseUrl so the OpenAI client points to Conway Compute.
+                if (process.env.OPENAI_BASE_URL) {
+                  registry.overrideBaseUrl("openai", process.env.OPENAI_BASE_URL);
+                }
+
+                const unifiedInference = new UnifiedInferenceClient(registry);'''.replace("                ", "")
+
+          new_block = '''      const resolveOrchestrationConnectionProvider = () => {
+                const liveConfig = loadConfig();
+                return (
+                  liveConfig?.aiConnection?.active?.provider ??
+                  config.aiConnection?.active?.provider ??
+                  (config.conwayApiKey
+                    ? "conway"
+                    : config.openaiApiKey
+                      ? "openai"
+                      : undefined)
+                );
+              };
+              const orchestrationInference =
+                new RouterBackedOrchestrationInferenceClient({
+                  db: db.raw,
+                  router: inferenceRouter,
+                  runtime: inference,
+                  getConnectionProvider: resolveOrchestrationConnectionProvider,
+                  getSessionId: () => db.getKV("session_id") || "default",
+                  getDailyBudgetCents: () => {
+                    const liveConfig = loadConfig();
+                    return (
+                      liveConfig?.treasuryPolicy ??
+                      config.treasuryPolicy ??
+                      DEFAULT_TREASURY_POLICY
+                    ).maxInferenceDailyCents;
+                  },
+                });'''.replace("                ", "")
+          if text.count(old_block) != 1:
+            raise SystemExit(f"expected exactly one legacy runtime block, found {text.count(old_block)}")
+          text = text.replace(old_block, new_block)
+
+          old_worker = '''      // Adapter: local workers use the unified inference path so planner-backed
+                // harnesses can preserve tier + responseFormat contracts.
+                const workerInference = createWorkerInferenceBridge(unifiedInference);'''.replace("                ", "")
+          new_worker = '''      // Workers and planner-backed harnesses use the same canonical router/model
+                // catalog/connection authority as the parent agent turn.
+                const workerInference = createWorkerInferenceBridge(orchestrationInference);'''.replace("                ", "")
+          if text.count(old_worker) != 1:
+            raise SystemExit(f"expected exactly one worker inference block, found {text.count(old_worker)}")
+          text = text.replace(old_worker, new_worker)
+
+          if text.count("inference: unifiedInference,") != 1:
+            raise SystemExit("expected exactly one Orchestrator legacy inference binding")
+          text = text.replace(
+            "inference: unifiedInference,",
+            "inference: orchestrationInference,",
+          )
+
+          path.write_text(text, encoding="utf-8")
+
+      - name: Verify patch shape
+        run: |
+          git diff --check
+          grep -q 'RouterBackedOrchestrationInferenceClient' src/agent/loop.ts
+          ! grep -q 'new UnifiedInferenceClient' src/agent/loop.ts
+          ! grep -q 'ProviderRegistry.fromConfig' src/agent/loop.ts
+
+      - name: Commit migration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/agent/loop.ts
+          git commit -m "refactor(inference): route orchestration through canonical fabric"
+          git push origin HEAD:abos/p019-adaptive-inference
