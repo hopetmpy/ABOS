@@ -2,19 +2,19 @@
 
 Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
-Active-Plan: P-020
-Active-Segment: continuity/C0016.md
-Active-Intervention: P020_COGNITIVE_FABRIC — AUDIT_IN_PROGRESS / SOURCE_UNMODIFIED
+Active-Plan: P-021
+Active-Segment: continuity/C0017.md
+Active-Intervention: P021_SKILL_EVOLUTION — AUDIT_IN_PROGRESS / SOURCE_UNMODIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p020-cognitive-fabric
-Host-Head-At-Audit-Open: 3e8c0eb31652175b0f3b22ff0296d52c16e758f1
-Last-Reconciled-Host-Head: 3e8c0eb31652175b0f3b22ff0296d52c16e758f1
-Last-Reconciled-Head-Semantics: P019_MAIN_GREEN_P020_AUDIT_OPEN
+Current-Host-Branch: abos/p021-skill-evolution
+Host-Head-At-Audit-Open: c07a1eb10c34792e2490c51196063fbac15df91c
+Last-Reconciled-Host-Head: c07a1eb10c34792e2490c51196063fbac15df91c
+Last-Reconciled-Head-Semantics: P020_MAIN_GREEN_P021_AUDIT_OPEN
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -43,8 +43,9 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 - P-017: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
 - P-018: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
 - P-019: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
-- P-020: EN_EJECUCIÓN / AUDIT_IN_PROGRESS / SOURCE_UNMODIFIED.
-- P-021..P-036: ver estado explícito en `ProjectOps/PLAN.md`.
+- P-020: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
+- P-021: EN_EJECUCIÓN / AUDIT_IN_PROGRESS / SOURCE_UNMODIFIED.
+- P-022..P-036: ver estado explícito en `ProjectOps/PLAN.md`.
 
 ## Evidencia reciente de integración
 
@@ -70,42 +71,52 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 ### P-019
 - PR #53; squash merge `3e8c0eb31652175b0f3b22ff0296d52c16e758f1`.
-- main CI `35918621864`: SUCCESS 8/8; ProjectOps `35918621868`: SUCCESS.
+- main CI `35918621864`: SUCCESS; ProjectOps `35918621868`: SUCCESS.
+
+### P-020
+- PR #54; squash merge `c07a1eb10c34792e2490c51196063fbac15df91c`.
+- PR head `dd8fe5b3418edd2146f0b75d709dec930b86df60`: CI `35929560664` + ProjectOps `35929560726` SUCCESS.
+- exact-main CI `35929847027`: SUCCESS.
+- exact-main ProjectOps Integrity `35929847097`: SUCCESS.
 - estado: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
 
-## Intervención viva — P-020
+## Intervención viva — P-021
 
-Authority detail: `ProjectOps/continuity/C0016.md`.
-Plan module: `ProjectOps/plan/P-020.md`.
-Working branch: `abos/p020-cognitive-fabric`.
-Baseline exacto: `main 3e8c0eb31652175b0f3b22ff0296d52c16e758f1`.
+Authority detail: `ProjectOps/continuity/C0017.md`.
+Plan module: `ProjectOps/plan/P-021.md`.
+Working branch: `abos/p021-skill-evolution`.
+Baseline exacto: `main c07a1eb10c34792e2490c51196063fbac15df91c`.
 
 Estado: `AUDIT_IN_PROGRESS / SOURCE_UNMODIFIED`.
 
 Findings iniciales verificables:
-- `src/agent/loop.ts` usa `MemoryRetriever` básico y `buildContextMessages()` como camino principal;
-- `ContextManager` y `EnhancedRetriever` avanzados existen y tienen tests dedicados, pero no gobiernan ese camino;
-- `KnowledgeStore` cierra categorías en cinco literals aunque SQLite persiste `category` como TEXT abierto;
-- `EnhancedRetriever` usa categorías conocidas como filtros, pudiendo invisibilizar knowledge futuro;
-- P-013 Evidence Fabric, `src/intelligence/` y `src/skills/` ya poseen authorities que P-020 debe reutilizar;
-- Required-Context histórico `src/agent/context/` era drift; source real es `src/agent/context.ts`.
+- skill registry/loader/format ya existen y son runtime real; no se crea un segundo registry;
+- `skills(name PRIMARY KEY)` + `INSERT OR REPLACE` no conserva version history ni rollback;
+- procedural memory ya posee procedure/steps + usage counts y debe reutilizarse como learning substrate;
+- Capability Fabric ya posee execution-readiness y trata skill inventory como `discovered_unverified`, no como executable truth;
+- CapabilityDescriptor ya soporta dependencies/permissions/effects/version/compatibility/environment/I/O/evidence;
+- P-013 Evidence Fabric ya posee provenance/correlation y redaction;
+- install/create skill ya pasan por tools/policy;
+- tests actuales protegen restart/runtime requirements y trust hardening, pero no evolution/versioning/rollback.
 
-Hipótesis principal: `EXTEND_AND_WIRE_EXISTING_MEMORY_CONTEXT_FABRIC`; no se crea un nuevo cognitive manager antes de completar consumer/persistence/restart audit y alcanzar DECISION_READY.
+Hipótesis principal: `EXTEND_EXISTING_SKILL_SYSTEM_WITH_VERSIONED_LIFECYCLE`. Sigue abierto discriminar si una authority de version history additive es necesaria o si alguna persistence existente demuestra equivalencia semántica suficiente.
 
 ## Límites / claims
 
-- P-020 aún no modifica product source.
-- No se declara activa una pieza sólo porque exista y tenga tests.
-- Open knowledge no autoriza duplicar persistence/evidence/skills/intelligence authorities.
-- Una migration nueva sólo se abre si relations/temporal/provenance requieren estado durable que las authorities actuales no puedan representar sin semántica falsa.
+- P-021 product source aún no se modifica.
+- `enabled` inventory nunca se interpreta como `verified_available`.
+- no se crea parallel capability authority, procedural memory, policy path ni evidence ledger.
+- no migration nueva hasta falsar equivalencia con stores/journals existentes y alcanzar DECISION_READY.
+- no thresholds de promoción arbitrarios sin semántica/evidencia.
 
 ## Siguiente punto verificable
 
-1. Completar authority/consumer/persistence/restart audit de memory/context/knowledge.
-2. Discriminar reuse/extend vs migration para relations/provenance/temporal facts.
-3. Registrar DECISION_READY en C0016 antes de product source.
-4. Ejecutar la primera unidad coherente sin crear otra memoria.
+1. Auditar modification/self-mod/evidence stores para version/rollback equivalence.
+2. Auditar migration/restart path y atomic projection de skill active version.
+3. Resolver candidate/validation/degrade/rollback contracts contra Capability Fabric.
+4. Registrar `DECISION_READY` en C0017 antes de product source.
+5. Implementar y atacar una unidad coherente; después focused/full validation e integración.
 
 ## Política de rotación
 
-`C0000-legacy.md` conserva historia pre-cutover. `C0001`..`C0015` son segmentos históricos cerrados; `C0016` es el único segmento ACTIVE mientras P-020 siga abierto. Nunca se crea un segundo `CONTINUITY.md`.
+`C0000-legacy.md` conserva historia pre-cutover. `C0001`..`C0016` son segmentos históricos cerrados; `C0017` es el único segmento ACTIVE mientras P-021 siga abierto. Nunca se crea un segundo `CONTINUITY.md`.
