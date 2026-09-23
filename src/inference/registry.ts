@@ -2,7 +2,7 @@
  * Model Registry
  *
  * DB-backed registry of available models with capabilities and pricing.
- * Seeded from a static baseline, updatable at runtime from Conway API.
+ * Seeded from a static baseline, updatable at runtime from provider catalogs.
  */
 
 import type BetterSqlite3 from "better-sqlite3";
@@ -34,16 +34,16 @@ export class ModelRegistry {
   }
 
   /**
-   * Upsert the static model baseline into the registry on every startup.
-   * New models are added, existing models get updated pricing/capabilities,
-   * and models removed from the baseline are disabled.
+   * Seed the static model baseline into the registry on every startup.
+   *
+   * The baseline owns only the entries it explicitly seeds. It is not a
+   * provider-wide lifecycle authority: models discovered by an adapter or a
+   * provider-native catalog must remain available until that discovery
+   * authority explicitly updates or retires them.
    */
   initialize(): void {
     const now = new Date().toISOString();
-    const baselineIds = new Set(STATIC_MODEL_BASELINE.map((m) => m.modelId));
-    const baselineProviders = new Set(STATIC_MODEL_BASELINE.map((m) => m.provider));
 
-    // Upsert all baseline models
     for (const model of STATIC_MODEL_BASELINE) {
       const existing = modelRegistryGet(this.db, model.modelId);
       const row: ModelRegistryRow = {
@@ -63,19 +63,6 @@ export class ModelRegistry {
         updatedAt: now,
       };
       modelRegistryUpsert(this.db, row);
-    }
-
-    // Disable models no longer in the baseline (e.g., removed Anthropic models).
-    // Skip dynamically-discovered providers (e.g. ollama) — they manage their own lifecycle.
-    const allModels = modelRegistryGetAll(this.db);
-    for (const existing of allModels) {
-      if (
-        !baselineIds.has(existing.modelId) &&
-        existing.enabled &&
-        baselineProviders.has(existing.provider)
-      ) {
-        modelRegistrySetEnabled(this.db, existing.modelId, false);
-      }
     }
   }
 
@@ -132,7 +119,7 @@ export class ModelRegistry {
   }
 
   /**
-   * Refresh registry from Conway /v1/models API response.
+   * Refresh registry from a provider model-catalog API response.
    */
   refreshFromApi(models: any[]): void {
     const now = new Date().toISOString();
