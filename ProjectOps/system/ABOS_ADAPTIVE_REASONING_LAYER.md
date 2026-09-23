@@ -6,333 +6,253 @@ Authority: REFERENCE_ONLY_NON_SCHEDULER
 Invoked-By: `AGENTS.md`
 Does-Not-Schedule: true
 ProjectOps-Model: SINGLE_OPERATING_SYSTEM
-Project: ABOS
-Mode: ABOS_SPECIFIC
 
-Este documento amplía **cómo investigar y razonar** según riesgo para ABOS. No define activación, estado operativo, macro boundaries, handoff, duración, siguiente unidad ni cierre. Todo control de ejecución pertenece exclusivamente a `AGENTS.md`.
+Este documento amplía **cómo investigar y razonar** según riesgo. No define activación, estado operativo, macro boundaries, handoff, duración, siguiente unidad ni cierre. Todo control de ejecución pertenece a `AGENTS.md`.
 
-Si una regla de esta referencia entra en tensión con el kernel, prevalece `AGENTS.md`. Esta referencia no crea una segunda máquina de trabajo.
+Si una regla de esta referencia entra en tensión con el kernel, prevalece `AGENTS.md`.
 
-## 1. Principios universales de razonamiento
+## 1. PROPÓSITO
 
-- `NO_CHANGE_IS_VALID`: no modificar es correcto cuando la evidencia demuestra que crear/cambiar sería redundante, peor o prematuro.
-- `REQUIRED_CONTEXT_IS_FLOOR`: Required-Context es el mínimo; una referencia material fuera de él debe seguirse.
-- `COMPETING_HYPOTHESES_WHEN_MATERIAL`: ante un defecto o ambigüedad relevante, considera explicaciones alternativas antes de fijar causa.
-- `ADVERSARIAL_REVIEW_REQUIRED`: antes de cerrar técnicamente una unidad significativa, intenta falsar la explicación y romper la solución.
-- `DECISION_READY_GATE`: no modifiques una unidad de riesgo material hasta poder explicar problema, authority, alternativas, impacto, evidencia y validación.
-- `SOURCE_IS_NOT_LIVE_EVIDENCE`: source/CI no se transforma en provider/economic LIVE.
-- `UNKNOWN_IS_NOT_ZERO_OR_IMPOSSIBLE`: ausencia de evidencia conserva incertidumbre.
-- `OBJECTIVE_IS_NOT_METHOD`: la estrategia puede cambiar sin abandonar el objetivo legítimo.
-- `ECONOMIC_CLAIMS_REQUIRE_CAUSAL_AUTHORITY`: money claims exigen unidad, source y causalidad.
-- `BOUNDARY_SWITCH_REQUIRES_REPLAN`: una tool call no cruza silenciosamente a otro executor/host por error.
-- `CAPABILITY_PRESERVATION_BEFORE_RESTRICTION`: una capability legítima no se elimina, degrada ni transforma en dependencia humana sólo porque su uso sea riesgoso o inmaduro; primero se audita si el riesgo puede gobernarse mediante mejor contexto, juicio, planning, verificación, observabilidad, adaptación o aprendizaje.
-- `HUMAN_ESCALATION_REQUIRES_REAL_BOUNDARY`: coste, novedad, dificultad o desviación respecto al histórico no son por sí solos motivo de aprobación humana; la escalación exige una frontera real de authority, identity, legalidad, permiso externo, capacidad física/técnica, o un oversight manual explícitamente configurado.
-- `FIXED_THRESHOLD_IS_NOT_RATIONALITY`: un límite monetario/porcentual fijo puede ser señal, guard provisional o frontera externa demostrada; no se trata como definición universal de una decisión racional sin evidencia contextual.
+La meta es hacer difícil que una explicación superficial sobreviva hasta convertirse en modificación.
 
-Estas reglas gobiernan **calidad de decisión**, no cadencia. `DECISION_READY` significa “la decisión técnica está suficientemente investigada”; nunca significa “detén el macro” o “entrega al usuario”.
+La referencia ayuda a:
 
-## 2. DECISION_READY
+- evitar saltar de solicitud a edición;
+- no casarse con la primera causa plausible;
+- tratar `Required-Context` como piso;
+- buscar evidencia falsable;
+- comparar `NO_CHANGE` y otras alternativas reales;
+- analizar efectos de segundo orden;
+- revisar bypasses y fallos parciales;
+- diferenciar source evidence de material/physical evidence;
+- actuar cuando la evidencia ya es suficiente sin caer en analysis paralysis.
 
-Una decisión está `DECISION_READY` sólo cuando, proporcionalmente al riesgo, se resolvió o clasificó:
+No exige exponer cadena de pensamiento. Registra únicamente resultados auditables que afecten el proyecto.
 
-1. qué resultado observable se necesita;
-2. qué existe realmente;
-3. qué authority produce/consume el estado afectado;
-4. qué invariante ABOS puede romperse;
-5. si existe implementación equivalente;
-6. al menos una hipótesis alternativa cuando el diagnóstico sea materialmente incierto;
-7. qué evidencia separa las hipótesis;
-8. impacto directo/upstream/downstream/lateral/temporal/persistente/económico;
-9. rollback/recovery;
-10. nivel de evidencia exigido para el claim.
+Principios nombrados que deben conservarse:
 
-Una incógnita no bloqueante puede permanecer UNKNOWN si está explícita. Una incógnita que invalide seguridad, economía, authority o causalidad bloquea sólo la acción correspondiente.
+- `NO_CHANGE_IS_VALID`;
+- `REQUIRED_CONTEXT_IS_FLOOR`;
+- `COMPETING_HYPOTHESES_WHEN_MATERIAL`;
+- `ADVERSARIAL_REVIEW_REQUIRED`;
+- `DECISION_READY_GATE`.
 
-## 3. Profundidad adaptativa por riesgo
+## 2. PROFUNDIDAD POR RIESGO
 
-### R0 — rutinario
+### R0 — RUTINARIO
 
 Trabajo local, reversible, semántica clara, sin cambio material de authority, contrato, persistencia, causalidad, seguridad o comportamiento crítico.
 
-Requiere contexto suficiente, búsqueda de equivalentes, cambio mínimo coherente y validación proporcional. No fabriques hipótesis o ceremonias que no aporten información.
+Requiere:
 
-### R1 — significativo
+- contexto suficiente;
+- comprobar equivalentes;
+- cambio mínimo coherente;
+- validación proporcional.
+
+No fabriques hipótesis o ceremonias que no aporten información.
+
+### R1 — SIGNIFICATIVO
 
 Cambio de comportamiento, contrato, integración, varios consumers, rendimiento material o blast radius relevante.
 
-Además de R0: mapa de authority/producers/consumers, incertidumbres relevantes, alternativas materialmente distintas, expansión de contexto cuando la evidencia lo pida, falsación y revisión adversarial posterior.
+Además de R0:
 
-### R2 — crítico
+- mapa de authority/producers/consumers;
+- incertidumbres relevantes;
+- alternativas materialmente distintas;
+- expansión de contexto si la evidencia lo pide;
+- prueba de falsación;
+- revisión adversarial posterior.
 
-Dinero, wallets, identity, OAuth, cloud billable, self-modification, replication, persistence migrations, executor boundaries, constitution/policy, TaskGraph, lifecycle, recovery, arquitectura o seguridad crítica.
+### R2 — CRÍTICO
 
-Además de R1, cuando sea material: hipótesis competidoras, causalidad/temporalidad, rollback, failure injection o E2E pertinente, bypasses, segundo orden e incertidumbre residual explícita.
+Arquitectura, persistencia/migration, auth/permissions, seguridad, dinero/wallets, OAuth, cloud billable, self-modification, replication/children, executor/provider boundaries, constitution/policy, lifecycle/recovery o datos irreversibles.
+
+Además de R1, cuando sea material:
+
+- hipótesis competidoras plausibles;
+- grafo causal/temporal/authority;
+- contrafactuales;
+- fallos parciales y recovery;
+- segundo orden;
+- búsqueda de bypasses;
+- validación independiente cuando exista;
+- incertidumbre residual explícita.
 
 La profundidad puede bajar si la evidencia demuestra que el problema es más simple. No baja por impaciencia.
 
-## 4. Razonamiento de rutas ABOS
+## 3. ENMARCAR EL PROBLEMA
 
-ABOS ya posee Adaptive Path Intelligence. El trabajo de desarrollo debe preservar su semántica:
+Antes de decidir una modificación pregunta:
 
-**GOAL → candidate path → assumptions/capabilities/environment → execution → observation → classified evidence → world model update → replan**
+- ¿qué problema real intento resolver?;
+- ¿qué comportamiento observable debería cambiar?;
+- ¿qué invariantes deben preservarse?;
+- ¿qué está fuera de scope?;
+- ¿qué evidencia demostraría que no hace falta modificar?;
+- ¿la solución pedida es realmente el problema o sólo una propuesta?
 
-Distingue:
+## 4. MAPA MÍNIMO DE SISTEMA
 
-- transient retry: misma estrategia puede repetirse cuando la causa es temporal y existe una condición nueva o ventana legítima;
-- strategic failure: cambia evidence/assumptions y requiere replan;
-- authorization failure: no se evade; se registra `UNAUTHORIZED` y se busca una ruta autorizada si existe;
-- capability unavailable: no equivale a imposible; discover/acquire/compose/construct cuando sea legítimo;
-- prohibited path: se descarta esa ruta sin inferir que todo el objetivo es imposible;
-- impossible: requiere evidencia suficiente de imposibilidad dentro de las condiciones definidas.
+Cuando sea material identifica:
 
-No uses un contador fijo de intentos como prueba de imposibilidad.
+1. authority canónica;
+2. producers;
+3. transforms;
+4. persistence;
+5. consumers;
+6. dependencias directas/indirectas;
+7. orden temporal;
+8. entradas alternativas/bypasses;
+9. restart/replay behavior.
 
-## 5. Authority económica y supervivencia
+Para causal/financial/external execution añade según corresponda:
 
-ABOS toma decisiones bajo presión de recursos. Por ello, los números mal clasificados son defectos semánticos de alta severidad.
+- event time;
+- knowledge time;
+- materialization time;
+- actor/identity;
+- authorization;
+- settlement/ground truth;
+- execution authority.
 
-Antes de usar una cifra pregunta:
+No modifiques una frontera crítica mientras dos authorities compitan sin resolver cuál gobierna.
 
-- ¿es cash/USDC, Conway credit, accounting interno, estimate, commitment o realized cost?;
-- ¿es saldo observado o acumulación histórica?;
-- ¿es revenue atribuido causalmente o expectation?;
-- ¿es flujo interno de capital o P&L externo?;
-- ¿la unidad es cents, USD, token-price, credits u otra?;
-- ¿timestamp y scope corresponden al actor correcto?;
-- ¿quién posee authority sobre la cuenta/wallet implicada?;
-- ¿qué parte sigue UNKNOWN?
+## 5. HIPÓTESIS COMPETIDORAS CUANDO SON MATERIALES
 
-Reglas:
+`COMPETING_HYPOTHESES_WHEN_MATERIAL`
 
-- funding != balance;
-- funding != expense;
-- allocation != external loss;
-- estimate != realized cost;
-- expected revenue != realized revenue;
-- unknown balance != zero;
-- unknown profitability != unprofitable;
-- ROI requiere numerator y denominator semánticamente válidos;
-- parent bookkeeping no sustituye child financial observation.
+Si la causa es incierta y una explicación distinta cambiaría la decisión:
 
-Una decisión de kill/fund/recall/replicate por profitability no puede construirse sobre señales que el propio sistema reconoce como desconocidas.
+- formula al menos otra hipótesis plausible;
+- incluye `NO_DEFECT` cuando sea razonable;
+- considera reloj/authority incorrectos, protección en otra capa, estado stale, ordering o evidencia incompleta;
+- no fabriques alternativas absurdas para cumplir una cuota.
 
-Cuando ABOS decide gastar o reservar recursos, el saldo disponible no es por sí solo la decisión. Distingue necesidad actual, commitments, trabajo/contratos futuros, anticipos, capital libre, reserva dinámica, coste recurrente, provider risk, refund latency, alternativas y coste de no actuar.
+Si una causa queda demostrada de forma suficientemente única, no mantengas hipótesis ficticias.
 
-## 6. Parent/child y replication
+## 6. FALSACIÓN Y DISCRIMINACIÓN
 
-Un child ABOS es un actor con identity/wallet/runtime propios.
+No busques sólo evidencia compatible con tu explicación favorita.
 
-Antes de una acción parent→child determina:
+Pregunta:
 
-- si es observación, instrucción, allocation, message, lifecycle action o debit;
-- quién puede autorizarla realmente;
-- qué sandbox/transport pertenece al child;
-- qué señal prueba runtime health;
-- qué estado puede observar el parent y cuál sólo puede inferir;
-- qué ocurre si el child está unreachable pero no dead.
+- ¿qué observación separa H1 de H2?;
+- ¿qué haría falsa mi explicación?;
+- ¿qué prueba mínima maximiza ganancia de información?;
+- ¿puedo inspeccionar una authority más cercana al hecho?;
+- ¿qué resultado haría inseguro implementar?
 
-Prohibido:
+Una hipótesis descartada no se revive sin nueva evidencia.
 
-- usar credenciales/cliente del parent para fingir un debit del child;
-- usar el executor del parent como evidence de health del child;
-- convertir ausencia de telemetría child en balance cero/dead;
-- autocertificar constitution propagation únicamente porque el spawn no lanzó excepción.
+## 7. REQUIRED-CONTEXT ES PISO
 
-## 7. Executor/environment boundaries
+`REQUIRED_CONTEXT_IS_FLOOR`
 
-Environment/provider es medio, no objetivo.
+Sigue evidencia hacia:
 
-Cuando el executor seleccionado falla:
+- imports/callers;
+- types/contracts;
+- producers/consumers;
+- events;
+- tables/migrations;
+- tests;
+- commits/PRs;
+- logs/runbooks;
+- history;
+- otra authority relevante.
 
-1. conserva el failure real;
-2. no ejecutes silenciosamente local como fallback de la misma call;
-3. determina scope de failure: resource, provider, auth, capability, transient o semantic;
-4. actualiza Adaptive Path evidence;
-5. deja que orchestration seleccione otra ruta explícita.
+No cargues historia irrelevante por reflejo.
 
-Un resource AWS fallido no bloquea todo AWS si el evidence scope es resource-specific. Un provider no disponible no prueba que Local/Conway/futuro provider tampoco pueda resolver el objetivo.
+Una rama de investigación deja de expandirse cuando nuevos nodos razonables ya no pueden cambiar materialmente decisión, riesgo o estrategia de validación. Esto es **saturación de investigación**, no autorización de handoff.
 
-## 8. Long-running state, concurrency y recovery
+## 8. ESPACIO DE DECISIÓN
 
-ABOS debe sobrevivir a interrupciones sin duplicar efectos.
+Considera explícitamente:
 
-Para scheduler/tasks/resource mutations revisa:
+- `NO_CHANGE`;
+- `REUSE`;
+- `EXTEND`;
+- `CORRECT`;
+- `REFACTOR`;
+- `MIGRATE`;
+- `UNIFY`;
+- `REPLACE`;
+- `RETIRE`;
+- `CREATE`.
 
-- leases;
-- idempotency keys;
-- retry slot lifecycle;
-- cancellation cooperativa;
-- operación que timeout pero continúa viva;
-- late success;
-- restart entre side effect y persistencia;
-- stale wake/task/event;
-- dedup;
-- atomicidad o compensación.
+`NO_CHANGE_IS_VALID`.
 
-`timeout` no significa que el side effect terminó. No liberes authority de ejecución de forma que otro retry pueda solaparse mientras el trabajo anterior sigue vivo.
+Compara semántica, evidencia, compatibilidad, riesgo, complejidad, deuda, observabilidad, rendimiento, migration, reversibilidad y evolución futura.
 
-## 9. Inference y model routing
+Para problemas recurrentes pregunta si una pequeña invariante puede eliminar la clase de fallo sin crear una plataforma innecesaria.
 
-Preserva la separación:
+## 9. SEGUNDO ORDEN
 
-- ModelRegistry = modelos conocidos/estado;
-- connection adapter = compatibilidad/auth/discovery;
-- InferenceRouter = ruta ejecutable;
-- budget ledger/tracker = costo observado/caps.
+Una solución no se evalúa sólo por arreglar el caso actual.
 
-Open-world:
+Pregunta:
 
-- un modelo dinámicamente descubierto no debe quedar inválido sólo por no existir en un baseline estático;
-- compatibilidad desconocida no se convierte arbitrariamente en incompatibilidad;
-- compatibilidad conocida `false` sí excluye esa ruta;
-- fallback puede explorar modelos compatibles/affordable sin cruzar una conexión imposible;
-- timeout/caller abort debe propagarse; no multipliques un timeout en retries completos.
+- ¿crea un nuevo bypass?;
+- ¿crea estado derivado que pueda competir con su source?;
+- ¿aumenta coste de migration/test/operation?;
+- ¿oculta fallos silenciosos?;
+- ¿dificulta retirar la pieza?;
+- ¿convierte una excepción en precedente?;
+- ¿mejora una parte degradando el sistema completo?
 
-No introduzcas una policy de inference que no observe el path real.
+## 10. REVISIÓN ADVERSARIAL
 
-## 10. Constitution, policy y autonomía
+`ADVERSARIAL_REVIEW_REQUIRED`
 
-Autonomía amplia no significa authority infinita.
-
-La jerarquía de `constitution.md` es material:
-
-- Never harm prevalece;
-- Earn your existence sólo autoriza valor legítimo;
-- Never deceive exige representación fiel de acciones/estado.
-
-Cuando una ruta es prohibida por constitution/policy/auth:
-
-- no la camufles como fallo técnico;
-- no busques un bypass equivalente;
-- conserva el objetivo si existe otra ruta legítima;
-- si el objetivo sólo puede lograrse violando la frontera, se bloquea/rechaza esa ruta/objetivo según corresponda.
-
-### 10.1 Preservación de capacidad antes de restricción
-
-Antes de retirar, desactivar, hardcodear un tope, exigir aprobación humana o reducir una capability legítima, clasifica el problema:
-
-- `REAL_BOUNDARY`;
-- `GOVERNABLE_RISK`;
-- `IMMATURE_CAPABILITY`;
-- `REDUNDANT_OR_HARMFUL`;
-- `UNKNOWN`.
-
-Conducta:
-
-- `REAL_BOUNDARY` puede bloquear o escalar a la authority real;
-- `GOVERNABLE_RISK` se gobierna sin destruir autonomía;
-- `IMMATURE_CAPABILITY` se completa/refactoriza antes de retirar;
-- `REDUNDANT_OR_HARMFUL` puede eliminarse después de mapear dependencias;
-- `UNKNOWN` exige investigación, no prohibición por defecto.
-
-Para una nueva restricción material, la decisión debe registrar qué alternativa de preservación de capacidad se evaluó y por qué era insuficiente.
-
-### 10.2 Escalación humana mínima
-
-ABOS no escala al creator simplemente porque una decisión sea cara, difícil, nueva, parcialmente irreversible o distinta del histórico.
-
-La escalación humana es correcta cuando existe una frontera concreta, por ejemplo identity/KYC que corresponde al creator, authority sobre una cuenta/recurso que ABOS no posee, permiso externo que no puede autoconcederse, acción que exige consentimiento explícito o oversight manual configurado para ese scope.
-
-Creator-signed approval es una capability válida para esas fronteras y overrides explícitos; no es el mecanismo universal de decisión económica u operativa.
-
-## 11. Self-modification y capability acquisition
-
-Antes de modificar su propio source, instalar packages/tools/skills o incorporar capability externa:
-
-- identifica provenance;
-- verifica scope/permisos;
-- protege constitution/core laws;
-- evalúa supply-chain risk;
-- registra la modificación;
-- define rollback;
-- valida que la capability realmente quedó ejecutable;
-- no confundas install success con capability success.
-
-Una capability faltante puede adquirirse/construirse, pero el mecanismo de adquisición tampoco debe convertirse en una segunda authority paralela de tools/skills.
-
-## 12. Datos, source y runtime state
-
-No confundas:
-
-- repo checkout;
-- `~/.abos` state;
-- artifacts remotos;
-- child sandbox state;
-- external provider state.
-
-Update/rebrand/clone no puede sustituir wallet/config/db existentes por accidente. Recovery debe identificar qué authority conserva cada estado y cómo se valida después de restart.
-
-## 13. Documentación y drift
-
-Docs son hipótesis de arquitectura hasta reconciliarse con source actual.
-
-Ante mismatch:
-
-1. determina si source cambió después del doc;
-2. identifica authority vigente;
-3. no “arregles” source para coincidir con doc viejo;
-4. corrige doc o source según evidence;
-5. registra la divergencia si afecta futuras decisiones.
-
-Contadores frágiles requieren especial cautela porque envejecen rápido.
-
-## 14. Evidencia externa
-
-No declares E5/E6 porque:
-
-- hay mocks/injected clients;
-- CI fue verde;
-- existe un adapter;
-- un provider respondió en una prueba aislada distinta;
-- source contiene un endpoint;
-- existe un wallet address.
-
-Para OAuth LIVE: autorización real + operación autenticada verificable.
-Para AWS LIVE: cuenta/autorización real + evidence del lifecycle exacto; si genera coste, budget/cleanup son parte del test.
-Para economic LIVE: observaciones reales y atribución causal suficiente para la decisión reclamada.
-
-## 15. Revisión adversarial
-
-`ADVERSARIAL_REVIEW_REQUIRED`.
-
-Para R1/R2 intenta romper la solución por fronteras materiales:
+Para R1/R2 intenta romper la solución por las rutas que realmente puedan invalidarla:
 
 - entrypoint alternativo;
-- restart/replay/idempotencia;
+- restart/replay/duplicación/idempotencia;
 - race/concurrency;
-- crash entre persistencias;
+- fallo parcial/crash entre persistencias;
 - stale/missing/corrupt data;
 - legacy/version skew;
-- dependency caída;
+- límites temporales/clocks;
+- dependencia caída;
 - input malformado;
 - permisos/seguridad;
 - observabilidad ausente;
-- resource degradation;
-- authority/economic causality incompleta.
+- degradación de recursos;
+- authority/financial causality incompleta;
+- provider/executor switch no autorizado;
+- parent/child authority confundida.
 
-Antes de declarar un claim técnico satisfecho pregunta además:
+No ejecutes mecánicamente toda la lista. Ataca las fronteras materiales.
 
-- ¿qué parte sigue sin consumer real?;
-- ¿creé authority duplicada?;
-- ¿un restart rompe consistencia?;
-- ¿un timeout permite overlap?;
-- ¿un UNKNOWN fue convertido en 0/false/dead?;
-- ¿un parent está fingiendo child authority?;
-- ¿una ruta cambió de executor sin replan?;
-- ¿estimate se presenta como realized?;
-- ¿CI realmente ejecutó el comportamiento que afirmo?;
-- ¿un PR/branch no merged está siendo tratado como main?;
-- ¿violé constitution para resolver el objetivo?;
-- ¿rollback preserva identity/state?;
-- ¿cerré una capability legítima cuando faltaba criterio/contexto?;
-- ¿introduje aprobación humana donde bastaba juicio autónomo?;
-- ¿un threshold fijo está decidiendo por contexto todavía no modelado?
+## 11. VALIDACIÓN
 
-Si una respuesta material invalida el claim, el claim no está técnicamente demostrado. Esta revisión no decide cuándo detener el macro; eso pertenece a `AGENTS.md`.
+Demuestra comportamiento desde la authority más cercana posible al objetivo.
 
-## 16. SOURCE-FIRST y evidencia material diferida
+Escala según riesgo:
 
-`SOURCE_FIRST_DEFERRED_MATERIAL_VALIDATION`.
+- static/source contract;
+- unit;
+- integración;
+- persistence/restart;
+- E2E;
+- runtime target;
+- evidencia externa/real;
+- evidencia longitudinal cuando aplique.
+
+Distingue:
+
+- source-defined evidence;
+- prueba realmente ejecutada;
+- runtime observado;
+- evidencia física externa.
+
+Un test autocumplido puede ser insuficiente para un claim crítico si existe una fuente independiente mejor.
+
+## 12. SOURCE-FIRST Y EVIDENCIA MATERIAL DIFERIDA
+
+`SOURCE_FIRST_DEFERRED_MATERIAL_VALIDATION`
 
 Si una prueba material ausente no puede cambiar la siguiente decisión source:
 
@@ -341,13 +261,69 @@ Si una prueba material ausente no puede cambiar la siguiente decisión source:
 - conserva claims limitados;
 - continúa el source elegible.
 
-La evidencia material bloquea sólo cuando puede cambiar authority, causalidad, contrato, seguridad/permisos, dinero, migration irreversible, siguiente decisión source o dependencia explícita del plan.
+Puede diferirse según contexto:
 
-Prohibido declarar PASS no ejecutado, llamar runtime demostrado a source correcto, usar CI pre-runner como validación, llamar HECHO a un DoD materialmente incompleto o paralizar source independiente sin dependencia real.
+- Windows/PC target;
+- browser/provider real;
+- hardware;
+- DB/runtime local del operador;
+- infraestructura externa;
+- observación física;
+- longitudinal future evidence;
+- runner CI no ejecutado.
 
-## 17. Saturación de investigación
+La evidencia material bloquea inmediatamente cuando puede cambiar:
 
-`DECISION_READY_GATE`.
+- authority;
+- causalidad;
+- contrato;
+- seguridad/permisos;
+- dinero/financial execution;
+- migration irreversible;
+- siguiente decisión source;
+- una dependencia explícita del plan.
+
+Prohibido:
+
+- declarar PASS no ejecutado;
+- llamar runtime demostrado a source correcto;
+- usar CI pre-runner como validación;
+- llamar HECHO a un DoD materialmente incompleto;
+- reintentar ciegamente la misma prueba bloqueada;
+- paralizar source independiente sin dependencia real.
+
+## 13. CONTROL DE SESGOS
+
+### Terminación
+No asumas que una petición de “arreglar” exige diff.
+
+### Confirmación
+Busca evidencia que pueda falsar tu explicación.
+
+### Contexto
+No conviertas archivo inicial o `Required-Context` en túnel.
+
+### Parche
+No prefieras el cambio local si existe causa estructural demostrada.
+
+### Arquitectura
+No prefieras rediseño si una solución simple preserva invariantes.
+
+### Test autocumplido
+No confundas el test que refleja tu implementación con prueba independiente de semántica.
+
+### Narrativa
+Plan/continuity pueden estar stale; contrasta con realidad.
+
+### Disponibilidad
+La causa que recuerdas primero no obtiene prioridad sin evidencia.
+
+### Validación inmediata
+No confundas rigor con repetir una prueba material bloqueada que no puede cambiar la siguiente decisión source.
+
+## 14. SATURACIÓN DE INVESTIGACIÓN
+
+`DECISION_READY_GATE`
 
 Una decisión puede considerarse suficientemente investigada cuando, proporcionalmente al riesgo:
 
@@ -360,28 +336,15 @@ Una decisión puede considerarse suficientemente investigada cuando, proporciona
 - existe estrategia de validación falsable;
 - incertidumbres residuales no cambian la decisión o están bloqueadas.
 
-Esta regla determina si la **decisión técnica** está lista. No decide cadencia, handoff ni cierre del macro.
+Esta regla sólo determina si la **decisión técnica** está lista. No decide cadencia, handoff ni cierre del macro.
 
-## 18. NO_CHANGE
-
-`NO_CHANGE` es resultado positivo cuando la auditoría demuestra que:
-
-- la capability ya existe correctamente;
-- el supuesto del plan era falso;
-- el cambio duplicaría authority;
-- el riesgo supera el beneficio;
-- falta evidence necesaria para actuar correctamente;
-- la solución propuesta empeoraría invariantes.
-
-Debe registrarse evidence y motivo; no se usa como excusa para evitar trabajo incómodo.
-
-## 19. Registro auditable
+## 15. REGISTRO AUDITABLE
 
 Registra cuando sea material:
 
 - hechos;
 - hipótesis que condicionaron decisión;
-- evidence discriminante;
+- evidencia discriminante;
 - alternativas relevantes;
 - decisión;
 - cambios;
@@ -390,16 +353,34 @@ Registra cuando sea material:
 - riesgos residuales;
 - siguiente punto verificable.
 
-No vuelques cadena de pensamiento privada ni cientos de preguntas resueltas.
+No vuelques cadena de pensamiento ni cientos de preguntas resueltas.
 
-## 20. Regla final
+## 16. ESCENARIOS DE AUTOCONTROL
 
-ABOS debe aumentar su capacidad **sin degradar verdad, authority, causalidad, continuidad, constitution ni autonomía legítima**.
+La referencia está mal aplicada si ocurre alguno:
 
-La pregunta central no es “¿puedo escribir este código?”, sino:
+- falso bug recibe guard duplicado sin auditar authority;
+- dependencia fuera de `Required-Context` se ignora;
+- CI failure sin runner se trata como code failure;
+- implementaciones parecidas se deduplican por nombre;
+- bug recurrente recibe parche cuando una invariante pequeña elimina la clase de fallo;
+- tarea R0 se paraliza con ceremonia R2;
+- evidencia insuficiente se presenta como PASS;
+- validación física diferible bloquea source independiente;
+- una regla de razonamiento se usa como excusa para cortar la frontera macro.
 
-**«¿Este cambio hace que ABOS pueda perseguir objetivos legítimos por más rutas, con mejor evidence, criterio y recovery, sin inventar capabilities, dinero, permisos o éxito que no posee?»**
+## FRASES DE CONTROL
 
-Esta referencia mejora la calidad de la decisión; `AGENTS.md` gobierna ejecución y continuidad de trabajo.
+**«¿Qué otra explicación plausible produciría la misma evidencia y cómo las separo?»**
+
+**«Required-Context es el piso. ¿La evidencia apunta fuera?»**
+
+**«¿Modificar es realmente la mejor decisión, o sólo la acción más inmediata?»**
+
+**«¿Estoy corrigiendo el síntoma o puedo eliminar la clase de fallo con una invariante proporcional?»**
+
+**«¿Su resultado material puede cambiar la siguiente decisión source?»**
+
+**«¿Puede la respuesta cambiar materialmente la decisión, el riesgo o la prueba?»**
 
 <!-- PROJECTOPS:ADAPTIVE-REASONING-REFERENCE:END -->
