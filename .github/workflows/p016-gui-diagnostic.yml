@@ -1,0 +1,47 @@
+name: P016 GUI Probe Diagnostic
+
+on:
+  push:
+    branches:
+      - abos/p016-computer-browser-gui-hands
+    paths:
+      - .github/workflows/p016-gui-diagnostic.yml
+
+jobs:
+  windows-probe-diagnostic:
+    runs-on: windows-2025
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: abos/p016-computer-browser-gui-hands
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - name: Direct Windows primitives
+        shell: powershell
+        run: |
+          Write-Host "UserInteractive=$([Environment]::UserInteractive) SessionId=$([System.Diagnostics.Process]::GetCurrentProcess().SessionId)"
+          Add-Type -AssemblyName UIAutomationClient
+          Add-Type -AssemblyName UIAutomationTypes
+          $root = [System.Windows.Automation.AutomationElement]::RootElement
+          Write-Host "UIARoot=$($null -ne $root)"
+          Add-Type -AssemblyName System.Windows.Forms
+          Add-Type -AssemblyName System.Drawing
+          $virtual = [System.Windows.Forms.SystemInformation]::VirtualScreen
+          Write-Host "VirtualScreen=$($virtual.X),$($virtual.Y),$($virtual.Width),$($virtual.Height)"
+          $bmp = New-Object System.Drawing.Bitmap 1,1
+          $graphics = [System.Drawing.Graphics]::FromImage($bmp)
+          try {
+            $graphics.CopyFromScreen($virtual.X, $virtual.Y, 0, 0, (New-Object System.Drawing.Size 1,1))
+            Write-Host "CopyFromScreen=true"
+          } finally {
+            $graphics.Dispose(); $bmp.Dispose()
+          }
+      - name: ABOS LocalGuiRuntime probe
+        shell: pwsh
+        run: |
+          node --input-type=module -e "import('./dist/gui/local-runtime.js').then(({LocalGuiRuntime}) => { const r = new LocalGuiRuntime().probe(); console.log(JSON.stringify(r,null,2)); })"
