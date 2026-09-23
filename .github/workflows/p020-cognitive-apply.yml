@@ -1,4 +1,4 @@
-name: P020 Cognitive Fabric Apply
+name: P020 Cognitive Fabric Validation
 
 on:
   push:
@@ -7,43 +7,25 @@ on:
     paths:
       - .github/workflows/p020-cognitive-apply.yml
 
-permissions:
-  contents: write
-
 jobs:
-  apply:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: abos/p020-cognitive-fabric
-          fetch-depth: 0
-
-      - name: Apply P-020 adversarial fix
-        run: python3 scripts/p020-adversarial-fix.py
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Validate tool protocol fix
+      - name: Validate persistence, activation, context and build
         shell: bash
         run: |
           corepack enable
           pnpm install --frozen-lockfile
-          pnpm exec vitest run src/__tests__/memory/context-manager.test.ts
+          pnpm exec vitest run \
+            src/__tests__/memory/knowledge-store.test.ts \
+            src/__tests__/memory/enhanced-retriever.test.ts \
+            src/__tests__/memory/context-manager.test.ts \
+            src/__tests__/memory/cognitive-fabric.integration.test.ts
           pnpm run typecheck
           pnpm run build
-
-      - name: Commit source fix
-        shell: bash
-        run: |
-          if git diff --quiet; then
-            echo "No source changes produced; refusing silent success."
-            exit 1
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/memory/context-manager.ts src/__tests__/memory/context-manager.test.ts
-          git commit -m "P-020: preserve tool-only turn protocol"
-          git push origin HEAD:abos/p020-cognitive-fabric
