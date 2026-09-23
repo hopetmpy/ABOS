@@ -25,4 +25,33 @@ describe("P-017 remediation persistence redaction", () => {
     expect(JSON.stringify(redacted)).not.toContain("should-never-persist");
     expect(original.probeArguments.apiToken).toBe("super-secret-token");
   });
+
+  it("does not persist source contents from a P-012 construction plan", () => {
+    const original = {
+      requirement: "archive extraction",
+      constructionPlan: {
+        description: "Construct archive adapter",
+        edits: [
+          {
+            path: "src/adapters/archive.ts",
+            content: "const embeddedSecret = 'do-not-persist-this-source';",
+          },
+        ],
+      },
+    };
+
+    const redacted = redactToolArgumentsForPersistence(
+      "remediate_capability",
+      original,
+    );
+
+    expect(redacted).toEqual({
+      requirement: "archive extraction",
+      constructionPlan: "<redacted>",
+    });
+    expect(JSON.stringify(redacted)).not.toContain("do-not-persist-this-source");
+    expect((original.constructionPlan.edits[0] as any).content).toContain(
+      "do-not-persist-this-source",
+    );
+  });
 });
