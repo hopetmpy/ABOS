@@ -42,6 +42,13 @@ function environmentCapabilityState(
   if (snapshot.availability === "unknown") return "unknown";
   if (snapshot.availability === "degraded") return "degraded";
   if (snapshot.availability === "available") {
+    const explicitState = typeof capability.state === "string" && capability.state.trim()
+      ? capability.state.trim()
+      : null;
+    if (explicitState) {
+      if (explicitState === "verified_available" && !capability.available) return "probed";
+      return explicitState;
+    }
     return capability.available ? "verified_available" : "unavailable";
   }
   return "unknown";

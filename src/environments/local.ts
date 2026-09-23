@@ -69,9 +69,13 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
         "Local screen capture is currently unavailable on this host.",
       );
     }
-    if (!gui.input.available) {
+    if (gui.input.state === "probed") {
       constraints.push(
-        "Local low-level GUI input is currently unavailable or not authorized on this host.",
+        "Local low-level GUI input provider is present, but execution readiness is not verified until an explicit input action succeeds.",
+      );
+    } else if (!gui.input.available) {
+      constraints.push(
+        "Local low-level GUI input is currently unavailable on this host.",
       );
     }
 
@@ -98,6 +102,7 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
         guiAccessibilityAvailable: gui.accessibility.available,
         guiScreenAvailable: gui.screen.available,
         guiInputAvailable: gui.input.available,
+        guiInputState: gui.input.state,
         guiObservedAt: gui.observedAt,
         guiScreenBounds: gui.screen.bounds,
       },
@@ -161,7 +166,7 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
           effects: ["desktop_observation", "desktop_semantic_interaction"],
           environment: "local",
           available: gui.accessibility.available,
-          state: gui.accessibility.available ? "verified_available" : "unavailable",
+          state: gui.accessibility.state,
           observedAt: gui.observedAt,
           authority: "local-gui-runtime:accessibility-probe",
           evidence: [...gui.accessibility.evidence],
@@ -177,7 +182,7 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
           effects: ["screen_capture", "file_write"],
           environment: "local",
           available: gui.screen.available,
-          state: gui.screen.available ? "verified_available" : "unavailable",
+          state: gui.screen.state,
           observedAt: gui.observedAt,
           authority: "local-gui-runtime:screen-probe",
           evidence: [...gui.screen.evidence],
@@ -194,7 +199,7 @@ export class LocalEnvironmentProvider implements EnvironmentProvider {
           effects: ["desktop_low_level_input"],
           environment: "local",
           available: gui.input.available,
-          state: gui.input.available ? "verified_available" : "unavailable",
+          state: gui.input.state,
           observedAt: gui.observedAt,
           authority: "local-gui-runtime:input-probe",
           evidence: [...gui.input.evidence],

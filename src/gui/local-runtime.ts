@@ -12,7 +12,8 @@ const MAX_ACTION_SCAN_NODES = 5_000;
 const MAX_TEXT_LENGTH = 4_096;
 
 export interface GuiBounds { x: number; y: number; width: number; height: number; }
-export interface GuiPrimitiveProbe { available: boolean; evidence: string[]; }
+export type GuiPrimitiveState = "verified_available" | "probed" | "unavailable";
+export interface GuiPrimitiveProbe { available: boolean; state: GuiPrimitiveState; evidence: string[]; }
 export interface LocalGuiProbe {
   observedAt: string;
   platform: string;
@@ -152,6 +153,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 public static class AbosGuiInput
 {
+    private const uint INPUT_MOUSE = 0;
     private const uint INPUT_KEYBOARD = 1;
     private const uint KEYEVENTF_KEYUP = 0x0002;
     private const uint KEYEVENTF_UNICODE = 0x0004;
@@ -163,7 +165,6 @@ public static class AbosGuiInput
     [DllImport("user32.dll", SetLastError = true)] public static extern bool SetCursorPos(int X, int Y);
     [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT point);
     [DllImport("user32.dll")] public static extern IntPtr GetDesktopWindow();
-    [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
     [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, INPUT[] inputs, int size);
     public static uint SendUnicode(string text) {
         var inputs = new List<INPUT>(text.Length * 2);
@@ -177,6 +178,13 @@ public static class AbosGuiInput
     public static bool SendVirtualKey(ushort key, bool keyUp) {
         var input = new INPUT { type = INPUT_KEYBOARD, U = new INPUTUNION { ki = new KEYBDINPUT { wVk = key, dwFlags = keyUp ? KEYEVENTF_KEYUP : 0 } } };
         return SendInput(1, new[] { input }, Marshal.SizeOf(typeof(INPUT))) == 1;
+    }
+    public static uint SendMouseClick(uint downFlag, uint upFlag) {
+        var inputs = new[] {
+            new INPUT { type = INPUT_MOUSE, U = new INPUTUNION { mi = new MOUSEINPUT { dwFlags = downFlag } } },
+            new INPUT { type = INPUT_MOUSE, U = new INPUTUNION { mi = new MOUSEINPUT { dwFlags = upFlag } } },
+        };
+        return SendInput(2, inputs, Marshal.SizeOf(typeof(INPUT)));
     }
 }
 '@
@@ -199,7 +207,7 @@ try {
 
   if ($protocol.op -eq 'probe') {
     $accessibilityEvidence = New-Object System.Collections.ArrayList; $screenEvidence = New-Object System.Collections.ArrayList; $inputEvidence = New-Object System.Collections.ArrayList
-    $accessibility = $false; $screen = $false; $input = $false; $bounds = $null
+    $accessibility = $false; $screen = $false; $inputProviderReady = $false; $bounds = $null
     if (-not [Environment]::UserInteractive) {
       [void]$accessibilityEvidence.Add('Environment.UserInteractive=false'); [void]$screenEvidence.Add('Environment.UserInteractive=false'); [void]$inputEvidence.Add('Environment.UserInteractive=false')
     } else {
@@ -212,9 +220,9 @@ try {
         }
         [void]$screenEvidence.Add("virtualScreen=$($virtual.X),$($virtual.Y),$($virtual.Width),$($virtual.Height); CopyFromScreen=$screen")
       } catch { [void]$screenEvidence.Add("screen probe failed: $($_.Exception.Message)") }
-      try { Load-Input; $point = New-Object AbosGuiInput+POINT; $desktop = [AbosGuiInput]::GetDesktopWindow(); $cursor = [AbosGuiInput]::GetCursorPos([ref]$point); $input = ($desktop -ne [IntPtr]::Zero) -and $cursor; [void]$inputEvidence.Add("user32 desktop=$($desktop -ne [IntPtr]::Zero); cursorReadable=$cursor; per-target UIPI may still deny an action") } catch { [void]$inputEvidence.Add("input probe failed: $($_.Exception.Message)") }
+      try { Load-Input; $point = New-Object AbosGuiInput+POINT; $desktop = [AbosGuiInput]::GetDesktopWindow(); $cursor = [AbosGuiInput]::GetCursorPos([ref]$point); $inputProviderReady = ($desktop -ne [IntPtr]::Zero) -and $cursor; [void]$inputEvidence.Add("user32 providerReady=$inputProviderReady; desktop=$($desktop -ne [IntPtr]::Zero); cursorReadable=$cursor; no input emitted by probe; per-target UIPI may still deny an action") } catch { [void]$inputEvidence.Add("input probe failed: $($_.Exception.Message)") }
     }
-    Result @{ userInteractive = [Environment]::UserInteractive; accessibility = @{ available = $accessibility; evidence = @($accessibilityEvidence) }; screen = @{ available = $screen; bounds = $bounds; evidence = @($screenEvidence) }; input = @{ available = $input; evidence = @($inputEvidence) } }
+    Result @{ userInteractive = [Environment]::UserInteractive; accessibility = @{ available = $accessibility; evidence = @($accessibilityEvidence) }; screen = @{ available = $screen; bounds = $bounds; evidence = @($screenEvidence) }; input = @{ providerReady = $inputProviderReady; evidence = @($inputEvidence) } }
   }
 
   if ($protocol.op -eq 'snapshot') {
@@ -262,11 +270,12 @@ try {
       if ($action -eq 'pointer_click') {
         $button = [string]$protocol.button; if ([string]::IsNullOrWhiteSpace($button)) { $button = 'left' }
         switch ($button) {
-          'left' { [AbosGuiInput]::mouse_event(0x0002,0,0,0,[UIntPtr]::Zero); [AbosGuiInput]::mouse_event(0x0004,0,0,0,[UIntPtr]::Zero) }
-          'right' { [AbosGuiInput]::mouse_event(0x0008,0,0,0,[UIntPtr]::Zero); [AbosGuiInput]::mouse_event(0x0010,0,0,0,[UIntPtr]::Zero) }
-          'middle' { [AbosGuiInput]::mouse_event(0x0020,0,0,0,[UIntPtr]::Zero); [AbosGuiInput]::mouse_event(0x0040,0,0,0,[UIntPtr]::Zero) }
+          'left' { $sent = [AbosGuiInput]::SendMouseClick(0x0002,0x0004) }
+          'right' { $sent = [AbosGuiInput]::SendMouseClick(0x0008,0x0010) }
+          'middle' { $sent = [AbosGuiInput]::SendMouseClick(0x0020,0x0040) }
           default { throw "unsupported pointer button: $button" }
         }
+        if ($sent -ne 2) { throw "SendInput accepted $sent of 2 mouse inputs" }
       }
       $point = New-Object AbosGuiInput+POINT; [void][AbosGuiInput]::GetCursorPos([ref]$point); Result @{ action = $action; cursor = @{ x = $point.X; y = $point.Y }; button = $protocol.button }
     }
@@ -277,8 +286,22 @@ try {
     }
     if ($action -eq 'key_press') {
       $key = Virtual-Key ([string]$protocol.key); $modifierMap = @{ CTRL = [ushort]0x11; ALT = [ushort]0x12; SHIFT = [ushort]0x10; WIN = [ushort]0x5B }; $mods = @($protocol.modifiers | ForEach-Object { ([string]$_).ToUpperInvariant() })
-      foreach ($mod in $mods) { if (-not $modifierMap.ContainsKey($mod)) { throw "unsupported modifier: $mod" }; if (-not [AbosGuiInput]::SendVirtualKey($modifierMap[$mod], $false)) { throw "failed to press modifier: $mod" } }
-      try { if (-not [AbosGuiInput]::SendVirtualKey($key, $false)) { throw 'failed to press key' }; if (-not [AbosGuiInput]::SendVirtualKey($key, $true)) { throw 'failed to release key' } } finally { [array]::Reverse($mods); foreach ($mod in $mods) { [void][AbosGuiInput]::SendVirtualKey($modifierMap[$mod], $true) } }
+      $pressed = New-Object System.Collections.ArrayList; $keyDown = $false
+      try {
+        foreach ($mod in $mods) {
+          if (-not $modifierMap.ContainsKey($mod)) { throw "unsupported modifier: $mod" }
+          if (-not [AbosGuiInput]::SendVirtualKey($modifierMap[$mod], $false)) { throw "failed to press modifier: $mod" }
+          [void]$pressed.Add($mod)
+        }
+        if (-not [AbosGuiInput]::SendVirtualKey($key, $false)) { throw 'failed to press key' }
+        $keyDown = $true
+        if (-not [AbosGuiInput]::SendVirtualKey($key, $true)) { throw 'failed to release key' }
+        $keyDown = $false
+      } finally {
+        if ($keyDown) { [void][AbosGuiInput]::SendVirtualKey($key, $true) }
+        $release = @($pressed); [array]::Reverse($release)
+        foreach ($mod in $release) { [void][AbosGuiInput]::SendVirtualKey($modifierMap[$mod], $true) }
+      }
       Result @{ action = $action; key = [string]$protocol.key; modifiers = @($mods) }
     }
     throw "unsupported input action: $action"
@@ -341,7 +364,26 @@ function parseProviderJson(stdout: string): WindowsProviderResult {
   return result;
 }
 
+export function prepareGuiCaptureTarget(
+  captureRoot = path.join(getHomeDir(), ".abos", "gui-captures"),
+  idFactory: () => string = randomUUID,
+): string {
+  const lexicalRoot = confinePathToLocalHome(captureRoot, "gui capture root");
+  if (typeof lexicalRoot === "object") throw new Error(lexicalRoot.error);
+  fs.mkdirSync(lexicalRoot, { recursive: true });
+  const realRoot = fs.realpathSync(lexicalRoot);
+  const confinedRoot = confinePathToLocalHome(realRoot, "gui capture real root");
+  if (typeof confinedRoot === "object") throw new Error(confinedRoot.error);
+  const proposed = path.join(confinedRoot, `gui-${Date.now()}-${idFactory()}.png`);
+  const confined = confinePathToLocalHome(proposed, "gui capture");
+  if (typeof confined === "object") throw new Error(confined.error);
+  if (fs.existsSync(confined)) throw new Error(`gui capture target already exists: ${confined}`);
+  return confined;
+}
+
 export class LocalGuiRuntime {
+  private inputVerifiedAt: string | null = null;
+
   private runWindows(protocol: Record<string, unknown>, timeoutMs = GUI_PROVIDER_TIMEOUT_MS): WindowsProviderResult {
     if (process.platform !== "win32") throw new Error(`Local GUI provider is unavailable on platform ${process.platform}`);
     const result = spawnSync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", WINDOWS_GUI_PROVIDER_ENCODED], {
@@ -356,20 +398,30 @@ export class LocalGuiRuntime {
     const observedAt = new Date().toISOString();
     if (process.platform !== "win32") {
       const evidence = [`No validated provider-native GUI adapter is installed for platform=${process.platform}.`];
-      return { observedAt, platform: process.platform, accessibility: { available: false, evidence: [...evidence] }, screen: { available: false, bounds: null, evidence: [...evidence] }, input: { available: false, evidence: [...evidence] } };
+      return { observedAt, platform: process.platform, accessibility: { available: false, state: "unavailable", evidence: [...evidence] }, screen: { available: false, state: "unavailable", bounds: null, evidence: [...evidence] }, input: { available: false, state: "unavailable", evidence: [...evidence] } };
     }
     try {
       const result = this.runWindows({ op: "probe" });
       const accessibility = (result.accessibility ?? {}) as Record<string, unknown>; const screen = (result.screen ?? {}) as Record<string, unknown>; const input = (result.input ?? {}) as Record<string, unknown>;
+      const accessibilityAvailable = accessibility.available === true;
+      const screenAvailable = screen.available === true;
+      const inputProviderReady = input.providerReady === true;
+      const inputAvailable = inputProviderReady && this.inputVerifiedAt !== null;
+      const inputEvidence = asEvidence(input.evidence);
+      inputEvidence.push(inputAvailable
+        ? `Low-level input was explicitly accepted at ${this.inputVerifiedAt}.`
+        : inputProviderReady
+          ? "Low-level input provider is present, but the side-effect-free probe emitted no input; readiness remains probed until an explicit gui_input succeeds."
+          : "Low-level input provider was not observed ready.");
       return {
         observedAt, platform: process.platform,
-        accessibility: { available: accessibility.available === true, evidence: asEvidence(accessibility.evidence) },
-        screen: { available: screen.available === true, bounds: asBounds(screen.bounds), evidence: asEvidence(screen.evidence) },
-        input: { available: input.available === true, evidence: asEvidence(input.evidence) },
+        accessibility: { available: accessibilityAvailable, state: accessibilityAvailable ? "verified_available" : "unavailable", evidence: asEvidence(accessibility.evidence) },
+        screen: { available: screenAvailable, state: screenAvailable ? "verified_available" : "unavailable", bounds: asBounds(screen.bounds), evidence: asEvidence(screen.evidence) },
+        input: { available: inputAvailable, state: inputAvailable ? "verified_available" : inputProviderReady ? "probed" : "unavailable", evidence: inputEvidence },
       };
     } catch (error) {
       const evidence = [`Windows GUI probe failed: ${error instanceof Error ? error.message : String(error)}`];
-      return { observedAt, platform: process.platform, accessibility: { available: false, evidence: [...evidence] }, screen: { available: false, bounds: null, evidence: [...evidence] }, input: { available: false, evidence: [...evidence] } };
+      return { observedAt, platform: process.platform, accessibility: { available: false, state: "unavailable", evidence: [...evidence] }, screen: { available: false, state: "unavailable", bounds: null, evidence: [...evidence] }, input: { available: false, state: "unavailable", evidence: [...evidence] } };
     }
   }
 
@@ -394,12 +446,12 @@ export class LocalGuiRuntime {
   capture(): { path: string; bounds: GuiBounds; observedAt: string } {
     const probe = this.probe();
     if (!probe.screen.available) throw new Error(`GUI screen capture is unavailable: ${probe.screen.evidence.join("; ")}`);
-    const dir = path.join(getHomeDir(), ".abos", "gui-captures"); fs.mkdirSync(dir, { recursive: true });
-    const proposed = path.join(dir, `gui-${Date.now()}-${randomUUID()}.png`); const confined = confinePathToLocalHome(proposed, "gui capture");
-    if (typeof confined === "object") throw new Error(confined.error);
+    const confined = prepareGuiCaptureTarget();
     const result = this.runWindows({ op: "capture", path: confined }); const bounds = asBounds(result.bounds);
     if (!bounds) throw new Error("GUI capture provider returned invalid screen bounds");
     if (!fs.existsSync(confined)) throw new Error("GUI capture provider did not materialize the PNG");
+    const outputStat = fs.lstatSync(confined);
+    if (outputStat.isSymbolicLink() || !outputStat.isFile()) { fs.rmSync(confined, { force: true }); throw new Error("GUI capture output is not a regular file"); }
     const signature = fs.readFileSync(confined).subarray(0, 8).toString("hex");
     if (signature !== "89504e470d0a1a0a") { fs.rmSync(confined, { force: true }); throw new Error("GUI capture output is not a PNG"); }
     return { path: confined, bounds, observedAt: new Date().toISOString() };
@@ -407,7 +459,7 @@ export class LocalGuiRuntime {
 
   input(request: GuiInputRequest): Record<string, unknown> {
     const probe = this.probe();
-    if (!probe.input.available) throw new Error(`GUI low-level input is unavailable: ${probe.input.evidence.join("; ")}`);
+    if (probe.input.state === "unavailable") throw new Error(`GUI low-level input provider is unavailable: ${probe.input.evidence.join("; ")}`);
     const protocol: Record<string, unknown> = { op: "input", ...request };
     if (request.action === "pointer_move" || request.action === "pointer_click") {
       requireFiniteInteger(request.x, "x"); requireFiniteInteger(request.y, "y"); const bounds = probe.screen.bounds;
@@ -419,7 +471,9 @@ export class LocalGuiRuntime {
       const modifiers = request.modifiers ?? []; if (new Set(modifiers).size !== modifiers.length) throw new Error("GUI key modifiers must be unique");
     }
     const result = this.runWindows(protocol); const { ok: _ok, ...output } = result;
-    return { ...output, observedAt: new Date().toISOString() };
+    const observedAt = new Date().toISOString();
+    this.inputVerifiedAt = observedAt;
+    return { ...output, observedAt };
   }
 }
 

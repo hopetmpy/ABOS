@@ -132,9 +132,14 @@ export function createGuiTools(
         }
         if (action === "key_press") {
           if (typeof args.key !== "string") throw new Error("gui_input key_press requires key");
-          const modifiers = Array.isArray(args.modifiers)
-            ? args.modifiers.filter((entry): entry is "CTRL" | "ALT" | "SHIFT" | "WIN" => ["CTRL", "ALT", "SHIFT", "WIN"].includes(String(entry)))
-            : undefined;
+          let modifiers: Array<"CTRL" | "ALT" | "SHIFT" | "WIN"> | undefined;
+          if (Array.isArray(args.modifiers)) {
+            const allowed = new Set(["CTRL", "ALT", "SHIFT", "WIN"]);
+            if (args.modifiers.some((entry) => typeof entry !== "string" || !allowed.has(entry))) {
+              throw new Error("gui_input key_press received an unsupported modifier");
+            }
+            modifiers = args.modifiers as Array<"CTRL" | "ALT" | "SHIFT" | "WIN">;
+          }
           return encode(runtime.input({ action, key: args.key, modifiers }));
         }
         throw new Error(`Unsupported gui_input action: ${String(action)}`);
