@@ -181,6 +181,28 @@ describe("EnhancedRetriever", () => {
     expect(result.entries[0].entry.category).toBe("technical");
   });
 
+  it("uses known categories as ranking hints instead of hard filters", () => {
+    addKnowledge({
+      category: "legal-regulatory",
+      key: "api-timeout-policy",
+      content: "api timeout policy for regulated deployments",
+      confidence: 0.95,
+      tokenCount: 20,
+    });
+
+    const retriever = new mod.EnhancedRetriever(db);
+    const result = retriever.retrieveScored({
+      sessionId: "s1",
+      currentInput: "api timeout policy",
+      agentRole: "software engineer",
+      budgetTokens: 200,
+    });
+
+    expect(result.entries.some((candidate) =>
+      candidate.entry.category === "legal-regulatory"
+    )).toBe(true);
+  });
+
   it("respects budget and reports truncation", () => {
     addKnowledge({ key: "k1", content: "high relevance api timeout", tokenCount: 60 });
     addKnowledge({ key: "k2", content: "high relevance api timeout", tokenCount: 60 });
@@ -364,6 +386,35 @@ describe("EnhancedRetriever", () => {
       .get(knowledgeId) as { accessCount: number };
 
     expect(row.accessCount).toBe(1);
+  });
+
+  it("keeps retrieval feedback isolated between retriever instances", () => {
+    const secondDb = createTestDb();
+    try {
+      const first = new mod.EnhancedRetriever(db);
+      const second = new mod.EnhancedRetriever(secondDb);
+
+      first.recordRetrievalFeedback({
+        turnId: "turn-a",
+        retrieved: ["a"],
+        matched: ["a"],
+        retrievalPrecision: 0,
+        rollingPrecision: 0,
+      });
+
+      expect(first.retrieveScored({
+        sessionId: "s1",
+        currentInput: "none",
+        budgetTokens: 0,
+      }).retrievalPrecision).toBe(1);
+      expect(second.retrieveScored({
+        sessionId: "s2",
+        currentInput: "none",
+        budgetTokens: 0,
+      }).retrievalPrecision).toBeUndefined();
+    } finally {
+      secondDb.close();
+    }
   });
 
   it("retrieveScored includes precision metadata once feedback exists", () => {

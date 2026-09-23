@@ -244,6 +244,15 @@ describe("KnowledgeStore", () => {
     expect(stats.byCategory.market).toBe(0);
   });
 
+  it("accepts and reports categories unknown at compile time", () => {
+    addKnowledge({ category: "legal-regulatory", key: "policy", content: "new rule" });
+
+    const results = store.search("rule", "legal-regulatory");
+    expect(results).toHaveLength(1);
+    expect(results[0].category).toBe("legal-regulatory");
+    expect(store.getStats().byCategory["legal-regulatory"]).toBe(1);
+  });
+
   it("getStats handles empty table", () => {
     const stats = store.getStats();
 

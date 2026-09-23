@@ -25,14 +25,16 @@ import type {
   SpendTrackerInterface,
   InputSource,
   ModelStrategyConfig,
+  ChatMessage,
 } from "../types.js";
 import {
   DEFAULT_MODEL_STRATEGY_CONFIG,
   DEFAULT_TREASURY_POLICY,
+  DEFAULT_TOKEN_BUDGET,
 } from "../types.js";
 import type { PolicyEngine } from "./policy-engine.js";
 import { buildSystemPrompt, buildWakeupPrompt } from "./system-prompt.js";
-import { buildContextMessages, trimContext } from "./context.js";
+import { buildAntiRepetitionMessage, trimContext } from "./context.js";
 import {
   createBuiltinTools,
   loadInstalledTools,
@@ -60,6 +62,8 @@ import { loadConfig } from "../config.js";
 import { createBuiltinAiConnectionAdapterRegistry } from "../setup/ai-connection-adapters.js";
 import { MemoryRetriever } from "../memory/retrieval.js";
 import { MemoryIngestionPipeline } from "../memory/ingestion.js";
+import { EnhancedRetriever, calculateMemoryBudget } from "../memory/enhanced-retriever.js";
+import { ContextManager, createTokenCounter } from "../memory/context-manager.js";
 import { DEFAULT_MEMORY_BUDGET } from "../types.js";
 import { formatMemoryBlock } from "./context.js";
 import { createLogger } from "../observability/logger.js";
@@ -69,7 +73,7 @@ import {
   calculateTaskFundingCents,
 } from "../orchestration/orchestrator.js";
 import { PlanModeController } from "../orchestration/plan-mode.js";
-import { generateTodoMd, injectTodoContext } from "../orchestration/attention.js";
+import { generateTodoMd } from "../orchestration/attention.js";
 import {
   COLONY_MESSAGE_TYPES,
   ColonyMessaging,
@@ -422,6 +426,8 @@ export async function runAgentLoop(
     },
   );
   const runtimeModelBinding = new RuntimeModelBinding(modelStrategyConfig);
+  const contextManager = new ContextManager(createTokenCounter());
+  const enhancedRetriever = new EnhancedRetriever(db.raw, DEFAULT_MEMORY_BUDGET);
 
   // Optional orchestration bootstrap (requires V9 goals/task tables)
   let planModeController: PlanModeController | undefined;
@@ -1282,30 +1288,8 @@ export async function runAgentLoop(
         isFirstRun,
       });
 
-      // Phase 2.2: Pre-turn memory retrieval
-      let memoryBlock: string | undefined;
-      try {
-        const sessionId = db.getKV("session_id") || "default";
-        const retriever = new MemoryRetriever(db.raw, DEFAULT_MEMORY_BUDGET);
-        const memories = retriever.retrieve(sessionId, pendingInput?.content);
-        if (memories.totalTokens > 0) {
-          memoryBlock = formatMemoryBlock(memories);
-        }
-      } catch (error) {
-        logger.error("Memory retrieval failed", error instanceof Error ? error : undefined);
-        // Memory failure must not block the agent loop
-      }
-
-      let messages = buildContextMessages(
-        systemPrompt,
-        recentTurns,
-        pendingInput,
-      );
-
-      // Inject memory block after system prompt, before conversation history
-      if (memoryBlock) {
-        messages.splice(1, 0, { role: "system", content: memoryBlock });
-      }
+      let todoMd: string | undefined;
+      let retrievedKnowledgeIds: string[] = [];
 
       if (orchestrator) {
         if (environmentMobility) {
@@ -1378,11 +1362,10 @@ export async function runAgentLoop(
 
       if (planModeController) {
         try {
-          const todoMd = generateTodoMd(db.raw);
-          messages = injectTodoContext(messages, todoMd);
+          todoMd = generateTodoMd(db.raw);
         } catch (error) {
           logger.warn(
-            `todo.md context injection skipped: ${
+            `todo.md context generation skipped: ${
               error instanceof Error ? error.message : String(error)
             }`,
           );
@@ -1420,12 +1403,85 @@ export async function runAgentLoop(
       }
 
       const survivalTier = getSurvivalTier(financial.creditsCents);
-      const selectedModel =
-        inferenceRouter.selectModel(
-          survivalTier,
-          "agent_turn",
-          activeConnectionProvider,
-        )?.modelId || "none";
+      const selectedModelEntry = inferenceRouter.selectModel(
+        survivalTier,
+        "agent_turn",
+        activeConnectionProvider,
+      );
+      const selectedModel = selectedModelEntry?.modelId || "none";
+      // Until the router exposes a fallback-safe aggregate window, never widen
+      // beyond the legacy prompt ceiling. A smaller selected model is honored.
+      const modelContextWindow = Math.max(
+        1,
+        Math.min(
+          selectedModelEntry?.contextWindow ?? DEFAULT_TOKEN_BUDGET.total,
+          DEFAULT_TOKEN_BUDGET.total,
+        ),
+      );
+
+      const cognitiveMemoryBlocks: string[] = [];
+      try {
+        const sessionId = db.getKV("session_id") || "default";
+        const retriever = new MemoryRetriever(db.raw, DEFAULT_MEMORY_BUDGET);
+        const memories = retriever.retrieve(sessionId, currentInput?.content);
+        if (memories.totalTokens > 0) {
+          cognitiveMemoryBlocks.push(formatMemoryBlock(memories));
+        }
+
+        const knowledgeBudget = calculateMemoryBudget(
+          contextManager.getUtilization(),
+          modelContextWindow,
+        );
+        const activatedKnowledge = enhancedRetriever.retrieveScored({
+          sessionId,
+          currentInput: currentInput?.content,
+          budgetTokens: knowledgeBudget,
+        });
+        retrievedKnowledgeIds = activatedKnowledge.entries.map(
+          (candidate) => candidate.entry.id,
+        );
+        for (const candidate of activatedKnowledge.entries) {
+          const entry = candidate.entry;
+          cognitiveMemoryBlocks.push(
+            `### Activated Knowledge
+- [${entry.category}/${entry.key}] ${entry.content}
+` +
+            `  source=${entry.source}; confidence=${entry.confidence.toFixed(2)}; ` +
+            `lastVerified=${entry.lastVerified}`,
+          );
+        }
+      } catch (error) {
+        logger.error("Cognitive retrieval failed", error instanceof Error ? error : undefined);
+      }
+
+      const tailMessages: ChatMessage[] = [];
+      const antiRepetitionMessage = buildAntiRepetitionMessage(recentTurns);
+      if (antiRepetitionMessage) {
+        tailMessages.push(antiRepetitionMessage);
+      }
+      if (currentInput) {
+        tailMessages.push({
+          role: "user",
+          content: `[${currentInput.source}] ${currentInput.content}`,
+        });
+      }
+
+      const assembledContext = contextManager.assembleContext({
+        systemPrompt,
+        todoMd,
+        recentTurns,
+        memories: cognitiveMemoryBlocks,
+        tailMessages,
+        modelContextWindow,
+      });
+      const messages = assembledContext.messages;
+      if (assembledContext.utilization.recommendation !== "ok") {
+        logger.info("Cognitive context utilization", {
+          utilization: assembledContext.utilization,
+          budget: assembledContext.budget,
+        });
+      }
+
       const providerLabel = activeConnectionProvider || "legacy/auto";
       log(
         config,
@@ -1542,6 +1598,24 @@ export async function runAgentLoop(
           markInboxProcessed(db.raw, claimedIds);
         }
       });
+
+      if (retrievedKnowledgeIds.length > 0) {
+        try {
+          enhancedRetriever.recordRetrievalFeedback({
+            turnId: turn.id,
+            retrieved: retrievedKnowledgeIds,
+            matched: [],
+            retrievalPrecision: 0,
+            rollingPrecision: 0,
+          });
+        } catch (error) {
+          logger.error(
+            "Knowledge retrieval feedback failed",
+            error instanceof Error ? error : undefined,
+          );
+        }
+      }
+
       onTurnComplete?.(turn);
 
       // Phase 2.2: Post-turn memory ingestion (non-blocking)

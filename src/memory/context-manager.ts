@@ -23,6 +23,7 @@ export interface ContextBudget {
   memoryTokens: number;
   eventTokens: number;
   turnTokens: number;
+  tailTokens: number;
   compressionHeadroom: number;
 }
 
@@ -54,8 +55,9 @@ export interface ContextAssemblyParams {
   todoMd?: string;
   recentTurns: any[];
   taskSpec?: string;
-  memories?: string;
+  memories?: string | string[];
   events?: any[];
+  tailMessages?: ChatMessage[];
   modelContextWindow: number;
   reserveTokens?: number;
 }
@@ -238,20 +240,30 @@ export class ContextManager {
       usedTokens += todoTokens;
     }
 
+    const tailMessages = [...(params.tailMessages ?? [])];
+    const tailTokens = this.countMessagesTokens(tailMessages);
+    usedTokens += tailTokens;
+
     const renderedTurns = (params.recentTurns ?? []).map((turn, index) =>
       this.renderTurn(turn, index),
     );
-    const recentTurns = renderedTurns.slice(-3);
+    const recentCandidates = renderedTurns.slice(-3);
     const olderTurns = renderedTurns.slice(0, -3);
 
     let includedTurnCount = 0;
     let turnTokens = 0;
-
-    for (const recentTurn of recentTurns) {
-      recentTurnMessages.push(...recentTurn.messages);
+    const selectedRecentTurns: RenderedTurn[] = [];
+    for (let i = recentCandidates.length - 1; i >= 0; i--) {
+      const recentTurn = recentCandidates[i];
+      if (usedTokens + recentTurn.tokens > promptCapacity) continue;
+      selectedRecentTurns.push(recentTurn);
       usedTokens += recentTurn.tokens;
       turnTokens += recentTurn.tokens;
       includedTurnCount += 1;
+    }
+    selectedRecentTurns.sort((a, b) => a.turnIndex - b.turnIndex);
+    for (const recentTurn of selectedRecentTurns) {
+      recentTurnMessages.push(...recentTurn.messages);
     }
 
     let memoryTokens = 0;
@@ -268,10 +280,18 @@ export class ContextManager {
       }
     }
 
-    if (params.memories && params.memories.trim().length > 0) {
+    const memoryBlocks = Array.isArray(params.memories)
+      ? params.memories
+      : params.memories
+        ? [params.memories]
+        : [];
+
+    for (const memoryBlock of memoryBlocks) {
+      if (!memoryBlock || memoryBlock.trim().length === 0) continue;
       const memoryMessage: ChatMessage = {
         role: "system",
-        content: `## Retrieved memories\n${params.memories.trim()}`,
+        content: `## Retrieved memories
+${memoryBlock.trim()}`,
       };
       const candidateTokens = this.countMessagesTokens([memoryMessage]);
       if (usedTokens + candidateTokens <= promptCapacity) {
@@ -316,6 +336,7 @@ export class ContextManager {
     messages.push(...olderTurnMessages);
     messages.push(...recentTurnMessages);
     messages.push(...eventMessages);
+    messages.push(...tailMessages);
 
     const totalTurns = renderedTurns.length;
     const compressedTurns = Math.max(0, totalTurns - includedTurnCount);
@@ -351,6 +372,7 @@ export class ContextManager {
       memoryTokens,
       eventTokens,
       turnTokens,
+      tailTokens,
       compressionHeadroom,
     };
 

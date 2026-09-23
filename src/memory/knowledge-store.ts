@@ -16,12 +16,7 @@ import {
 
 type Database = BetterSqlite3.Database;
 
-export type KnowledgeCategory =
-  | "market"
-  | "technical"
-  | "social"
-  | "financial"
-  | "operational";
+export type KnowledgeCategory = string;
 
 export interface KnowledgeEntry {
   id: string;
@@ -39,27 +34,19 @@ export interface KnowledgeEntry {
 
 export interface KnowledgeStats {
   total: number;
-  byCategory: Record<KnowledgeCategory, number>;
+  byCategory: Record<string, number>;
   totalTokens: number;
 }
 
-const KNOWLEDGE_CATEGORIES: KnowledgeCategory[] = [
+const KNOWN_KNOWLEDGE_CATEGORIES = [
   "market",
   "technical",
   "social",
   "financial",
   "operational",
-];
-
-function isKnowledgeCategory(value: string): value is KnowledgeCategory {
-  return (KNOWLEDGE_CATEGORIES as string[]).includes(value);
-}
+] as const;
 
 function toKnowledgeEntry(row: KnowledgeStoreRow): KnowledgeEntry {
-  if (!isKnowledgeCategory(row.category)) {
-    throw new Error(`Invalid knowledge category: ${row.category}`);
-  }
-
   return {
     id: row.id,
     category: row.category,
@@ -201,13 +188,9 @@ export class KnowledgeStore {
   }
 
   getStats(): KnowledgeStats {
-    const byCategory: Record<KnowledgeCategory, number> = {
-      market: 0,
-      technical: 0,
-      social: 0,
-      financial: 0,
-      operational: 0,
-    };
+    const byCategory: Record<string, number> = Object.fromEntries(
+      KNOWN_KNOWLEDGE_CATEGORIES.map((category) => [category, 0]),
+    );
 
     const counts = this.db
       .prepare(
@@ -216,9 +199,7 @@ export class KnowledgeStore {
       .all() as { category: string; count: number }[];
 
     for (const row of counts) {
-      if (isKnowledgeCategory(row.category)) {
-        byCategory[row.category] = row.count;
-      }
+      byCategory[row.category] = row.count;
     }
 
     const totals = this.db
