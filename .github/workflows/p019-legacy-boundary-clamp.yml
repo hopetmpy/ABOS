@@ -1,0 +1,179 @@
+name: P019 Legacy Boundary Clamp Apply
+
+on:
+  push:
+    branches:
+      - abos/p019-adaptive-inference
+    paths:
+      - .github/workflows/p019-legacy-boundary-clamp.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: abos/p019-adaptive-inference
+          fetch-depth: 0
+
+      - name: Clamp legacy chat to one provider per call
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("src/inference/inference-client.ts")
+          text = path.read_text(encoding="utf-8")
+          start = text.index("  async chat(params: UnifiedChatParams): Promise<UnifiedInferenceResult> {")
+          end = text.index("\n  async chatDirect(", start)
+          replacement = '''  async chat(params: UnifiedChatParams): Promise<UnifiedInferenceResult> {
+            const survivalMode = this.isSurvivalMode();
+            const candidates = this.registry.resolveCandidates(params.tier, survivalMode);
+            if (candidates.length === 0) {
+              throw new Error(`No providers available for tier '${params.tier}'`);
+            }
+
+            // A legacy call may select one provider/model before dispatch, but a
+            // retryable provider failure is not authority to cross a provider
+            // boundary. Replanning or a new call must own any provider change.
+            const resolved = candidates[0]!;
+            if (this.isProviderCircuitOpen(resolved.provider.id)) {
+              throw new Error(`Provider '${resolved.provider.id}' circuit is open`);
+            }
+
+            const trace = this.resolveTrace(params.trace);
+            try {
+              const attempt = await this.executeWithRetries(
+                resolved,
+                params,
+                params.tier,
+                trace,
+              );
+              this.markProviderSuccess(resolved.provider.id);
+              return {
+                ...attempt.result,
+                metadata: {
+                  ...attempt.result.metadata,
+                  retries: attempt.retries,
+                  failedProviders: [],
+                },
+              };
+            } catch (error) {
+              if (!(error instanceof ProviderAttemptError)) {
+                throw error;
+              }
+
+              this.markProviderFailure(resolved.provider.id);
+              throw this.unwrapError(error.originalError);
+            }
+          }
+'''
+          text = text[:start] + replacement + text[end:]
+          path.write_text(text, encoding="utf-8")
+
+      - name: Reconcile legacy regression expectations
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("src/__tests__/inference/inference-client.test.ts")
+          text = path.read_text(encoding="utf-8")
+
+          start = text.index('  it.each([429, 500, 503])(\n    "fails over to next provider on retryable %s errors",')
+          end = text.index('\n  it("does not fail over on non-retryable provider error"', start)
+          replacement = '''  it.each([429, 500, 503])(
+            "does not cross provider boundary after retryable %s errors",
+            async (status) => {
+              const client = createClient();
+
+              // The selected provider receives its bounded retries. A queued
+              // fallback response must remain untouched because provider change
+              // requires a new decision/call.
+              queueError(status);
+              queueError(status);
+              queueError(status);
+              queueError(status, `openai-final-${status}`);
+              queueCompletion({ content: `must-not-use-fallback-${status}` });
+
+              vi.useFakeTimers();
+              const pending = expect(
+                client.chat({ tier: "reasoning", messages: BASE_MESSAGES }),
+              ).rejects.toThrow(`openai-final-${status}`);
+              await vi.runAllTimersAsync();
+              await pending;
+              vi.useRealTimers();
+
+              expect(mockState.create).toHaveBeenCalledTimes(4);
+              expect(mockState.queue).toHaveLength(1);
+            },
+          );
+'''
+          text = text[:start] + replacement + text[end:]
+
+          start = text.index('  it("stops retrying after max retry budget", async () => {')
+          end = text.index('\n  it("throws when no providers are available for tier"', start)
+          replacement = '''  it("stops retrying after the selected provider max retry budget", async () => {
+            const client = createClient();
+
+            queueError(429, "openai-1");
+            queueError(429, "openai-2");
+            queueError(429, "openai-3");
+            queueError(429, "openai-4");
+
+            vi.useFakeTimers();
+            const pending = expect(
+              client.chat({ tier: "reasoning", messages: BASE_MESSAGES }),
+            ).rejects.toThrow("openai-4");
+            await vi.runAllTimersAsync();
+            await pending;
+            vi.useRealTimers();
+
+            expect(mockState.create).toHaveBeenCalledTimes(4);
+          });
+'''
+          text = text[:start] + replacement + text[end:]
+
+          start = text.index('  it("chat skips providers with open circuit and fails over", async () => {')
+          end = text.index('\n  it("successful chatDirect resets circuit breaker failure count"', start)
+          replacement = '''  it("chat fails closed when the selected provider circuit is open", async () => {
+            const client = createClient();
+
+            for (let i = 0; i < 5; i += 1) {
+              queueError(400, `trip-${i}`);
+              await expect(
+                client.chatDirect({
+                  providerId: "openai",
+                  modelId: "gpt-4.1",
+                  messages: BASE_MESSAGES,
+                }),
+              ).rejects.toThrow();
+            }
+
+            queueCompletion({ content: "must-not-use-fallback" });
+
+            await expect(
+              client.chat({ tier: "reasoning", messages: BASE_MESSAGES }),
+            ).rejects.toThrow(/circuit is open/);
+            expect(mockState.create).toHaveBeenCalledTimes(5);
+            expect(mockState.queue).toHaveLength(1);
+          });
+'''
+          text = text[:start] + replacement + text[end:]
+          path.write_text(text, encoding="utf-8")
+
+      - name: Verify patch shape
+        run: |
+          git diff --check
+          grep -q "provider failure is not authority to cross a provider" src/inference/inference-client.ts
+          ! grep -q "fails over to next provider on retryable" src/__tests__/inference/inference-client.test.ts
+          grep -q "does not cross provider boundary after retryable" src/__tests__/inference/inference-client.test.ts
+
+      - name: Commit boundary clamp
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/inference/inference-client.ts src/__tests__/inference/inference-client.test.ts
+          git commit -m "fix(inference): prohibit silent cross-provider failover"
+          git push origin HEAD:abos/p019-adaptive-inference
