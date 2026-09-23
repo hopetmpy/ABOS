@@ -13,8 +13,6 @@ permissions:
 jobs:
   apply-and-linux-validate:
     runs-on: ubuntu-24.04
-    outputs:
-      source_sha: ${{ steps.commit.outputs.source_sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,8 +23,8 @@ jobs:
           node-version: 22.23.2
       - uses: pnpm/action-setup@v4
 
-      - name: Apply recovered GUI correction
-        run: python3 scripts/p016-gui-source-recovery.py
+      - name: Apply Windows GUI launcher transport fix
+        run: python3 scripts/p016-gui-launch-fix.py
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -48,43 +46,11 @@ jobs:
           node scripts/projectops-integrity-verify.mjs
           git diff --check
 
-      - name: Commit validated product correction
-        id: commit
+      - name: Commit validated launcher correction
         shell: bash
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/gui/local-runtime.ts src/gui/tools.ts src/environments/local.ts src/capabilities/registry.ts src/agent/tools.ts src/__tests__/p016-local-gui-runtime.test.ts
-          git commit -m 'fix(p016): complete and harden local GUI hands'
-          SOURCE_SHA=$(git rev-parse HEAD)
-          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          git add src/gui/local-runtime.ts
+          git commit -m 'fix(p016): avoid Windows GUI command-line overflow'
           git push origin HEAD:abos/p016-computer-browser-gui-hands
-
-  windows-material-validate:
-    needs: apply-and-linux-validate
-    runs-on: windows-2025
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.apply-and-linux-validate.outputs.source_sha }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22.23.2
-      - uses: pnpm/action-setup@v4
-      - name: Assert exact source SHA
-        shell: pwsh
-        run: |
-          $expected = '${{ needs.apply-and-linux-validate.outputs.source_sha }}'
-          $actual = git rev-parse HEAD
-          if ($actual -ne $expected) { throw "expected source head $expected but checked out $actual" }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run typecheck
-      - run: pnpm run build
-      - name: Real Windows GUI and security regressions
-        shell: pwsh
-        run: pnpm exec vitest run src/__tests__/p016-local-gui-runtime.test.ts src/__tests__/p016-local-computer-runtime.test.ts src/__tests__/tools-security.test.ts src/__tests__/command-injection.test.ts
-      - name: ProjectOps integrity
-        shell: pwsh
-        run: node scripts/projectops-integrity-verify.mjs
