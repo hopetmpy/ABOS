@@ -44,23 +44,23 @@ describe("ModelRegistry dynamic provider lifecycle", () => {
     expect(registry.get("future-provider:model-x")?.enabled).toBe(true);
   });
 
-  it("still manages removed models from providers owned by the static baseline", () => {
+  it("does not let the static baseline retire a dynamically discovered sibling model from the same provider", () => {
     const registry = new ModelRegistry(db);
     registry.initialize();
 
     const now = new Date().toISOString();
     registry.upsert({
-      modelId: "removed-openai-baseline-model",
+      modelId: "openai:future-dynamic-model",
       provider: "openai",
-      displayName: "Removed baseline model",
+      displayName: "Future Dynamic OpenAI Model",
       tierMinimum: "normal",
-      costPer1kInput: 1,
-      costPer1kOutput: 1,
-      maxTokens: 4096,
-      contextWindow: 4096,
+      costPer1kInput: 7,
+      costPer1kOutput: 21,
+      maxTokens: 16384,
+      contextWindow: 200000,
       supportsTools: true,
-      supportsVision: false,
-      parameterStyle: "max_tokens",
+      supportsVision: true,
+      parameterStyle: "max_completion_tokens",
       enabled: true,
       lastSeen: now,
       createdAt: now,
@@ -69,6 +69,28 @@ describe("ModelRegistry dynamic provider lifecycle", () => {
 
     registry.initialize();
 
-    expect(registry.get("removed-openai-baseline-model")?.enabled).toBe(false);
+    expect(registry.get("openai:future-dynamic-model")).toMatchObject({
+      provider: "openai",
+      displayName: "Future Dynamic OpenAI Model",
+      enabled: true,
+    });
+  });
+
+  it("continues to refresh baseline-owned entries without re-enabling a user-disabled model", () => {
+    const registry = new ModelRegistry(db);
+    registry.initialize();
+    registry.setEnabled("gpt-5.2", false);
+
+    const before = registry.get("gpt-5.2");
+    expect(before).toBeDefined();
+    expect(before?.enabled).toBe(false);
+
+    registry.initialize();
+
+    const after = registry.get("gpt-5.2");
+    expect(after).toBeDefined();
+    expect(after?.displayName).toBe("GPT-5.2");
+    expect(after?.provider).toBe("openai");
+    expect(after?.enabled).toBe(false);
   });
 });

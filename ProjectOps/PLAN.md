@@ -27,8 +27,8 @@ Master-Transformation-Plan: P-007
 | P-015 | Sustituir MCP nominal por un runtime MCP real y verificable | HECHO | PR #46 integrado; `main 6e620ffcdddbe630ace58be67d5abb0826ed19b9` revalidado por CI `35423685890` + ProjectOps `35423685860` SUCCESS; OAuth MCP interactivo permanece delegado por ownership a P-019 connection/auth fabric | plan/P-015.md |
 | P-016 | Dar a ABOS manos de computadora, browser y GUI mediante providers reales | HECHO | PR #48 integrado; `main 08b7a5cce8f18c57c52e6a2f43048b6f1c214e50` revalidado por CI `35809162263` + ProjectOps `35809162403` SUCCESS; GUI material Windows E2E validado sin promover E3/E4 a E5 | plan/P-016.md |
 | P-017 | Implementar discovery, acquisition, composition y construction de capacidades | HECHO | PR #51 integrado; `main c5c5ae856923ba74c943cc26beca26ea38de0dcc` revalidado por CI `35904429871` + ProjectOps `35904429875` SUCCESS | plan/P-017.md |
-| P-018 | Reconciliar Environment y Resource Fabric provider-neutral | EN_EJECUCIÓN | P-009 + P-010 + P-011 + P-013 + P-014 HECHO; activado tras P-017 main E3 green | plan/P-018.md |
-| P-019 | Mantener model/connection fabric abierto y añadir adaptive inference | PLANIFICADO | P-008 + P-009 + P-010 + P-013 | plan/P-019.md |
+| P-018 | Reconciliar Environment y Resource Fabric provider-neutral | HECHO | PR #52 integrado; `main 9bf05ce5be0e5497a56b28f1584678c1f15b3994` revalidado por CI `35908965085` + ProjectOps `35908964855` SUCCESS | plan/P-018.md |
+| P-019 | Mantener model/connection fabric abierto y añadir adaptive inference | EN_EJECUCIÓN | P-008 + P-009 + P-010 + P-013 HECHO; activado tras P-018 main E3 green | plan/P-019.md |
 | P-020 | Unificar Cognitive Fabric: memory, context, knowledge y activation | PLANIFICADO | P-008 + P-013 + P-019 | plan/P-020.md |
 | P-021 | Construir Skill Evolution Engine sobre experiencia verificable | PLANIFICADO | P-014 + P-020 + P-013 | plan/P-021.md |
 | P-022 | Implementar World Model, beliefs e hipótesis falsables | PLANIFICADO | P-020 + P-021 + P-013 | plan/P-022.md |
@@ -79,7 +79,7 @@ Cada bloque puede poseer componentes especializados, pero debe conservar una aut
 1. **P-006 — HECHO**: security-audit restaurado sin debilitar gate e integrado en `main` por PR #32.
 2. **P-003 — HECHO**: child capital semantics reconciliadas por PR #33, integradas y revalidadas en `main`.
 
-La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth, P-009 Authority/Provenance, P-010 Policy/Authorization, P-011 Lifecycle/Recovery, P-012 transactional self-modification y P-013 observability/evidence están HECHO con evidencia E3 exacta. PR #42 cerró canónicamente P-013 en `main 21911888b8271662f1b546bc637f49d76610c132`; las fases P-014..P-017 también están integradas y revalidadas; la intervención activa es P-018 Environment/Resource Fabric.
+La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth, P-009 Authority/Provenance, P-010 Policy/Authorization, P-011 Lifecycle/Recovery, P-012 transactional self-modification y P-013 observability/evidence están HECHO con evidencia E3 exacta. PR #42 cerró canónicamente P-013 en `main 21911888b8271662f1b546bc637f49d76610c132`; las fases P-014..P-018 también están integradas y revalidadas; la intervención activa es P-019 model/connection/adaptive inference.
 
 ### Ola 1 — verdad, autoridad y recovery
 
@@ -118,123 +118,3 @@ P-033 E2E; P-034 fault/sustained; P-035 cleanup/authority retirement; P-004 docs
 5. **Unknown is first-class**: UNKNOWN/UNAVAILABLE/UNAUTHORIZED/PROHIBITED/IMPOSSIBLE no se colapsan.
 6. **Objective != method**: route failure alimenta evidence/replan; no retry estratégico equivalente.
 7. **No silent boundary switch**: executor/provider/actor cambia sólo por una decisión nueva explícita.
-8. **Money is causal**: unit/source/scope/timestamp/actor y realized vs estimated explícitos.
-9. **Durable effects are recoverable**: idempotency/lease/compensation/late-success handling proporcional al side effect.
-10. **Source state != runtime state**: repo, `~/.abos`, remote environment y child state son dominios distintos.
-11. **Broad knowledge != broad prompt**: persistent universe amplio; working set activado por relevancia/causalidad/uncertainty/value-of-information/context cost.
-12. **Install != capability**: acquisition no se promueve hasta probe/evidence.
-13. **CI != LIVE**: evidence ladder exacta.
-14. **Judgment before restriction**: antes de eliminar, desactivar o human-gate una capability legítima por riesgo, demostrar si el problema puede gobernarse con contexto, razonamiento, planning, verificación, observabilidad, adaptación o aprendizaje.
-15. **Human escalation is a real boundary, not a convenience**: precio, porcentaje, dificultad, novedad o desviación histórica no bastan para pedir permiso; escala cuando exista authority/identity/legal/external permission/capability boundary real o oversight manual explícito.
-16. **Threshold is signal, not intelligence**: límites fijos pueden alertar, activar revisión o representar restricciones externas; no sustituyen necesidad, expected value, commitments, liquidez, contingencia y causalidad.
-17. **Autonomy remains auditable**: que ABOS pueda decidir solo no autoriza hidden side effects; decisiones materiales deben atravesar boundaries explícitas con evidence/outcome proporcional al riesgo.
-
-## 6. Protocolo de interrogación que cada módulo debe aplicar
-
-Antes de `DECISION_READY`, además de AGENTS/reasoning layer, preguntar materialmente:
-- ¿por qué existe esta pieza y quién depende de ella?;
-- ¿qué ya existe bajo otro nombre?;
-- ¿qué autoridad produce/consume este estado?;
-- ¿qué pasa si no cambio nada?;
-- ¿qué rompe el cambio mínimo? ¿y el reemplazo total?;
-- ¿qué ocurre si el proceso muere entre efecto y persistencia?;
-- ¿qué pasa al reiniciar?;
-- ¿qué actor/permiso/secret/resource se necesita?;
-- ¿qué hipótesis alternativa explica la misma evidencia?;
-- ¿qué prueba mínima las separa?;
-- pre-mortem: “supón que esto falló mañana; ¿qué probablemente pasó?”;
-- ¿qué evidencia podría demostrar que la decisión fue equivocada?;
-- ¿cómo vuelvo atrás sin corromper identity/state/economics?;
-- ¿estoy cerrando artificialmente una posibilidad futura o, al contrario, eliminando un invariante necesario?;
-- **si quiero restringir una capability, ¿es una frontera real, un riesgo gobernable, una capability inmadura, algo redundante/perjudicial o UNKNOWN?**;
-- **¿qué ruta preserva autonomía legítima sin reintroducir el defecto?**;
-- **¿estoy usando creator approval o un threshold fijo para sustituir juicio que el sistema debería desarrollar?**
-
-No se documenta chain-of-thought privado; sí findings, alternatives, decisions y evidence que cambien el proyecto.
-
-## 7. Definición de capacidad real
-
-Toda capability material debe poder terminar en un estado equivalente a:
-
-`DISCOVERED/UNVERIFIED → ACQUIRED/CONFIGURED → PROBED → VERIFIED/AVAILABLE → DEGRADED/UNAVAILABLE → RETIRED`
-
-Los nombres finales se adaptan al source. Lo obligatorio es la separación semántica y la evidencia. `PROHIBITED`, `UNAUTHORIZED` y `UNKNOWN` se conservan como fronteras distintas cuando corresponda.
-
-## 8. Estrategia de modelos e inference
-
-- Actualmente se preserva Codex OAuth como conexión principal disponible; no se fuerza “un solo modelo”.
-- ABOS puede descubrir/seleccionar/cambiar entre modelos compatibles del provider activo y ajustar reasoning effort.
-- Manual lock/ceiling del usuario debe prevalecer.
-- El controlador considera primero si una llamada de modelo es necesaria.
-- Un futuro provider (por ejemplo Anthropic) entra por adapter cuando exista necesidad/autorización; no se inventa soporte ahora.
-- Cross-provider switch nunca es fallback silencioso.
-
-## 9. Estrategia de manos/capabilities
-
-Preferencia por fiabilidad y semántica, no allowlist:
-
-API/CLI/capability estructurada → MCP/provider estructurado → browser DOM/accessibility → GUI visual/input.
-
-Si una ruta falla, se registra evidence y se replantea otra; no se cambia silenciosamente dentro de la misma tool call.
-
-Capability gap:
-
-**reuse → discover → acquire → compose → construct → probe → register → use → observe → retain/evolve/retire**.
-
-## 10. Estrategia cognitiva
-
-Cognitive Fabric no será una segunda memoria. Antes de P-020 se auditan y clasifican retrievers/context/compression/aggregation/knowledge/events existentes. La meta es un Persistent Cognitive Universe con working set progresivo L0–L4, branching/checkpoints y activación por relevance/causality/uncertainty/dependencies/value-of-information/context cost.
-
-Skills se promueven desde experiencia sólo con applicability/evidence/replay suficiente. World model distingue OBSERVED/INFERRED/ESTIMATED/ASSUMED/UNKNOWN. Prediction/outcome learning calibra decisiones. Simulation ejecuta barato antes de efectos caros cuando aporta información.
-
-Strategic cognition debe poder descomponer un compromiso en resultados/dependencias, descubrir qué más hace falta, comparar rutas y distinguir una anomalía que necesita evidencia adicional de una frontera que realmente necesita permiso externo.
-
-## 11. Estrategia económica y organizacional
-
-Opportunities son hipótesis abiertas de creación legítima de valor. No existe `business_type` cerrado como universo. Delegation se basa en competence evidence, capabilities, cost y authority. Children heredan constitution/family index/skills/capabilities selectivamente, no todo el history. Treasury separa internal capital de external P&L y nunca fabrica ROI.
-
-Autonomía económica no significa gastar sin criterio ni pedir permiso por cada gasto. ABOS debe evolucionar hacia decisiones basadas en necesidad/commitment, capital libre, ingresos/anticipos causalmente observados, expected value, downside, timing, liquidez, reserva de contingencia, provider risk y aprendizaje prediction→outcome. Puede gastar una proporción extraordinaria cuando la causa lo justifica y debe evitar sobrecomprar aunque el saldo lo permita.
-
-P-025 aporta juicio estratégico; P-030 autoridad económica/treasury causal; P-031 adquisición/reinversión autónoma. Ninguno crea una authority paralela para adelantar trabajo de otro.
-
-## 12. Evidencia y cierre
-
-Cada P define su nivel necesario. Para la campaña se usan estas etiquetas documentales además de E0–E7:
-- `SOURCE_COMPLETE`;
-- `INTEGRATION_VERIFIED`;
-- `LIVE_VERIFIED`;
-- `LIVE_BLOCKED_EXTERNAL`.
-
-`SOURCE_COMPLETE` exige code + wiring + persistence/observability cuando aplique + tests + failure paths + continuity. `INTEGRATION_VERIFIED` exige flujo entre autoridades. `LIVE_VERIFIED` exige proveedor/recurso externo real. `LIVE_BLOCKED_EXTERNAL` sólo es válido si lo único pendiente es realmente externo.
-
-## 13. Paralelismo permitido
-
-Después de satisfacer dependencies, ramas independientes pueden avanzar en paralelo sólo si:
-- no editan la misma autoridad sin coordinación;
-- cada intervención tiene P-xxx/continuity;
-- no se mergea un consumidor antes de su contract/producer;
-- integration gate se ejecuta después de converger.
-
-Un bloqueo LIVE no frena source no dependiente. Un bloqueo de autoridad/persistence/security sí bloquea consumidores que dependan de él.
-
-## 14. P-004 y documentación
-
-P-004 puede corregir drift puntual antes, pero su cierre final ocurre después de P-035 para documentar la arquitectura realmente integrada, no una intención intermedia. Documentación no gobierna source cuando divergen; se reconcilia por autoridad/evidence.
-
-## 15. P-005 y validación física/LIVE
-
-P-005 es un track incremental: Codex OAuth real, AWS billable, MCP/provider externo, economic/child/resource claims y futuras fronteras que requieran E5/E6. No toda capability local requiere E5: una computer/browser E4 realista puede cerrar integración local. Si falta autorización/credencial/dinero, registrar `LIVE_BLOCKED_EXTERNAL` y continuar source.
-
-## 16. Estado actual — P-018 activo
-
-P-008 a P-017 están HECHO para sus objetivos exactos e integrados/revalidados. P-017 Capability Acquisition cerró por PR #51; `main c5c5ae856923ba74c943cc26beca26ea38de0dcc` pasó CI `35904429871` y ProjectOps `35904429875` SUCCESS.
-
-P-018 está `EN_EJECUCIÓN / DECISION_READY` en `abos/p018-environment-resource-fabric`. La primera unidad reconcilia Environment selection con la authority de readiness P-014 y evita elevar discovery/auth global a capability execution-ready. Lifecycle, resource store y mobility existentes se reutilizan; no se abre un segundo environment system.
-
-## 17. Cierre de campaña
-
-P-036 no significa “todo el universo futuro de ABOS está terminado”. Significa que **todo lo planificado en esta campaña** está code-complete/integrado y que cualquier frontier externa pendiente está explícita. Nuevas capacidades futuras pueden añadirse después mediante el mismo sistema abierto, sin rediseñar el core.
-
-## 18. Siguiente trabajo recuperable
-
-`P-018 — endurecer capability-readiness provider-neutral, reconciliar descriptors/runtime truth de environments y gatear la primera unidad antes de ampliar P-018.`

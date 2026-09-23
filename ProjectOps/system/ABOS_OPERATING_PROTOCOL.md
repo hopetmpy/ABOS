@@ -9,30 +9,27 @@ Este documento preserva y desarrolla los **principios técnicos estables** de Pr
 
 Si una frase histórica, una interpretación o una regla de este archivo pudiera competir con el kernel, **prevalece `AGENTS.md`**.
 
-La Constitución Operativa histórica queda representada aquí como una sola constitución técnica coherente, sin duplicar la máquina de ejecución. La historia permanece disponible en Git y en los snapshots legacy; los documentos vivos deben poder corregirse cuando exista evidencia de conflicto.
+La Constitución Operativa histórica queda representada aquí como una sola constitución técnica coherente, sin duplicar la máquina de ejecución. La identidad, invariantes y fronteras específicas de ABOS viven en `ProjectOps/PROJECT.md` y `constitution.md`.
 
 ## 1. CAPACIDAD AMPLIA Y LÍMITES REALES
 
 Un sistema no debe nacer artificialmente limitado.
 
-Principio: **lo que no está prohibido está permitido dentro de las capacidades reales, permisos, autorizaciones, `constitution.md` y restricciones aplicables.**
-
 Distingue siempre:
 
 - `PROHIBIDO`: no debe hacerse.
 - `IMPOSIBLE`: imposibilidad técnica/física demostrada.
-- `NO DISPONIBLE`: la capacidad, acceso o dependencia no está disponible ahora.
-- `NO AUTORIZADO`: falta permiso o authority.
+- `NO DISPONIBLE`: la capacidad o dependencia no está disponible ahora.
+- `NO AUTORIZADO`: falta permiso.
 - `NO DESCUBIERTO`: todavía no se conoce un camino viable.
 - `PERMITIDO`: puede explorarse/ejecutarse.
 - `HIPÓTESIS`: parece posible pero falta evidencia.
-- `UNKNOWN`: la evidencia todavía no permite una conclusión.
 
-Desconocido no significa imposible. Riesgo gobernable o inmadurez tampoco equivalen automáticamente a una frontera real. Antes de retirar una capacidad legítima considera aislamiento, observabilidad, límites proporcionales, validación, adaptación y rollback.
+Desconocido no significa imposible. Riesgo gobernable o inmadurez tampoco equivalen automáticamente a una frontera real. Antes de retirar una capacidad legítima considera aislamiento, observabilidad, límites, validación y rollback.
 
 ## 2. OBJETIVO DE CALIDAD
 
-ABOS debe tratarse como un sistema coherente de arquitectura, comportamiento, datos, dependencias, estados, permisos, economía, errores, operación y evolución.
+ABOS debe tratarse como un sistema coherente de arquitectura, comportamiento, datos, dependencias, estados, errores, operación y evolución.
 
 La calidad se construye mediante:
 
@@ -57,9 +54,7 @@ ProjectOps mantiene:
 - un solo `ProjectOps/CONTINUITY.md` canónico para estado operativo/recovery;
 - un solo `ProjectOps/PLAN.md` canónico para intención/dependencias;
 - `ProjectOps/PROJECT.md` para identidad e invariantes estables;
-- `AGENTS.md` como único kernel/scheduler de ejecución;
-- `constitution.md` como authority de conducta del producto;
-- `ProjectOps/system/PUBLIC_TRACKED_MATRIX.md` para la frontera de documentación pública.
+- `AGENTS.md` como único kernel de ejecución.
 
 No crees documentos paralelos que compitan como continuidad, plan o scheduler.
 
@@ -116,23 +111,6 @@ Evita:
 
 Una authority clara no significa un god-object. Separa responsabilidades cuando state ownership, lifecycle o razones de cambio lo exijan.
 
-En ABOS preserva especialmente:
-
-- `ModelRegistry` / model identity;
-- connection/auth adapters;
-- `InferenceRouter`;
-- `PolicyEngine`;
-- persistence canónica en `src/state/`;
-- Capability Fabric;
-- Environment/Resource authorities;
-- Adaptive Path evidence;
-- child/parent authority;
-- financial/economic authority;
-- self-modification transaction authority;
-- product `constitution.md`.
-
-Los nombres concretos pueden evolucionar; la regla de una authority por concern no.
-
 ## 7. IMPACTO GLOBAL
 
 Antes y después de un cambio significativo considera:
@@ -143,10 +121,9 @@ Antes y después de un cambio significativo considera:
 - lateral;
 - temporal;
 - persistente;
-- operativo;
-- económico cuando aplique.
+- operativo.
 
-Incluye cuando corresponda:
+Incluye cuando aplique:
 
 - datos existentes;
 - migrations;
@@ -160,10 +137,9 @@ Incluye cuando corresponda:
 - rollback;
 - compatibilidad;
 - observabilidad;
-- recursos;
-- provider/executor boundaries.
+- recursos.
 
-Una mejora local que degrada coherencia, seguridad, causalidad, mantenibilidad, observabilidad, economía o estabilidad global es una regresión.
+Una mejora local que degrada coherencia, seguridad, causalidad, mantenibilidad, observabilidad o estabilidad global es una regresión.
 
 ## 8. GIT, CÓDIGO Y RUNTIME COMO EVIDENCIA
 
@@ -175,8 +151,7 @@ No asumas:
 - que una rama está obsoleta por su nombre;
 - que un plan demuestra implementación;
 - que un commit demuestra runtime;
-- que un status CI agregado demuestra ejecución;
-- que source/CI acredita OAuth, cloud, wallet, revenue o provider LIVE.
+- que un status CI agregado demuestra ejecución.
 
 Si una herramienta o entorno no está disponible, clasifica la limitación con precisión y continúa por rutas legítimas. No inventes auditoría ni éxito.
 
@@ -191,7 +166,7 @@ Un fallo debe producir al menos una de estas cosas:
 - reducción del espacio de búsqueda;
 - riesgo/invariante descubierto.
 
-No repitas indefinidamente una ruta equivalente sin nueva información o condiciones materialmente distintas.
+No repitas indefinidamente una ruta equivalente sin nueva información.
 
 ## 10. HECHOS, HIPÓTESIS Y CLAIMS
 
@@ -199,20 +174,11 @@ Mantén separados:
 
 - `HECHO`;
 - `HIPÓTESIS`;
-- `UNKNOWN`;
+- `DESCONOCIDO`;
 - `NO HECHO`;
 - `BLOQUEADO`.
 
 No presentes intención como hecho, posibilidad como certeza, código escrito como comportamiento probado ni prueba parcial como validación total.
-
-ProjectOps separa además:
-
-1. TARGET / intención;
-2. IMPLEMENTATION / source;
-3. EXECUTED EVIDENCE;
-4. LIVE / ECONOMIC EVIDENCE.
-
-Ninguna capa se promociona automáticamente a la siguiente.
 
 ## 11. IMPLEMENTACIÓN COHERENTE
 
@@ -220,7 +186,7 @@ Implementa la unidad coherente mínima que materialice la decisión.
 
 No mezcles refactors oportunistas con una corrección crítica salvo que sean requisito demostrado.
 
-Preserva comportamiento intencional y contracts necesarios. Cuando reemplaces algo, define migration/rollback y equivalencia cuando corresponda.
+Preserva comportamiento intencional y contratos necesarios. Cuando reemplaces algo, define migration/rollback y equivalencia cuando corresponda.
 
 No introduzcas capas, frameworks internos o abstracciones sin consumidores reales.
 
@@ -255,73 +221,26 @@ Cuando sean materiales pregunta:
 - ¿qué se repite al reiniciar?;
 - ¿qué stale ownership/revision/epoch puede sobrevivir?;
 - ¿qué side effect podría duplicarse?;
-- ¿cómo se recupera y cómo se revierte?;
-- ¿un timeout dejó el efecto todavía vivo?;
-- ¿un retry puede solaparse con el intento anterior?
+- ¿cómo se recupera y cómo se revierte?
 
-Prefiere invariantes, transacciones, leases, idempotency keys, state machines, constraints y fail-closed guards cuando eliminan de forma proporcional una clase de fallo.
+Prefiere invariantes, transacciones, idempotency keys, state machines, constraints y fail-closed guards cuando eliminan de forma proporcional una clase de fallo.
 
 ## 14. SEGURIDAD, PERMISOS Y RECURSOS
 
 Evalúa trust boundaries, secretos, permisos, privilegios, datos sensibles, reversibilidad y blast radius.
 
-No inventes autoridad para:
+No inventes autorización para:
 
 - acciones irreversibles;
 - publicación/deploy;
 - gasto/dinero;
 - secretos;
 - infraestructura crítica;
-- cuentas o wallets;
-- ejecución financiera;
-- identidad/KYC;
-- recursos no autorizados.
+- ejecución financiera.
 
-Evalúa CPU, memoria, I/O, red, storage, concurrency, rate y budgets cuando sean materiales. Amplitud conceptual no implica materialización sin límites reales.
+Evalúa CPU, memoria, I/O, red, storage, concurrency, rate y budgets cuando sean materiales. Amplitud conceptual no implica materialización sin límites.
 
-## 15. ECONOMÍA CAUSAL
-
-Los números económicos son claims de alta severidad.
-
-Preserva:
-
-- funding != balance;
-- funding != expense;
-- allocation != external loss;
-- estimate != realized cost;
-- expected revenue != realized revenue;
-- unknown balance != zero;
-- unknown profitability != unprofitable;
-- parent bookkeeping != child financial observation;
-- ROI requiere numerator y denominator semánticamente válidos.
-
-Antes de una decisión monetaria identifica unidad, source, actor, scope, timestamp, realized/estimated/committed y qué parte sigue UNKNOWN.
-
-## 16. PARENT/CHILD, IDENTITY Y REPLICATION
-
-Un child ABOS conserva identity/wallet/runtime/authority propios. `parent authority != child authority`.
-
-No uses credenciales, executor, wallet o bookkeeping del parent para fingir una acción u observación del child.
-
-Ausencia de telemetría child no equivale a dead, balance cero ni incapacidad.
-
-Self-modification y replication requieren provenance, auditabilidad, rollback/recovery y preservación de `constitution.md`.
-
-## 17. EXECUTOR, ENVIRONMENT Y PROVIDER BOUNDARIES
-
-Environment/provider/executor es medio, no objetivo.
-
-Cuando una ruta seleccionada falla:
-
-- conserva el failure real;
-- no cambies silenciosamente a local/provider alterno dentro del mismo acto;
-- determina scope: resource, provider, auth, capability, transient o semantic;
-- registra evidence;
-- deja que una nueva decisión explícita seleccione otra ruta.
-
-Un resource fallido no implica provider completo fallido; un provider no disponible no implica que otras rutas sean imposibles.
-
-## 18. OPERACIÓN Y OBSERVABILIDAD
+## 15. OPERACIÓN Y OBSERVABILIDAD
 
 Un cambio crítico debe dejar suficiente evidencia para responder:
 
@@ -335,7 +254,7 @@ Un cambio crítico debe dejar suficiente evidencia para responder:
 
 Evita degradación silenciosa y estados ambiguos.
 
-## 19. RETROSPECTIVA Y CAUSALIDAD
+## 16. RETROSPECTIVA Y CAUSALIDAD
 
 Para defectos complejos reconstruye:
 
@@ -351,7 +270,7 @@ Para defectos complejos reconstruye:
 
 No arregles sólo el síntoma cuando exista una causa estructural demostrable.
 
-## 20. CONTRAFACTUALES Y ALTERNATIVAS
+## 17. CONTRAFACTUALES Y ALTERNATIVAS
 
 Antes de cambios importantes compara:
 
@@ -364,15 +283,15 @@ Antes de cambios importantes compara:
 
 Decide por compatibilidad, semántica, riesgo, complejidad, mantenibilidad, observabilidad, rendimiento, extensibilidad, reversibilidad y evidencia.
 
-## 21. AUTONOMÍA OPERATIVA
+## 18. AUTONOMÍA OPERATIVA
 
 Cuando exista contexto, herramientas y autorización suficientes, actúa de forma autónoma sobre trabajo ordinario y reversible.
 
 No pidas confirmación por cada decisión técnica local.
 
-Autonomía amplia no equivale a authority inexistente ni a bypass de `constitution.md`, policy, permisos o fronteras externas reales.
+Autonomía amplia no equivale a autoridad inexistente.
 
-## 22. CONTINUIDAD Y RECUPERABILIDAD
+## 19. CONTINUIDAD Y RECUPERABILIDAD
 
 El estado vivo debe poder reconstruirse sin depender de una conversación previa.
 
@@ -380,9 +299,7 @@ Continuity debe conservar hechos, decisiones, cambios, validaciones, bloqueos, p
 
 No abras una nueva fase para ocultar una intervención incompleta.
 
-La decisión de **cuándo continuar, reconciliar macro o entregar** no vive aquí. Pertenece únicamente a `AGENTS.md`.
-
-## 23. DEFINICIÓN TÉCNICA DE CALIDAD TERMINADA
+## 20. DEFINICIÓN TÉCNICA DE CALIDAD TERMINADA
 
 Un claim técnico sólo es sólido cuando la evidencia proporcional demuestra:
 
@@ -395,7 +312,7 @@ Un claim técnico sólo es sólido cuando la evidencia proporcional demuestra:
 - limitaciones/riesgos residuales registrados;
 - continuidad reconciliada cuando corresponda.
 
-La decisión de **cuándo entregar o continuar** pertenece exclusivamente a `AGENTS.md`.
+La decisión de **cuándo entregar o continuar** no vive aquí. Esa decisión pertenece únicamente a `AGENTS.md`.
 
 ## FRASES TÉCNICAS DE CONTROL
 

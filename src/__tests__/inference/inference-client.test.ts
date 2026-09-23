@@ -173,27 +173,29 @@ describe("UnifiedInferenceClient", () => {
   });
 
   it.each([429, 500, 503])(
-    "fails over to next provider on retryable %s errors",
+    "does not cross provider boundary after retryable %s errors",
     async (status) => {
       const client = createClient();
 
-      // openai gets 4 failures (3 retries + final failure), then groq succeeds
+      // The selected provider receives its bounded retries. A queued fallback
+      // response must remain untouched because provider change requires a new
+      // decision/call.
       queueError(status);
       queueError(status);
       queueError(status);
-      queueError(status);
-      queueCompletion({ content: `from-groq-${status}` });
+      queueError(status, `openai-final-${status}`);
+      queueCompletion({ content: `must-not-use-fallback-${status}` });
 
       vi.useFakeTimers();
-      const pending = client.chat({ tier: "reasoning", messages: BASE_MESSAGES });
+      const pending = expect(
+        client.chat({ tier: "reasoning", messages: BASE_MESSAGES }),
+      ).rejects.toThrow(`openai-final-${status}`);
       await vi.runAllTimersAsync();
-      const result = await pending;
+      await pending;
       vi.useRealTimers();
 
-      expect(result.content).toBe(`from-groq-${status}`);
-      expect(result.metadata.providerId).toBe("groq");
-      expect(result.metadata.failedProviders).toEqual(["openai"]);
-      expect(result.metadata.retries).toBe(3);
+      expect(mockState.create).toHaveBeenCalledTimes(4);
+      expect(mockState.queue).toHaveLength(1);
     },
   );
 
@@ -206,27 +208,23 @@ describe("UnifiedInferenceClient", () => {
     ).rejects.toThrow("bad request");
   });
 
-  it("stops retrying after max retry budget", async () => {
+  it("stops retrying after the selected provider max retry budget", async () => {
     const client = createClient();
 
-    // openai exhausted
     queueError(429, "openai-1");
     queueError(429, "openai-2");
     queueError(429, "openai-3");
     queueError(429, "openai-4");
-    // groq exhausted
-    queueError(429, "groq-1");
-    queueError(429, "groq-2");
-    queueError(429, "groq-3");
-    queueError(429, "groq-4");
 
     vi.useFakeTimers();
     const pending = expect(
       client.chat({ tier: "reasoning", messages: BASE_MESSAGES }),
-    ).rejects.toThrow(/All providers failed/);
+    ).rejects.toThrow("openai-4");
     await vi.runAllTimersAsync();
     await pending;
     vi.useRealTimers();
+
+    expect(mockState.create).toHaveBeenCalledTimes(4);
   });
 
   it("throws when no providers are available for tier", async () => {
@@ -291,7 +289,7 @@ describe("UnifiedInferenceClient", () => {
     expect(mockState.create).toHaveBeenCalledTimes(5);
   });
 
-  it("chat skips providers with open circuit and fails over", async () => {
+  it("chat fails closed when the selected provider circuit is open", async () => {
     const client = createClient();
 
     for (let i = 0; i < 5; i += 1) {
@@ -305,11 +303,13 @@ describe("UnifiedInferenceClient", () => {
       ).rejects.toThrow();
     }
 
-    queueCompletion({ content: "from-fallback" });
+    queueCompletion({ content: "must-not-use-fallback" });
 
-    const result = await client.chat({ tier: "reasoning", messages: BASE_MESSAGES });
-    expect(result.metadata.providerId).toBe("groq");
-    expect(result.metadata.failedProviders).toEqual([]);
+    await expect(
+      client.chat({ tier: "reasoning", messages: BASE_MESSAGES }),
+    ).rejects.toThrow(/circuit is open/);
+    expect(mockState.create).toHaveBeenCalledTimes(5);
+    expect(mockState.queue).toHaveLength(1);
   });
 
   it("successful chatDirect resets circuit breaker failure count", async () => {

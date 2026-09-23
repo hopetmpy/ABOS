@@ -85,8 +85,7 @@ import { createColonyTaskAssignmentConsumer } from "../orchestration/colony-task
 import { SimpleAgentTracker, SimpleFundingProtocol } from "../orchestration/simple-tracker.js";
 import { HarnessRegistry } from "./harness-registry.js";
 import { createWorkerInferenceBridge } from "./worker-inference-bridge.js";
-import { ProviderRegistry } from "../inference/provider-registry.js";
-import { UnifiedInferenceClient } from "../inference/inference-client.js";
+import { RouterBackedOrchestrationInferenceClient } from "../inference/router-orchestration-client.js";
 import { isIdleOnlyTool } from "./idle-only-tools.js";
 import { CapabilityRegistry } from "../capabilities/registry.js";
 import { CapabilityStore } from "../capabilities/store.js";
@@ -433,43 +432,34 @@ export async function runAgentLoop(
     try {
       planModeController = new PlanModeController(db.raw);
 
-      // Bridge abos config API keys to env vars for the provider registry.
-      // The registry reads keys from process.env; the abos config may have
-      // them from config.json or Conway provisioning.
-      if (config.openaiApiKey && !process.env.OPENAI_API_KEY) {
-        process.env.OPENAI_API_KEY = config.openaiApiKey;
-      }
-      if (config.anthropicApiKey && !process.env.ANTHROPIC_API_KEY) {
-        process.env.ANTHROPIC_API_KEY = config.anthropicApiKey;
-      }
-      // Conway Compute API is OpenAI-compatible. Use it as fallback when no
-      // direct OpenAI key is available. The conwayApiKey is always present
-      // (required for sandbox operations), so this ensures the orchestrator
-      // can always make inference calls.
-      if (config.conwayApiKey && !process.env.CONWAY_API_KEY) {
-        process.env.CONWAY_API_KEY = config.conwayApiKey;
-      }
-      // If no OpenAI key is set but Conway key is available, use Conway as
-      // the OpenAI provider (Conway Compute is OpenAI API-compatible).
-      if (!process.env.OPENAI_API_KEY && config.conwayApiKey) {
-        process.env.OPENAI_API_KEY = config.conwayApiKey;
-        process.env.OPENAI_BASE_URL = `${config.conwayApiUrl}/v1`;
-      }
-
-      const providersPath = path.join(
-        getHomeDir(),
-        ".abos",
-        "inference-providers.json",
+      const resolveOrchestrationConnectionProvider = () => {
+      const liveConfig = loadConfig();
+      return (
+        liveConfig?.aiConnection?.active?.provider ??
+        config.aiConnection?.active?.provider ??
+        (config.conwayApiKey
+          ? "conway"
+          : config.openaiApiKey
+            ? "openai"
+            : undefined)
       );
-      const registry = ProviderRegistry.fromConfig(providersPath);
-
-      // If OPENAI_BASE_URL was set (Conway fallback), update the default
-      // provider's baseUrl so the OpenAI client points to Conway Compute.
-      if (process.env.OPENAI_BASE_URL) {
-        registry.overrideBaseUrl("openai", process.env.OPENAI_BASE_URL);
-      }
-
-      const unifiedInference = new UnifiedInferenceClient(registry);
+    };
+    const orchestrationInference =
+      new RouterBackedOrchestrationInferenceClient({
+        db: db.raw,
+        router: inferenceRouter,
+        runtime: inference,
+        getConnectionProvider: resolveOrchestrationConnectionProvider,
+        getSessionId: () => db.getKV("session_id") || "default",
+        getDailyBudgetCents: () => {
+          const liveConfig = loadConfig();
+          return (
+            liveConfig?.treasuryPolicy ??
+            config.treasuryPolicy ??
+            DEFAULT_TREASURY_POLICY
+          ).maxInferenceDailyCents;
+        },
+      });
       const agentTracker = new SimpleAgentTracker(db);
       const funding = new SimpleFundingProtocol(conway, identity, db);
       const messaging = new ColonyMessaging(
@@ -481,9 +471,9 @@ export async function runAgentLoop(
 
       const harnessRegistry = new HarnessRegistry();
 
-      // Adapter: local workers use the unified inference path so planner-backed
-      // harnesses can preserve tier + responseFormat contracts.
-      const workerInference = createWorkerInferenceBridge(unifiedInference);
+      // Workers and planner-backed harnesses use the same canonical router/model
+      // catalog/connection authority as the parent agent turn.
+      const workerInference = createWorkerInferenceBridge(orchestrationInference);
 
       // Canonical harness execution config is shared by local workers and by
       // structured parent -> Conway child task_assignment consumption.
@@ -975,7 +965,7 @@ export async function runAgentLoop(
         agentTracker,
         funding,
         messaging,
-        inference: unifiedInference,
+        inference: orchestrationInference,
         identity,
         resolveAgentEnvironment: resolveExecutionEnvironment,
         isWorkerAlive: (address: string) => {
