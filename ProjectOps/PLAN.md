@@ -25,8 +25,8 @@ Master-Transformation-Plan: P-007
 | P-013 | Unificar Observability, Audit y Evidence Fabric | HECHO | P-008 + P-009; producto PR #41 + cierre PR #42 integrados; main `21911888b8271662f1b546bc637f49d76610c132` CI `35410063228` + ProjectOps `35410063240` green | plan/P-013.md |
 | P-014 | Consolidar Capability Fabric canónico y lifecycle de capacidades | HECHO | PR #44 integrado; `main bf9adfd11617a37698ce7095248c1e1228f0d3cf` revalidado por CI `35417887204` + ProjectOps `35417887215` SUCCESS | plan/P-014.md |
 | P-015 | Sustituir MCP nominal por un runtime MCP real y verificable | HECHO | PR #46 integrado; `main 6e620ffcdddbe630ace58be67d5abb0826ed19b9` revalidado por CI `35423685890` + ProjectOps `35423685860` SUCCESS; OAuth MCP interactivo permanece delegado por ownership a P-019 connection/auth fabric | plan/P-015.md |
-| P-016 | Dar a ABOS manos de computadora, browser y GUI mediante providers reales | EN_EJECUCIÓN | P-014 + P-009 + P-010 + P-011 + P-013; activado tras cierre canónico P-015 | plan/P-016.md |
-| P-017 | Implementar discovery, acquisition, composition y construction de capacidades | PLANIFICADO | P-012 + P-014 + P-015 + P-016 + P-013 | plan/P-017.md |
+| P-016 | Dar a ABOS manos de computadora, browser y GUI mediante providers reales | HECHO | PR #48 integrado; `main 08b7a5cce8f18c57c52e6a2f43048b6f1c214e50` revalidado por CI `35809162263` + ProjectOps `35809162403` SUCCESS; GUI material Windows E2E validado sin promover E3/E4 a E5 | plan/P-016.md |
+| P-017 | Implementar discovery, acquisition, composition y construction de capacidades | EN_EJECUCIÓN | P-012 + P-014 + P-015 + P-016 + P-013 HECHO; activado tras cierre canónico P-016 | plan/P-017.md |
 | P-018 | Reconciliar Environment y Resource Fabric provider-neutral | PLANIFICADO | P-009 + P-010 + P-011 + P-013 + P-014 | plan/P-018.md |
 | P-019 | Mantener model/connection fabric abierto y añadir adaptive inference | PLANIFICADO | P-008 + P-009 + P-010 + P-013 | plan/P-019.md |
 | P-020 | Unificar Cognitive Fabric: memory, context, knowledge y activation | PLANIFICADO | P-008 + P-013 + P-019 | plan/P-020.md |

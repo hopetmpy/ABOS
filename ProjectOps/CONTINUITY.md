@@ -2,19 +2,19 @@
 
 Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
-Active-Plan: P-016
-Active-Segment: continuity/C0012.md
-Active-Intervention: P016_COMPUTER_BROWSER_GUI_HANDS — EN_EJECUCIÓN / TECHNICAL_OBJECTIVE_SATISFIED / E3_BRANCH_GREEN / MAIN_INTEGRATION_PENDING
+Active-Plan: P-017
+Active-Segment: continuity/C0013.md
+Active-Intervention: P017_CAPABILITY_DISCOVERY_ACQUISITION — AUDIT_OPEN / SOURCE_UNMODIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p016-computer-browser-gui-hands
+Current-Host-Branch: abos/p017-capability-acquisition
 Host-Head-At-Audit-Open: fe845184fce48c65032f8521ecd0bdfa42e04b77
-Last-Reconciled-Host-Head: 28c449fc98d63f4b5a9450db3d399f2d60302c77
-Last-Reconciled-Head-Semantics: P016_TECHNICAL_OBJECTIVE_SATISFIED_E3_BRANCH_GREEN_MAIN_INTEGRATION_PENDING
+Last-Reconciled-Host-Head: 08b7a5cce8f18c57c52e6a2f43048b6f1c214e50
+Last-Reconciled-Head-Semantics: P016_HECHO_P017_AUDIT_OPEN_SOURCE_UNMODIFIED
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -450,3 +450,14 @@ P016-Local-Computer-Baseline-CI: 35646198066 SUCCESS / 8_OF_8
 P016-Local-Computer-Baseline-ProjectOps: 35646198284 SUCCESS
 P016-Local-Computer-State: DECISION_READY / SOURCE_UNMODIFIED
 P016-Local-Computer-Decision: REFACTOR_LOCAL_EXEC_INTO_SHARED_LOCAL_COMPUTER_RUNTIME / EXTEND_EXISTING_TOOL_SURFACE / KEEP_ENVIRONMENT_TASK_LIFECYCLE_SEPARATE / REDACT_ENV_PERSISTENCE / EVIDENCE_BACK_LOCAL_PROCESS_CAPABILITY
+
+P016-PR: 48
+P016-Merge: 08b7a5cce8f18c57c52e6a2f43048b6f1c214e50
+P016-Main-CI: 35809162263 SUCCESS
+P016-Main-ProjectOps: 35809162403 SUCCESS
+P016-Canonical-State: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED
+P017-Activation-Branch: abos/p017-capability-acquisition
+P017-Canonical-Baseline: 08b7a5cce8f18c57c52e6a2f43048b6f1c214e50
+P017-Baseline-CI: 35809162263 SUCCESS
+P017-Baseline-ProjectOps: 35809162403 SUCCESS
+P017-Activation-State: AUDIT_OPEN / SOURCE_UNMODIFIED

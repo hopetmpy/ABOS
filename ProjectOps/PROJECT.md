@@ -211,11 +211,11 @@ E3 nunca se promociona a E5/E6 por narrativa.
 
 Codex OAuth humano, AWS billable, providers externos, saldos/revenue atribuibles y otras fronteras E5/E6 requieren evidencia real; CI/source no las autocertifican.
 
-### 7.4 P-016 activo
+### 7.4 P-017 activo
 
-P-011 Lifecycle/Health/Restart/Recovery, P-012 transactional self-modification, P-013 Observability/Audit/Evidence Fabric, P-014 Capability Fabric y P-015 MCP runtime están HECHO / INTEGRATION_VERIFIED para sus objetivos exactos. P-015 fue integrado por PR #46 y el `main 6e620ffcdddbe630ace58be67d5abb0826ed19b9` resultante fue revalidado por CI `35423685890` + ProjectOps `35423685860` SUCCESS.
+P-011 Lifecycle/Health/Restart/Recovery, P-012 transactional self-modification, P-013 Observability/Audit/Evidence Fabric, P-014 Capability Fabric, P-015 MCP runtime y P-016 computer/browser/GUI hands están HECHO / INTEGRATION_VERIFIED para sus objetivos exactos. P-016 fue integrado por PR #48 y el `main 08b7a5cce8f18c57c52e6a2f43048b6f1c214e50` resultante fue revalidado por CI `35809162263` + ProjectOps `35809162403` SUCCESS.
 
-P-016 se activa para dar a ABOS manos generales sobre una computadora autorizada mediante filesystem/process/shell, integración portable de OS/apps, browser estructurado y GUI/accessibility/input sólo cuando una interfaz más semántica no exista. La activación no modifica product source: primero se auditan las primitives y authorities existentes en agent/capabilities/environments/platform/state para reutilizar o extender sin crear un segundo executor/control plane.
+P-017 se activa para hacer real el pipeline abierto de discovery, acquisition, composition y construction de capacidades cuando exista un capability gap legítimo. Debe reutilizar P-014 como capability authority, P-015/P-016 como rutas existentes y P-012 para construction transaccional; no puede crear un registry, installer o control plane paralelo. La activación no modifica product source: primero se audita qué discovery/acquisition/composition/construction ya existe, quién lo produce/consume y qué evidence/policy/treasury/supply-chain boundaries gobiernan cada ruta.
 
 ## 8. Anti-contaminación entre proyectos
 
