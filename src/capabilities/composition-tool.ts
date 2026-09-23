@@ -1,7 +1,7 @@
 import type { AbosTool } from "../types.js";
 import { currentProtectedToolInvoker } from "../agent/protected-tool-invoker.js";
 import type { CapabilityRegistry } from "./registry.js";
-import { capabilityStateOf } from "./model.js";
+import { capabilityProvides, capabilityStateOf } from "./model.js";
 import {
   COMPOSITION_PROVIDER,
   compositionPlanHash,
@@ -154,7 +154,8 @@ export function createExecuteComposedCapabilityTool(
         });
       }
 
-      for (const componentId of plan.componentIds) {
+      const components = plan.componentIds.map((componentId) => registry.get(componentId));
+      for (const [index, componentId] of plan.componentIds.entries()) {
         if (!registry.isExecutionReady(componentId)) {
           degrade(
             registry,
@@ -165,6 +166,36 @@ export function createExecuteComposedCapabilityTool(
           return JSON.stringify({
             status: "degraded",
             reason: `Dependency ${componentId} is no longer execution-ready.`,
+          });
+        }
+        if (!components[index]) {
+          degrade(
+            registry,
+            capability,
+            "degraded",
+            `Composition dependency ${componentId} disappeared from the canonical registry.`,
+          );
+          return JSON.stringify({
+            status: "degraded",
+            reason: `Dependency ${componentId} is no longer registered.`,
+          });
+        }
+      }
+
+      for (const step of plan.steps) {
+        const covered = components.some((component) =>
+          Boolean(component) && capabilityProvides(component!, step.toolName)
+        );
+        if (!covered) {
+          degrade(
+            registry,
+            capability,
+            "degraded",
+            `Verified component contracts no longer provide composition step tool ${step.toolName}.`,
+          );
+          return JSON.stringify({
+            status: "degraded",
+            reason: `Composition step tool ${step.toolName} is no longer provided by the declared verified components.`,
           });
         }
       }
