@@ -397,6 +397,36 @@ describe("ContextManager.assembleContext", () => {
     )).toBe(false);
   });
 
+  it("emits an assistant tool-call envelope for tool-only turns", () => {
+    const manager = new ContextManager(fixedTokenCounter(1));
+    const turn = {
+      id: "tool-only-turn",
+      timestamp: new Date().toISOString(),
+      state: "running",
+      input: "inspect",
+      thinking: "",
+      toolCalls: [{ id: "call-only", name: "inspect", args: {}, result: "done" }],
+      tokenUsage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+      costCents: 0,
+    };
+    const assembled = manager.assembleContext({
+      systemPrompt: "sys",
+      recentTurns: [turn],
+      tailMessages: [{ role: "user", content: "next" }],
+      modelContextWindow: 100,
+      reserveTokens: 10,
+    });
+
+    const assistantIndex = assembled.messages.findIndex((message) =>
+      message.role === "assistant" && Array.isArray(message.tool_calls)
+    );
+    expect(assistantIndex).toBeGreaterThan(0);
+    expect(assembled.messages[assistantIndex]?.content).toBe("");
+    expect(assembled.messages[assistantIndex]?.tool_calls?.[0]?.id).toBe("call-only");
+    expect(assembled.messages[assistantIndex + 1]?.role).toBe("tool");
+    expect(assembled.messages[assistantIndex + 1]?.tool_call_id).toBe("call-only");
+  });
+
   it("keeps assistant tool calls adjacent to their tool results", () => {
     const manager = new ContextManager(fixedTokenCounter(1));
     const turn = {

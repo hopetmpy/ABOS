@@ -439,13 +439,16 @@ ${memoryBlock.trim()}`,
         });
       }
 
-      if (typeof turn?.thinking === "string" && turn.thinking.length > 0) {
+      const hasThinking = typeof turn?.thinking === "string" && turn.thinking.length > 0;
+      const hasToolCalls = Array.isArray(turn?.toolCalls) && turn.toolCalls.length > 0;
+
+      if (hasThinking || hasToolCalls) {
         const assistantMessage: ChatMessage = {
           role: "assistant",
-          content: turn.thinking,
+          content: hasThinking ? turn.thinking : "",
         };
 
-        if (Array.isArray(turn.toolCalls) && turn.toolCalls.length > 0) {
+        if (hasToolCalls) {
           assistantMessage.tool_calls = turn.toolCalls
             .filter((toolCall: any) => toolCall && typeof toolCall.id === "string")
             .map((toolCall: any) => ({
