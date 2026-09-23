@@ -611,7 +611,6 @@ export class UnifiedInferenceClient {
         failures: 0,
         disabledUntil: 0,
       });
-      this.registry.enableProvider(providerId);
     }
 
     return false;
@@ -627,11 +626,6 @@ export class UnifiedInferenceClient {
 
     if (state.failures >= CIRCUIT_BREAKER_FAILURE_THRESHOLD) {
       state.disabledUntil = Date.now() + CIRCUIT_BREAKER_DISABLE_MS;
-      this.registry.disableProvider(
-        providerId,
-        "circuit-breaker: too many consecutive inference failures",
-        CIRCUIT_BREAKER_DISABLE_MS,
-      );
     }
 
     this.circuitBreaker.set(providerId, state);
@@ -642,7 +636,6 @@ export class UnifiedInferenceClient {
       failures: 0,
       disabledUntil: 0,
     });
-    this.registry.enableProvider(providerId);
   }
 
   private unwrapError(error: unknown): Error {
