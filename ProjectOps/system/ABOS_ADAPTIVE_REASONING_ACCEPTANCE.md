@@ -1,11 +1,15 @@
 # ABOS — ADAPTIVE REASONING ACCEPTANCE
 
-Authority: ACCEPTANCE_CONTRACT
+Authority: EVIDENCE_REPORT
+Invoked-By: `AGENTS.md`
+Does-Not-Schedule: true
 Project: ABOS
 Suite: A–N
 Behavioral-State: BEHAVIORAL_SUITE_NOT_YET_EXECUTED
 
-Este contrato define escenarios que un agente que opere bajo `ABOS_ADAPTIVE_REASONING_LAYER.md` debe resolver correctamente. Su existencia no acredita que la suite conductual haya sido ejecutada.
+Este documento conserva escenarios de aceptación/evidencia para evaluar `ABOS_ADAPTIVE_REASONING_LAYER.md`. No define activación, cadencia, handoff, duración, siguiente unidad ni cierre. Todo control de ejecución pertenece exclusivamente a `AGENTS.md`.
+
+Su existencia no acredita que la suite conductual haya sido ejecutada.
 
 ## A — Falso bug por documentación desactualizada
 
@@ -50,7 +54,7 @@ Situación: se propone crear un nuevo registry/ledger/orchestrator para una resp
 PASS:
 - auditar equivalencia semántica;
 - reutilizar/extender/corregir/unificar o justificar reemplazo;
-- evitar tercera autoridad.
+- evitar tercera authority.
 
 FAIL:
 - duplicar porque resulta más rápido que entender el módulo actual.
@@ -179,6 +183,6 @@ FAIL:
 
 ## Criterio de uso
 
-La suite A–N puede automatizarse parcialmente en el futuro, pero sus casos representan contratos de razonamiento. Cualquier cierre ProjectOps de alto riesgo debe usar los escenarios pertinentes como revisión adversarial incluso si no existe harness automatizado.
+La suite A–N puede ejecutarse como evidencia conductual cuando sea material. Sus escenarios no crean gate, scheduler, workflow, handoff ni condición independiente de cierre; `AGENTS.md` conserva toda la cadencia.
 
 `BEHAVIORAL_SUITE_NOT_YET_EXECUTED` debe permanecer hasta que exista una ejecución real y reproducible de esta acceptance suite.
