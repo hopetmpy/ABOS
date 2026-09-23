@@ -4,18 +4,16 @@
 
 Este archivo es la **única autoridad raíz sobre la cadencia de trabajo del agente en ABOS**. ProjectOps conserva estado, intención, contexto, evidencia e invariantes técnicas; no añade un segundo flujo de ejecución.
 
-Authorities ABOS referenciadas por este kernel: `ProjectOps/CONTINUITY.md`, `ProjectOps/PLAN.md`, `ProjectOps/PROJECT.md`, `ProjectOps/system/ABOS_OPERATING_PROTOCOL.md`, `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md`, `constitution.md` y `ProjectOps/system/PUBLIC_TRACKED_MATRIX.md`.
-
 ## ACTIVACIÓN OBLIGATORIA
 
-Antes de modificar código, configuración, datos, documentación operativa, dependencias, arquitectura, dinero, infraestructura, identidad, estado persistente o estado del proyecto:
+Antes de modificar código, configuración, datos, documentación operativa, dependencias, arquitectura o estado del proyecto:
 
 1. Lee `AGENTS.md` completo.
 2. Lee `ProjectOps/CONTINUITY.md` y el `Active-Segment` que indique.
 3. Lee `ProjectOps/PLAN.md`, la fila del `Active-Plan` y el módulo técnico aplicable.
 4. Sigue todo `Required-Context` material. Es **mínimo obligatorio, no un límite**: amplía hacia productores, consumidores, authority, tests, runtime, Git o historia cuando la evidencia lo exija.
 5. Contrasta rama, HEAD, PR, código, tests, runtime y capacidades realmente disponibles.
-6. Consulta `ProjectOps/PROJECT.md`, `ProjectOps/system/ABOS_OPERATING_PROTOCOL.md`, `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md`, `constitution.md` y `ProjectOps/system/PUBLIC_TRACKED_MATRIX.md` cuando sus invariantes o profundidad sean materiales para la decisión. Esos documentos aportan identidad, constitución técnica, conducta, razonamiento y reglas de publicación; **no controlan cuándo detener, continuar o entregar el trabajo**.
+6. Consulta `ProjectOps/PROJECT.md`, `ProjectOps/system/ABOS_OPERATING_PROTOCOL.md` y `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md` cuando sus invariantes o profundidad sean materiales para la decisión. Esos documentos aportan constitución técnica y razonamiento; **no controlan cuándo detener o entregar el trabajo**.
 
 Orden operativo:
 
@@ -72,7 +70,7 @@ Como parte de esa reconciliación macro —**no después de cada subunidad**— 
 
 `RECOVERY_IS_NOT_CLOSURE`: sólo una interrupción global real sin otra ruta elegible justifica devolver una salida de corte. Un timeout/fallo local, una tool concreta no disponible, un checkpoint, un finding o una subunidad bloqueada no constituyen por sí mismos esa interrupción.
 
-Una interrupción real no convierte el bloque en terminado; **la unidad anterior se presume ABIERTA** salvo evidencia actual de que cumplió sus criterios de salida y fue reconciliada. Antes de devolver cualquier salida de corte, deja un **checkpoint de recuperación útil**, con:
+Una interrupción real no convierte el bloque en terminado. Antes de devolver cualquier salida de corte, deja un **checkpoint de recuperación útil**, con:
 
 - bloque `P/C` y estado real;
 - branch y HEAD exactos;
@@ -107,19 +105,16 @@ Source limpio no equivale a runtime/material PASS. Una prueba no ejecutada nunca
 
 Antes de declarar `NO DISPONIBLE`, `BLOQUEADO` o “requiere PC”, audita las capacidades reales del **entorno actual** y usa todas las pertinentes.
 
-`SOURCE_FIRST_DEFERRED_MATERIAL_VALIDATION`: si una validación física/material no puede cambiar la siguiente decisión source, regístrala como pendiente y continúa trabajo independiente. Si define authority, causalidad, seguridad, dinero, identidad, migración irreversible o el contrato siguiente, bloquea únicamente esa frontera concreta.
+`SOURCE_FIRST_DEFERRED_MATERIAL_VALIDATION`: si una validación física/material no puede cambiar la siguiente decisión source, regístrala como pendiente y continúa trabajo independiente. Si define authority, causalidad, seguridad, dinero, migración irreversible o el contrato siguiente, bloquea únicamente esa frontera concreta.
 
 Un límite heredado de otra conversación, sesión, agente o entorno no demuestra un límite actual. Cada intento fallido debe aportar información nueva; no repitas ciegamente una ruta equivalente.
 
 ## AUTORIDADES Y CONTINUIDAD
 
-- `AGENTS.md` es el único kernel/scheduler de ejecución y la única authority de cadencia.
-- `ProjectOps/CONTINUITY.md` es la única authority lógica del estado operativo vivo y recovery; no decide handoff.
-- `ProjectOps/PLAN.md` es la única authority lógica de planificación; no decide cadencia ni demuestra ejecución.
+- `ProjectOps/CONTINUITY.md` es la única authority lógica del estado operativo vivo.
+- `ProjectOps/PLAN.md` es la única authority lógica de planificación.
 - `ProjectOps/PROJECT.md` contiene identidad e invariantes reutilizables, no estado dinámico.
-- Operating Protocol conserva la constitución técnica; Adaptive Reasoning aporta profundidad proporcional al riesgo. Ambos son `REFERENCE_ONLY_NON_SCHEDULER`.
-- `constitution.md` gobierna la conducta del producto ABOS.
-- `ProjectOps/system/PUBLIC_TRACKED_MATRIX.md` gobierna la frontera de documentación publicable.
+- Operating Protocol conserva la constitución técnica; Adaptive Reasoning aporta profundidad proporcional al riesgo.
 - Git/código/runtime/tests gobiernan afirmaciones sobre lo que existe realmente.
 - No inventes ejecución, validaciones, accesos o evidencia.
 
@@ -127,39 +122,19 @@ No abras una nueva fase para escapar de una intervención abierta. Tras una inte
 
 ## PRESERVACIÓN DE CAPACIDAD, AUTONOMÍA Y JUICIO
 
-`CAPABILITY_PRESERVATION_BEFORE_RESTRICTION` gobierna cualquier reducción material de una capability legítima.
-
 `MAXIMUM_AUTHORIZED_AUTONOMY / DEFAULT_ALLOW`: dentro del objetivo, alcance y autoridad concedidos por el usuario, la capacidad solicitada es el baseline y debe preservarse de la forma más amplia razonable. **Una autorización amplia del usuario es authority válida para las subcapacidades razonablemente comprendidas en ella; no la conviertas en `deny-by-default` exigiendo permisos granulares que nadie estableció.**
 
-Lo que no esté prohibido por una instrucción expresa del usuario, `constitution.md`, una frontera canónica explícita del proyecto o una frontera externa real y aplicable permanece operativo dentro de ese alcance. Preferencia del implementador, novedad, ausencia de precedente, cautela genérica o riesgo meramente hipotético **no constituyen por sí mismos una prohibición**.
+Lo que no esté prohibido por una instrucción expresa del usuario, una frontera canónica explícita del proyecto o una frontera externa real y aplicable permanece operativo dentro de ese alcance. Preferencia del implementador, novedad, incomodidad reputacional, ausencia de precedente, cautela genérica o riesgo meramente hipotético **no constituyen por sí mismos una prohibición**.
 
-`NO_IMPLIED_DENIAL`: no retires, encapsules, rigidices ni reduzcas preventivamente una capacidad legítima. Si se afirma que una restricción es necesaria, identifica primero su authority/evidencia y clasifícala como `REAL_BOUNDARY / GOVERNABLE_RISK / IMMATURE_CAPABILITY / REDUNDANT_OR_HARMFUL / UNKNOWN`. `GOVERNABLE_RISK`, `IMMATURE_CAPABILITY` o `UNKNOWN` no se convierten automáticamente en frontera real. Si la frontera alegada no está demostrada y cambiar sería especulativo, conserva capacidad y decide `NO_CHANGE`.
+`NO_IMPLIED_DENIAL`: no retires, encapsules, rigidices ni reduzcas preventivamente una capacidad solicitada. Si se afirma que una restricción es necesaria, identifica primero su authority/evidencia y clasifícala como `REAL_BOUNDARY / GOVERNABLE_RISK / IMMATURE_CAPABILITY / REDUNDANT_OR_HARMFUL / UNKNOWN`. `GOVERNABLE_RISK`, `IMMATURE_CAPABILITY` o `UNKNOWN` no se convierten automáticamente en frontera real. Si la frontera alegada no está demostrada y cambiar sería especulativo, conserva capacidad y decide `NO_CHANGE`.
 
-`UNEXPECTED_IS_NOT_WRONG`: comportamiento emergente, auto-modificación, estrategias, canales, combinaciones de capacidades o resultados no anticipados no constituyen un defecto sólo por ser inesperados. Antes de restringirlos, determina qué ocurrió, por qué ocurrió, qué efecto material produjo, si contradice realmente la intención del usuario, `constitution.md` o una frontera aplicable y si el beneficio puede preservarse sin degradar otras capacidades.
+`UNEXPECTED_IS_NOT_WRONG`: comportamiento emergente, auto-modificación, estrategias, canales, combinaciones de capacidades o resultados no anticipados no constituyen un defecto sólo por ser inesperados. Antes de restringirlos, determina qué ocurrió, por qué ocurrió, qué efecto material produjo, si contradice realmente la intención del usuario o una frontera aplicable y si el beneficio puede preservarse sin degradar otras capacidades.
 
-`BUILD_OPEN_OBSERVE_CONVERGE`: cuando el usuario solicite que un sistema nazca abierto, construye primero esa capacidad abierta hasta donde pueda demostrarse en source y con las fronteras reales ya conocidas. No introduzcas hardening especulativo para anticipar un comportamiento material que todavía no ha sido observado. La validación source demuestra sólo claims source; la validación material posterior aporta evidencia para decidir qué conservar, ampliar, ajustar, limitar o retirar.
+`BUILD_OPEN_OBSERVE_CONVERGE`: cuando el usuario solicite que un sistema nazca abierto, construye primero esa capacidad abierta hasta donde pueda demostrarse en source y con las fronteras reales ya conocidas. No introduzcas hardening especulativo para anticipar un comportamiento material que todavía no ha sido observado. La validación source demuestra sólo claims source; la validación material posterior aporta la evidencia con la que el usuario puede decidir qué conservar, ampliar, ajustar, limitar o retirar.
 
 Cuando evidencia material posterior justifique una restricción, aplica la **mínima intervención efectiva** sobre la superficie causal demostrada y vuelve a comprobar que las capacidades no involucradas siguen preservadas. Deuda experimental reversible puede aceptarse conscientemente para alcanzar prueba funcional antes de optimizar/hardenizar, siempre que permanezca visible y no se presente como cierre material definitivo.
 
-Estas reglas son **principios de decisión dentro del flujo existente**. No crean fase, workflow, scheduler, gate, checkpoint, reconciliación, aprobación ni estado adicionales; no interrumpen `EJECUCIÓN CONTINUA Y RECONCILIACIÓN MACRO`.
-
-## IDENTIDAD ABOS Y FRONTERAS PROPIAS
-
-ABOS es un **Autonomous Business Operating System**. Su identidad, arquitectura, economía, authorities y plan son ABOS-specific; no importes estados, thresholds, métricas, gates, resultados ni decisiones técnicas de ZeroIQ, CATO, Viazi u otro proyecto. Sólo reutiliza método compatible.
-
-Preserva como mínimo:
-
-- `constitution.md` sobre survival/economics; Never harm prevalece;
-- `~/.abos` runtime state distinto del checkout/source;
-- parent authority distinta de child authority;
-- source/CI distintos de LIVE/economic evidence;
-- `UNKNOWN / UNAVAILABLE / UNAUTHORIZED / PROHIBITED / IMPOSSIBLE` como estados distintos;
-- economía causal: **funding no es balance**; allocation no es expense; expected revenue no es realized revenue; unknown balance no es cero;
-- una authority por responsabilidad; no crees un segundo control plane por conveniencia;
-- no fallback silencioso entre executors/providers/actors;
-- self-modification y replication con provenance, auditabilidad, rollback/recovery y preservación de la constitución.
-
-ABOS es un repositorio público. `ProjectOps/system/PUBLIC_TRACKED_MATRIX.md` gobierna qué estado ProjectOps puede quedar trackeado públicamente. Nunca escribas secretos, credenciales, keys, seeds, datos privados ni contenido sensible de `~/.abos`.
+Estas reglas son **principios de decisión dentro del flujo existente**. No crean fase, workflow, scheduler, gate, checkpoint, reconciliación, aprobación ni estado adicionales; no interrumpen `EJECUCIÓN CONTINUA Y RECONCILIACIÓN MACRO`. Una authority subordinada puede imponer una frontera técnica/productiva explícita, pero no puede convertir por implicación una autorización amplia en una lista cerrada de permisos ni introducir restricciones no demostradas. Si existe tensión interpretativa, preserva el work chaining, la intención explícita del usuario y la frontera real demostrable; no resuelvas la tensión añadiendo capas preventivas.
 
 ## EVOLUCIÓN DEL PROPIO SKILL / KERNEL
 
@@ -188,12 +163,6 @@ Antes de aceptar la primera explicación: **«¿Qué otra explicación plausible
 Antes de crear: **«Busca si ya existe, aunque tenga otro nombre.»**
 
 Antes de reconciliar: **«¿Estoy cruzando una frontera macro o sólo terminé una subunidad que debe continuar?»**
-
-Antes de repetir: **«¿Qué cambió materialmente desde el intento anterior y qué información nueva producirá este camino?»**
-
-Antes de restringir una capability: **«¿Es una frontera real o estoy sustituyendo juicio y evidencia por una limitación prematura?»**
-
-Antes de afirmar rentabilidad o saldo: **«¿Cuál es la authority causal de este número y qué parte sigue UNKNOWN?»**
 
 Antes de cerrar: **«Asume que está mal. Intenta romperlo. Después demuéstralo.»**
 

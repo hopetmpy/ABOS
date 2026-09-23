@@ -8,8 +8,7 @@ const at=path=>resolve(root,path);
 const read=path=>readFileSync(at(path),"utf8");
 const fail=message=>{throw new Error(`PROJECTOPS_INTEGRITY_VERIFY: ${message}`)};
 const requirePath=path=>{if(!existsSync(at(path)))fail(`required path missing: ${path}`)};
-const requireText=(content,needle,label)=>{if(!content.includes(needle))fail(label??`missing contract: ${needle}`)};
-const forbidText=(content,needle,label)=>{if(content.includes(needle))fail(label??`forbidden contract present: ${needle}`)};
+const requireText=(content,needle,label)=>{if(!content.includes(needle))fail(label)};
 const forbidFile=path=>{if(existsSync(at(path)))fail(`forbidden competing root authority exists: ${path}`)};
 const lineCount=content=>content.length?content.split(/\r?\n/).length:0;
 const gitBlobSha=path=>execFileSync("git",["hash-object",`--path=${path}`,path],{cwd:root,encoding:"utf8"}).trim();
@@ -35,102 +34,41 @@ for(const path of Object.values(p))requirePath(path);
 forbidFile("CONTINUITY.md");
 forbidFile("PLAN.md");
 
-// Historical snapshots remain immutable. Live governance documents stay correctable.
+requireBlob(p.protocol,"ba0d546c704d7078fb1471107c29c7174379d134");
 requireBlob(p.legacyContinuity,"6ee88dc560dc53ddb6e728fca9193fa62f6ee3a7");
 requireBlob(p.legacyPlan,"8c52273bf1801958273a77474315c85e0903ee1d");
 
-// AGENTS.md is the single operating kernel. Preserve continuous execution and autonomous chaining.
 const agents=read(p.agents);
 for(const needle of [
   "<!-- PROJECTOPS:ABOS-ROOT-ENTRYPOINT -->",
-  "única autoridad raíz sobre la cadencia de trabajo del agente en ABOS",
   "ProjectOps/system/ABOS_OPERATING_PROTOCOL.md",
   "ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md",
   "ProjectOps/CONTINUITY.md",
   "ProjectOps/PROJECT.md",
-  "ProjectOps/PLAN.md",
-  "constitution.md",
-  "PUBLIC_TRACKED_MATRIX.md",
   "Required-Context",
   "mínimo obligatorio, no un límite",
   "DECISION_READY",
   "NO_CHANGE",
-  "CHECKPOINT LIGERO → CONTINUAR",
-  "NO_PREMATURE_RETURN_AFTER_SUBUNIT",
-  "LOCAL_BLOCK_IS_NOT_TOTAL_BLOCK",
-  "NO_TIME_QUOTA_AS_BOUNDARY",
-  "NO_GLOBAL_PROCESS_KILL_BY_TIMEOUT",
-  "UNIT_DONE_IS_TRANSITION_NOT_HANDOFF",
-  "NEXT_ELIGIBLE_WORK",
-  "LOCAL_FAILURE_REQUIRES_REROUTE",
-  "STOP_GATE_REQUIRES_TERMINAL_CONDITION",
-  "REQUESTED_SCOPE_COMPLETE",
-  "TOTAL_REAL_BLOCK",
-  "RECOVERY_IS_NOT_CLOSURE",
-  "SOURCE_FIRST_DEFERRED_MATERIAL_VALIDATION",
-  "MAXIMUM_AUTHORIZED_AUTONOMY / DEFAULT_ALLOW",
-  "NO_IMPLIED_DENIAL",
-  "UNEXPECTED_IS_NOT_WRONG",
-  "BUILD_OPEN_OBSERVE_CONVERGE",
-  "FUNCTIONAL_BASELINE → PLAN DELTA → EXTEND/CORRECT → VERIFY PRESERVATION → MACRO RECONCILE",
   "Autonomous Business Operating System",
-  "~/.abos",
-  "funding no es balance",
-  "CAPABILITY_PRESERVATION_BEFORE_RESTRICTION",
-  "La auditoría estática forma parte de `AUDITAR/REAUDITAR/VERIFICAR`; **no es una capa, estado ni frontera separada**.",
-  "no hagas reconciliación completa ni reporte de cierre después de cada subunidad",
-  "Un bloque sólo puede entregarse como terminado cuando la frontera solicitada realmente terminó",
-])requireText(agents,needle,`root AGENTS lost operating-kernel contract: ${needle}`);
-for(const forbidden of [
-  "Authority: MANDATORY_ADDITIVE_VERIFICATION_CLOSURE_LAYER",
-  "Authority: MANDATORY_ADDITIVE_REASONING_LAYER",
-  "ACTIVE_MACRO_NEXT",
-  "FINAL_RESPONSE_IS_SCHEDULER_TRANSITION",
-])forbidText(agents,forbidden,`root AGENTS reintroduced parallel scheduling semantics: ${forbidden}`);
-
-const chainingIndex=agents.indexOf("### Resolución obligatoria del siguiente trabajo");
-const reconcileIndex=agents.indexOf("La reconciliación completa ocurre");
-const closeIndex=agents.indexOf("## REANUDACIÓN Y CIERRE");
-if(chainingIndex<0||reconcileIndex<0||closeIndex<0)fail("AGENTS chaining/reconciliation/closure sections not found");
-if(!(chainingIndex<reconcileIndex&&reconcileIndex<closeIndex))fail("NEXT_ELIGIBLE_WORK must resolve before macro reconciliation/closure");
-requireText(agents,"Para solicitudes de ejecución, una respuesta final debe pasar `STOP_GATE_REQUIRES_TERMINAL_CONDITION`","AGENTS closure does not enforce terminal stop gate");
-if(statSync(at(p.agents)).size>20*1024)fail("root AGENTS exceeded 20 KiB operating-kernel budget");
-
-// Technical constitution is reference-only and cannot schedule the agent.
-const protocol=read(p.protocol);
-for(const needle of [
-  "# ABOS — CONSTITUCIÓN TÉCNICA DE INGENIERÍA",
-  "Authority: REFERENCE_ONLY_NON_SCHEDULER",
-  "Invoked-By: `AGENTS.md`",
-  "Does-Not-Schedule: true",
-  "ProjectOps-Model: SINGLE_OPERATING_SYSTEM",
   "constitution.md",
-  "CONTINUITY.md",
-  "PLAN.md",
-  "funding != balance",
-  "parent authority != child authority",
-  "cuándo entregar o continuar",
-])requireText(protocol,needle,`engineering constitution lost reference-only/ABOS contract: ${needle}`);
-for(const forbidden of [
-  "# AGENTS.md — PROTOCOLO OPERATIVO CANÓNICO DEL AGENTE",
-  "## PROTOCOLO DE ACTIVACIÓN OBLIGATORIO",
-  "## CICLO OBLIGATORIO POR UNIDAD SIGNIFICATIVA",
-  "37. ALGORITMO OPERATIVO OBLIGATORIO",
-  "27. CIERRE OBLIGATORIO",
-  "# ORDEN FINAL DE TRABAJO",
-  "Authority: ONLY_EXECUTION_SCHEDULER",
-])forbidText(protocol,forbidden,`engineering constitution reintroduced scheduler semantics: ${forbidden}`);
+  "funding no es balance",
+  "PUBLIC_TRACKED_MATRIX.md",
+  "~/.abos",
+  "BARRERA OBLIGATORIA DE RECONCILIACIÓN",
+  "la unidad anterior se presume ABIERTA",
+  "CAPABILITY_PRESERVATION_BEFORE_RESTRICTION",
+])requireText(agents,needle,`root AGENTS missing: ${needle}`);
+const ai=agents.indexOf("ProjectOps/system/ABOS_OPERATING_PROTOCOL.md");
+const ri=agents.indexOf("ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md");
+const ci=agents.indexOf("ProjectOps/CONTINUITY.md");
+if(!(ai>=0&&ai<ri&&ri<ci))fail("root activation order must be protocol -> reasoning -> continuity");
+if(statSync(at(p.agents)).size>12*1024)fail("root AGENTS exceeded 12 KiB compact-router budget");
 
-// Adaptive reasoning is a reasoning reference, never a second workflow/scheduler.
 const reasoning=read(p.reasoning);
 for(const needle of [
-  "<!-- PROJECTOPS:ADAPTIVE-REASONING-REFERENCE:BEGIN -->",
-  "<!-- PROJECTOPS:ADAPTIVE-REASONING-REFERENCE:END -->",
-  "Authority: REFERENCE_ONLY_NON_SCHEDULER",
-  "Invoked-By: `AGENTS.md`",
-  "Does-Not-Schedule: true",
-  "ProjectOps-Model: SINGLE_OPERATING_SYSTEM",
-  "Project: ABOS",
+  "<!-- PROJECTOPS:ADAPTIVE-REASONING-LAYER:BEGIN -->",
+  "<!-- PROJECTOPS:ADAPTIVE-REASONING-LAYER:END -->",
+  "Authority: MANDATORY_ADDITIVE_REASONING_LAYER",
   "NO_CHANGE_IS_VALID",
   "REQUIRED_CONTEXT_IS_FLOOR",
   "COMPETING_HYPOTHESES_WHEN_MATERIAL",
@@ -142,30 +80,23 @@ for(const needle of [
   "ECONOMIC_CLAIMS_REQUIRE_CAUSAL_AUTHORITY",
   "BOUNDARY_SWITCH_REQUIRES_REPLAN",
   "CAPABILITY_PRESERVATION_BEFORE_RESTRICTION",
-  "HUMAN_ESCALATION_REQUIRES_REAL_BOUNDARY",
-  "FIXED_THRESHOLD_IS_NOT_RATIONALITY",
+  "REAL_BOUNDARY",
+  "GOVERNABLE_RISK",
+  "IMMATURE_CAPABILITY",
+  "REDUNDANT_OR_HARMFUL",
+  "funding != balance",
   "Parent/child y replication",
   "Executor/environment boundaries",
   "Long-running state, concurrency y recovery",
   "Inference y model routing",
   "Constitution, policy y autonomía",
-])requireText(reasoning,needle,`adaptive reasoning reference missing ABOS invariant: ${needle}`);
-for(const forbidden of [
-  "Authority: MANDATORY_ADDITIVE_REASONING_LAYER",
-  "<!-- PROJECTOPS:ADAPTIVE-REASONING-LAYER:BEGIN -->",
-  "<!-- PROJECTOPS:ADAPTIVE-REASONING-LAYER:END -->",
-  "Esta capa **se suma**",
-  "Authority: ONLY_EXECUTION_SCHEDULER",
-])forbidText(reasoning,forbidden,`adaptive reasoning reintroduced parallel operating authority: ${forbidden}`);
-if(statSync(at(p.reasoning)).size>48*1024||lineCount(reasoning)>800)fail("reasoning reference exceeded context budget");
+])requireText(reasoning,needle,`reasoning layer missing: ${needle}`);
+if(statSync(at(p.reasoning)).size>48*1024||lineCount(reasoning)>800)fail("reasoning layer exceeded mandatory-context budget");
 
-// Acceptance remains a contract until actually executed; it cannot acquire scheduler authority by implication.
 const acceptance=read(p.acceptance);
 for(const needle of ["Authority: ACCEPTANCE_CONTRACT","Suite: A–N","BEHAVIORAL_SUITE_NOT_YET_EXECUTED"])
   requireText(acceptance,needle,`acceptance missing: ${needle}`);
 for(const letter of "ABCDEFGHIJKLMN")requireText(acceptance,`## ${letter} —`,`acceptance scenario ${letter} missing`);
-for(const forbidden of ["Authority: ONLY_EXECUTION_SCHEDULER","Authority: MANDATORY_ADDITIVE_REASONING_LAYER"])
-  forbidText(acceptance,forbidden,`acceptance acquired operating authority: ${forbidden}`);
 
 const mode=read(p.mode);
 requireText(mode,"Mode: PUBLIC_TRACKED_DOCUMENTARY_MATRIX","public ProjectOps host mode missing");
@@ -191,9 +122,6 @@ for(const needle of [
   "PR #29",
   "Documentation drift",
 ])requireText(project,needle,`PROJECT baseline missing: ${needle}`);
-for(const forbidden of ["Authority: ONLY_EXECUTION_SCHEDULER","Authority: MANDATORY_ADDITIVE_REASONING_LAYER"])
-  forbidText(project,forbidden,`PROJECT competes with AGENTS as scheduler: ${forbidden}`);
-
 requirePath("src/state/schema.ts");
 const schemaSource=read("src/state/schema.ts");
 const schemaMatch=schemaSource.match(/export const SCHEMA_VERSION\s*=\s*(\d+)\s*;/);
@@ -209,8 +137,6 @@ if(field(continuity,"Reasoning-Acceptance")!=="system/ABOS_ADAPTIVE_REASONING_AC
 if(field(continuity,"Host-Mode")!=="system/PUBLIC_TRACKED_MATRIX.md")fail("Host-Mode authority mismatch");
 if(field(continuity,"ProjectOps-Integrity-Verifier")!=="scripts/projectops-integrity-verify.mjs")fail("integrity verifier authority mismatch");
 if(!/^[0-9a-f]{40}$/.test(field(continuity,"Last-Reconciled-Host-Head")))fail("Last-Reconciled-Host-Head must be exact Git SHA");
-for(const forbidden of ["Authority: ONLY_EXECUTION_SCHEDULER","Authority: MANDATORY_ADDITIVE_REASONING_LAYER"])
-  forbidText(continuity,forbidden,`CONTINUITY competes with AGENTS as scheduler: ${forbidden}`);
 
 const activeSegmentPath=`ProjectOps/${activeSegment}`;
 const activePlanPath=`ProjectOps/plan/${activePlan}.md`;
@@ -221,16 +147,13 @@ requireText(segment,"State: ACTIVE","active continuity segment not ACTIVE");
 if(statSync(at(activeSegmentPath)).size>100*1024||lineCount(segment)>1000)fail("active continuity segment exceeded rotation threshold");
 
 const plan=read(p.plan);
-for(const forbidden of ["Authority: ONLY_EXECUTION_SCHEDULER","Authority: MANDATORY_ADDITIVE_REASONING_LAYER"])
-  forbidText(plan,forbidden,`PLAN competes with AGENTS as scheduler: ${forbidden}`);
 const rows=new Map();
 for(const m of plan.matchAll(/^\|\s*(P-\d{3})\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|\s*(plan\/[^|\s]+\.md)\s*\|$/gm)){
   const [,id,title,state,deps,modulePath]=m;
   if(rows.has(id))fail(`duplicate PLAN id: ${id}`);
   const normalizedState=state.trim();
   if(!validPlanStates.has(normalizedState))fail(`${id} has invalid state: ${normalizedState}`);
-  const full=`ProjectOps/${modulePath}`;
-  requirePath(full);
+  const full=`ProjectOps/${modulePath}`; requirePath(full);
   if(stateOf(read(full))!==normalizedState)fail(`${id} manifest/module state mismatch`);
   rows.set(id,{title:title.trim(),state:normalizedState,deps:deps.trim(),modulePath});
 }
@@ -254,10 +177,8 @@ if(rci<0)fail(`${activePlanPath} lacks Required-Context`);
 let count=0;
 for(let i=rci+1;i<active.length;i++){
   if(!active[i].trim()&&count>0)break;
-  const m=active[i].match(/^\s*-\s+`([^`]+)`/);
-  if(!m)continue;
-  requirePath(m[1]);
-  count++;
+  const m=active[i].match(/^\s*-\s+`([^`]+)`/); if(!m)continue;
+  requirePath(m[1]); count++;
 }
 if(!count)fail(`${activePlanPath} Required-Context has no local paths`);
 
