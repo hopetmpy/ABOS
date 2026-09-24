@@ -112,7 +112,7 @@ export class LocalComputerRuntime {
         timeoutMs: WINDOWS_PROBE_TIMEOUT_MS,
       });
       const available = result.exitCode === 0 && !result.providerTimedOut;
-      this.cachedProbe = {
+      const probe: LocalComputerProbe = {
         available,
         observedAt,
         shell,
@@ -123,12 +123,18 @@ export class LocalComputerRuntime {
               "process handles are process-local and are invalid after runtime restart",
               "windows managed-process owner=kernel-job-object; limit=KILL_ON_JOB_CLOSE; shell is assigned before resume",
             ]
-          : [
-              `local process Windows Job Object readiness probe failed for shell: ${shell}`,
-              "Local process readiness remains unavailable until PowerShell, Job Object ownership and the selected shell complete an inert probe.",
-            ],
+          : result.providerTimedOut
+            ? [
+                `local process Windows Job Object provider bootstrap timed out for shell: ${shell}`,
+                "Local process readiness is inconclusive for this attempt; transient provider bootstrap timeouts are not cached.",
+              ]
+            : [
+                `local process Windows Job Object readiness probe failed for shell: ${shell}`,
+                "Local process readiness remains unavailable until PowerShell, Job Object ownership and the selected shell complete an inert probe.",
+              ],
       };
-      return this.cachedProbe;
+      if (!result.providerTimedOut) this.cachedProbe = probe;
+      return probe;
     }
 
     const launchable = this.probeShellLaunch(shell);
@@ -558,11 +564,4 @@ export class LocalComputerRuntime {
       throw new Error(`Managed process handle capacity reached (${MAX_RETAINED_PROCESSES}); wait for or terminate existing processes before starting another.`);
     }
   }
-}
-
-let singleton: LocalComputerRuntime | null = null;
-
-export function getLocalComputerRuntime(): LocalComputerRuntime {
-  singleton ??= new LocalComputerRuntime();
-  return singleton;
 }
