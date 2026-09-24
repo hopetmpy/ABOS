@@ -10,7 +10,6 @@ import { WORLD_MODEL_SCHEMA } from "./world-model-schema.js";
 export const SCHEMA_VERSION = 21;
 
 export const CREATE_TABLES = `
-${WORLD_MODEL_SCHEMA}
   -- Schema version tracking
   CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY,
@@ -478,7 +477,7 @@ export const MIGRATION_V5 = `
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
-  CREATE INDEX IF NOT EXISTS idx_rel_trust ON relationship_memory(entity_address);
+  CREATE INDEX IF NOT EXISTS idx_rel_trust ON relationship_memory(trust_score);
 `;
 
 // === Phase 2.3: Inference & Model Strategy Tables ===
@@ -684,6 +683,7 @@ export const MIGRATION_V10 = `
   CREATE INDEX idx_knowledge_category ON knowledge_store(category);
   CREATE INDEX idx_knowledge_key ON knowledge_store(key);
 `;
+
 
 // === Adaptive Path Intelligence ===
 
@@ -906,6 +906,7 @@ export const MIGRATION_V13 = `
     ON environment_resource_events(provider, created_at);
 `;
 
+
 // === Cross-Environment Recovery / Reuse / Migration v1 ===
 
 export const MIGRATION_V14 = `
@@ -962,6 +963,7 @@ export const MIGRATION_V14 = `
     ON environment_migration_events(migration_id, created_at);
 `;
 
+
 // === Authority / Provenance v1 ===
 // Additive only. Existing inbox rows intentionally default to legacy/unknown.
 export const MIGRATION_V15_ALTER_INBOX_TRANSPORT = `
@@ -1005,6 +1007,7 @@ export const MIGRATION_V16_POLICY_LIFECYCLE: readonly string[] = [
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_policy_claim_token ON policy_decisions(claim_token) WHERE claim_token IS NOT NULL`,
 ];
 
+
 // === Transactional Self-Modification v1 (P-012) ===
 // Durable journal + singleton source lease. Status strings are intentionally
 // application-validated so recovery can evolve without a destructive schema rewrite.
@@ -1041,6 +1044,7 @@ export const MIGRATION_V17_SELF_MOD_TRANSACTION = `
   CREATE INDEX IF NOT EXISTS idx_self_mod_leases_expiry
     ON self_mod_leases(expires_at);
 `;
+
 
 // === Correlatable Evidence Fabric v1 (P-013) ===
 // This table owns only cross-domain causal/correlation evidence. Domain state
@@ -1081,6 +1085,8 @@ export const MIGRATION_V18_EVIDENCE_FABRIC = `
     ON evidence_events(goal_id, task_id, sequence);
 `;
 
+
+
 // === Capability Fabric durable lifecycle v1 (P-014) ===
 // Domain authority for capability readiness across restart. State strings are
 // intentionally open-ended; only the runtime model decides which states are
@@ -1103,6 +1109,7 @@ export const MIGRATION_V19_CAPABILITY_LIFECYCLE = `
   CREATE INDEX IF NOT EXISTS idx_capability_records_fingerprint
     ON capability_records(definition_fingerprint);
 `;
+
 
 // === Skill Evolution lifecycle v1 (P-021) ===
 // `skills` remains the compatibility/runtime projection. These tables own
