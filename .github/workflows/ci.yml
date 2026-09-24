@@ -14,6 +14,8 @@ jobs:
           node-version: ${{ matrix.node-version }}
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
+      - name: ProjectOps integrity
+        run: node scripts/projectops-integrity-verify.mjs
       - run: pnpm run typecheck
       - run: pnpm run build
       - name: Run tests
