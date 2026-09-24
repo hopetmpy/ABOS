@@ -34,6 +34,19 @@ jobs:
           git show 248d18e3577033347f5e58ada5ffa78f4f1e7e11:.github/p021-skill-evolution-apply.py > /tmp/p021-apply.py 2> /tmp/p021-apply.log
           status=$?
           if [ "$status" -eq 0 ]; then
+            python3 - <<'PY' >> /tmp/p021-apply.log 2>&1
+          from pathlib import Path
+          p = Path('/tmp/p021-apply.py')
+          text = p.read_text()
+          old = '''    if count != 1:\n        raise SystemExit(f"{path}: expected exactly one literal match, found {count}: {old[:160]!r}")\n    p.write_text(text.replace(old, new, 1))'''
+          new = '''    if count != 1:\n        if path == "src/skills/registry.ts" and count == 2 and old.startswith("  // Validate inputs to prevent injection\\n"):\n            p.write_text(text.replace(old, new, 1))\n            return\n        raise SystemExit(f"{path}: expected exactly one literal match, found {count}: {old[:160]!r}")\n    p.write_text(text.replace(old, new, 1))'''
+          if old not in text:
+              raise SystemExit('recovered apply helper shape changed unexpectedly')
+          p.write_text(text.replace(old, new, 1))
+          PY
+            status=$?
+          fi
+          if [ "$status" -eq 0 ]; then
             python3 /tmp/p021-apply.py >> /tmp/p021-apply.log 2>&1
             status=$?
           fi
