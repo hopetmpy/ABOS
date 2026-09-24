@@ -8,6 +8,10 @@ export class PossibilitySpace {
     const paths = this.store.listPaths(goalId);
     const openOpportunities = this.store.listOpenOpportunities(goalId);
     const facts = this.store.listFacts(goalId);
+    // Active beliefs are time-filtered here so expired interpretations never
+    // reach planning as current world state. Durable history remains queryable
+    // through AdaptiveStore.listBeliefs().
+    const beliefs = this.store.listActiveBeliefs(goalId);
     const assumptions = this.store.listAssumptions(goalId);
 
     const exhaustedSignatures = paths
@@ -18,6 +22,8 @@ export class PossibilitySpace {
 
     const unknownCount =
       paths.filter((path) => path.status === "unknown").length +
+      beliefs.filter((belief) => belief.epistemicStatus === "unknown").length +
+      assumptions.filter((assumption) => assumption.status === "unknown").length +
       openOpportunities.length;
 
     return {
@@ -25,6 +31,7 @@ export class PossibilitySpace {
       paths,
       openOpportunities,
       facts,
+      beliefs,
       assumptions,
       exhaustedSignatures: [...new Set(exhaustedSignatures)],
       unknownCount,
@@ -46,6 +53,7 @@ export class PossibilitySpace {
       `paths=${snapshot.paths.length}`,
       `open_opportunities=${snapshot.openOpportunities.length}`,
       `facts=${snapshot.facts.length}`,
+      `beliefs=${snapshot.beliefs.length}`,
       `assumptions=${snapshot.assumptions.length}`,
       `unknown_count=${snapshot.unknownCount}`,
       `exhausted_signatures=${snapshot.exhaustedSignatures.length}`,
