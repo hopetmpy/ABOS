@@ -447,12 +447,12 @@ export class SkillEvolutionEngine {
       return "context:unspecified";
     }));
     const independentSuccessCount = requiredIndependentSuccesses > 1
-      ? independentContexts.length
+      ? Math.min(successfulEvidenceIds.length, independentContexts.length)
       : successfulEvidenceIds.length > 0 ? 1 : 0;
     const reasons: string[] = [];
     if (failedValidation) reasons.push("At least one validation/replay observation failed.");
     if (independentSuccessCount < requiredIndependentSuccesses) {
-      reasons.push(`Need ${requiredIndependentSuccesses} independent successful validation/replay contexts; found ${independentSuccessCount}.`);
+      reasons.push(`Need ${requiredIndependentSuccesses} independent successful validation/replay evidence contexts; found ${independentSuccessCount}.`);
     }
     for (const dependency of version.definition.capability.requiredCapabilities) {
       if (!registry.isExecutionReady(dependency)) reasons.push(`Required capability is not execution-ready: ${dependency}`);
@@ -462,7 +462,7 @@ export class SkillEvolutionEngine {
 
   validateVersion(versionId: string, registry: CapabilityRegistry): SkillVersionRecord {
     const version = this.requireVersion(versionId);
-    if (!["candidate", "degraded"].includes(version.lifecycleState)) throw new Error(`Skill version ${version.id} cannot be validated from state ${version.lifecycleState}.`);
+    if (version.lifecycleState !== "candidate") throw new Error(`Skill version ${version.id} cannot be validated from state ${version.lifecycleState}; only candidate versions can enter validation.`);
     const assessment = this.assessPromotion(version.id, registry);
     if (!assessment.eligible) throw new Error(`Skill version is not validation-ready: ${assessment.reasons.join(" ")}`);
     const now = new Date().toISOString();
@@ -532,7 +532,7 @@ export class SkillEvolutionEngine {
     const target = this.requireVersion(targetVersionId);
     if (target.skillName !== skillName) throw new Error("Rollback target belongs to another skill.");
     if (!target.activatedAt) throw new Error("Rollback target has never been an activated runtime version.");
-    if (target.lifecycleState === "deprecated") throw new Error("Deprecated skill version cannot be rollback target without a new evolution candidate.");
+    if (target.lifecycleState !== "superseded") throw new Error(`Rollback target must be a superseded previously activated version; state=${target.lifecycleState}.`);
     this.requireEvidence(evidenceEventId);
     const dependencyFailures = target.definition.capability.requiredCapabilities.filter((dependency) => !registry.isExecutionReady(dependency));
     if (dependencyFailures.length > 0) throw new Error(`Rollback target dependencies are not execution-ready: ${dependencyFailures.join(", ")}`);
