@@ -7,6 +7,7 @@ import {
   latestEvidenceByAuthority,
 } from "../observability/evidence.js";
 import { pathSignature } from "./path-signature.js";
+import { WORLD_BELIEF_SCHEMA } from "./world-belief-schema.js";
 import type {
   Opportunity,
   PathAttempt,
@@ -16,6 +17,9 @@ import type {
   PersistedPath,
   FailureClass,
   WorldFact,
+  WorldBelief,
+  BeliefEpistemicStatus,
+  BeliefLifecycleStatus,
   TrackedAssumption,
   AssumptionStatus,
   AdaptiveTaskBinding,
@@ -43,6 +47,7 @@ function appendAdaptiveAuthorityEvent(
     goalId: string;
     taskId?: string | null;
     causationId?: string | null;
+    epistemicStatus?: BeliefEpistemicStatus | string;
     payload?: Record<string, unknown>;
   },
 ): void {
@@ -55,7 +60,7 @@ function appendAdaptiveAuthorityEvent(
     authorityId: input.authorityId,
     goalId: input.goalId,
     taskId: input.taskId ?? null,
-    epistemicStatus: "observation",
+    epistemicStatus: input.epistemicStatus ?? "observation",
     payload: input.payload ?? {},
     provenance: { source: input.authorityType },
   });
@@ -71,6 +76,9 @@ export class AdaptiveStore {
     // Raw DB embeddings that opt into AdaptiveStore also need the causal fabric
     // required by P-013. Production createDatabase() still owns schema_version.
     db.exec(MIGRATION_V18_EVIDENCE_FABRIC);
+    // P-022 follows the same sidecar compatibility rule. This remains owned by
+    // AdaptiveStore and never creates a second memory/evidence authority.
+    db.exec(WORLD_BELIEF_SCHEMA);
   }
 
   getOrCreatePath(candidate: PathCandidate): PersistedPath {
@@ -650,6 +658,238 @@ export class AdaptiveStore {
     return rows.map(deserializeFact);
   }
 
+  recordBelief(input: {
+    goalId: string;
+    key: string;
+    value: string;
+    epistemicStatus: BeliefEpistemicStatus;
+    confidence?: number | null;
+    source: string;
+    evidenceRefs?: string[];
+    falsificationConditions?: string[];
+    lastVerifiedAt?: string | null;
+    expiresAt?: string | null;
+    invalidateBeliefIds?: string[];
+    supersedeBeliefIds?: string[];
+  }): WorldBelief {
+    const key = requireNonEmpty(input.key, "belief key");
+    const value = requireNonEmpty(input.value, "belief value");
+    const source = requireNonEmpty(input.source, "belief source");
+    const confidence = normalizeOptionalConfidence(input.confidence);
+    const lastVerifiedAt = normalizeOptionalTimestamp(input.lastVerifiedAt, "lastVerifiedAt");
+    const expiresAt = normalizeOptionalTimestamp(input.expiresAt, "expiresAt");
+    const evidenceRefs = uniqueStrings(input.evidenceRefs ?? []);
+    const falsificationConditions = uniqueStrings(input.falsificationConditions ?? []);
+    const invalidateIds = [...new Set(input.invalidateBeliefIds ?? [])];
+    const supersedeIds = [...new Set(input.supersedeBeliefIds ?? [])];
+    const overlap = invalidateIds.find((id) => supersedeIds.includes(id));
+    if (overlap) {
+      throw new Error(`Belief ${overlap} cannot be invalidated and superseded by the same update`);
+    }
+
+    const id = ulid();
+    const now = new Date().toISOString();
+
+    this.db.transaction(() => {
+      for (const targetId of invalidateIds) {
+        this.transitionBeliefInTransaction(
+          targetId,
+          input.goalId,
+          "invalidated",
+          "Contradicted by a newer world-model update.",
+          evidenceRefs,
+          now,
+        );
+      }
+      for (const targetId of supersedeIds) {
+        this.transitionBeliefInTransaction(
+          targetId,
+          input.goalId,
+          "superseded",
+          "Superseded by a newer world-model update.",
+          evidenceRefs,
+          now,
+        );
+      }
+
+      this.db.prepare(
+        `INSERT INTO adaptive_world_beliefs
+         (id, goal_id, key, value, epistemic_status, lifecycle_status,
+          confidence, source, evidence_refs, falsification_conditions,
+          last_verified_at, expires_at, invalidated_at, invalidation_reason,
+          created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)`,
+      ).run(
+        id,
+        input.goalId,
+        key,
+        value,
+        input.epistemicStatus,
+        confidence,
+        source,
+        stringify(evidenceRefs),
+        stringify(falsificationConditions),
+        lastVerifiedAt,
+        expiresAt,
+        now,
+        now,
+      );
+
+      appendAdaptiveAuthorityEvent(this.db, {
+        eventType: "adaptive.world_belief_recorded",
+        authorityType: "adaptive_world_belief",
+        authorityId: id,
+        goalId: input.goalId,
+        epistemicStatus: input.epistemicStatus,
+        payload: {
+          lifecycleStatus: "active",
+          confidenceAvailable: confidence !== null,
+          evidenceRefCount: evidenceRefs.length,
+          falsificationConditionCount: falsificationConditions.length,
+          hasExpiry: expiresAt !== null,
+          invalidatedBeliefCount: invalidateIds.length,
+          supersededBeliefCount: supersedeIds.length,
+        },
+      });
+    })();
+
+    return this.getBelief(id)!;
+  }
+
+  getBelief(id: string): WorldBelief | undefined {
+    const row = this.db.prepare(
+      "SELECT * FROM adaptive_world_beliefs WHERE id = ?",
+    ).get(id) as any | undefined;
+    return row ? deserializeBelief(row) : undefined;
+  }
+
+  listBeliefs(goalId: string, key?: string): WorldBelief[] {
+    const rows = key
+      ? this.db.prepare(
+          `SELECT * FROM adaptive_world_beliefs
+           WHERE goal_id = ? AND key = ?
+           ORDER BY created_at ASC`,
+        ).all(goalId, key) as any[]
+      : this.db.prepare(
+          `SELECT * FROM adaptive_world_beliefs
+           WHERE goal_id = ?
+           ORDER BY key ASC, created_at ASC`,
+        ).all(goalId) as any[];
+    return rows.map(deserializeBelief);
+  }
+
+  listActiveBeliefs(
+    goalId: string,
+    options: { key?: string; at?: string } = {},
+  ): WorldBelief[] {
+    const at = normalizeRequiredTimestamp(options.at ?? new Date().toISOString(), "at");
+    const conditions = [
+      "goal_id = ?",
+      "lifecycle_status = 'active'",
+      "(expires_at IS NULL OR expires_at > ?)",
+    ];
+    const params: unknown[] = [goalId, at];
+    if (options.key) {
+      conditions.push("key = ?");
+      params.push(options.key);
+    }
+    const rows = this.db.prepare(
+      `SELECT * FROM adaptive_world_beliefs
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY key ASC, created_at ASC`,
+    ).all(...params) as any[];
+    return rows.map(deserializeBelief);
+  }
+
+  invalidateBelief(id: string, reason: string, evidenceRefs: string[] = []): WorldBelief | undefined {
+    const existing = this.getBelief(id);
+    if (!existing) return undefined;
+    if (existing.lifecycleStatus === "invalidated") return existing;
+    const now = new Date().toISOString();
+    this.db.transaction(() => {
+      this.transitionBeliefInTransaction(
+        id,
+        existing.goalId,
+        "invalidated",
+        requireNonEmpty(reason, "invalidation reason"),
+        uniqueStrings(evidenceRefs),
+        now,
+      );
+    })();
+    return this.getBelief(id);
+  }
+
+  supersedeBelief(id: string, reason: string, evidenceRefs: string[] = []): WorldBelief | undefined {
+    const existing = this.getBelief(id);
+    if (!existing) return undefined;
+    if (existing.lifecycleStatus === "superseded") return existing;
+    const now = new Date().toISOString();
+    this.db.transaction(() => {
+      this.transitionBeliefInTransaction(
+        id,
+        existing.goalId,
+        "superseded",
+        requireNonEmpty(reason, "supersession reason"),
+        uniqueStrings(evidenceRefs),
+        now,
+      );
+    })();
+    return this.getBelief(id);
+  }
+
+  private transitionBeliefInTransaction(
+    id: string,
+    expectedGoalId: string,
+    toStatus: Exclude<BeliefLifecycleStatus, "active">,
+    reason: string,
+    evidenceRefs: string[],
+    now: string,
+  ): void {
+    const existing = this.getBelief(id);
+    if (!existing) {
+      throw new Error(`Cannot transition unknown belief: ${id}`);
+    }
+    if (existing.goalId !== expectedGoalId) {
+      throw new Error(`Cannot transition belief across goals: ${id}`);
+    }
+    if (existing.lifecycleStatus !== "active") {
+      if (existing.lifecycleStatus === toStatus) return;
+      throw new Error(
+        `Cannot transition belief ${id} from ${existing.lifecycleStatus} to ${toStatus}`,
+      );
+    }
+
+    const mergedEvidence = uniqueStrings([...existing.evidenceRefs, ...evidenceRefs]);
+    this.db.prepare(
+      `UPDATE adaptive_world_beliefs
+       SET lifecycle_status = ?, evidence_refs = ?,
+           invalidated_at = CASE WHEN ? = 'invalidated' THEN ? ELSE invalidated_at END,
+           invalidation_reason = ?, updated_at = ?
+       WHERE id = ?`,
+    ).run(
+      toStatus,
+      stringify(mergedEvidence),
+      toStatus,
+      now,
+      reason,
+      now,
+      id,
+    );
+
+    appendAdaptiveAuthorityEvent(this.db, {
+      eventType: "adaptive.world_belief_status_changed",
+      authorityType: "adaptive_world_belief",
+      authorityId: id,
+      goalId: expectedGoalId,
+      epistemicStatus: existing.epistemicStatus,
+      payload: {
+        fromStatus: existing.lifecycleStatus,
+        toStatus,
+        evidenceRefCount: mergedEvidence.length,
+      },
+    });
+  }
+
   addOpportunity(input: {
     goalId: string;
     sourcePathId?: string | null;
@@ -768,10 +1008,65 @@ function deserializeFact(row: any): WorldFact {
   };
 }
 
+function deserializeBelief(row: any): WorldBelief {
+  return {
+    id: row.id,
+    goalId: row.goal_id,
+    key: row.key,
+    value: row.value,
+    epistemicStatus: row.epistemic_status,
+    lifecycleStatus: row.lifecycle_status,
+    confidence: row.confidence ?? null,
+    source: row.source,
+    evidenceRefs: parseArray(row.evidence_refs),
+    falsificationConditions: parseArray(row.falsification_conditions),
+    lastVerifiedAt: row.last_verified_at ?? null,
+    expiresAt: row.expires_at ?? null,
+    invalidatedAt: row.invalidated_at ?? null,
+    invalidationReason: row.invalidation_reason ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
 
 function normalizeAssumption(statement: string): string {
   return statement
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function requireNonEmpty(value: string, label: string): string {
+  const normalized = value.trim();
+  if (!normalized) throw new Error(`${label} cannot be empty`);
+  return normalized;
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function normalizeOptionalConfidence(value: number | null | undefined): number | null {
+  if (value == null) return null;
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    throw new Error(`belief confidence must be between 0 and 1 when provided: ${value}`);
+  }
+  return value;
+}
+
+function normalizeOptionalTimestamp(
+  value: string | null | undefined,
+  label: string,
+): string | null {
+  if (value == null) return null;
+  return normalizeRequiredTimestamp(value, label);
+}
+
+function normalizeRequiredTimestamp(value: string, label: string): string {
+  const timestamp = value.trim();
+  const parsed = Date.parse(timestamp);
+  if (!timestamp || !Number.isFinite(parsed)) {
+    throw new Error(`${label} must be a valid timestamp`);
+  }
+  return new Date(parsed).toISOString();
 }
