@@ -51,6 +51,19 @@ jobs:
             status=$?
           fi
           if [ "$status" -eq 0 ]; then
+            python3 - <<'PY' >> /tmp/p021-apply.log 2>&1
+          from pathlib import Path
+          p = Path('src/skills/evolution.ts')
+          text = p.read_text()
+          old = '''export function isSkillEvolutionManaged(db: Database, skillName: string): boolean {\n  const table = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='skill_versions'").get();'''
+          new = '''export function isSkillEvolutionManaged(db: Database | undefined | null, skillName: string): boolean {\n  if (!db) return false;\n  const table = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='skill_versions'").get();'''
+          if old not in text:
+              raise SystemExit('generated skill evolution helper shape changed unexpectedly')
+          p.write_text(text.replace(old, new, 1))
+          PY
+            status=$?
+          fi
+          if [ "$status" -eq 0 ]; then
             git diff --check >> /tmp/p021-apply.log 2>&1
             status=$?
           fi
