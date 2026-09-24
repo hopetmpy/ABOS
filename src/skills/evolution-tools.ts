@@ -74,7 +74,7 @@ export function createSkillEvolutionTools(): AbosTool[] {
       execute: async (args, ctx) => { const result = engineFor(ctx).deprecateVersion(String(args.versionId ?? ""), String(args.evidenceEventId ?? ""), String(args.reason ?? ""), requireRegistry(ctx)); return JSON.stringify({ status: result.lifecycleState, versionId: result.id }); },
     },
     {
-      name: "rollback_skill_version", description: "Rollback to a previously activated non-deprecated version when dependencies remain execution-ready.", category: "skills", riskLevel: "dangerous",
+      name: "rollback_skill_version", description: "Rollback to a previously activated superseded version when dependencies remain execution-ready.", category: "skills", riskLevel: "dangerous",
       parameters: { type: "object", properties: { skillName: { type: "string" }, targetVersionId: { type: "string" }, evidenceEventId: { type: "string" } }, required: ["skillName", "targetVersionId", "evidenceEventId"] },
       execute: async (args, ctx) => { const result = engineFor(ctx).rollback(String(args.skillName ?? ""), String(args.targetVersionId ?? ""), String(args.evidenceEventId ?? ""), requireRegistry(ctx)); return JSON.stringify({ status: result.lifecycleState, versionId: result.id, version: result.version }); },
     },
