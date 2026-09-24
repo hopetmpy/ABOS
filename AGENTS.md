@@ -162,7 +162,7 @@ Al reanudar:
 
 No repitas auditorías válidas por ceremonia. No conviertas una interrupción en cierre.
 
-Para solicitudes de ejecución, un **claim de cierre** debe pasar `STOP_GATE_REQUIRES_TERMINAL_CONDITION`; terminar una unidad o agotar una lista local obliga antes a `NEXT_ELIGIBLE_WORK`. Si el turno devuelve control con trabajo pendiente, el reporte final del turno debe decirlo explícitamente y dejar el siguiente punto verificable; ese reporte no convierte el macro en terminado.
+Para solicitudes de ejecución, una respuesta final debe pasar `STOP_GATE_REQUIRES_TERMINAL_CONDITION` **cuando declare cierre o terminación del scope**; un reporte final de turno explícitamente `EN_EJECUCIÓN` no es un claim de cierre. Terminar una unidad o agotar una lista local obliga antes a `NEXT_ELIGIBLE_WORK`. Si el turno devuelve control con trabajo pendiente, el reporte debe decirlo explícitamente y dejar el siguiente punto verificable; ese reporte no convierte el macro en terminado.
 
 Un bloque sólo puede entregarse como terminado cuando la frontera solicitada realmente terminó y está reconciliada, o cuando existe un bloqueo total real sin otra ruta elegible. Si el usuario pidió únicamente estado/diagnóstico, responde ese estado sin inventar ejecución adicional.
 
