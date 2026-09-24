@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-022
 Active-Segment: continuity/C0018.md
-Active-Intervention: P022_WORLD_MODEL — SOURCE_UNMODIFIED / AUDIT_IN_PROGRESS
+Active-Intervention: P022_WORLD_MODEL — DECISION_READY / SOURCE_IN_PROGRESS / PARTIAL_EVIDENCE
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -16,7 +16,7 @@ Cutover-State: ACTIVE
 Current-Host-Branch: abos/p022-world-model
 Host-Head-At-Audit-Open: 6eb836be2325048e7ac243415e59e9565fc93d08
 Last-Reconciled-Host-Head: 6eb836be2325048e7ac243415e59e9565fc93d08
-Last-Reconciled-Head-Semantics: P021_HECHO_E3_MAIN_GREEN_P022_AUDIT_OPEN
+Last-Reconciled-Head-Semantics: P021_HECHO_E3_MAIN_GREEN_P022_ACTIVE_NOT_MACRO_RECONCILED
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -41,7 +41,7 @@ No existe otra capa de cadencia dentro de ProjectOps.
 - P-004: PLANIFICADO — track documental transversal/final.
 - P-005: PLANIFICADO — acceptance LIVE incremental.
 - P-006..P-021: HECHO para sus objetivos canónicos.
-- P-022: EN_EJECUCIÓN / SOURCE_UNMODIFIED / AUDIT_IN_PROGRESS.
+- P-022: EN_EJECUCIÓN / DECISION_READY / SOURCE_IN_PROGRESS / PARTIAL_EVIDENCE.
 - P-023..P-036: ver estado explícito en `ProjectOps/PLAN.md`.
 
 ## Cierre P-021
@@ -57,29 +57,42 @@ Evidencia terminal:
 
 Estado final P-021: `HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED`. El detalle histórico terminal vive en `continuity/C0017.md` y `plan/P-021.md`.
 
-## Apertura P-022
+## P-022 activo
 
-`NEXT_ELIGIBLE_WORK` resolvió P-022 porque P-020 + P-021 + P-013 están HECHO. La branch `abos/p022-world-model` fue creada exactamente desde `main 6eb836be2325048e7ac243415e59e9565fc93d08` después de exact-main CI `35954954278` SUCCESS 8/8.
+P-022 se abrió desde `main 6eb836be2325048e7ac243415e59e9565fc93d08` después de exact-main CI `35954954278` SUCCESS 8/8. La auditoría alcanzó `DECISION_READY` antes de source y decidió `EXTEND_EXISTING_INTELLIGENCE_STATE` en lugar de crear una authority paralela.
 
-P-022 está registrado antes de cualquier source material como:
-- `EN_EJECUCIÓN`;
-- `SOURCE_UNMODIFIED`;
-- `AUDIT_IN_PROGRESS`;
-- `NOT_DECISION_READY`.
+Estado observable vigente antes del siguiente gate:
 
-La auditoría activa debe demostrar qué authority equivalente ya existe para beliefs/hypotheses antes de elegir entre NO_CHANGE, EXTEND o persistencia aditiva. `knowledge_store`, Adaptive Path, state e intelligence no se consideran equivalentes por nombre.
+- branch `abos/p022-world-model`;
+- head observado `8ceac3306ba7bd1c63f022a8a359efbb6dec90a5`;
+- beliefs/hypotheses persistentes bajo `AdaptiveStore`, con confidence nullable, temporalidad, lifecycle y Evidence Fabric referencial;
+- active/non-expired beliefs proyectados al `PossibilitySpace` y planner context;
+- producer runtime estratégico conectado a `AdaptivePathEngine.selectCandidate()` y falsación ligada a failure evidence terminal;
+- tests P-022 de store/restart/competition/evidence y producer runtime añadidos;
+- schema global `SCHEMA_VERSION=21` y `WORLD_MODEL_SCHEMA` incorporado a `CREATE_TABLES` usando blob exacto; falta demostrar fresh DB + upgrade V20→V21 y CI exact-head antes de aceptar el claim de migración;
+- primer source slice `a327e730dabf8c3b7e402f5fa5ab83f6eb6f3a35` sí tuvo CI `36042290760` verde en las familias inspeccionadas, pero esa evidencia no cubre el head actual.
+
+## Findings abiertos / resueltos
+
+- RESUELTO: P-021 stale en continuidad inicial; Git/PR/CI demostraron integración terminal.
+- RESUELTO: creación de manager/store paralelo P-022 rechazada; Adaptive Intelligence ya era owner parcial.
+- RESUELTO: ausencia inicial de producer runtime; la ruta mínima usa el lifecycle ya obligatorio de `selectCandidate()` sin ampliar Planner/Orchestrator.
+- RESUELTO: dos intentos de edición de migration con reconstrucción textual produjeron drift lateral y fueron revertidos exactamente antes de aceptación.
+- CONDICIÓN NUEVA: `fetch_blob` permitió editar `schema.ts` desde su contenido exacto; el diff de la integración V21 quedó acotado a import, versión e interpolación de `WORLD_MODEL_SCHEMA`.
+- FALSADA: hipótesis adversarial de que el failure-classifier cae a `unknown`; el fallback real es `strategic_failure`, y auth/capability/resource/transient/environment permanecen no terminales.
+- ABIERTO: demostrar migration global/fresh DB y exact-head completo; reauditar radius completo antes de cualquier integración/HECHO.
 
 ## Claims y límites actuales
 
-- P-021 sí puede reclamarse HECHO con E3 exact-main.
-- P-022 no tiene todavía cambio de producto ni arquitectura decidida.
-- No se ha creado store, manager, schema, migration ni runtime wiring P-022.
+- P-021 puede reclamarse HECHO con E3 exact-main.
+- P-022 NO está HECHO ni integrado.
+- No se ha creado una segunda authority de memory/knowledge/evidence/planning.
 - P-023/P-024/P-025 no se adelantan dentro de P-022.
-- `AGENTS.md`, PROJECT, Operating Protocol y Adaptive Reasoning permanecen NO_CHANGE en esta transición.
+- El head actual no puede reclamar PASS global hasta completar las validaciones exact-head y reconciliación macro.
 
 ## Siguiente punto verificable
 
-Completar la auditoría Required-Context ampliada de P-022: producers, consumers, persistence, schema, evidence/provenance, Adaptive Path/intelligence, Cognitive Fabric/knowledge, restart y runtime decision path; discriminar H0..H5 y alcanzar `DECISION_READY` antes de source material.
+Añadir y ejecutar evidencia específica de schema fresh DB + upgrade V20→V21 mediante `createDatabase()`, revisar CI exact-head de producer + schema, atacar el diff/radius completo y reconciliar C0018/P-022 sólo con los resultados observados.
 
 ## Política de rotación
 
