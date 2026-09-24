@@ -446,7 +446,17 @@ export class SimulationWorkspace {
   }
 
   createExperiment(input: ExperimentSpec): ExperimentRecord {
-    const spec = normalizeExperimentSpec(input);
+    const requestedId = input.experimentId == null
+      ? null
+      : requireLabel(input.experimentId, "experimentId");
+    const existingBeforeNormalize = requestedId == null
+      ? undefined
+      : this.getExperiment(requestedId);
+    const normalizedInput =
+      existingBeforeNormalize && input.mode === "stochastic" && input.seed == null
+        ? { ...input, seed: existingBeforeNormalize.seed }
+        : input;
+    const spec = normalizeExperimentSpec(normalizedInput);
     if (spec.parentExperimentId) {
       const parent = this.getExperiment(spec.parentExperimentId);
       if (!parent) throw new Error(`parent experiment not found: ${spec.parentExperimentId}`);
@@ -460,7 +470,7 @@ export class SimulationWorkspace {
     }
 
     const fingerprint = specFingerprint(spec);
-    const existing = this.getExperiment(spec.experimentId);
+    const existing = existingBeforeNormalize ?? this.getExperiment(spec.experimentId);
     if (existing) {
       const row = this.db.prepare(
         "SELECT spec_fingerprint FROM simulation_experiments WHERE id = ?",
@@ -580,30 +590,21 @@ export class SimulationWorkspace {
         this.executeOneRun(experiment, simulator);
         completedInCall += 1;
       }
-    } catch (error) {
-      const now = new Date().toISOString();
-      this.db.prepare(
-        `UPDATE simulation_experiments
-         SET status = 'failed', updated_at = ?
-         WHERE id = ?`,
-      ).run(now, experiment.id);
-      this.appendExperimentEvidence(experiment.id, "simulation.experiment.failed", {
-        error: error instanceof Error ? error.message : String(error),
-        runCount: this.requireExperiment(experiment.id).runCount,
+
+      experiment = this.refreshSummary(experiment.id, simulator);
+      experiment = this.finishIfComplete(experiment);
+      this.appendExperimentEvidence(experiment.id, "simulation.batch.completed", {
+        requestedRuns: requestedRuns ?? null,
+        completedInCall,
+        runCount: experiment.runCount,
+        spentCents: experiment.spentCents,
+        status: experiment.status,
       });
+      return this.requireExperiment(experiment.id);
+    } catch (error) {
+      this.failExperiment(experiment.id, error);
       throw error;
     }
-
-    experiment = this.refreshSummary(experiment.id, simulator);
-    experiment = this.finishIfComplete(experiment);
-    this.appendExperimentEvidence(experiment.id, "simulation.batch.completed", {
-      requestedRuns: requestedRuns ?? null,
-      completedInCall,
-      runCount: experiment.runCount,
-      spentCents: experiment.spentCents,
-      status: experiment.status,
-    });
-    return this.requireExperiment(experiment.id);
   }
 
   replayRun(experimentId: string, runIndex: number): ReplayResult {
@@ -882,6 +883,19 @@ export class SimulationWorkspace {
        WHERE id = ?`,
     ).run(now, now, experiment.id);
     return this.requireExperiment(experiment.id);
+  }
+
+  private failExperiment(experimentId: string, error: unknown): void {
+    const now = new Date().toISOString();
+    this.db.prepare(
+      `UPDATE simulation_experiments
+       SET status = 'failed', updated_at = ?
+       WHERE id = ?`,
+    ).run(now, experimentId);
+    this.appendExperimentEvidence(experimentId, "simulation.experiment.failed", {
+      error: error instanceof Error ? error.message : String(error),
+      runCount: this.requireExperiment(experimentId).runCount,
+    });
   }
 
   private appendExperimentEvidence(
