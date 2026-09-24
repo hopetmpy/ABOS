@@ -4,21 +4,27 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
-Active-Plan: P-023
-Active-Segment: continuity/C0019.md
-Active-Intervention: P023_PREDICTION_LEARNING — SOURCE_COMPLETE / MAIN_RECONCILED / FINAL_GATE_PENDING
+Active-Plan: P-024
+Active-Segment: continuity/C0020.md
+Active-Intervention: P024_SIMULATION_EXPERIMENTS — EN_EJECUCIÓN / ADVERSARIAL_HARDENED_V2 / EXACT_HEAD_GATE_PENDING
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p023-prediction-learning
-Host-Head-At-Audit-Open: ade7d29148f6c49df94464c52dc22b8b2e2cb77f
-Last-Product-Head: e88564cc018a2d39c3a0f5d263cf86a461a414e8
-Last-Product-CI: 36056552849 — SUCCESS 8/8
-Last-Reconciled-Host-Head: f464c8278578005689fde1c9eff5a2bab6c37ed6
-Observed-Main-Head: ee033e5586dbf7bcbb2dbfac88ad12e529a38972
+Current-Host-Branch: abos/p024-simulation-experiments
+Host-Head-At-Audit-Open: 5cd1ba2238c5790b4bfe76e906dccc93bc1ca7b4
+Last-Reconciled-Host-Head: 09d145a8fdd712b2328a0b488953567daa2e38aa
+Observed-Main-Head: 976747d9af4bb3c262444c3dfd199757d05d8f96
+Last-Kernel-Reconcile: a282a0219286a498628b686d587dd138b0f8a73e
+Last-Product-Head: 09d145a8fdd712b2328a0b488953567daa2e38aa
+Last-Product-CI: PENDING_EXACT_HEAD_AFTER_V2_BOUNDARY_TESTS
+Last-Green-Superseded-Head: 8e7a9fd0cc8d5b0a4773539de79bb1f47f997893
+Last-Green-Superseded-CI: 36070697224 — SUCCESS 8/8
+Last-Completed-Plan: P-023
+Last-Completed-Merge: b25dfebf0454f488766b14a816ed1997beeb407a
+Last-Completed-CI: 36057756301 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -28,7 +34,7 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 ## Autoridad operativa
 
-- `AGENTS.md`: único kernel/scheduler.
+- `AGENTS.md`: único kernel/scheduler conductual.
 - CONTINUITY + segmento activo: estado vivo/recovery.
 - PLAN + módulo activo: intención/Definition of Done.
 - PROJECT: identidad/invariantes estables.
@@ -40,103 +46,68 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 - P-001..P-003: HECHO.
 - P-004: PLANIFICADO — track documental transversal/final.
 - P-005: PLANIFICADO — acceptance LIVE incremental.
-- P-006..P-022: HECHO.
-- P-023: EN_EJECUCIÓN / SOURCE_COMPLETE / MAIN_RECONCILED / FINAL_GATE_PENDING.
-- P-024..P-036: usar estado explícito de `ProjectOps/PLAN.md`; no se adelantan mientras P-023 siga no terminal.
+- P-006..P-023: HECHO.
+- P-024: EN_EJECUCIÓN / DECISION_READY / ADVERSARIAL_HARDENED_V2 / EXACT_HEAD_GATE_PENDING.
+- P-025..P-036: usar estado explícito de `ProjectOps/PLAN.md`; no se adelantan mientras P-024 siga no terminal.
 
-## Cierre P-022
+## P-023 — cierre verificado
 
-P-022 World Model está terminalmente demostrado:
-- PR #62 merge `ade7d29148f6c49df94464c52dc22b8b2e2cb77f`;
-- exact-main CI `36048851506`: SUCCESS 8/8;
-- estado `HECHO / SOURCE_COMPLETE / E3_MAIN_GREEN / INTEGRATION_VERIFIED`.
+- PR #63 merge `b25dfebf0454f488766b14a816ed1997beeb407a`.
+- exact-main CI `36057756301`: SUCCESS 8/8.
+- Estado: `HECHO / SOURCE_COMPLETE / E3_MAIN_GREEN / INTEGRATION_VERIFIED`.
+- Historial: `continuity/C0019.md` + `plan/P-023.md`.
 
-Detalle histórico: `continuity/C0018.md` + `plan/P-022.md`.
+## P-024 — estado recuperable
 
-## P-023 — estado real reconciliado
+Decision-Class:
+`CREATE_EXPERIMENT_AUTHORITY + REUSE_WORLD_ADAPTIVE_INPUTS + REFERENCE_EVIDENCE_FABRIC + KEEP_EXTERNAL_EXECUTION_BEHIND_POLICY`.
 
-Objetivo:
-`OBSERVE → MODEL → PREDICT → ACT → MEASURE → COMPARE → ATTRIBUTE → LEARN → UPDATE`.
+PR #65 permanece OPEN / DRAFT.
 
-Decision-Class ejecutada:
-`REUSE_ADAPTIVE_PATH_ATTEMPT + EXTEND_CAUSAL_COMPARISON + CORRECT_UNKNOWN_ATTRIBUTION`.
+Source/capacidad actual:
+- `src/state/simulation-schema.ts`: E-xxx sidecar revision 2 + upgrade v1→v2.
+- `src/intelligence/simulation-workspace.ts`: deterministic/stochastic seeded runs, exact-version replay, budgets, counterfactuals, calibration externality, surprise persistence, restart discovery y Evidence inferencial.
+- `src/__tests__/p024-simulation-workspace.test.ts`: suite funcional/adversarial original.
+- `src/__tests__/p024-simulation-adversarial.test.ts`: stochastic retry + summary failure recovery.
+- `src/__tests__/p024-simulation-boundaries.test.ts`: schema upgrade, surprise replay, calibration externality y restart discovery.
 
-Authorities preservadas:
-- `adaptive_paths` = prediction canónica;
-- `adaptive_attempts` = outcome canónico;
-- Evidence Fabric = causal/referential fabric;
-- no existe nueva prediction/outcome authority paralela.
+Hardening relevante:
+- `dcddc7bd...`: fixed-ID stochastic retry reutiliza seed persistida; summary failure deja estado `failed` explícito.
+- `74a6a2ee...`: schema revision 2 y `surprise_json` con upgrade declarativo.
+- `6be6162f...`: wiring transaccional v1→v2, surprise persistida/replay, calibration rechaza Evidence simulation-owned, `listExperiments()` para recovery discovery.
+- `09d145a8...`: regresiones de fronteras v2.
 
-Cambios product demostrados:
-- UNKNOWN default → non-terminal `unknown/inconclusive`;
-- strategic contradiction requiere evidencia explícita;
-- comparison/attribution causal conectado al adaptive runtime;
-- terminal success confirma, intermediate multi-task success no confirma prematuramente;
-- Evidence ya no copia canonical expected/observed outcome values;
-- `recordSuccess()`/`recordFailure()` son atómicos dentro del adaptive engine;
-- restart conserva path/attempt/evidence pairing;
-- comparison y terminal resolution son idempotentes.
+Boundary explícito: el workspace no entrega ToolContext/executors ni acepta async output como run válido, pero un simulator callback JS sigue siendo código del proceso. No se reclama sandbox universal.
 
-## Adversarial findings resueltos
+## Reconciliación con main
 
-- D1 UNKNOWN→strategic failure inventado: RESUELTO.
-- D2 comparison/attribution implícita: RESUELTO.
-- D3 Evidence duplicaba canonical outcome values: RESUELTO.
-- D4 partial adaptive state ante excepción local: RESUELTO con transaction envelope + fault injection.
-- D5 restart/idempotence insuficientemente demostrados: RESUELTO con reopen/replay tests.
+`main` avanzó durante P-024 a `976747d9af4bb3c262444c3dfd199757d05d8f96` por cambio exclusivo de `AGENTS.md`. El kernel actualizado fue re-leído y la branch fue reconciliada con merge real `a282a0219286a498628b686d587dd138b0f8a73e`. No cambió la arquitectura P-024.
 
-Regresión detectada y corregida:
-- `e3449582...`: full CI falló un único test P-022 por `unrecoverable strategic mismatch` clasificado UNKNOWN;
-- `367a6b02...`: matching estratégico explícito restaurado sin reintroducir default terminal.
+## Evidencia de gates
 
-## Evidencia exacta P-023
+1. `36069543167` / `631e627...`: FAIL informativo en ProjectOps integrity; producto posterior SKIPPED.
+2. `36069696406` / `35ce13a...`: SUCCESS 8/8.
+3. `36070176676` / `dcddc7bd...`: SUCCESS 8/8.
+4. `36070697224` / `8e7a9fd...`: SUCCESS 8/8; quedó superado deliberadamente por hardening v2.
+5. HEAD posterior a `09d145a8...` + este checkpoint: **NO VERIFICADO TODAVÍA**. No se hereda PASS para cambios posteriores.
 
-- `5f7bdc10b62c16294cf1c8cd03471d87f94b5ed9` → CI `36055483209` SUCCESS 8/8;
-- `925fe387ba70b51972bdf6ab9d5b4e97afdf7c16` → CI `36056178001` SUCCESS 8/8;
-- `e88564cc018a2d39c3a0f5d263cf86a461a414e8` → CI `36056552849` SUCCESS 8/8.
+## Hallazgos v2 resueltos pendientes de gate
 
-Los gates incluyen full tests/security tests 22/24, ProjectOps integrity, typecheck/build, Windows 22/24, public distribution 22/24, dependency audit e identity/rebrand checks.
+- `RUN_SURPRISE_DURABLE`: antes FALSADO; corregido y cubierto por regresión.
+- `SCHEMA_V2_UPGRADE_PATH_IS_WIRED`: antes FALSADO; corregido con upgrade transaccional y prueba de reopen.
+- `CALIBRATION_EXTERNALITY`: antes FALSADO; calibration ya rechaza observation originada en simulation authority y tiene regresión negativa.
+- `RECOVERY_DISCOVERY_WITHOUT_DIRECT_SQL`: antes FALSADO; `listExperiments()` permite recovery por goal/path/status/parent y tiene prueba tras restart.
 
-## Reconciliación Git con main
-
-`main ee033e5586dbf7bcbb2dbfac88ad12e529a38972` tenía un único delta posterior al baseline: retirar el workflow P-010 obsoleto, ya retirado también en la branch.
-
-Merge de reconciliación:
-- `f464c8278578005689fde1c9eff5a2bab6c37ed6`;
-- parents `e88564cc...` + `ee033e55...`;
-- mismo tree del product head ya validado;
-- compare posterior: branch `ahead 23 / behind 0`, merge-base = current main;
-- no apareció delta product adicional.
-
-## Finding SOFT residual
-
-Existe frontera de saga entre adaptive learning y TaskGraph: Orchestrator ejecuta `adaptive.recordSuccess()` antes de `completeTask()`. Ambas mutaciones son transaccionales por separado, no globalmente atómicas.
-
-Clasificación: `SOFT / NO BLOQUEA P-023` mientras no exista evidencia que invalide el claim terminal de learning, porque:
-- el adaptive cycle es internamente atómico;
-- terminal prediction resolution se deduplica por path;
-- assumption terminal learning es idempotente;
-- async result exige task assigned/authoritative y TaskGraph rechaza transiciones desde terminal.
-
-Se conserva como riesgo visible de orchestration/recovery, no se oculta ni se usa para expandir P-023 especulativamente.
-
-## Claims y límites
-
-- P-023 source: SOURCE_COMPLETE.
-- P-023 main ancestry: RECONCILED.
-- PR #63: OPEN / DRAFT hasta gate final.
-- Integración a `main`: NO HECHO.
-- Exact-main post-merge: NO EJECUTADO.
-- Estado terminal positivo P-023: NO AUTORIZADO POR EVIDENCIA todavía.
+La decisión arquitectónica no cambió; correspondió `CORRECT` dentro de la misma authority.
 
 ## Siguiente punto verificable
 
-1. Gatear exact-head el commit documental derivado de `f464c827...`.
-2. Confirmar PR #63 exact-head verde y convertir draft → ready.
-3. Integrar PR #63 con expected-head exacto.
-4. Exigir exact-main CI del merge.
-5. Recién entonces reconciliar P-023 como `HECHO / INTEGRATION_VERIFIED` y resolver `NEXT_ELIGIBLE_WORK`.
+1. Gatear el exact-head creado por este checkpoint.
+2. Ante rojo: leer job/log exacto, clasificar y corregir sin saltar P-024.
+3. Si todo queda verde: reauditar branch vs main y PR #65; reconciliar si main avanzó.
+4. Sólo con exact-head verde y sin HARD abierto pasar PR a ready/merge.
+5. Exigir merge + exact-main CI antes de marcar P-024 HECHO.
 
 ## Política de rotación
 
-`C0000-legacy.md` conserva historia pre-cutover. `C0001`..`C0018` son históricos cerrados; `C0019` es el único segmento ACTIVE. Nunca se crea un segundo `CONTINUITY.md`.
+`C0000-legacy.md` conserva historia pre-cutover. `C0001`..`C0019` son históricos cerrados; `C0020` es el único segmento ACTIVE. Nunca se crea un segundo `CONTINUITY.md`.
