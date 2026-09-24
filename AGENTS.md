@@ -108,7 +108,7 @@ Source limpio no equivale a runtime/material PASS. Una prueba no ejecutada nunca
 
 Antes de declarar `NO DISPONIBLE`, `BLOQUEADO` o “requiere PC”, audita las capacidades reales del entorno actual.
 
-No hagas reconciliación completa ni reporte de cierre después de cada subunidad; hazlos cuando cambie materialmente el estado vivo, se cierre una unidad, se cruce a otra unidad o la ejecución deba entregarse.
+Dentro del flujo vigente, no hagas reconciliación completa ni reporte de cierre después de cada subunidad; hazlos cuando cambie materialmente el estado vivo, se cierre una unidad, se cruce a otra unidad o la ejecución deba entregarse.
 
 ## 6. AUTORIDADES
 
