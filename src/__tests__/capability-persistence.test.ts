@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDatabase } from "../state/database.js";
+import { SCHEMA_VERSION } from "../state/schema.js";
 import { CapabilityRegistry } from "../capabilities/registry.js";
 import { CapabilityStore } from "../capabilities/store.js";
 import { capabilityStateOf } from "../capabilities/model.js";
@@ -29,7 +30,7 @@ describe("P-014 durable Capability Fabric", () => {
       const table = db.raw.prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'capability_records'",
       ).get() as { name: string } | undefined;
-      expect(version.version).toBe(20);
+      expect(version.version).toBe(SCHEMA_VERSION);
       expect(table?.name).toBe("capability_records");
     } finally {
       db.close();
