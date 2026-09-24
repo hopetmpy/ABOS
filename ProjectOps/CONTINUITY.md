@@ -2,19 +2,21 @@
 
 Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
-Active-Plan: P-020
-Active-Segment: continuity/C0016.md
-Active-Intervention: P020_COGNITIVE_FABRIC — AUDIT_IN_PROGRESS / SOURCE_UNMODIFIED
+ProjectOps-Model: SINGLE_OPERATING_SYSTEM
+Operating-Kernel: AGENTS.md
+Active-Plan: P-021
+Active-Segment: continuity/C0017.md
+Active-Intervention: P021_SKILL_EVOLUTION — SOURCE_IMPLEMENTED / VALIDATION_RECONCILING
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p020-cognitive-fabric
-Host-Head-At-Audit-Open: 3e8c0eb31652175b0f3b22ff0296d52c16e758f1
-Last-Reconciled-Host-Head: 3e8c0eb31652175b0f3b22ff0296d52c16e758f1
-Last-Reconciled-Head-Semantics: P019_MAIN_GREEN_P020_AUDIT_OPEN
+Current-Host-Branch: abos/p021-skill-evolution
+Host-Head-At-Audit-Open: c07a1eb10c34792e2490c51196063fbac15df91c
+Last-Reconciled-Host-Head: a30d97c377b335038bac057df48ccbca304ead4d
+Last-Reconciled-Head-Semantics: P021_IMPLEMENTED_PRE_CONTINUITY_RECONCILIATION_COMMIT
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -22,90 +24,99 @@ ProjectOps-PR: 30
 Master-Plan-PR: 31
 Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
+## Autoridad operativa
+
+- `AGENTS.md`: único kernel/scheduler de ejecución.
+- CONTINUITY + segmento activo: estado vivo y recovery.
+- PLAN + módulo activo: intención, dependencias y Definition of Done.
+- PROJECT: identidad e invariantes estables; no posee estado dinámico.
+- Operating Protocol / Adaptive Reasoning: referencias `REFERENCE_ONLY_NON_SCHEDULER`.
+- Git/código/runtime/tests: realidad observable.
+
+No existe otra capa de cadencia dentro de ProjectOps.
+
 ## Estado canónico actual
 
-- P-001: HECHO.
-- P-002: HECHO.
-- P-003: HECHO.
+- P-001..P-003: HECHO.
 - P-004: PLANIFICADO — track documental transversal/final.
-- P-005: PLANIFICADO — acceptance LIVE incremental; puede quedar `LIVE_BLOCKED_EXTERNAL` cuando falten fronteras reales.
-- P-006: HECHO.
-- P-007: HECHO.
-- P-008: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
-- P-009: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
-- P-010: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
-- P-011: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
-- P-012: HECHO / INTEGRATION_VERIFIED / P013_EVIDENCE_SATISFIED.
-- P-013: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
-- P-014: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
-- P-015: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
-- P-016: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
-- P-017: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
-- P-018: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
-- P-019: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
-- P-020: EN_EJECUCIÓN / AUDIT_IN_PROGRESS / SOURCE_UNMODIFIED.
-- P-021..P-036: ver estado explícito en `ProjectOps/PLAN.md`.
+- P-005: PLANIFICADO — acceptance LIVE incremental.
+- P-006..P-020: HECHO para sus objetivos canónicos; P-020 integrado por PR #54 y revalidado en exact main.
+- P-021: EN_EJECUCIÓN / SOURCE_IMPLEMENTED / VALIDATION_RECONCILING.
+- P-022..P-036: ver estado explícito en `ProjectOps/PLAN.md`.
 
-## Evidencia reciente de integración
-
-### P-014
-- PR #44; merge `bf9adfd11617a37698ce7095248c1e1228f0d3cf`.
-- main CI `35417887204`: SUCCESS; ProjectOps `35417887215`: SUCCESS.
-
-### P-015
-- PR #46; merge `6e620ffcdddbe630ace58be67d5abb0826ed19b9`.
-- main CI `35423685890`: SUCCESS; ProjectOps `35423685860`: SUCCESS.
-
-### P-016
-- PR #48; merge `08b7a5cce8f18c57c52e6a2f43048b6f1c214e50`.
-- main CI `35809162263`: SUCCESS; ProjectOps `35809162403`: SUCCESS.
-
-### P-017
-- PR #51; merge `c5c5ae856923ba74c943cc26beca26ea38de0dcc`.
-- main CI `35904429871`: SUCCESS; ProjectOps `35904429875`: SUCCESS.
-
-### P-018
-- PR #52; merge `9bf05ce5be0e5497a56b28f1584678c1f15b3994`.
-- main CI `35908965085`: SUCCESS; ProjectOps `35908964855`: SUCCESS.
+## Evidencia de integración inmediatamente anterior
 
 ### P-019
 - PR #53; squash merge `3e8c0eb31652175b0f3b22ff0296d52c16e758f1`.
-- main CI `35918621864`: SUCCESS 8/8; ProjectOps `35918621868`: SUCCESS.
+- exact-main CI `35918621864`: SUCCESS; ProjectOps `35918621868`: SUCCESS.
+
+### P-020
+- PR #54; squash merge `c07a1eb10c34792e2490c51196063fbac15df91c`.
+- PR head `dd8fe5b3418edd2146f0b75d709dec930b86df60`: CI `35929560664` + ProjectOps `35929560726` SUCCESS.
+- exact-main CI `35929847027`: SUCCESS.
+- exact-main ProjectOps Integrity `35929847097`: SUCCESS.
 - estado: HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED.
 
-## Intervención viva — P-020
+## Intervención viva — P-021
 
-Authority detail: `ProjectOps/continuity/C0016.md`.
-Plan module: `ProjectOps/plan/P-020.md`.
-Working branch: `abos/p020-cognitive-fabric`.
-Baseline exacto: `main 3e8c0eb31652175b0f3b22ff0296d52c16e758f1`.
+Authority detail: `ProjectOps/continuity/C0017.md`.
+Plan module: `ProjectOps/plan/P-021.md`.
+Working branch: `abos/p021-skill-evolution`.
+Baseline de producto: `main c07a1eb10c34792e2490c51196063fbac15df91c`.
 
-Estado: `AUDIT_IN_PROGRESS / SOURCE_UNMODIFIED`.
+Decision-Class: `EXTEND_EXISTING_SKILL_SYSTEM_WITH_VERSIONED_LIFECYCLE / REUSE_CAPABILITY_EVIDENCE_POLICY / ACTIVE_SKILLS_REMAIN_RUNTIME_PROJECTION / NO_PARALLEL_REGISTRY`.
 
-Findings iniciales verificables:
-- `src/agent/loop.ts` usa `MemoryRetriever` básico y `buildContextMessages()` como camino principal;
-- `ContextManager` y `EnhancedRetriever` avanzados existen y tienen tests dedicados, pero no gobiernan ese camino;
-- `KnowledgeStore` cierra categorías en cinco literals aunque SQLite persiste `category` como TEXT abierto;
-- `EnhancedRetriever` usa categorías conocidas como filtros, pudiendo invisibilizar knowledge futuro;
-- P-013 Evidence Fabric, `src/intelligence/` y `src/skills/` ya poseen authorities que P-020 debe reutilizar;
-- Required-Context histórico `src/agent/context/` era drift; source real es `src/agent/context.ts`.
+### Estado real reconciliado
 
-Hipótesis principal: `EXTEND_AND_WIRE_EXISTING_MEMORY_CONTEXT_FABRIC`; no se crea un nuevo cognitive manager antes de completar consumer/persistence/restart audit y alcanzar DECISION_READY.
+El checkpoint anterior decía `DECISION_READY / SOURCE_UNMODIFIED`, pero Git ya había avanzado materialmente. Esa descripción quedó stale y se retira como estado actual.
 
-## Límites / claims
+La branch contiene implementación P-021 real:
+- schema v20 y persistence aditiva para version/evaluation history;
+- `src/skills/evolution.ts` y lifecycle tools;
+- integración con Capability Fabric sin crear otra readiness authority;
+- guards de loader/registry para skills gestionadas;
+- wiring de runtime y tests de evolution/restart/rollback/evidence.
 
-- P-020 aún no modifica product source.
-- No se declara activa una pieza sólo porque exista y tenga tests.
-- Open knowledge no autoriza duplicar persistence/evidence/skills/intelligence authorities.
-- Una migration nueva sólo se abre si relations/temporal/provenance requieren estado durable que las authorities actuales no puedan representar sin semántica falsa.
+P-021 **no está cerrado**: source existe, pero la validación exacta del HEAD reconciliado debe quedar verde antes de PR/integración.
+
+### Conflictos descubiertos durante la auditoría transversal
+
+1. El kernel raíz `AGENTS.md` ya estaba funcionalmente alineado con ZeroIQ; no se añadió otra capa ni se reescribió por sospecha.
+2. CONTINUITY/C0017 habían quedado atrás del Git real y todavía afirmaban `SOURCE_UNMODIFIED` después de múltiples commits de implementación.
+3. Persistía tooling temporal P-021 fuera de la arquitectura final:
+   - `.github/p021-skill-evolution-hardening.py`;
+   - `.github/workflows/p021-skill-evolution-apply-v2.yml`, con capacidad de commit/push sobre la propia branch.
+   Ambos fueron retirados antes de esta reconciliación; no forman parte del producto ni del kernel.
+4. ProjectOps Integrity detectó drift real: source schema `20` mientras PROJECT seguía declarando `19`.
+5. CI detectó el mismo drift en `capability-persistence.test.ts`, que todavía exigía schema `19` aunque v20 ya era canónico.
+
+### Correcciones ya aplicadas
+
+- `0ac20d316192d44d4ac05e012623d865aa333aa9`: retira el script temporal P-021.
+- `d49b090ead7a171e1dcf12554cb0c5ee19f91c5b`: retira el workflow temporal auto-mutante P-021.
+- `c14ff8c32e4b78170083b53035059ea87315911a`: alinea el test de Capability Fabric con schema v20 sin retirar la authority v19 que prueba.
+- `a30d97c377b335038bac057df48ccbca304ead4d`: reconcilia PROJECT con schema v20 y explicita el modelo single-kernel; elimina estado dinámico stale de PROJECT.
+
+No se creó scheduler, watchdog, recovery layer, workflow compensatorio ni estado paralelo.
+
+## Claims y límites
+
+- P-021 sigue `EN_EJECUCIÓN`; no se declara HECHO por source escrito.
+- P-022 no se abre mientras P-021 siga incompleto.
+- `skills` continúa como proyección runtime compatible; history/version lifecycle es aditiva.
+- Capability Fabric continúa siendo la authority de execution readiness.
+- Evidence Fabric continúa siendo la authority de provenance/correlation; no se crea ledger paralelo.
+- `enabled` no equivale a `verified_available`.
+- La eliminación de tooling temporal reduce branch churn; no se presenta como prueba de que una UI/plataforma externa jamás pueda interrumpirse.
 
 ## Siguiente punto verificable
 
-1. Completar authority/consumer/persistence/restart audit de memory/context/knowledge.
-2. Discriminar reuse/extend vs migration para relations/provenance/temporal facts.
-3. Registrar DECISION_READY en C0016 antes de product source.
-4. Ejecutar la primera unidad coherente sin crear otra memoria.
+1. Ejecutar/observar ProjectOps Integrity sobre el HEAD reconciliado.
+2. Ejecutar/observar CI completo sobre el mismo HEAD; confirmar que schema/test drift quedó cerrado y buscar cualquier HARD restante.
+3. Si aparece un HARD real, corregirlo dentro del mismo P-021 y volver a verificar; no abrir otra capa.
+4. Cuando el exact branch HEAD quede verde, reconciliar C0017 a `SOURCE_COMPLETE / BRANCH_E3_GREEN / PR_READY`.
+5. Sólo entonces abrir/integrar PR P-021 y revalidar exact-main antes de marcar P-021 HECHO.
 
 ## Política de rotación
 
-`C0000-legacy.md` conserva historia pre-cutover. `C0001`..`C0015` son segmentos históricos cerrados; `C0016` es el único segmento ACTIVE mientras P-020 siga abierto. Nunca se crea un segundo `CONTINUITY.md`.
+`C0000-legacy.md` conserva historia pre-cutover. `C0001`..`C0016` son segmentos históricos cerrados; `C0017` es el único segmento ACTIVE mientras P-021 siga abierto. Nunca se crea un segundo `CONTINUITY.md`.
