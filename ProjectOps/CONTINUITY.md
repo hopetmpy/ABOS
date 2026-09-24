@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-023
 Active-Segment: continuity/C0019.md
-Active-Intervention: P023_PREDICTION_LEARNING — DECISION_READY / SOURCE_IMPLEMENTED / VALIDATING
+Active-Intervention: P023_PREDICTION_LEARNING — DECISION_READY / SOURCE_IMPLEMENTED / ADVERSARIAL_CORRECTION
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,8 +15,8 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p023-prediction-learning
 Host-Head-At-Audit-Open: ade7d29148f6c49df94464c52dc22b8b2e2cb77f
-Last-Reconciled-Host-Head: 367a6b02ce76eff4a6791a6cd7200e4a71107faf
-Last-Reconciled-Head-Semantics: P023_IMPLEMENTED_UNKNOWN_CORRECTED_STRATEGIC_MATCH_GAP_FIXED_CI_RUNNING
+Last-Reconciled-Host-Head: 5f7bdc10b62c16294cf1c8cd03471d87f94b5ed9
+Last-Reconciled-Head-Semantics: P023_IMPLEMENTED_FULL_CI_GREEN_ADVERSARIAL_ATOMICITY_CORRECTION_ACTIVE
 Observed-Main-Head: ee033e5586dbf7bcbb2dbfac88ad12e529a38972
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
@@ -42,7 +42,7 @@ No existe otra capa de cadencia dentro de ProjectOps.
 - P-004: PLANIFICADO — track documental transversal/final.
 - P-005: PLANIFICADO — acceptance LIVE incremental.
 - P-006..P-022: HECHO para sus objetivos canónicos.
-- P-023: EN_EJECUCIÓN / DECISION_READY / SOURCE_IMPLEMENTED / VALIDATING.
+- P-023: EN_EJECUCIÓN / DECISION_READY / SOURCE_IMPLEMENTED / ADVERSARIAL_CORRECTION.
 - P-024..P-036: ver estado explícito en `ProjectOps/PLAN.md`.
 
 ## Cierre P-022
@@ -77,8 +77,7 @@ Estado demostrado:
 - product source P-023 modificado: SÍ;
 - nueva tabla/parallel prediction manager: NO;
 - UNKNOWN default corregido a non-terminal `unknown/inconclusive`;
-- comparison/attribution conectado al runtime adaptativo;
-- focused P-023 tests en el HEAD previo: PASS 7/7.
+- comparison/attribution conectado al runtime adaptativo.
 
 ## Hipótesis P-023 resueltas
 
@@ -89,15 +88,36 @@ Estado demostrado:
 - H4 `COMPOSE_EXISTING_AUTHORITIES`: CONFIRMADA.
 - H5 `CREATE_PARALLEL_PREDICTION_MANAGER`: RECHAZADA.
 
-## Incidente de validación recuperado en curso
+## Validación recuperada
 
-El exact-head `e344958200449b4fcc01ec11ae93eb0ce2f152fc` falló full CI en Node 22/24 aunque integrity, typecheck, build, Windows, public distribution y security audit pasaron.
+El exact-head `e344958200449b4fcc01ec11ae93eb0ce2f152fc` falló por un único test P-022: `Execution produced an unrecoverable strategic mismatch.` dejó de ser terminal al eliminar correctamente el antiguo default `strategic_failure`.
 
-La causa fue discriminada a un único test P-022: el mensaje `Execution produced an unrecoverable strategic mismatch.` dejó de ser terminal al eliminar correctamente el antiguo default `strategic_failure`. El mensaje sí contiene evidencia estratégica explícita, por lo que aceptar UNKNOWN habría degradado semántica P-022; restaurar el default habría reintroducido el defecto P-023.
+La corrección `367a6b02ce76eff4a6791a6cd7200e4a71107faf` añadió matching explícito y acotado para `strategic mismatch/contradiction`, manteniendo UNKNOWN como default.
 
-Corrección aplicada en `367a6b02ce76eff4a6791a6cd7200e4a71107faf`: matching explícito y acotado para `strategic mismatch/contradiction`; el default UNKNOWN permanece intacto.
+Luego `5f7bdc10b62c16294cf1c8cd03471d87f94b5ed9` añadió cobertura explícita de:
+- assumption invalid → `contradicted/stale_assumption`;
+- authorization → `inconclusive/external_condition` sin invalidar belief;
+- restart/reopen conserva path/attempt/evidence causation y replay deduplica comparison.
 
-CI exact-head `36055195762` está en validación. No existe claim de PASS hasta que concluya.
+CI exact-head `36055483209`: SUCCESS 8/8, incluyendo full tests/security tests Node 22/24, ProjectOps integrity, Windows 22/24, public distribution 22/24, security audit y rebrand integrity.
+
+Ese verde es evidencia intermedia válida, no cierre P-023: la adversarial review posterior detectó dos gaps materiales.
+
+## Adversarial findings abiertos
+
+### A1 — ciclo engine no atómico ante excepción/crash local
+
+`recordSuccess()` y `recordFailure()` componen múltiples mutaciones durables cuyos helpers abren transacciones independientes. En success, `adaptive.prediction_compared=confirmed` se persiste antes de `completePath()`; si una excepción ocurre entre ambas operaciones, puede quedar una comparación terminal sin path terminal. Failure tiene el mismo riesgo entre attempt/evidence/comparison/belief/path/opportunity updates.
+
+Esto contradice los invariantes P-023 de restart/idempotencia y estados parciales. No es sólo una hipótesis de infraestructura: el orden source demuestra la ventana.
+
+Decisión `CORRECT`: envolver cada llamada síncrona de `recordSuccess()` y `recordFailure()` en una transacción exterior del mismo `better-sqlite3` DB. La librería soporta transaction functions anidadas mediante SAVEPOINT, por lo que los store transactions existentes pueden mantenerse. Añadir fault-injection tests que obliguen una excepción después de comparison y demuestren rollback integral.
+
+### A2 — Evidence payload replica valores canónicos
+
+`adaptive.prediction_compared` copia `expectedOutcome` y `observedOutcome`; `adaptive.prediction_resolved` copia `expectedOutcome`. P-023 decidió que Evidence Fabric sea referencial y que prediction/outcome canonical values permanezcan en `adaptive_paths`/`adaptive_attempts`, no duplicados en otra tabla.
+
+Decisión `CORRECT`: mantener `pathId`, `attemptId`, comparison, attribution, learningTargets, reason y provenance refs; retirar las copias de canonical prediction/outcome values. Añadir assertions negativas para impedir authority drift futuro.
 
 ## Invariantes activos
 
@@ -114,16 +134,16 @@ CI exact-head `36055195762` está en validación. No existe claim de PASS hasta 
 ## Claims y límites actuales
 
 - P-022: HECHO / E3 exact-main.
-- P-023: EN_EJECUCIÓN / DECISION_READY / SOURCE_IMPLEMENTED / VALIDATING.
+- P-023: EN_EJECUCIÓN / DECISION_READY / SOURCE_IMPLEMENTED / ADVERSARIAL_CORRECTION.
 - P-023 no es HECHO, SOURCE_COMPLETE ni INTEGRATION_VERIFIED.
 - `main` observado: `ee033e5586dbf7bcbb2dbfac88ad12e529a38972`; la rama está divergida porque main y la branch retiraron el mismo workflow P-010 mediante commits distintos. Reconciliación histórica pendiente después del product gate.
-- restart/pairing, assumption attribution y external-condition coverage todavía requieren validación explícita proporcional al plan.
+- CI `36055483209` es verde para `5f7bdc10...`, pero cualquier corrección posterior debe obtener su propio exact-head gate.
 
 ## Siguiente punto verificable
 
-1. Obtener resultado exact-head CI `36055195762` del fix de clasificación.
-2. Si el gate se recupera, cerrar los gaps de validación explícita P-023: assumption attribution, external-condition attribution, restart/pairing e idempotencia.
-3. Reauditar Evidence causation y crash/reprocessing semantics antes de SOURCE_COMPLETE.
+1. Corregir A1 con transaction envelope síncrono y fault-injection rollback tests.
+2. Corregir A2 retirando canonical value copies de Evidence payload y añadir assertions negativas.
+3. Ejecutar exact-head CI completo; reauditar causation/reprocessing.
 4. Reconciliar branch con `main ee033e5586dbf7bcbb2dbfac88ad12e529a38972`, revalidar exact-head y sólo entonces preparar integración de PR #63.
 5. Exigir exact-main CI después del merge antes de estado terminal positivo.
 
