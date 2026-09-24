@@ -26,7 +26,7 @@ describe("P016 Windows provider probe stability", () => {
     vi.doMock("../platform/windows-job-process.js", () => ({
       runWindowsJobProcessSync,
       spawnWindowsJobProcess: vi.fn(),
-      WINDOWS_JOB_READY_TIMEOUT_MS: 60_000,
+      WINDOWS_JOB_READY_TIMEOUT_MS: 20_000,
     }));
 
     const { LocalComputerRuntime } = await import("../platform/local-computer-runtime.js");
