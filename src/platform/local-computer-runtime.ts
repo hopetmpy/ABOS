@@ -565,3 +565,10 @@ export class LocalComputerRuntime {
     }
   }
 }
+
+let singleton: LocalComputerRuntime | null = null;
+
+export function getLocalComputerRuntime(): LocalComputerRuntime {
+  singleton ??= new LocalComputerRuntime();
+  return singleton;
+}
