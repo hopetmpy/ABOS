@@ -69,7 +69,21 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Focused P-021 validation
-        run: pnpm exec vitest run src/__tests__/skills-evolution.test.ts src/__tests__/skill-runtime-truth.test.ts src/__tests__/skills-hardening.test.ts
+        shell: bash
+        run: |
+          set +e
+          pnpm exec vitest run src/__tests__/skills-evolution.test.ts src/__tests__/skill-runtime-truth.test.ts src/__tests__/skills-hardening.test.ts > /tmp/p021-tests.log 2>&1
+          status=$?
+          cat /tmp/p021-tests.log
+          exit "$status"
+
+      - name: Upload focused test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p021-focused-test-evidence
+          path: /tmp/p021-tests.log
+          if-no-files-found: warn
 
       - name: Typecheck
         run: pnpm run typecheck
