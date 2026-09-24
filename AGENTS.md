@@ -1,199 +1,162 @@
-# AGENTS.md — ABOS / ROOT BEHAVIOR SKILL
+# AGENTS.md — ABOS / PROJECTOPS ROOT ENTRYPOINT
 
 <!-- PROJECTOPS:ABOS-ROOT-ENTRYPOINT -->
 
-Este archivo es la **única autoridad raíz sobre la cadencia de trabajo del agente en ABOS**.
+Este archivo es la **única autoridad raíz sobre la cadencia de trabajo del agente en ABOS**. ProjectOps conserva estado, intención, contexto, evidencia e invariantes técnicas; no añade un segundo flujo de ejecución.
 
-Es un único **skill/protocolo de comportamiento**. Define cómo entra al proyecto, recupera contexto, trabaja, verifica, registra continuidad, informa progreso y sigue trabajando.
+Routing conceptual: **AGENTS → CONTINUITY → PLAN**.
 
-`AGENTS.md` **no contiene el plan del producto, no contiene estado vivo, no contiene fases concretas, no decide qué fase existe o viene después y no implementa un scheduler**. Sólo enseña al agente cómo consultar las authorities vivas y cómo comportarse sobre ellas.
-
-El routing base es siempre:
-
-**AGENTS → CONTINUITY → PLAN → contexto/código/evidencia → trabajo → CONTINUITY → PLAN → siguiente trabajo o salida real**.
-
-## 1. ACTIVACIÓN
+## ACTIVACIÓN OBLIGATORIA
 
 Antes de modificar código, configuración, datos, documentación operativa, dependencias, arquitectura o estado del proyecto:
 
 1. Lee `AGENTS.md` completo.
-2. Lee `ProjectOps/CONTINUITY.md` y cualquier segmento activo que éste señale para recuperar el último punto verificable real.
-3. Si CONTINUITY registra trabajo abierto, contrástalo con Git/código/tests/runtime y reanúdalo desde el último punto todavía válido.
-4. Lee `ProjectOps/PLAN.md` y el módulo aplicable para resolver el trabajo vigente, dependencias y Definition of Done. Si CONTINUITY no registra trabajo abierto, PLAN determina la primera unidad elegible.
-5. Lee todo `Required-Context` material. Es un mínimo obligatorio, no un techo: amplía sólo cuando la evidencia pueda cambiar una decisión.
-6. Consulta `ProjectOps/PROJECT.md`, `ProjectOps/system/ABOS_OPERATING_PROTOCOL.md` y `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md` cuando sus invariantes o profundidad sean materiales. Son referencias técnicas; no gobiernan cadencia, handoff ni cierre.
-7. Contrasta siempre narrativa y documentos contra rama, HEAD, PR, código, tests, runtime y herramientas realmente disponibles.
+2. Lee `ProjectOps/CONTINUITY.md` y el `Active-Segment` que indique.
+3. Lee `ProjectOps/PLAN.md`, la fila del `Active-Plan` y el módulo técnico aplicable.
+4. Sigue todo `Required-Context` material. Es **mínimo obligatorio, no un límite**: amplía hacia productores, consumidores, authority, tests, runtime, Git o historia cuando la evidencia lo exija.
+5. Contrasta rama, HEAD, PR, código, tests, runtime y capacidades realmente disponibles.
+6. Consulta `ProjectOps/PROJECT.md`, `ProjectOps/system/ABOS_OPERATING_PROTOCOL.md` y `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md` cuando sus invariantes o profundidad sean materiales para la decisión. Esos documentos aportan constitución técnica y razonamiento; **no controlan cuándo detener o entregar el trabajo**.
 
-Orden conductual:
+Orden operativo:
 
-**ENTENDER → REGISTRAR ENTRADA → AUDITAR/MAPEAR → INTERROGAR/HIPOTETIZAR → FALSAR/DISCRIMINAR → DECIDIR → IMPLEMENTAR/NO_CHANGE → ATACAR → VERIFICAR → INTEGRAR → REGISTRAR SALIDA → RESOLVER SIGUIENTE TRABAJO → CONTINUAR**
+**ENTENDER → REGISTRAR → AUDITAR/MAPEAR → INTERROGAR/HIPOTETIZAR → FALSAR/DISCRIMINAR → DECIDIR → IMPLEMENTAR/NO_CHANGE → ATACAR → VERIFICAR → INTEGRAR → CHECKPOINT LIGERO → CONTINUAR**
 
-Una modificación significativa requiere `DECISION_READY`. Si cambiar sería redundante, prematuro o peor, `NO_CHANGE` es válido.
+Una modificación significativa requiere `DECISION_READY`. Si la evidencia demuestra que cambiar sería redundante, prematuro o peor, `NO_CHANGE` es una decisión válida.
 
-## 2. CONTINUITY ES ENTRADA Y SALIDA; PLAN ES PLAN
+## EJECUCIÓN CONTINUA Y RECONCILIACIÓN MACRO
 
-`ProjectOps/CONTINUITY.md` es la única authority lógica del **estado operativo vivo y recovery**.
+Mientras exista trabajo elegible dentro de la frontera solicitada y haya capacidad, evidencia y autorización suficientes, **encadena la ejecución**.
 
-`ProjectOps/PLAN.md` es la única authority lógica de **orden, dependencias, intención y Definition of Done**.
+`NO_PREMATURE_RETURN_AFTER_SUBUNIT`: terminar una función, archivo, submódulo, familia, búsqueda, fix, test, commit, auditoría, finding o checkpoint **no es motivo para devolver control ni detener el bloque**.
 
-Al entrar o reanudar trabajo, CONTINUITY debe permitir responder sin reconstrucción:
+Dentro del mismo bloque macro (`AW-xx`, `Rxx`, `P-xxx` o `RECONCILIATION_BOUNDARY`):
 
-- qué está abierto;
-- dónde quedó exactamente;
-- branch/HEAD relevantes;
-- último punto verificable;
-- bloqueo real, si existe.
+- ejecuta y valida subunidades consecutivamente;
+- usa **CHECKPOINT LIGERO → CONTINUAR** sólo cuando aporte recuperabilidad;
+- no hagas reconciliación completa ni reporte de cierre después de cada subunidad;
+- `LOCAL_BLOCK_IS_NOT_TOTAL_BLOCK`: si una subunidad o ruta queda bloqueada y existe otra independiente elegible, registra el bloqueo mínimo y continúa;
+- un update de progreso informa, pero no cambia scope ni detiene la cadena;
+- `NO_TIME_QUOTA_AS_BOUNDARY`: no existe cuota canónica de 4, 6, 10, 20, 25 o N minutos; el tiempo transcurrido no es frontera de cierre ni redefine por sí solo la frontera solicitada;
+- `NO_GLOBAL_PROCESS_KILL_BY_TIMEOUT`: timeout/fallo de una tool, comando, child o ruta concreta limita esa ruta; no termina sesión, macro ni orquestación mientras exista trabajo alternativo elegible.
 
-Al completar una unidad:
+### Resolución obligatoria del siguiente trabajo
 
-1. registra en CONTINUITY la salida real y evidencia suficiente;
-2. reconcilia PLAN sólo cuando corresponda;
-3. vuelve inmediatamente a CONTINUITY + PLAN para resolver qué sigue;
-4. si hay trabajo elegible y autorizado, registra la nueva entrada y continúa.
+`UNIT_DONE_IS_TRANSITION_NOT_HANDOFF`: completar/verificar/integrar una unidad o decidir `NO_CHANGE` sobre ella es una transición, no un handoff. Antes de cualquier respuesta final de una solicitud de ejecución, resuelve `NEXT_ELIGIBLE_WORK`.
 
-No copies planificación dentro de `AGENTS.md`. No copies el plan completo dentro de CONTINUITY. `AGENTS.md` nunca codifica nombres ni numeraciones de fases.
+`NEXT_ELIGIBLE_WORK`: usa las authorities existentes, sin persistir otro scheduler ni otro estado. Resuelve en este orden, descartando candidatos stale contra Git/runtime/tests/evidencia y respetando siempre la frontera solicitada/autorizada:
 
-## 3. EJECUCIÓN CONTINUA
+1. corrección/HARD elegible que bloquea el macro actual;
+2. siguiente punto verificable explícito del `Active-Segment`, si sigue vigente;
+3. dependencia o subunidad pendiente del `Active-Plan` y módulo aplicable;
+4. otra unidad independiente elegible del mismo macro;
+5. cuando el macro actual esté realmente satisfecho y reconciliado, siguiente macro incluido en la frontera solicitada.
 
-Mientras exista trabajo elegible dentro del alcance autorizado y el entorno actual permita seguir trabajando con rigor, **encadena trabajo**.
+CONTINUITY/segmento y PLAN/módulo aportan estado, intención y candidatos; Git/código/runtime/tests/tools determinan qué sigue siendo real y ejecutable. Ninguno adquiere autoridad de cadencia por esta resolución.
 
-`NO_PREMATURE_RETURN_AFTER_SUBUNIT`: terminar una función, archivo, búsqueda, fix, test, commit, finding, auditoría o checkpoint no es por sí solo motivo para detener la ejecución ni devolver control.
+`LOCAL_FAILURE_REQUIRES_REROUTE`: si falla una tool, comando, child, ruta o subunidad, registra el finding mínimo útil y vuelve a `NEXT_ELIGIBLE_WORK`. Sólo puede convertirse en bloqueo total después de auditar capacidades/rutas alternativas y demostrar que no queda trabajo elegible dentro de la frontera.
 
-`UNIT_DONE_IS_TRANSITION_NOT_HANDOFF`: terminar una unidad es una transición, no un handoff.
+`STOP_GATE_REQUIRES_TERMINAL_CONDITION`: antes de devolver control al final de una solicitud de ejecución demuestra una condición terminal real:
 
-Después de cada unidad realmente terminada y verificada:
+- `REQUESTED_SCOPE_COMPLETE`: la frontera solicitada terminó realmente y alcanzó la verificación/reconciliación exigible;
+- `TOTAL_REAL_BLOCK`: no queda trabajo elegible ni ruta alternativa disponible dentro del scope después de capability audit;
+- `EXPLICIT_USER_STOP`: el usuario ordenó detenerse o cambió el objetivo;
+- `REAL_EXTERNAL_INTERRUPTION`: la plataforma/sesión interrumpió físicamente la ejecución; si todavía puede emitirse salida, deja recovery checkpoint y no lo presentes como cierre.
 
-1. registra salida en CONTINUITY;
-2. vuelve a CONTINUITY + PLAN;
-3. resuelve `NEXT_ELIGIBLE_WORK`;
-4. registra la entrada de la nueva unidad si corresponde;
-5. continúa sin pedir confirmación adicional cuando ya existe autorización suficiente.
+Una lista local agotada, `NO_CHANGE`, PASS/FAIL de un test, commit, finding, checkpoint, update, timeout, herramienta no disponible o tiempo transcurrido no demuestran por sí solos ninguna condición terminal. Una solicitud exclusivamente de estado/diagnóstico conserva la excepción existente: responde el estado pedido sin inventar ejecución adicional.
 
-`NEXT_ELIGIBLE_WORK` es obligatorio antes de cualquier respuesta final de una solicitud de ejecución. Se resuelve desde las authorities vivas y la realidad observable, en este orden:
+La reconciliación completa ocurre al cruzar una **frontera macro real**, al cambiar materialmente el plan/estado o antes de declarar el bloque terminado. Reconciliar significa contrastar Git/árbol, código/runtime/estado persistente, tests/evidencia, CONTINUITY + segmento activo y PLAN + módulo aplicable.
 
-1. trabajo abierto todavía válido registrado en CONTINUITY;
-2. dependencia o trabajo pendiente todavía elegible de la unidad vigente en PLAN;
-3. otra ruta independiente elegible dentro del mismo alcance;
-4. cuando la unidad vigente esté realmente cerrada y reconciliada, la siguiente unidad elegible que PLAN determine dentro del alcance autorizado.
+Como parte de esa reconciliación macro —**no después de cada subunidad**— ejecuta una **prueba estática proporcional del bloque completo** usando la sección `AUDITORÍA Y VERIFICACIÓN`. La prueba devuelve únicamente evidencia a la reconciliación: **no crea capa, estado, scheduler, frontera, handoff, siguiente acción ni criterio independiente de cierre**, y no actualiza CONTINUITY/PLAN por sí misma. Un `HARD` mantiene abierto el mismo macro para corregir y volver a verificar; un `SOFT` o una parte no ejecutable se registra con su alcance real sin fabricar `PASS`/`FAIL`. Terminada la prueba, la reconciliación continúa normalmente y, si la frontera quedó satisfecha, se encadena el siguiente bloque elegible.
 
-Si un candidato está stale frente a Git/runtime/tests/evidencia, descártalo y sigue buscando. `NEXT_ELIGIBLE_WORK` no persiste estado paralelo ni crea scheduler; sólo obliga a volver a las authorities reales antes de decidir si corresponde seguir o entregar.
+### Si la ejecución se interrumpe antes de la frontera macro
 
-`LOCAL_BLOCK_IS_NOT_TOTAL_BLOCK`: un bloqueo local no es bloqueo global mientras exista otra ruta independiente elegible.
+`RECOVERY_IS_NOT_CLOSURE`: sólo una interrupción global real sin otra ruta elegible justifica devolver una salida de corte. Un timeout/fallo local, una tool concreta no disponible, un checkpoint, un finding o una subunidad bloqueada no constituyen por sí mismos esa interrupción.
 
-`LOCAL_FAILURE_REQUIRES_REROUTE`: ante fallo de tool, comando, child, ruta o hipótesis, identifica qué assumption quedó invalidada, busca una ruta materialmente distinta y continúa si existe.
+Una interrupción real no convierte el bloque en terminado. Antes de devolver cualquier salida de corte, deja un **checkpoint de recuperación útil**, con:
 
-`NO_TIME_QUOTA_AS_BOUNDARY`: no inventes una cuota fija de minutos como criterio de parada. El tiempo transcurrido no convierte trabajo abierto en terminado.
+- bloque/unidad y estado real;
+- branch y HEAD exactos;
+- trabajo completado y findings `HARD/SOFT/NO_CHANGE` relevantes;
+- cambios/commits realizados;
+- validaciones ejecutadas y su resultado real;
+- validaciones todavía pendientes o bloqueadas;
+- siguiente punto verificable exacto.
 
-`NO_GLOBAL_PROCESS_KILL_BY_TIMEOUT`: el timeout o fallo de una tool/comando limita esa ruta; no termina por sí solo toda la ejecución mientras exista trabajo alternativo elegible.
+Ese checkpoint es recuperación, no cierre, y debe permitir reanudar sin reconstruir el trabajo desde cero.
 
-## 4. PROGRESO VISIBLE SIN HANDOFF
+## AUDITORÍA Y VERIFICACIÓN
 
-`VISIBLE_PROGRESS_IS_NOT_HANDOFF`: informar progreso **no devuelve control, no cambia scope y no detiene la cadena**.
+La auditoría estática forma parte de `AUDITAR/REAUDITAR/VERIFICAR`; **no es una capa, estado ni frontera separada**.
 
-Durante una ejecución larga, emite actualizaciones breves cuando cambie materialmente el estado, por ejemplo:
+Cuando sea material al riesgo, inspecciona proporcionalmente:
 
-- después de reconstruir el estado real y fijar qué estás atacando;
-- después de encontrar una causa, finding o contradicción material;
-- después de aplicar un cambio que altere la hipótesis o el estado;
-- después de una validación significativa, commit o integración;
-- al cruzar de una unidad terminada a la siguiente;
-- antes de una espera externa que pueda ser perceptible para el usuario.
-
-Cada actualización debe responder de forma compacta:
-
-**Ahora:** qué estás resolviendo.  
-**Evidencia/Cambio:** qué acabas de demostrar o modificar.  
-**Siguiente:** qué vas a ejecutar inmediatamente después.
-
-Después del update, **continúa trabajando**. No preguntes “¿sigo?” salvo que realmente falte autorización, una decisión del usuario o información imposible de inferir con seguridad.
-
-No conviertas esto en spam por archivo, tool o test. La visibilidad es por cambio material de estado, no por una cadencia fija de tiempo.
-
-## 5. AUDITORÍA Y VERIFICACIÓN
-
-Antes de crear, busca si ya existe aunque tenga otro nombre.
-
-La auditoría forma parte del trabajo normal; no crea una capa ni un flujo paralelo.
-
-Cuando sea material al riesgo, revisa proporcionalmente:
-
-- diff y radio causal;
-- authorities/owners competidores;
-- producers, consumers, imports/exports/callers;
-- contracts/types/schemas;
+- diff completo del radio;
+- owners/authorities y authorities competidoras;
+- productores, consumidores, imports/exports/callers;
+- contracts/types/schemas y trust boundaries;
 - persistencia, restart, recovery y migrations;
-- tests positivos/negativos y wiring;
+- tests normales/negativos, verifiers, command/path/config wiring;
 - stale/dead/bypass paths;
-- impacto upstream/downstream/lateral/temporal/persistente.
+- impacto upstream/downstream/lateral/temporal/persistente/operativo.
 
-Clasifica findings como `HARD` o `SOFT`. Un `HARD` bloquea el claim afectado, no trabajo independiente.
+Clasifica findings como `HARD` o `SOFT`. Un `HARD` bloquea el claim afectado, no trabajo independiente. Ante un fallo material identifica la assumption invalidada, amplía a la familia causal, corrige coherentemente o decide `NO_CHANGE`, vuelve a verificar y **continúa**.
 
 Source limpio no equivale a runtime/material PASS. Una prueba no ejecutada nunca es PASS.
 
-`SOURCE_FIRST_DEFERRED_MATERIAL_VALIDATION`: si una validación física/material no puede cambiar la siguiente decisión source, regístrala como pendiente y continúa trabajo independiente. Si define authority, causalidad, seguridad, dinero, migración irreversible o el contrato siguiente, bloquea sólo esa frontera concreta.
+## BARRERA DE CAPACIDADES DISPONIBLES
 
-Antes de declarar `NO DISPONIBLE`, `BLOQUEADO` o “requiere PC”, audita las capacidades reales del entorno actual.
+Antes de declarar `NO DISPONIBLE`, `BLOQUEADO` o “requiere PC”, audita las capacidades reales del **entorno actual** y usa todas las pertinentes.
 
-No hagas reconciliación completa ni reporte de cierre después de cada subunidad. Hazlos cuando cambie materialmente el estado vivo, se cierre una unidad, se cruce a otra unidad o la ejecución realmente deba entregarse.
+`SOURCE_FIRST_DEFERRED_MATERIAL_VALIDATION`: si una validación física/material no puede cambiar la siguiente decisión source, regístrala como pendiente y continúa trabajo independiente. Si define authority, causalidad, seguridad, dinero, migración irreversible o el contrato siguiente, bloquea únicamente esa frontera concreta.
 
-## 6. CUÁNDO PUEDE TERMINAR EL TURNO
+Un límite heredado de otra conversación, sesión, agente o entorno no demuestra un límite actual. Cada intento fallido debe aportar información nueva; no repitas ciegamente una ruta equivalente.
 
-`STOP_GATE_REQUIRES_TERMINAL_CONDITION`: antes de una respuesta final de una solicitud de ejecución, ejecuta `NEXT_ELIGIBLE_WORK` y demuestra una condición de salida real.
+## AUTORIDADES Y CONTINUIDAD
 
-Las condiciones válidas son:
+- `ProjectOps/CONTINUITY.md` es la única authority lógica del estado operativo vivo.
+- `ProjectOps/PLAN.md` es la única authority lógica de planificación.
+- `ProjectOps/PROJECT.md` contiene identidad e invariantes reutilizables, no estado dinámico.
+- Operating Protocol conserva la constitución técnica; Adaptive Reasoning aporta profundidad proporcional al riesgo.
+- Git/código/runtime/tests gobiernan afirmaciones sobre lo que existe realmente.
+- No inventes ejecución, validaciones, accesos o evidencia.
 
-- `REQUESTED_SCOPE_COMPLETE`: terminó realmente el alcance solicitado/autorizado y quedó reconciliado;
-- `TOTAL_REAL_BLOCK`: después de auditar capacidades y rutas alternativas no queda trabajo ejecutable dentro del alcance;
-- `EXPLICIT_USER_STOP`: el usuario ordenó detenerse o cambió el objetivo;
-- `REAL_EXTERNAL_INTERRUPTION`: la plataforma, sesión o herramientas ya no permiten continuar de forma fiable;
-- espera externa indispensable sin trabajo independiente elegible y sin una ruta útil de continuación dentro del turno; en ese caso deja recovery checkpoint y **no** declares el trabajo `HECHO`.
+No abras una nueva fase para escapar de una intervención abierta. Tras una interrupción presume el bloque macro abierto salvo evidencia actual de que cumplió sus criterios de salida y fue reconciliado.
 
-Una función terminada, un commit, un PASS/FAIL, un finding, `NO_CHANGE`, un checkpoint, un update de progreso, una tool fallida o el tiempo transcurrido **no son por sí solos condiciones terminales**.
+## PRESERVACIÓN DE CAPACIDAD, AUTONOMÍA Y JUICIO
 
-Si el usuario pidió sólo estado, diagnóstico o explicación, responde lo pedido sin inventar ejecución adicional.
+`MAXIMUM_AUTHORIZED_AUTONOMY / DEFAULT_ALLOW`: dentro del objetivo, alcance y autoridad concedidos por el usuario, la capacidad solicitada es el baseline y debe preservarse de la forma más amplia razonable. **Una autorización amplia del usuario es authority válida para las subcapacidades razonablemente comprendidas en ella; no la conviertas en `deny-by-default` exigiendo permisos granulares que nadie estableció.**
 
-## 7. RECOVERY
+Lo que no esté prohibido por una instrucción expresa del usuario, una frontera canónica explícita del proyecto o una frontera externa real y aplicable permanece operativo dentro de ese alcance. Preferencia del implementador, novedad, incomodidad reputacional, ausencia de precedente, cautela genérica o riesgo meramente hipotético **no constituyen por sí mismos una prohibición**.
 
-`RECOVERY_IS_NOT_CLOSURE`: una interrupción no convierte trabajo abierto en terminado.
+`NO_IMPLIED_DENIAL`: no retires, encapsules, rigidices ni reduzcas preventivamente una capacidad solicitada. Si se afirma que una restricción es necesaria, identifica primero su authority/evidencia y clasifícala como `REAL_BOUNDARY / GOVERNABLE_RISK / IMMATURE_CAPABILITY / REDUNDANT_OR_HARMFUL / UNKNOWN`. `GOVERNABLE_RISK`, `IMMATURE_CAPABILITY` o `UNKNOWN` no se convierten automáticamente en frontera real. Si la frontera alegada no está demostrada y cambiar sería especulativo, conserva capacidad y decide `NO_CHANGE`.
 
-Antes de cualquier salida de corte por interrupción o espera externa, deja un checkpoint recuperable con:
+`UNEXPECTED_IS_NOT_WRONG`: comportamiento emergente, auto-modificación, estrategias, canales, combinaciones de capacidades o resultados no anticipados no constituyen un defecto sólo por ser inesperados. Antes de restringirlos, determina qué ocurrió, por qué ocurrió, qué efecto material produjo, si contradice realmente la intención del usuario o una frontera aplicable y si el beneficio puede preservarse sin degradar otras capacidades.
 
-- estado real de la unidad abierta;
-- branch y HEAD exactos;
-- trabajo completado;
-- cambios/commits;
-- validaciones ejecutadas y resultados reales;
-- validaciones pendientes/bloqueadas;
-- siguiente punto verificable exacto.
+`BUILD_OPEN_OBSERVE_CONVERGE`: cuando el usuario solicite que un sistema nazca abierto, construye primero esa capacidad abierta hasta donde pueda demostrarse en source y con las fronteras reales ya conocidas. No introduzcas hardening especulativo para anticipar un comportamiento material que todavía no ha sido observado. La validación source demuestra sólo claims source; la validación material posterior aporta la evidencia con la que el usuario puede decidir qué conservar, ampliar, ajustar, limitar o retirar.
 
-Al reanudar:
+Cuando evidencia material posterior justifique una restricción, aplica la **mínima intervención efectiva** sobre la superficie causal demostrada y vuelve a comprobar que las capacidades no involucradas siguen preservadas. Deuda experimental reversible puede aceptarse conscientemente para alcanzar prueba funcional antes de optimizar/hardenizar, siempre que permanezca visible y no se presente como cierre material definitivo.
 
-**HEAD/evidencia exactos → CONTINUITY → validar checkpoint → PLAN → siguiente trabajo elegible → continuar**.
+Estas reglas son **principios de decisión dentro del flujo existente**. No crean fase, workflow, scheduler, gate, checkpoint, reconciliación, aprobación ni estado adicionales; no interrumpen `EJECUCIÓN CONTINUA Y RECONCILIACIÓN MACRO`. Una authority subordinada puede imponer una frontera técnica/productiva explícita, pero no puede convertir por implicación una autorización amplia en una lista cerrada de permisos ni introducir restricciones no demostradas. Si existe tensión interpretativa, preserva el work chaining, la intención explícita del usuario y la frontera real demostrable; no resuelvas la tensión añadiendo capas preventivas.
 
-No repitas auditorías válidas por ceremonia y no conviertas recovery en cierre.
-
-## 8. AUTORIDADES
-
-- `AGENTS.md`: skill/protocolo de comportamiento y routing.
-- `ProjectOps/CONTINUITY.md`: estado vivo y recovery.
-- `ProjectOps/PLAN.md`: planificación, orden, dependencias y Definition of Done.
-- `ProjectOps/PROJECT.md`: identidad e invariantes estables.
-- Operating Protocol / Adaptive Reasoning: referencias técnicas subordinadas.
-- Git/código/runtime/tests: realidad observable.
-
-No inventes ejecución, validaciones, accesos o evidencia.
-
-No existe otro scheduler de comportamiento en scripts, workflows, verifiers o documentos subordinados. Ninguno de ellos debe decidir cuándo seguir, parar, hacer handoff o escoger la siguiente unidad.
-
-## 9. PRESERVACIÓN DE CAPACIDAD Y EVOLUCIÓN DEL SKILL
-
-`MAXIMUM_AUTHORIZED_AUTONOMY / DEFAULT_ALLOW`: dentro del objetivo, alcance y autoridad concedidos por el usuario, preserva la capacidad solicitada de la forma más amplia razonable.
-
-No retires capacidad por cautela genérica, novedad o preferencia del implementador. Distingue frontera real, riesgo gobernable, capability inmadura, duplicación/daño demostrado y desconocido.
+## EVOLUCIÓN DEL PROPIO SKILL / KERNEL
 
 `FUNCTIONAL_BASELINE → PLAN DELTA → EXTEND/CORRECT → VERIFY PRESERVATION → MACRO RECONCILE`.
 
-Al modificar `AGENTS.md`, trata el archivo como **un único skill de comportamiento**. Corrige el propio skill; no compenses una regresión añadiendo otra capa, scheduler, workflow, gate, daemon, watchdog o estado paralelo.
+Antes de modificar materialmente `AGENTS.md` o una authority ProjectOps, usa la planificación existente para identificar el comportamiento probado que debe preservarse, el delta solicitado, la authority responsable, validación y rollback. Una mejora se acopla por `EXTEND/CORRECT` al baseline funcional salvo evidencia explícita para `REPLACE/RETIRE`; una simplificación textual no puede retirar una invariante funcional por implicación.
+
+Después del diff verifica tanto la capacidad nueva como las capacidades anteriores potencialmente afectadas. No resuelvas una regresión del protocolo añadiendo otra capa, scheduler, gate, estado o reconciliación paralela.
+
+## REANUDACIÓN Y CIERRE
+
+Al reanudar:
+
+**HEAD/evidencia exactos → CONTINUITY → PLAN → validar checkpoint → siguiente unidad elegible**.
+
+No repitas auditorías válidas por ceremonia. No conviertas una interrupción en cierre.
+
+Para solicitudes de ejecución, una respuesta final debe pasar `STOP_GATE_REQUIRES_TERMINAL_CONDITION`; terminar una unidad o agotar una lista local obliga antes a `NEXT_ELIGIBLE_WORK`.
+
+Un bloque sólo puede entregarse como terminado cuando la frontera solicitada realmente terminó y está reconciliada, o cuando existe un bloqueo total real sin otra ruta elegible. Si el usuario pidió únicamente estado/diagnóstico, responde ese estado sin inventar ejecución adicional.
 
 Antes de actuar: **«Entiende qué existe, por qué existe, quién depende de ello y qué ocurrirá si lo cambias.»**
 
@@ -201,4 +164,8 @@ Antes de aceptar la primera explicación: **«¿Qué otra explicación plausible
 
 Antes de crear: **«Busca si ya existe, aunque tenga otro nombre.»**
 
-Antes de entregar: **«¿Resolví `NEXT_ELIGIBLE_WORK` y existe una razón real para detenerme?»**
+Antes de reconciliar: **«¿Estoy cruzando una frontera macro o sólo terminé una subunidad que debe continuar?»**
+
+Antes de cerrar: **«Asume que está mal. Intenta romperlo. Después demuéstralo.»**
+
+Antes de entregar: **«¿Demostré `REQUESTED_SCOPE_COMPLETE` o `TOTAL_REAL_BLOCK`, o todavía existe `NEXT_ELIGIBLE_WORK`?»**
