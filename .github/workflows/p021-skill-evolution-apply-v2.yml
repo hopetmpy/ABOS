@@ -36,7 +36,11 @@ jobs:
           text = p.read_text()
           start = text.index('# 9. Registry validates untrusted names before consulting lifecycle storage.')
           end = text.index('# 10. Runtime startup imports any legacy DB projections before Capability Fabric ingestion.')
-          p.write_text(text[:start] + '# 9. Registry ordering hardening is applied in a separate verified transform.\n\n' + text[end:])
+          text = text[:start] + '# 9. Registry ordering hardening is applied in a separate verified transform.\n\n' + text[end:]
+          dedupe = '''    const existing = this.db.prepare(`SELECT * FROM skill_versions\n      WHERE skill_name = ? AND content_hash = ? AND lifecycle_state <> 'deprecated'\n      ORDER BY version DESC LIMIT 1`).get(definition.name, hash) as any | undefined;\n    if (existing) return deserializeVersion(existing);\n\n'''
+          if text.count(dedupe) != 1:
+              raise SystemExit(f'expected one createCandidate dedupe block, found {text.count(dedupe)}')
+          p.write_text(text.replace(dedupe, '', 1))
           PY
           status=$?
           if [ "$status" -eq 0 ]; then
