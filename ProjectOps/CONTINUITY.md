@@ -15,12 +15,13 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p024-simulation-experiments
 Host-Head-At-Audit-Open: 5cd1ba2238c5790b4bfe76e906dccc93bc1ca7b4
-Last-Reconciled-Host-Head: 24cb7c6e2293f32130233e4ced63c1b3496c552a
-Observed-Main-Head: 5cd1ba2238c5790b4bfe76e906dccc93bc1ca7b4
+Last-Reconciled-Host-Head: a282a0219286a498628b686d587dd138b0f8a73e
+Observed-Main-Head: 976747d9af4bb3c262444c3dfd199757d05d8f96
+Last-Kernel-Reconcile: a282a0219286a498628b686d587dd138b0f8a73e
 Last-Product-Head: ddc9c3369d860bf024937f32344124b260863036
-Last-Product-CI: PENDING_EXACT_HEAD_AFTER_ADVERSARIAL_HARDENING
-Last-Green-Superseded-Head: 35ce13a0e0bf0c5459230a12770e7e12be57932a
-Last-Green-Superseded-CI: 36069696406 — SUCCESS 8/8
+Last-Product-CI: PENDING_EXACT_HEAD_AFTER_ADVERSARIAL_HARDENING_AND_KERNEL_RECONCILIATION
+Last-Green-Superseded-Head: dcddc7bd94557b99e4d2b38a94fc197ebfea7b82
+Last-Green-Superseded-CI: 36070176676 — SUCCESS 8/8
 Last-Completed-Plan: P-023
 Last-Completed-Merge: b25dfebf0454f488766b14a816ed1997beeb407a
 Last-Completed-CI: 36057756301 — SUCCESS 8/8
@@ -33,7 +34,7 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 ## Autoridad operativa
 
-- `AGENTS.md`: único kernel/scheduler.
+- `AGENTS.md`: único kernel/scheduler conductual.
 - CONTINUITY + segmento activo: estado vivo/recovery.
 - PLAN + módulo activo: intención/Definition of Done.
 - PROJECT: identidad/invariantes estables.
@@ -79,11 +80,18 @@ Adversarial review descubrió y corrigió después del candidate inicial:
 
 Boundary: el workspace no entrega ToolContext/executors ni acepta async output como run válido, pero un callback JavaScript registrado sigue siendo código del proceso y no constituye un sandbox universal. No se reclama aislamiento que no existe.
 
+## Reconciliación concurrente de main
+
+Mientras P-024 estaba en gate, `main` avanzó de `5cd1ba223...` a `976747d9af4bb3c262444c3dfd199757d05d8f96` por una mejora exclusiva de `AGENTS.md` (root behavior skill). Se releyó completo el kernel nuevo antes de seguir. El cambio refuerza ejecución continua, progreso visible y `NEXT_ELIGIBLE_WORK`; no altera source/product/schema P-024.
+
+La branch fue reconciliada mediante merge real `a282a0219286a498628b686d587dd138b0f8a73e`, con padres P-024 + `main 976747d9...`. Comparación posterior: branch 9 commits adelante, 0 detrás; el diff contra `main` vuelve a contener únicamente las 10 piezas P-023/P-024 esperadas y **no** contiene `AGENTS.md`.
+
 ## Evidencia de gates
 
 1. CI `36069543167` sobre `631e627...`: FAIL en ProjectOps integrity por continuity incompleta; producto posterior SKIPPED.
 2. PR CI `36069696406` sobre `35ce13a0...`: SUCCESS 8/8 — ProjectOps, typecheck/build, full tests/security 22/24, Windows 22/24, public distribution 22/24, security audit y rebrand.
-3. Ese SUCCESS quedó superado por `dcddc7bd...` + `ddc9c336...`; por tanto el HEAD actual requiere gate nuevo y permanece **NO VERIFICADO** hasta que termine.
+3. Push CI `36070176676` sobre `dcddc7bd...`: SUCCESS 8/8 — confirma el runtime hardening de retry/summary sobre todos los gates de la matriz.
+4. Los tests adversariales `ddc9c336...`, el checkpoint y la reconciliación del kernel son posteriores; por tanto el exact-head final sigue **NO VERIFICADO** hasta su gate propio.
 
 ## Siguiente punto verificable
 
