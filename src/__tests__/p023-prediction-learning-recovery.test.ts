@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AdaptivePathEngine, STRATEGIC_PATH_BELIEF_KEY } from "../intelligence/adaptive-engine.js";
 import { recordPredictionComparison } from "../intelligence/prediction-learning.js";
 import type { PathCandidate } from "../intelligence/types.js";
@@ -53,6 +53,12 @@ function payload(event: { payload: unknown } | undefined): Record<string, unknow
     : {};
 }
 
+function eventCount(db: Database.Database, eventType: string): number {
+  return (db.prepare(
+    "SELECT COUNT(*) AS count FROM evidence_events WHERE event_type = ?",
+  ).get(eventType) as { count: number }).count;
+}
+
 describe("P-023 attribution and recovery invariants", () => {
   it("attributes an invalid assumption to stale_assumption and updates only related adaptive state", () => {
     const db = new Database(":memory:");
@@ -77,6 +83,12 @@ describe("P-023 attribution and recovery invariants", () => {
         .find((event) => event.eventType === "adaptive.prediction_compared");
       expect(payload(comparison).comparison).toBe("contradicted");
       expect(payload(comparison).attribution).toBe("stale_assumption");
+      expect(payload(comparison)).not.toHaveProperty("expectedOutcome");
+      expect(payload(comparison)).not.toHaveProperty("observedOutcome");
+
+      const resolution = getEvidenceByAuthority(db, "adaptive_path", selected.path.id)
+        .find((event) => event.eventType === "adaptive.prediction_resolved");
+      expect(payload(resolution)).not.toHaveProperty("expectedOutcome");
       expect(engine.store.listActiveBeliefs("goal-1", {
         key: STRATEGIC_PATH_BELIEF_KEY,
       })).toHaveLength(0);
@@ -151,6 +163,8 @@ describe("P-023 attribution and recovery invariants", () => {
       expect(comparison?.causationId).toBe(recorded?.id);
       expect(payload(comparison).pathId).toBe(selected.path.id);
       expect(payload(comparison).attemptId).toBe(attemptId);
+      expect(payload(comparison)).not.toHaveProperty("expectedOutcome");
+      expect(payload(comparison)).not.toHaveProperty("observedOutcome");
 
       const replay = recordPredictionComparison(db, {
         path: reopenedPath!,
@@ -163,6 +177,65 @@ describe("P-023 attribution and recovery invariants", () => {
     } finally {
       if (db.open) db.close();
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rolls back success attempt and comparison when terminal path completion fails", () => {
+    const db = new Database(":memory:");
+    try {
+      prepareGoals(db);
+      const engine = new AdaptivePathEngine(db);
+      const pathCandidate = candidate();
+      const selected = engine.selectCandidate(pathCandidate);
+      vi.spyOn(engine, "completePath").mockImplementation(() => {
+        throw new Error("fault injection after comparison");
+      });
+
+      expect(() => engine.recordSuccess({
+        candidate: pathCandidate,
+        pathId: selected.path.id,
+      })).toThrow("fault injection after comparison");
+
+      expect(engine.store.listAttempts("goal-1")).toHaveLength(0);
+      expect(engine.store.getPath(selected.path.id)?.status).toBe("selected");
+      expect(eventCount(db, "adaptive.prediction_compared")).toBe(0);
+      expect(eventCount(db, "adaptive.prediction_resolved")).toBe(0);
+      expect(engine.store.listActiveBeliefs("goal-1", {
+        key: STRATEGIC_PATH_BELIEF_KEY,
+      })).toHaveLength(1);
+    } finally {
+      vi.restoreAllMocks();
+      db.close();
+    }
+  });
+
+  it("rolls back terminal failure learning when a later path mutation fails", () => {
+    const db = new Database(":memory:");
+    try {
+      prepareGoals(db);
+      const engine = new AdaptivePathEngine(db);
+      const pathCandidate = candidate();
+      const selected = engine.selectCandidate(pathCandidate);
+      vi.spyOn(engine.store, "setPathStatus").mockImplementation(() => {
+        throw new Error("fault injection after terminal learning");
+      });
+
+      expect(() => engine.recordFailure({
+        candidate: pathCandidate,
+        pathId: selected.path.id,
+        error: "Execution produced an invalid result.",
+      })).toThrow("fault injection after terminal learning");
+
+      expect(engine.store.listAttempts("goal-1")).toHaveLength(0);
+      expect(engine.store.getPath(selected.path.id)?.status).toBe("selected");
+      expect(eventCount(db, "adaptive.prediction_compared")).toBe(0);
+      expect(eventCount(db, "adaptive.prediction_resolved")).toBe(0);
+      expect(engine.store.listActiveBeliefs("goal-1", {
+        key: STRATEGIC_PATH_BELIEF_KEY,
+      })).toHaveLength(1);
+    } finally {
+      vi.restoreAllMocks();
+      db.close();
     }
   });
 });
