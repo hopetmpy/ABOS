@@ -1,4 +1,4 @@
-name: P021 Skill Evolution Apply v2
+name: P021 Skill Evolution Hardening
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  apply:
+  harden:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,76 +26,31 @@ jobs:
       - name: Enable Corepack
         run: corepack enable
 
-      - name: Recover and apply audited P-021 draft
-        id: apply
+      - name: Apply audited hardening
         shell: bash
         run: |
-          set +e
-          git show 248d18e3577033347f5e58ada5ffa78f4f1e7e11:.github/p021-skill-evolution-apply.py > /tmp/p021-apply.py 2> /tmp/p021-apply.log
-          status=$?
-          if [ "$status" -eq 0 ]; then
-            python3 - <<'PY' >> /tmp/p021-apply.log 2>&1
-          from pathlib import Path
-          p = Path('/tmp/p021-apply.py')
-          text = p.read_text()
-          old = '''    if count != 1:\n        raise SystemExit(f"{path}: expected exactly one literal match, found {count}: {old[:160]!r}")\n    p.write_text(text.replace(old, new, 1))'''
-          new = '''    if count != 1:\n        if path == "src/skills/registry.ts" and count == 2 and old.startswith("  // Validate inputs to prevent injection\\n"):\n            p.write_text(text.replace(old, new, 1))\n            return\n        raise SystemExit(f"{path}: expected exactly one literal match, found {count}: {old[:160]!r}")\n    p.write_text(text.replace(old, new, 1))'''
-          if old not in text:
-              raise SystemExit('recovered apply helper shape changed unexpectedly')
-          p.write_text(text.replace(old, new, 1))
-          PY
-            status=$?
-          fi
-          if [ "$status" -eq 0 ]; then
-            python3 /tmp/p021-apply.py >> /tmp/p021-apply.log 2>&1
-            status=$?
-          fi
-          if [ "$status" -eq 0 ]; then
-            python3 - <<'PY' >> /tmp/p021-apply.log 2>&1
-          from pathlib import Path
-          p = Path('src/skills/evolution.ts')
-          text = p.read_text()
-          old = '''export function isSkillEvolutionManaged(db: Database, skillName: string): boolean {\n  const table = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='skill_versions'").get();'''
-          new = '''export function isSkillEvolutionManaged(db: Database | undefined | null, skillName: string): boolean {\n  if (!db) return false;\n  const table = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='skill_versions'").get();'''
-          if old not in text:
-              raise SystemExit('generated skill evolution helper shape changed unexpectedly')
-          p.write_text(text.replace(old, new, 1))
-          PY
-            status=$?
-          fi
-          if [ "$status" -eq 0 ]; then
-            git diff --check >> /tmp/p021-apply.log 2>&1
-            status=$?
-          fi
-          cat /tmp/p021-apply.log
-          exit "$status"
-
-      - name: Upload apply evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: p021-apply-evidence
-          path: /tmp/p021-apply.log
-          if-no-files-found: error
+          set -euo pipefail
+          python3 .github/p021-skill-evolution-hardening.py
+          git diff --check
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Focused P-021 validation
+      - name: Focused adversarial validation
         shell: bash
         run: |
           set +e
-          pnpm exec vitest run src/__tests__/skills-evolution.test.ts src/__tests__/skill-runtime-truth.test.ts src/__tests__/skills-hardening.test.ts > /tmp/p021-tests.log 2>&1
+          pnpm exec vitest run src/__tests__/skills-evolution.test.ts src/__tests__/skill-runtime-truth.test.ts src/__tests__/skills-hardening.test.ts > /tmp/p021-hardening-tests.log 2>&1
           status=$?
-          cat /tmp/p021-tests.log
+          cat /tmp/p021-hardening-tests.log
           exit "$status"
 
-      - name: Upload focused test evidence
+      - name: Upload focused evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: p021-focused-test-evidence
-          path: /tmp/p021-tests.log
+          name: p021-hardening-test-evidence
+          path: /tmp/p021-hardening-tests.log
           if-no-files-found: warn
 
       - name: Typecheck
@@ -104,7 +59,7 @@ jobs:
       - name: Build
         run: pnpm run build
 
-      - name: Commit staged product source
+      - name: Commit hardened product source
         shell: bash
         run: |
           set -euo pipefail
@@ -115,5 +70,5 @@ jobs:
             echo 'No product source changes to commit.'
             exit 1
           fi
-          git commit -m 'feat: stage P-021 skill evolution lifecycle'
+          git commit -m 'fix: harden P-021 skill lifecycle semantics'
           git push origin HEAD:abos/p021-skill-evolution
