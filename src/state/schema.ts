@@ -1,3 +1,5 @@
+import { WORLD_MODEL_SCHEMA } from "./world-model-schema.js";
+
 /**
  * ABOS SQLite Schema
  *
@@ -5,7 +7,7 @@
  * The database IS the abos's memory.
  */
 
-export const SCHEMA_VERSION = 20;
+export const SCHEMA_VERSION = 21;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -175,6 +177,8 @@ export const CREATE_TABLES = `
 
   CREATE INDEX IF NOT EXISTS idx_inbox_unprocessed
     ON inbox_messages(received_at) WHERE processed_at IS NULL;
+
+${WORLD_MODEL_SCHEMA}
 `;
 
 export const MIGRATION_V3 = `

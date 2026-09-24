@@ -1,0 +1,4 @@
+export {
+  WORLD_MODEL_SCHEMA as WORLD_BELIEF_SCHEMA,
+  WORLD_MODEL_SCHEMA_VERSION as WORLD_BELIEF_SCHEMA_VERSION,
+} from "../state/world-model-schema.js";

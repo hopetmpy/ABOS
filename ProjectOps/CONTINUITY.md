@@ -4,19 +4,19 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
-Active-Plan: P-021
-Active-Segment: continuity/C0017.md
-Active-Intervention: P021_SKILL_EVOLUTION — MERGED / P016_WINDOWS_REPAIR_PR_READY
+Active-Plan: P-022
+Active-Segment: continuity/C0018.md
+Active-Intervention: P022_WORLD_MODEL — DECISION_READY / SOURCE_COMPLETE / E3_EXACT_PRODUCT_HEAD_GREEN / INTEGRATION_PENDING
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p021-p016-probe-stability
-Host-Head-At-Audit-Open: c07a1eb10c34792e2490c51196063fbac15df91c
-Last-Reconciled-Host-Head: 3e27c87aaabf0119cbeb112c776a6d90492f28a3
-Last-Reconciled-Head-Semantics: P021_MERGED_P016_REPAIR_EXACT_HEAD_GREEN_PR_READY
+Current-Host-Branch: abos/p022-world-model
+Host-Head-At-Audit-Open: 6eb836be2325048e7ac243415e59e9565fc93d08
+Last-Reconciled-Host-Head: 6eb836be2325048e7ac243415e59e9565fc93d08
+Last-Reconciled-Head-Semantics: P021_HECHO_E3_MAIN_GREEN_P022_ACTIVE_NOT_MACRO_RECONCILED
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -40,100 +40,66 @@ No existe otra capa de cadencia dentro de ProjectOps.
 - P-001..P-003: HECHO.
 - P-004: PLANIFICADO — track documental transversal/final.
 - P-005: PLANIFICADO — acceptance LIVE incremental.
-- P-006..P-020: HECHO para sus objetivos canónicos.
-- P-021: EN_EJECUCIÓN / MERGED / P016_WINDOWS_REPAIR_PR_READY.
-- P-022..P-036: ver estado explícito en `ProjectOps/PLAN.md`.
+- P-006..P-021: HECHO para sus objetivos canónicos.
+- P-022: EN_EJECUCIÓN / DECISION_READY / SOURCE_COMPLETE / E3_EXACT_PRODUCT_HEAD_GREEN / INTEGRATION_PENDING.
+- P-023..P-036: ver estado explícito en `ProjectOps/PLAN.md`.
 
-## P-021 — integración y evidencia posterior
+## Cierre P-021
 
-PR #56 fue squash-merged a `main` como `c36c97d37d9f25c3de938c3c0383dc8e5551888e`.
+P-021 Skill Evolution quedó integrado por PR #56 y alcanzó cierre positivo sólo después de resolver y revalidar la regresión P-016 Windows post-merge.
 
-Antes del merge quedaron verdes:
-- technical head `c93c1d553d0a7ab9d6a050e3d902f70d8530b97c`: CI `35947871588` SUCCESS 8/8; 151 test files / 2136 tests PASS en Node 22;
-- exact PR-ready head `1ccb3bf854b2801cb7dcf59463c607d0852f1545`: ProjectOps `35948277202` + CI `35948277149` SUCCESS;
-- reconciled PR head `89ed8a925ad917ed2f3b954d21e8e3cb2f2e13fc`: ProjectOps `35948580486` + CI `35948580503` SUCCESS 8/8.
+Evidencia terminal:
+- repair technical head `3e27c87aaabf0119cbeb112c776a6d90492f28a3`: CI `35954129457` SUCCESS 8/8;
+- repair PR-ready head `f7ea832cb1bb4304ef8eec9a7274b76fdd2009b7`: push CI `35954474308` SUCCESS 8/8;
+- PR #58 exact-head CI `35954721816`: SUCCESS 8/8;
+- PR #58 merge: `6eb836be2325048e7ac243415e59e9565fc93d08`;
+- exact-main CI `35954954278`: SUCCESS 8/8.
 
-En exact-main `c36c97d...`:
-- ProjectOps `35948816442`: SUCCESS;
-- CI `35948816508`: FAILURE por `windows-regression (22)`; los demás lanes fueron SUCCESS.
+Estado final P-021: `HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED`. El detalle histórico terminal vive en `continuity/C0017.md` y `plan/P-021.md`.
 
-Por Definition of Done P-021 no se cierra hasta revalidación terminal positiva del exact-main resultante.
+## P-022 activo
 
-## P-016 repair branch — diagnóstico y corrección
+P-022 se abrió desde `main 6eb836be2325048e7ac243415e59e9565fc93d08` después de exact-main CI `35954954278` SUCCESS 8/8. La auditoría alcanzó `DECISION_READY` antes de source y decidió `EXTEND_EXISTING_INTELLIGENCE_STATE` en lugar de crear una authority paralela.
 
-Rama activa: `abos/p021-p016-probe-stability`.
-Pre-reconcile head: `47128abdbf215d03c134a7b9cb31c38b0527e72b`.
-Main reconcile merge: `c8ffb8b4e980dc7ac854c5823eb15fcc133cb2e9`, con padres repair-head + `main 206cf74dcc68ade615989a1259540e73841fe7d6`.
-Technical repair head validado: `3e27c87aaabf0119cbeb112c776a6d90492f28a3`.
+Realidad observable reconciliada:
 
-La primera reparación había aumentado el bootstrap budget Windows Job provider a 60 s, además de introducir semántica non-sticky para `providerTimedOut`. Los logs exactos demostraron que el aumento a 60 s no resolvía el fallo: Windows 22/24 expiraban por el timeout Vitest de 30 s en `executes with explicit confined cwd and env`, mientras la regresión non-sticky sí pasaba.
+- branch `abos/p022-world-model`;
+- main observado `bff1fd49a561061c635da0b1fcab8502e5f0cab0`;
+- último product head completamente validado: `ef2eb0a29522cdd3208db52898c4d6381e245ef4`;
+- exact-head CI `36047421730`: SUCCESS 8/8;
+- beliefs/hypotheses persistentes bajo `AdaptiveStore`, con confidence nullable, temporalidad, lifecycle y Evidence Fabric referencial;
+- active/non-expired beliefs proyectados al `PossibilitySpace` y planner context;
+- producer runtime estratégico conectado a `AdaptivePathEngine.selectCandidate()` y falsación ligada a failure evidence terminal;
+- schema global `SCHEMA_VERSION=21` y `WORLD_MODEL_SCHEMA` incorporado a `CREATE_TABLES`;
+- fresh DB y upgrade sintético V20→V21 demostrados mediante `createDatabase()` real;
+- tests P-022 cubren store/restart/competition/evidence, runtime producer/failure lifecycle y migration;
+- dos regressions legacy detectadas en CI `36046871692` fueron discriminadas como expectations antiguas y corregidas sin cambiar product source;
+- reconciliación ProjectOps posterior al PASS: `16a06cdae90a07f4f1aee6cb323feea9c68a616c` actualizó C0018 y `57978b651ddfdaf5d3aaa2962b295ed720dbbe37` actualizó P-022; el HEAD docs-only resultante todavía debe completar su propio gate antes de PR.
 
-El `main 206cf74d...`, CI `35952635313`, aportó evidencia independiente: Windows 22 PASS y Windows 24 FAIL en el mismo test por timeout. El exact-main P-016 original `08b7a5cc...`, CI `35809162263`, había pasado 8/8 y el mismo test Windows Node 24 terminó en ~19.3 s. La variabilidad era de wall-clock, no una assertion semántica fallida.
+## Findings resueltos / abiertos
 
-Authority/source demostraron:
-- readiness Windows se prueba y cachea por instancia de `LocalComputerRuntime`;
-- P-016 aceptado no define SLA de startup;
-- baseline Job provider usa bootstrap grace de 20 s;
-- el primer `exec(..., 10_000)` puede pagar probe de readiness más ejecución provider-bound;
-- el gate Vitest de 30 s era menor que el camino válido acotado que pretendía verificar.
+- RESUELTO: P-021 stale en continuidad inicial; Git/PR/CI demostraron integración terminal.
+- RESUELTO: creación de manager/store paralelo P-022 rechazada; Adaptive Intelligence ya era owner parcial.
+- RESUELTO: ausencia inicial de producer runtime; `selectCandidate()` materializa strategic path viability sin ampliar Planner/Orchestrator.
+- RESUELTO: migration global que antes estaba `BLOQUEADO_TOOLING_SAFE_EDIT`; `fetch_blob`/edición exacta permitió integrar schema 21 sin drift lateral y `createDatabase()` fresh/V20→V21 lo demuestra.
+- RESUELTO: hipótesis adversarial de failure-classifier; sólo `terminalForPath` falsifica automáticamente la viabilidad estratégica.
+- RESUELTO: CI `36046871692` falló por dos baselines legacy; `2cf541746dedc5592813468993d5577d0e3c1e01` y `ef2eb0a29522cdd3208db52898c4d6381e245ef4` corrigieron las expectations y CI `36047421730` quedó verde 8/8.
+- ABIERTO: gatear el HEAD docs-only reconciliado, abrir/revisar PR, integrar y exigir exact-main CI antes de cierre terminal.
 
-Decision-Class: `CORRECT_TEST_GATE / RETAIN_TRANSIENT_PROBE_HARDENING / REVERT_UNJUSTIFIED_BOOTSTRAP_EXTENSION / NO_ARCHITECTURE_CHANGE`.
+## Claims y límites actuales
 
-Corrección aplicada:
-1. `windows-job-process.ts` restaurado al baseline P-016 de 20 s; por eso ya no aparece en el diff final contra `main`;
-2. `LocalComputerRuntime.probe()` conserva `providerTimedOut` como inconcluso/no-sticky, sin cachearlo como unavailable permanente;
-3. regresión dedicada demuestra timeout transitorio seguido de retry exitoso;
-4. las dos regresiones P-016 Windows se ejecutan en paso CI aislado con `--testTimeout=75000`;
-5. el resto del lane Windows mantiene el timeout ordinario;
-6. `AGENTS.md`, PLAN, PROJECT, Operating Protocol, Adaptive Reasoning y source P-021 permanecen NO_CHANGE.
-
-## Validación exact-head de reparación
-
-CI `35954129457` sobre `3e27c87aaabf0119cbeb112c776a6d90492f28a3`: **SUCCESS 8/8**.
-
-- build-and-test Node 22: SUCCESS; ProjectOps integrity + typecheck + build + full tests + security tests PASS.
-- build-and-test Node 24: SUCCESS; ProjectOps integrity + typecheck + build + full tests + security tests PASS.
-- windows-regression Node 22: SUCCESS.
-- windows-regression Node 24: SUCCESS.
-- public-distribution Node 22: SUCCESS.
-- public-distribution Node 24: SUCCESS.
-- security audit: SUCCESS.
-- rebrand integrity: SUCCESS.
-
-P-016 Windows dedicado:
-- Node 22: 2 files / 25 tests PASS, ~50.93 s total; non-sticky regression PASS; `executes with explicit confined cwd and env` PASS (~4.95 s).
-- Node 24: 2 files / 25 tests PASS, ~52.92 s total; non-sticky regression PASS; `executes with explicit confined cwd and env` PASS (~5.98 s).
-- residual portability: 10 files / 279 tests PASS en Node 22 y Node 24.
-
-Estado de evidencia: `BRANCH_EXACT_HEAD_GREEN / PR_READY`. Esto valida la reparación en la rama, pero no convierte P-021 en HECHO: falta PR exacto, integración y exact-main terminal positivo.
-
-## Auditoría de liveness del agente de desarrollo
-
-La corrección repo-side quedó materializada en `main 206cf74d...`:
-- ProjectOps Integrity se ejecuta dentro del workflow `CI` existente;
-- el workflow separado fue retirado;
-- CONTINUITY/C0017 fueron reconciliados con Git post-merge;
-- `AGENTS.md` quedó NO_CHANGE.
-
-La consulta de la push del exact `main 206cf74d...` y del technical repair head confirmó una sola surface de workflow por push y ProjectOps verifier PASS dentro de CI. Esto valida la corrección repo-side; no demuestra que una UI/plataforma externa nunca pueda interrumpirse.
-
-## Claims y límites
-
-- P-021 source está integrado, pero P-021 NO está HECHO mientras falte exact-main terminal positivo.
-- P-022 no se abre mientras P-021 siga incompleto.
-- la reparación P-016 está branch-validated y PR_READY, no integrada todavía.
-- los fallos Windows previos permanecen evidencia histórica roja; no fueron reetiquetados.
-- `AGENTS.md` permanece NO_CHANGE.
-- PLAN permanece NO_CHANGE porque la evidencia no altera objetivo, arquitectura, secuencia, dependencias ni Definition of Done de P-021.
+- P-021: HECHO / E3 exact-main.
+- P-022 source/branch product head: E3 exact-head demostrado.
+- P-022 integración en `main`: NO HECHO.
+- P-022: NO está HECHO todavía.
+- No se creó una segunda authority de memory/knowledge/evidence/planning/world-model.
+- P-023/P-024/P-025 no se adelantaron dentro de P-022.
+- E3 CI no demuestra provider/economic LIVE E5/E6 y P-022 no necesita esos niveles para su claim de source/integration.
 
 ## Siguiente punto verificable
 
-1. abrir PR desde `abos/p021-p016-probe-stability` contra `main`;
-2. exigir CI exacto del PR head;
-3. integrar sólo si los checks permanecen terminalmente verdes;
-4. revalidar exact-main resultante;
-5. sólo entonces cerrar P-021 y habilitar P-022.
+Esperar sólo evidencia del gate exact-head generado por esta reconciliación docs-only; si queda verde, abrir PR `abos/p022-world-model` → `main`, verificar mergeability/checks sobre el SHA exacto, integrar y ejecutar/observar CI exact-main. Sólo después reconciliar P-022 a HECHO si no aparece un defecto material nuevo.
 
 ## Política de rotación
 
-`C0000-legacy.md` conserva historia pre-cutover. `C0001`..`C0016` son segmentos históricos cerrados; `C0017` sigue ACTIVE mientras P-021 no alcance cierre canónico. Nunca se crea un segundo `CONTINUITY.md`.
+`C0000-legacy.md` conserva historia pre-cutover. `C0001`..`C0017` son segmentos históricos cerrados; `C0018` es el único segmento ACTIVE. Nunca se crea un segundo `CONTINUITY.md`.

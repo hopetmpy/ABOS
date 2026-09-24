@@ -21,6 +21,7 @@ describe("adaptive + environment schema migration", () => {
         "adaptive_opportunities",
         "adaptive_paths",
         "adaptive_task_bindings",
+        "adaptive_world_beliefs",
         "adaptive_world_facts",
       ]);
 

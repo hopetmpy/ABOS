@@ -122,6 +122,41 @@ export interface WorldFact {
   updatedAt: string;
 }
 
+export type BeliefEpistemicStatus =
+  | "observation"
+  | "inference"
+  | "estimate"
+  | "assumption"
+  | "unknown";
+
+export type BeliefLifecycleStatus = "active" | "invalidated" | "superseded";
+
+/**
+ * Goal-scoped interpretive world state.
+ *
+ * Facts remain canonical in adaptive_world_facts. A WorldBelief is deliberately
+ * separate: it may be uncertain, competing, stale or falsified, and confidence
+ * is nullable when no calibrated probability is available.
+ */
+export interface WorldBelief {
+  id: string;
+  goalId: string;
+  key: string;
+  value: string;
+  epistemicStatus: BeliefEpistemicStatus;
+  lifecycleStatus: BeliefLifecycleStatus;
+  confidence: number | null;
+  source: string;
+  evidenceRefs: string[];
+  falsificationConditions: string[];
+  lastVerifiedAt: string | null;
+  expiresAt: string | null;
+  invalidatedAt: string | null;
+  invalidationReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Opportunity {
   id: string;
   goalId: string;
@@ -132,7 +167,6 @@ export interface Opportunity {
   createdAt: string;
   updatedAt: string;
 }
-
 
 export type AssumptionStatus = "active" | "validated" | "invalidated" | "unknown";
 
@@ -154,11 +188,11 @@ export interface PossibilitySpaceSnapshot {
   paths: PersistedPath[];
   openOpportunities: Opportunity[];
   facts: WorldFact[];
+  beliefs: WorldBelief[];
   assumptions: TrackedAssumption[];
   exhaustedSignatures: string[];
   unknownCount: number;
 }
-
 
 export interface AdaptiveTaskBinding {
   taskId: string;
@@ -169,7 +203,6 @@ export interface AdaptiveTaskBinding {
   createdAt: string;
   updatedAt: string;
 }
-
 
 export type EvidenceKind =
   | "observation"
