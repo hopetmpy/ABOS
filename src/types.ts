@@ -232,6 +232,8 @@ export interface ToolContext {
   social?: SocialClientInterface;
   /** Runtime-scoped policy accounting authority for economic effects. */
   spendTracker?: SpendTrackerInterface;
+  /** Canonical runtime capability authority; optional for legacy/tests. */
+  capabilityRegistry?: import("./capabilities/registry.js").CapabilityRegistry;
 }
 
 export interface SocialClientInterface {

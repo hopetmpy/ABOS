@@ -14,6 +14,7 @@ import { parseSkillMd } from "./format.js";
 import { sanitizeInput } from "../agent/injection-defense.js";
 import { createLogger } from "../observability/logger.js";
 import { expandHomePath } from "../platform/home.js";
+import { SkillEvolutionEngine } from "./evolution.js";
 
 const logger = createLogger("skills.loader");
 
@@ -45,13 +46,18 @@ export function loadSkills(
   db: AbosDatabase,
 ): Skill[] {
   const resolvedDir = resolveHome(skillsDir);
+  const evolution = db.raw ? new SkillEvolutionEngine(db.raw) : null;
+
+  // Capture the pre-existing runtime projection before any filesystem refresh can
+  // replace it. This makes the legacy starting point rollbackable without
+  // upgrading it to verified capability evidence.
+  evolution?.bootstrapLegacySkills();
 
   if (fs.existsSync(resolvedDir)) {
     const entries = fs.readdirSync(resolvedDir, { withFileTypes: true });
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
-
       const skillMdPath = path.join(resolvedDir, entry.name, "SKILL.md");
       if (!fs.existsSync(skillMdPath)) continue;
 
@@ -60,29 +66,33 @@ export function loadSkills(
         const skill = parseSkillMd(content, skillMdPath);
         if (!skill) continue;
 
-        // Requirements are checked before refreshing the persisted definition.
-        if (!checkRequirements(skill)) {
-          continue;
-        }
-
-        // Check if already in DB and preserve enabled state
         const existing = db.getSkillByName(skill.name);
         if (existing) {
           skill.enabled = existing.enabled;
           skill.installedAt = existing.installedAt;
         }
 
+        if (evolution?.isManaged(skill.name)) {
+          // A managed file change is evidence for a candidate, never permission
+          // to overwrite the currently active runtime projection.
+          evolution.observeFilesystemSkill(skill);
+          continue;
+        }
+
+        // Legacy/new unmanaged skills keep the existing runtime requirement gate.
+        if (!checkSkillRequirements(skill)) continue;
         db.upsertSkill(skill);
       } catch {
-        // Skip invalid skill files
+        // Skip invalid/untrusted skill files. The active projection is preserved.
       }
     }
   }
 
-  // DB inventory is durable across restart, but availability is not. Re-probe
-  // requirements every load so a removed binary/env var cannot remain active
-  // merely because the skill row survived in SQLite.
-  return db.getSkills(true).filter((skill) => checkRequirements(skill));
+  // Newly discovered unmanaged skills acquire their durable v1 baseline in the
+  // same load after they have passed the legacy runtime requirement gate.
+  evolution?.bootstrapLegacySkills();
+
+  return db.getSkills(true).filter((skill) => checkSkillRequirements(skill));
 }
 
 /**
@@ -94,7 +104,7 @@ const BIN_NAME_RE = /^[a-zA-Z0-9._-]+$/;
  * Check if a skill's requirements are met.
  * Uses a platform-native binary locator with argument arrays to prevent shell injection.
  */
-function checkRequirements(skill: Skill): boolean {
+export function checkSkillRequirements(skill: Skill): boolean {
   if (!skill.requires) return true;
 
   // Check required binaries

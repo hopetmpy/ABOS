@@ -5,7 +5,7 @@
  * The database IS the abos's memory.
  */
 
-export const SCHEMA_VERSION = 19;
+export const SCHEMA_VERSION = 20;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -1106,4 +1106,54 @@ export const MIGRATION_V19_CAPABILITY_LIFECYCLE = `
     ON capability_records(state, updated_at);
   CREATE INDEX IF NOT EXISTS idx_capability_records_fingerprint
     ON capability_records(definition_fingerprint);
+`;
+
+
+// === Skill Evolution lifecycle v1 (P-021) ===
+// `skills` remains the compatibility/runtime projection. These tables own
+// immutable-per-version history and evidence-backed lifecycle observations.
+export const MIGRATION_V20_SKILL_EVOLUTION = `
+  CREATE TABLE IF NOT EXISTS skill_versions (
+    id TEXT PRIMARY KEY,
+    skill_name TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    parent_version_id TEXT REFERENCES skill_versions(id),
+    lifecycle_state TEXT NOT NULL,
+    definition_json TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    verification_json TEXT NOT NULL DEFAULT '{}',
+    applicability_json TEXT NOT NULL DEFAULT '{}',
+    provenance_json TEXT NOT NULL DEFAULT '{}',
+    evidence_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    activated_at TEXT,
+    deprecated_at TEXT,
+    UNIQUE(skill_name, version)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_skill_versions_name_version
+    ON skill_versions(skill_name, version DESC);
+  CREATE INDEX IF NOT EXISTS idx_skill_versions_lifecycle
+    ON skill_versions(lifecycle_state, updated_at);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_skill_versions_one_active
+    ON skill_versions(skill_name) WHERE lifecycle_state = 'active';
+
+  CREATE TABLE IF NOT EXISTS skill_evaluations (
+    id TEXT PRIMARY KEY,
+    skill_version_id TEXT NOT NULL REFERENCES skill_versions(id),
+    evaluation_kind TEXT NOT NULL,
+    outcome TEXT NOT NULL,
+    evidence_event_id TEXT NOT NULL REFERENCES evidence_events(id),
+    task_id TEXT,
+    environment_id TEXT,
+    details_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    UNIQUE(skill_version_id, evaluation_kind, evidence_event_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_skill_evaluations_version
+    ON skill_evaluations(skill_version_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_skill_evaluations_evidence
+    ON skill_evaluations(evidence_event_id);
 `;

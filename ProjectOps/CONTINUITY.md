@@ -15,8 +15,8 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p021-skill-evolution
 Host-Head-At-Audit-Open: c07a1eb10c34792e2490c51196063fbac15df91c
-Last-Reconciled-Host-Head: cd19a534962f1b46f4b4174c446ef42aead0fa73
-Last-Reconciled-Head-Semantics: P021_EXACT_BRANCH_GREEN_PRE_STATUS_RECONCILIATION_COMMIT
+Last-Reconciled-Host-Head: dd1b8a5e5ce062c7b9abc70f248c05820311e21f
+Last-Reconciled-Head-Semantics: P021_SOURCE_COMPLETE_BRANCH_E3_GREEN_PR_READY
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -68,65 +68,81 @@ Decision-Class: `EXTEND_EXISTING_SKILL_SYSTEM_WITH_VERSIONED_LIFECYCLE / REUSE_C
 
 ### Estado real reconciliado
 
-El checkpoint anterior decía `DECISION_READY / SOURCE_UNMODIFIED`, pero Git ya había avanzado materialmente. Esa descripción quedó stale y fue retirada.
-
 La branch contiene implementación P-021 real:
 - schema v20 y persistence aditiva para version/evaluation history;
 - `src/skills/evolution.ts` y lifecycle tools;
 - integración con Capability Fabric sin crear otra readiness authority;
 - guards de loader/registry para skills gestionadas;
-- wiring de runtime y tests de evolution/restart/rollback/evidence.
+- wiring de runtime y tests de evolution/restart/rollback/evidence;
+- hardening adversarial que exige evidencia y contextos realmente independientes para promotion multi-success;
+- degraded lifecycle no puede reactivarse con evidence histórico ni rollback a sí mismo.
 
-### Conflictos descubiertos durante la auditoría transversal
+### Hallazgos previos ya corregidos
 
-1. El kernel raíz `AGENTS.md` ya estaba funcionalmente alineado con ZeroIQ; no se añadió otra capa ni se reescribió por sospecha.
-2. CONTINUITY/C0017 habían quedado atrás del Git real y todavía afirmaban `SOURCE_UNMODIFIED` después de múltiples commits de implementación.
-3. Persistía tooling temporal P-021 fuera de la arquitectura final:
-   - `.github/p021-skill-evolution-hardening.py`;
-   - `.github/workflows/p021-skill-evolution-apply-v2.yml`, con capacidad de commit/push sobre la propia branch.
-   Ambos fueron retirados; no forman parte del producto ni del kernel.
-4. ProjectOps Integrity detectó drift real: source schema `20` mientras PROJECT seguía declarando `19`.
-5. CI detectó el mismo drift en `capability-persistence.test.ts`, que todavía exigía schema `19` aunque v20 ya era canónico.
+1. CONTINUITY/C0017 habían quedado atrás del Git real y afirmaban `SOURCE_UNMODIFIED` después de source material.
+2. Tooling temporal P-021 auto-mutante fue retirado.
+3. Schema global source `20` fue reconciliado con PROJECT y el test histórico de Capability Fabric.
+4. PROJECT dejó de mezclar estado dinámico antiguo con identidad estable.
+5. Root `AGENTS.md` quedó `NO_CHANGE`; no se añadió otra capa de governance.
 
-### Correcciones aplicadas
+### Reanudación 2026-09-23/24 — evidencia nueva
 
-- `0ac20d316192d44d4ac05e012623d865aa333aa9`: retira el script temporal P-021.
-- `d49b090ead7a171e1dcf12554cb0c5ee19f91c5b`: retira el workflow temporal auto-mutante P-021.
-- `c14ff8c32e4b78170083b53035059ea87315911a`: alinea el test de Capability Fabric con schema v20 sin retirar la authority v19 que prueba.
-- `a30d97c377b335038bac057df48ccbca304ead4d`: reconcilia PROJECT con schema v20 y explicita el modelo single-kernel; elimina estado dinámico stale de PROJECT.
-- `597e49531d0747063bb301fe1caedc05102f4d90` + `cd19a534962f1b46f4b4174c446ef42aead0fa73`: reconcilian CONTINUITY/C0017 con el source P-021 realmente implementado.
+#### Windows/Node 22 P-016
 
-No se creó scheduler, watchdog, recovery layer, workflow compensatorio ni estado paralelo.
+El exact head inicial de esta reanudación, `4947ef8f05b1d06a7ba6200825b6a05ed03cd57f`, tuvo un primer fallo aislado en `windows-regression (22)` del CI `35945097898`. Source/test P-016 eran byte-idénticos al exact branch head verde anterior; el siguiente probe del mismo runtime pasó en el mismo job. Un rerun dirigido del job fallido terminó SUCCESS (`107467089383`), dejando el attempt vigente del CI verde en Windows 22/24 y los demás lanes.
 
-## Validación exacta de branch
+Clasificación: fallo transitorio/flake observado de P-016; `NO_CHANGE` dentro de P-021. No se confunde rerun verde con prueba de ausencia absoluta de flakiness.
 
-Sobre `cd19a534962f1b46f4b4174c446ef42aead0fa73`:
-- ProjectOps Integrity `35944813460`: SUCCESS.
-- CI `35944812682`: SUCCESS.
-- Node 22/24 typecheck + build + full tests + security tests: SUCCESS.
-- Windows Node 22/24 regression/smoke: SUCCESS.
-- security audit: SUCCESS.
-- public distribution smoke Node 22/24: SUCCESS.
-- rebrand integrity: SUCCESS.
+#### HARD P-021 — independencia de evidencia
 
-Los dos artefactos temporales P-021 ya no existen en `.github`; sólo permanecen workflows canónicos/legacy no activos para P-021.
+`assessPromotion()` podía contar dos contextos distintos apoyados por el mismo `evidence_event_id`. H0 `NO_CHANGE`: FALSADA.
+
+Corrección `a9c61edff297d2de8b49213539a2ec1e2b971c9f`: una promotion que exige múltiples éxitos requiere a la vez múltiples evidence events distintos y múltiples contextos independientes.
+
+#### HARD P-021 — bypass de degradación
+
+`validateVersion()` aceptaba `degraded` y `rollback()` permitía reactivar una versión degradada previamente activada. H0 `NO_CHANGE`: FALSADA.
+
+Corrección `a9c61edff297d2de8b49213539a2ec1e2b971c9f`: sólo `candidate` puede validarse; rollback sólo admite una versión histórica `superseded`, previamente activada y con dependencies execution-ready.
+
+#### Cobertura adversarial y contrato
+
+- `c93c1d553d0a7ab9d6a050e3d902f70d8530b97c`: añade tests adversariales F7/F8.
+- `dd1b8a5e5ce062c7b9abc70f248c05820311e21f`: alinea contrato público de rollback con runtime.
+- P-021 plan: `NO_CHANGE`; los hallazgos no alteraron arquitectura, authorities, schema, dependencias ni DoD.
+
+### Validación exacta de branch
+
+Head técnico `c93c1d553d0a7ab9d6a050e3d902f70d8530b97c`:
+- CI `35947871588`: SUCCESS en los 8 lanes.
+- full tests Node 22: 151 test files PASS / 2136 tests PASS.
+- `skills-evolution.test.ts`: 14 PASS.
+- `skills-evolution-adversarial.test.ts`: 2 PASS.
+
+Exact head validado `dd1b8a5e5ce062c7b9abc70f248c05820311e21f`:
+- ProjectOps Integrity `35947950801`: SUCCESS.
+- CI `35947950830`: SUCCESS en los 8 lanes.
+- build/test/security Node 22/24: SUCCESS.
+- Windows Node 22/24: SUCCESS.
+- public distribution Node 22/24, dependency security audit y rebrand: SUCCESS.
 
 ## Claims y límites
 
-- P-021 sigue `EN_EJECUCIÓN`: branch green/PR-ready no equivale a integración en main.
+- P-021 está `PR_READY`, no HECHO: falta integración y revalidación exact-main.
 - P-022 no se abre mientras P-021 siga incompleto.
 - `skills` continúa como proyección runtime compatible; history/version lifecycle es aditiva.
 - Capability Fabric continúa siendo la authority de execution readiness.
 - Evidence Fabric continúa siendo la authority de provenance/correlation; no se crea ledger paralelo.
 - `enabled` no equivale a `verified_available`.
-- La eliminación de tooling temporal y la reconciliación de ProjectOps corrigen conflictos repo-side; no se presentan como garantía de que una UI/plataforma externa jamás pueda interrumpirse.
+- F7/F8 están corregidos con tests adversariales verdes; no se declara ausencia absoluta de futuros defectos.
+- El riesgo residual de flake P-016 permanece observado aunque los runs posteriores sean verdes.
 
 ## Siguiente punto verificable
 
-1. Abrir PR P-021 contra `main` desde la branch verde.
-2. Verificar mergeability/checks exactos del PR.
-3. Integrar sólo con evidencia verde.
-4. Revalidar exact-main CI + ProjectOps.
+1. Validar el HEAD documental de este checkpoint.
+2. Abrir PR P-021 y comprobar mergeability + checks.
+3. Integrar sólo si el PR exacto permanece verde.
+4. Revalidar CI + ProjectOps sobre el exact-main merge resultante.
 5. Sólo entonces marcar P-021 HECHO e iniciar P-022.
 
 ## Política de rotación

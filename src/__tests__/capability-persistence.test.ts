@@ -22,14 +22,14 @@ afterEach(() => {
 });
 
 describe("P-014 durable Capability Fabric", () => {
-  it("migrates fresh databases to schema v19 capability authority", () => {
+  it("preserves v19 capability authority after later schema migrations", () => {
     const db = createDatabase(tempDbPath());
     try {
       const version = db.raw.prepare("SELECT MAX(version) AS version FROM schema_version").get() as { version: number };
       const table = db.raw.prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'capability_records'",
       ).get() as { name: string } | undefined;
-      expect(version.version).toBe(19);
+      expect(version.version).toBe(20);
       expect(table?.name).toBe("capability_records");
     } finally {
       db.close();
