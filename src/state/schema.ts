@@ -1,3 +1,5 @@
+import { WORLD_MODEL_SCHEMA } from "./world-model-schema.js";
+
 /**
  * ABOS SQLite Schema
  *
@@ -5,7 +7,7 @@
  * The database IS the abos's memory.
  */
 
-export const SCHEMA_VERSION = 20;
+export const SCHEMA_VERSION = 21;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -1157,3 +1159,7 @@ export const MIGRATION_V20_SKILL_EVOLUTION = `
   CREATE INDEX IF NOT EXISTS idx_skill_evaluations_evidence
     ON skill_evaluations(evidence_event_id);
 `;
+
+// === World Model persistence v1 (P-022) ===
+// State owns durable SQL; Adaptive Intelligence owns world-model semantics.
+export const MIGRATION_V21_WORLD_MODEL = WORLD_MODEL_SCHEMA;
