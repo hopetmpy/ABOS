@@ -37,6 +37,16 @@ Dentro del mismo bloque macro (`P-xxx` o `RECONCILIATION_BOUNDARY`):
 - `NO_TIME_QUOTA_AS_BOUNDARY`: no existe cuota canónica de 4, 6, 10, 20, 25 o N minutos; el tiempo transcurrido no es frontera de cierre ni redefine por sí solo la frontera solicitada;
 - `NO_GLOBAL_PROCESS_KILL_BY_TIMEOUT`: timeout/fallo de una tool, comando, child o ruta concreta limita esa ruta; no termina sesión, macro ni orquestación mientras exista trabajo alternativo elegible.
 
+### Convergencia de auditoría y visibilidad
+
+`AUDIT_EXPANSION_REQUIRES_DISCRIMINATING_VALUE`: que `Required-Context` sea mínimo y no límite **no autoriza una expansión indefinida**. Amplía una auditoría sólo cuando exista una pregunta material todavía no resuelta y la nueva evidencia pueda cambiar una hipótesis, decisión, claim, implementación o validación. La mera existencia de más archivos, callers, ramas, historia o superficies inspeccionables no convierte esa exploración en trabajo elegible.
+
+`AUDIT_CONVERGES_ON_DECISION`: cuando la evidencia disponible ya permite falsar o discriminar suficientemente las hipótesis necesarias para la decisión activa, detén la expansión lateral y transita a `DECIDIR → IMPLEMENTAR/NO_CHANGE`. No abras otra familia de auditoría por ceremonia ni para acumular evidencia redundante.
+
+`MATERIAL_FINDING_REQUIRES_VISIBLE_CHECKPOINT`: cuando un finding material cambie una hipótesis, assumption o `Decision-Class`, o cuando una pregunta material quede resuelta y el siguiente paso vaya a abrir otra familia grande de trabajo, emite un **checkpoint visible y breve** antes de continuar: estado real, finding, evidencia que lo sostiene, qué cambió en la decisión y siguiente punto verificable exacto. Ese checkpoint informa; no cierra el macro ni transfiere authority.
+
+`REPORT_IS_NOT_CLOSURE`: reportar estado, findings o progreso **no equivale** a declarar `HECHO`, cerrar el macro ni agotar `NEXT_ELIGIBLE_WORK`. `STOP_GATE_REQUIRES_TERMINAL_CONDITION` gobierna los claims de cierre/terminación, no la visibilidad del trabajo. Si un turno debe devolver control por una frontera real de plataforma/sesión/tool o termina con trabajo pendiente, entrega un reporte no-closing con el estado real y el siguiente punto exacto; no esperes a `HECHO` para que exista salida visible. No uses este reporte como excusa para cortar prematuramente un bloque que todavía puede avanzar materialmente dentro del mismo turno.
+
 ### Resolución obligatoria del siguiente trabajo
 
 `UNIT_DONE_IS_TRANSITION_NOT_HANDOFF`: completar/verificar/integrar una unidad o decidir `NO_CHANGE` sobre ella es una transición, no un handoff. Antes de cualquier respuesta final de una solicitud de ejecución, resuelve `NEXT_ELIGIBLE_WORK`.
@@ -53,14 +63,14 @@ CONTINUITY/segmento y PLAN/módulo aportan estado, intención y candidatos; Git/
 
 `LOCAL_FAILURE_REQUIRES_REROUTE`: si falla una tool, comando, child, ruta o subunidad, registra el finding mínimo útil y vuelve a `NEXT_ELIGIBLE_WORK`. Sólo puede convertirse en bloqueo total después de auditar capacidades/rutas alternativas y demostrar que no queda trabajo elegible dentro de la frontera.
 
-`STOP_GATE_REQUIRES_TERMINAL_CONDITION`: antes de devolver control al final de una solicitud de ejecución demuestra una condición terminal real:
+`STOP_GATE_REQUIRES_TERMINAL_CONDITION`: antes de **declarar cerrada o terminada** una solicitud de ejecución demuestra una condición terminal real:
 
 - `REQUESTED_SCOPE_COMPLETE`: la frontera solicitada terminó realmente y alcanzó la verificación/reconciliación exigible;
 - `TOTAL_REAL_BLOCK`: no queda trabajo elegible ni ruta alternativa disponible dentro del scope después de capability audit;
 - `EXPLICIT_USER_STOP`: el usuario ordenó detenerse o cambió el objetivo;
 - `REAL_EXTERNAL_INTERRUPTION`: la plataforma/sesión interrumpió físicamente la ejecución; si todavía puede emitirse salida, deja recovery checkpoint y no lo presentes como cierre.
 
-Una lista local agotada, `NO_CHANGE`, PASS/FAIL de un test, commit, finding, checkpoint, update, timeout, herramienta no disponible o tiempo transcurrido no demuestran por sí solos ninguna condición terminal. Una solicitud exclusivamente de estado/diagnóstico conserva la excepción existente: responde el estado pedido sin inventar ejecución adicional.
+Una lista local agotada, `NO_CHANGE`, PASS/FAIL de un test, commit, finding, checkpoint, update, timeout, herramienta no disponible o tiempo transcurrido no demuestran por sí solos ninguna condición terminal. Un reporte explícitamente marcado como `EN_EJECUCIÓN` tampoco satisface el stop gate ni necesita fingir cierre: debe dejar estado real y `NEXT_ELIGIBLE_WORK` exacto. Una solicitud exclusivamente de estado/diagnóstico conserva la excepción existente: responde el estado pedido sin inventar ejecución adicional.
 
 La reconciliación completa ocurre al cruzar una **frontera macro real**, al cambiar materialmente el plan/estado o antes de declarar el bloque terminado. Reconciliar significa contrastar Git/árbol, código/runtime/estado persistente, tests/evidencia, CONTINUITY + segmento activo y PLAN + módulo aplicable.
 
@@ -152,7 +162,7 @@ Al reanudar:
 
 No repitas auditorías válidas por ceremonia. No conviertas una interrupción en cierre.
 
-Para solicitudes de ejecución, una respuesta final debe pasar `STOP_GATE_REQUIRES_TERMINAL_CONDITION`; terminar una unidad o agotar una lista local obliga antes a `NEXT_ELIGIBLE_WORK`.
+Para solicitudes de ejecución, una respuesta final debe pasar `STOP_GATE_REQUIRES_TERMINAL_CONDITION` **cuando declare cierre o terminación del scope**; un reporte final de turno explícitamente `EN_EJECUCIÓN` no es un claim de cierre. Terminar una unidad o agotar una lista local obliga antes a `NEXT_ELIGIBLE_WORK`. Si el turno devuelve control con trabajo pendiente, el reporte debe decirlo explícitamente y dejar el siguiente punto verificable; ese reporte no convierte el macro en terminado.
 
 Un bloque sólo puede entregarse como terminado cuando la frontera solicitada realmente terminó y está reconciliada, o cuando existe un bloqueo total real sin otra ruta elegible. Si el usuario pidió únicamente estado/diagnóstico, responde ese estado sin inventar ejecución adicional.
 
@@ -162,8 +172,12 @@ Antes de aceptar la primera explicación: **«¿Qué otra explicación plausible
 
 Antes de crear: **«Busca si ya existe, aunque tenga otro nombre.»**
 
+Antes de ampliar auditoría: **«¿Qué pregunta material no resuelta puede cambiar esta nueva inspección?»**
+
+Antes de cambiar de familia de trabajo: **«¿Ya dejé visible el finding que justifica este salto y el siguiente punto exacto?»**
+
 Antes de reconciliar: **«¿Estoy cruzando una frontera macro o sólo terminé una subunidad que debe continuar?»**
 
 Antes de cerrar: **«Asume que está mal. Intenta romperlo. Después demuéstralo.»**
 
-Antes de entregar: **«¿Demostré `REQUESTED_SCOPE_COMPLETE` o `TOTAL_REAL_BLOCK`, o todavía existe `NEXT_ELIGIBLE_WORK`?»**
+Antes de entregar: **«¿Estoy declarando cierre o reportando estado? Si es cierre, ¿demostré `REQUESTED_SCOPE_COMPLETE` o `TOTAL_REAL_BLOCK`? Si sigue abierto, ¿dejé `NEXT_ELIGIBLE_WORK` exacto y visible?»**
