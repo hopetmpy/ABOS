@@ -19,6 +19,25 @@ import type {
 
 export const STRATEGIC_PATH_BELIEF_KEY = "strategy.path_viability";
 
+type RecordFailureInput = {
+  candidate: PathCandidate;
+  pathId?: string | null;
+  error: string;
+  observations?: string[];
+  evidence?: string[];
+  learnedFacts?: Array<{ key: string; value: string; confidence?: number }>;
+  conditions?: Record<string, unknown>;
+};
+
+type RecordSuccessInput = {
+  candidate: PathCandidate;
+  pathId?: string | null;
+  markPathSucceeded?: boolean;
+  observations?: string[];
+  evidence?: string[];
+  conditions?: Record<string, unknown>;
+};
+
 export class AdaptivePathEngine {
   readonly store: AdaptiveStore;
   readonly possibilities: PossibilitySpace;
@@ -55,15 +74,11 @@ export class AdaptivePathEngine {
     return assessed;
   }
 
-  recordFailure(input: {
-    candidate: PathCandidate;
-    pathId?: string | null;
-    error: string;
-    observations?: string[];
-    evidence?: string[];
-    learnedFacts?: Array<{ key: string; value: string; confidence?: number }>;
-    conditions?: Record<string, unknown>;
-  }): AdaptiveDecision {
+  recordFailure(input: RecordFailureInput): AdaptiveDecision {
+    return this.db.transaction(() => this.recordFailureWithinTransaction(input))();
+  }
+
+  private recordFailureWithinTransaction(input: RecordFailureInput): AdaptiveDecision {
     const { path, novelty } = this.assessAttemptTarget(
       input.candidate,
       input.pathId,
@@ -265,14 +280,11 @@ export class AdaptivePathEngine {
     };
   }
 
-  recordSuccess(input: {
-    candidate: PathCandidate;
-    pathId?: string | null;
-    markPathSucceeded?: boolean;
-    observations?: string[];
-    evidence?: string[];
-    conditions?: Record<string, unknown>;
-  }): void {
+  recordSuccess(input: RecordSuccessInput): void {
+    this.db.transaction(() => this.recordSuccessWithinTransaction(input))();
+  }
+
+  private recordSuccessWithinTransaction(input: RecordSuccessInput): void {
     const { path, novelty } = this.assessAttemptTarget(
       input.candidate,
       input.pathId,
