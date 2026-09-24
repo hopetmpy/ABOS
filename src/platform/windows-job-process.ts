@@ -1,6 +1,6 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 
-const WINDOWS_JOB_BOOTSTRAP_GRACE_MS = 20_000;
+export const WINDOWS_JOB_BOOTSTRAP_TIMEOUT_MS = 60_000;
 
 const WINDOWS_JOB_OWNER_SOURCE = String.raw`
 $ErrorActionPreference = 'Stop'
@@ -295,7 +295,7 @@ export function runWindowsJobProcessSync(options: {
     windowsHide: true,
     encoding: "utf8",
     maxBuffer: 10 * 1024 * 1024,
-    timeout: commandTimeout + WINDOWS_JOB_BOOTSTRAP_GRACE_MS,
+    timeout: commandTimeout + WINDOWS_JOB_BOOTSTRAP_TIMEOUT_MS,
   });
 
   const providerTimedOut = Boolean(result.error && (result.error as NodeJS.ErrnoException).code === "ETIMEDOUT");
@@ -379,4 +379,4 @@ export function spawnWindowsJobProcess(options: {
   return { child, ready };
 }
 
-export const WINDOWS_JOB_READY_TIMEOUT_MS = 20_000;
+export const WINDOWS_JOB_READY_TIMEOUT_MS = WINDOWS_JOB_BOOTSTRAP_TIMEOUT_MS;
