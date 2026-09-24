@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-022
 Active-Segment: continuity/C0018.md
-Active-Intervention: P022_WORLD_MODEL — DECISION_READY / SOURCE_IN_PROGRESS / PARTIAL_EVIDENCE
+Active-Intervention: P022_WORLD_MODEL — DECISION_READY / SOURCE_COMPLETE / E3_EXACT_PRODUCT_HEAD_GREEN / INTEGRATION_PENDING
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -41,7 +41,7 @@ No existe otra capa de cadencia dentro de ProjectOps.
 - P-004: PLANIFICADO — track documental transversal/final.
 - P-005: PLANIFICADO — acceptance LIVE incremental.
 - P-006..P-021: HECHO para sus objetivos canónicos.
-- P-022: EN_EJECUCIÓN / DECISION_READY / SOURCE_IN_PROGRESS / PARTIAL_EVIDENCE.
+- P-022: EN_EJECUCIÓN / DECISION_READY / SOURCE_COMPLETE / E3_EXACT_PRODUCT_HEAD_GREEN / INTEGRATION_PENDING.
 - P-023..P-036: ver estado explícito en `ProjectOps/PLAN.md`.
 
 ## Cierre P-021
@@ -61,38 +61,44 @@ Estado final P-021: `HECHO / E3_MAIN_GREEN / INTEGRATION_VERIFIED`. El detalle h
 
 P-022 se abrió desde `main 6eb836be2325048e7ac243415e59e9565fc93d08` después de exact-main CI `35954954278` SUCCESS 8/8. La auditoría alcanzó `DECISION_READY` antes de source y decidió `EXTEND_EXISTING_INTELLIGENCE_STATE` en lugar de crear una authority paralela.
 
-Estado observable vigente antes del siguiente gate:
+Realidad observable reconciliada:
 
 - branch `abos/p022-world-model`;
-- head observado `8ceac3306ba7bd1c63f022a8a359efbb6dec90a5`;
+- main observado `bff1fd49a561061c635da0b1fcab8502e5f0cab0`;
+- último product head completamente validado: `ef2eb0a29522cdd3208db52898c4d6381e245ef4`;
+- exact-head CI `36047421730`: SUCCESS 8/8;
 - beliefs/hypotheses persistentes bajo `AdaptiveStore`, con confidence nullable, temporalidad, lifecycle y Evidence Fabric referencial;
 - active/non-expired beliefs proyectados al `PossibilitySpace` y planner context;
 - producer runtime estratégico conectado a `AdaptivePathEngine.selectCandidate()` y falsación ligada a failure evidence terminal;
-- tests P-022 de store/restart/competition/evidence y producer runtime añadidos;
-- schema global `SCHEMA_VERSION=21` y `WORLD_MODEL_SCHEMA` incorporado a `CREATE_TABLES` usando blob exacto; falta demostrar fresh DB + upgrade V20→V21 y CI exact-head antes de aceptar el claim de migración;
-- primer source slice `a327e730dabf8c3b7e402f5fa5ab83f6eb6f3a35` sí tuvo CI `36042290760` verde en las familias inspeccionadas, pero esa evidencia no cubre el head actual.
+- schema global `SCHEMA_VERSION=21` y `WORLD_MODEL_SCHEMA` incorporado a `CREATE_TABLES`;
+- fresh DB y upgrade sintético V20→V21 demostrados mediante `createDatabase()` real;
+- tests P-022 cubren store/restart/competition/evidence, runtime producer/failure lifecycle y migration;
+- dos regressions legacy detectadas en CI `36046871692` fueron discriminadas como expectations antiguas y corregidas sin cambiar product source;
+- reconciliación ProjectOps posterior al PASS: `16a06cdae90a07f4f1aee6cb323feea9c68a616c` actualizó C0018 y `57978b651ddfdaf5d3aaa2962b295ed720dbbe37` actualizó P-022; el HEAD docs-only resultante todavía debe completar su propio gate antes de PR.
 
-## Findings abiertos / resueltos
+## Findings resueltos / abiertos
 
 - RESUELTO: P-021 stale en continuidad inicial; Git/PR/CI demostraron integración terminal.
 - RESUELTO: creación de manager/store paralelo P-022 rechazada; Adaptive Intelligence ya era owner parcial.
-- RESUELTO: ausencia inicial de producer runtime; la ruta mínima usa el lifecycle ya obligatorio de `selectCandidate()` sin ampliar Planner/Orchestrator.
-- RESUELTO: dos intentos de edición de migration con reconstrucción textual produjeron drift lateral y fueron revertidos exactamente antes de aceptación.
-- CONDICIÓN NUEVA: `fetch_blob` permitió editar `schema.ts` desde su contenido exacto; el diff de la integración V21 quedó acotado a import, versión e interpolación de `WORLD_MODEL_SCHEMA`.
-- FALSADA: hipótesis adversarial de que el failure-classifier cae a `unknown`; el fallback real es `strategic_failure`, y auth/capability/resource/transient/environment permanecen no terminales.
-- ABIERTO: demostrar migration global/fresh DB y exact-head completo; reauditar radius completo antes de cualquier integración/HECHO.
+- RESUELTO: ausencia inicial de producer runtime; `selectCandidate()` materializa strategic path viability sin ampliar Planner/Orchestrator.
+- RESUELTO: migration global que antes estaba `BLOQUEADO_TOOLING_SAFE_EDIT`; `fetch_blob`/edición exacta permitió integrar schema 21 sin drift lateral y `createDatabase()` fresh/V20→V21 lo demuestra.
+- RESUELTO: hipótesis adversarial de failure-classifier; sólo `terminalForPath` falsifica automáticamente la viabilidad estratégica.
+- RESUELTO: CI `36046871692` falló por dos baselines legacy; `2cf541746dedc5592813468993d5577d0e3c1e01` y `ef2eb0a29522cdd3208db52898c4d6381e245ef4` corrigieron las expectations y CI `36047421730` quedó verde 8/8.
+- ABIERTO: gatear el HEAD docs-only reconciliado, abrir/revisar PR, integrar y exigir exact-main CI antes de cierre terminal.
 
 ## Claims y límites actuales
 
-- P-021 puede reclamarse HECHO con E3 exact-main.
-- P-022 NO está HECHO ni integrado.
-- No se ha creado una segunda authority de memory/knowledge/evidence/planning.
-- P-023/P-024/P-025 no se adelantan dentro de P-022.
-- El head actual no puede reclamar PASS global hasta completar las validaciones exact-head y reconciliación macro.
+- P-021: HECHO / E3 exact-main.
+- P-022 source/branch product head: E3 exact-head demostrado.
+- P-022 integración en `main`: NO HECHO.
+- P-022: NO está HECHO todavía.
+- No se creó una segunda authority de memory/knowledge/evidence/planning/world-model.
+- P-023/P-024/P-025 no se adelantaron dentro de P-022.
+- E3 CI no demuestra provider/economic LIVE E5/E6 y P-022 no necesita esos niveles para su claim de source/integration.
 
 ## Siguiente punto verificable
 
-Añadir y ejecutar evidencia específica de schema fresh DB + upgrade V20→V21 mediante `createDatabase()`, revisar CI exact-head de producer + schema, atacar el diff/radius completo y reconciliar C0018/P-022 sólo con los resultados observados.
+Esperar sólo evidencia del gate exact-head generado por esta reconciliación docs-only; si queda verde, abrir PR `abos/p022-world-model` → `main`, verificar mergeability/checks sobre el SHA exacto, integrar y ejecutar/observar CI exact-main. Sólo después reconciliar P-022 a HECHO si no aparece un defecto material nuevo.
 
 ## Política de rotación
 
