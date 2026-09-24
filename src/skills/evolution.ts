@@ -5,7 +5,7 @@ import type { Skill, SkillRequirements, SkillSource } from "../types.js";
 import type { CapabilityRegistry, SkillCapabilityProjection } from "../capabilities/registry.js";
 import { appendEvidenceEvent, correlationIdFor, getEvidenceEvent } from "../observability/evidence.js";
 
-export type SkillLifecycleState = "candidate" | "validated" | "active" | "superseded" | "degraded" | "deprecated";
+export type SkillLifecycleState = "candidate" | "validated" | "active" | "superseded" | "degraded" | "disabled" | "deprecated";
 
 export interface SkillCapabilityContract {
   requiredCapabilities: string[];
@@ -215,6 +215,140 @@ export class SkillEvolutionEngine {
     return (this.db.prepare("SELECT * FROM skill_evaluations WHERE skill_version_id = ? ORDER BY created_at ASC, id ASC").all(versionId) as any[]).map(deserializeEvaluation);
   }
 
+  bootstrapLegacySkills(): number {
+    const rows = this.db.prepare("SELECT * FROM skills ORDER BY name ASC").all() as any[];
+    let imported = 0;
+    for (const row of rows) {
+      const skillName = String(row.name);
+      if (this.isManaged(skillName)) continue;
+
+      const definition = normalizeDefinition({
+        name: skillName,
+        description: String(row.description ?? ""),
+        autoActivate: Boolean(row.auto_activate),
+        requires: parseJson<SkillRequirements>(String(row.requires || "{}"), `legacy skill requirements ${skillName}`),
+        instructions: String(row.instructions ?? ""),
+        source: String(row.source ?? "builtin") as SkillSource,
+        path: String(row.path ?? ""),
+        capability: {
+          requiredCapabilities: [],
+          provides: [skillName],
+          permissions: [],
+          effects: [],
+          compatibility: [],
+          environment: null,
+          inputs: [],
+          outputs: [],
+        },
+      });
+      const verification = normalizeVerification({
+        method: "legacy_runtime_baseline",
+        critical: false,
+        minimumIndependentSuccesses: 1,
+      });
+      const applicability: Record<string, unknown> = {};
+      const provenance: Record<string, unknown> = {
+        legacyBaseline: true,
+        importedFrom: "skills_projection",
+        installedAt: row.installed_at ?? null,
+      };
+      rejectSecretMaterial({ definition, provenance });
+      const id = ulid();
+      const now = new Date().toISOString();
+      const enabled = Boolean(row.enabled);
+      const hash = contentHash(definition, verification, applicability);
+
+      this.db.transaction(() => {
+        const observation = appendEvidenceEvent(this.db, {
+          correlationId: correlationIdFor("skill", skillName),
+          eventType: "skill.legacy_baseline_imported",
+          domain: "skill",
+          authorityType: "skill_version",
+          authorityId: id,
+          epistemicStatus: "observation",
+          payload: { skillName, enabled, contentHash: hash, importedFrom: "skills_projection" },
+          provenance: { source: "SkillEvolutionEngine.bootstrapLegacySkills" },
+        });
+        this.db.prepare(`INSERT INTO skill_versions (
+          id, skill_name, version, parent_version_id, lifecycle_state,
+          definition_json, content_hash, verification_json, applicability_json,
+          provenance_json, evidence_json, created_at, updated_at, activated_at
+        ) VALUES (?, ?, 1, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+          id,
+          skillName,
+          enabled ? "active" : "disabled",
+          JSON.stringify(definition),
+          hash,
+          JSON.stringify(verification),
+          JSON.stringify(applicability),
+          JSON.stringify(provenance),
+          JSON.stringify([observation.id]),
+          now,
+          now,
+          enabled ? now : null,
+        );
+      })();
+      imported += 1;
+    }
+    return imported;
+  }
+
+  observeFilesystemSkill(skill: Skill): SkillVersionRecord | undefined {
+    const runtime = this.getRuntimeVersion(skill.name);
+    if (!runtime) return undefined;
+
+    const definition = normalizeDefinition({
+      ...runtime.definition,
+      name: skill.name,
+      description: skill.description,
+      autoActivate: skill.autoActivate,
+      requires: skill.requires,
+      instructions: skill.instructions,
+      source: skill.source,
+      path: skill.path,
+      capability: runtime.definition.capability,
+    });
+    const verification = runtime.provenance.legacyBaseline
+      ? normalizeVerification({
+          method: "managed_file_change_validation",
+          critical: false,
+          minimumIndependentSuccesses: 1,
+        })
+      : runtime.verification;
+    const applicability = runtime.applicability;
+    rejectSecretMaterial({ definition });
+    const hash = contentHash(definition, verification, applicability);
+    if (hash === runtime.contentHash) return runtime;
+
+    const existing = this.db.prepare(`SELECT * FROM skill_versions
+      WHERE skill_name = ? AND content_hash = ? AND lifecycle_state <> 'deprecated'
+      ORDER BY version DESC LIMIT 1`).get(skill.name, hash) as any | undefined;
+    if (existing) return deserializeVersion(existing);
+
+    const observed = appendEvidenceEvent(this.db, {
+      correlationId: correlationIdFor("skill", skill.name),
+      eventType: "skill.file_change_observed",
+      domain: "skill",
+      authorityType: "skill_version",
+      authorityId: runtime.id,
+      epistemicStatus: "observation",
+      payload: { skillName: skill.name, parentVersionId: runtime.id, contentHash: hash, path: skill.path },
+      provenance: { source: "SkillEvolutionEngine.observeFilesystemSkill" },
+    });
+    return this.createCandidate({
+      definition,
+      verification,
+      applicability,
+      provenance: {
+        observedFromFilesystem: true,
+        observedAt: new Date().toISOString(),
+        parentVersionId: runtime.id,
+      },
+      evidenceEventIds: [observed.id],
+      parentVersionId: runtime.id,
+    });
+  }
+
   createCandidate(input: {
     definition: SkillVersionDefinition;
     verification: SkillVerificationPolicy;
@@ -233,11 +367,15 @@ export class SkillEvolutionEngine {
       if (!getEvidenceEvent(this.db, evidenceId)) throw new Error(`Unknown evidence event for skill candidate: ${evidenceId}`);
     }
     rejectSecretMaterial({ definition, provenance });
+    const hash = contentHash(definition, verification, applicability);
 
     let parent: SkillVersionRecord | undefined;
-    if (input.parentVersionId) {
-      parent = this.getVersion(input.parentVersionId);
-      if (!parent) throw new Error(`Unknown parent skill version: ${input.parentVersionId}`);
+    const requestedParentId = input.parentVersionId === undefined
+      ? this.getRuntimeVersion(definition.name)?.id ?? null
+      : input.parentVersionId;
+    if (requestedParentId) {
+      parent = this.getVersion(requestedParentId);
+      if (!parent) throw new Error(`Unknown parent skill version: ${requestedParentId}`);
       if (parent.skillName !== definition.name) throw new Error("Parent skill version belongs to a different skill.");
     }
 
@@ -245,7 +383,6 @@ export class SkillEvolutionEngine {
     const version = latest.version + 1;
     const id = ulid();
     const now = new Date().toISOString();
-    const hash = contentHash(definition, verification, applicability);
 
     this.db.transaction(() => {
       this.db.prepare(`INSERT INTO skill_versions (id, skill_name, version, parent_version_id, lifecycle_state, definition_json, content_hash, verification_json, applicability_json, provenance_json, evidence_json, created_at, updated_at) VALUES (?, ?, ?, ?, 'candidate', ?, ?, ?, ?, ?, ?, ?, ?)`).run(
@@ -273,6 +410,9 @@ export class SkillEvolutionEngine {
     const outcome = input.outcome.trim().toLowerCase();
     if (!evaluationKind) throw new Error("evaluationKind is required.");
     if (!outcome) throw new Error("evaluation outcome is required.");
+    if (!["success", "failure", "partial", "inconclusive"].includes(outcome)) {
+      throw new Error(`Unsupported evaluation outcome: ${input.outcome}`);
+    }
     if (!getEvidenceEvent(this.db, input.evidenceEventId)) throw new Error(`Evaluation evidence does not exist: ${input.evidenceEventId}`);
     const id = ulid();
     const now = new Date().toISOString();
@@ -297,12 +437,23 @@ export class SkillEvolutionEngine {
   assessPromotion(versionId: string, registry: CapabilityRegistry): PromotionAssessment {
     const version = this.requireVersion(versionId);
     const evaluations = this.listEvaluations(version.id);
-    const successfulEvidenceIds = unique(evaluations.filter((entry) => ["validation", "replay"].includes(entry.evaluationKind.toLowerCase()) && entry.outcome === "success").map((entry) => entry.evidenceEventId));
-    const failedValidation = evaluations.some((entry) => ["validation", "replay"].includes(entry.evaluationKind.toLowerCase()) && entry.outcome === "failure");
+    const relevant = evaluations.filter((entry) => ["validation", "replay"].includes(entry.evaluationKind.toLowerCase()));
+    const successful = relevant.filter((entry) => entry.outcome === "success");
+    const successfulEvidenceIds = unique(successful.map((entry) => entry.evidenceEventId));
+    const failedValidation = relevant.some((entry) => entry.outcome === "failure");
     const requiredIndependentSuccesses = Math.max(version.verification.minimumIndependentSuccesses, version.verification.critical ? 2 : 1);
+    const independentContexts = unique(successful.map((entry) => {
+      if (entry.taskId || entry.environmentId) return `task:${entry.taskId ?? "unknown"}|env:${entry.environmentId ?? "unknown"}`;
+      return "context:unspecified";
+    }));
+    const independentSuccessCount = requiredIndependentSuccesses > 1
+      ? independentContexts.length
+      : successfulEvidenceIds.length > 0 ? 1 : 0;
     const reasons: string[] = [];
     if (failedValidation) reasons.push("At least one validation/replay observation failed.");
-    if (successfulEvidenceIds.length < requiredIndependentSuccesses) reasons.push(`Need ${requiredIndependentSuccesses} independent successful validation/replay evidence events; found ${successfulEvidenceIds.length}.`);
+    if (independentSuccessCount < requiredIndependentSuccesses) {
+      reasons.push(`Need ${requiredIndependentSuccesses} independent successful validation/replay contexts; found ${independentSuccessCount}.`);
+    }
     for (const dependency of version.definition.capability.requiredCapabilities) {
       if (!registry.isExecutionReady(dependency)) reasons.push(`Required capability is not execution-ready: ${dependency}`);
     }
@@ -358,18 +509,22 @@ export class SkillEvolutionEngine {
   deprecateVersion(versionId: string, evidenceEventId: string, reason: string, registry: CapabilityRegistry): SkillVersionRecord {
     const version = this.requireVersion(versionId);
     this.requireEvidence(evidenceEventId);
+    const runtimeBefore = this.getRuntimeVersion(version.skillName);
+    const controlledRuntime = runtimeBefore?.id === version.id;
     const now = new Date().toISOString();
     this.db.transaction(() => {
       this.db.prepare("UPDATE skill_versions SET lifecycle_state = 'deprecated', deprecated_at = ?, updated_at = ? WHERE id = ?").run(now, now, version.id);
-      if (version.lifecycleState === "active") this.db.prepare("UPDATE skills SET enabled = 0 WHERE name = ?").run(version.skillName);
+      if (controlledRuntime) this.db.prepare("UPDATE skills SET enabled = 0 WHERE name = ?").run(version.skillName);
       appendEvidenceEvent(this.db, {
         correlationId: correlationIdFor("skill", version.skillName), causationId: evidenceEventId,
         eventType: "skill.version_deprecated", domain: "skill", authorityType: "skill_version", authorityId: version.id,
-        epistemicStatus: "observation", payload: { reason }, provenance: { source: "SkillEvolutionEngine" },
+        epistemicStatus: "observation", payload: { reason, controlledRuntime }, provenance: { source: "SkillEvolutionEngine" },
       });
     })();
-    registry.registerSkillInventory({ name: version.skillName, description: version.definition.description, enabled: false }, this.projectionFor(version));
-    registry.recordProbe(`skill:${version.skillName}`, { state: "retired", authority: `skill-evolution:${version.id}`, evidence: [`Skill version ${version.version} deprecated from evidence event ${evidenceEventId}.`] });
+    if (controlledRuntime) {
+      registry.registerSkillInventory({ name: version.skillName, description: version.definition.description, enabled: false }, this.projectionFor(version));
+      registry.recordProbe(`skill:${version.skillName}`, { state: "retired", authority: `skill-evolution:${version.id}`, evidence: [`Skill version ${version.version} deprecated from evidence event ${evidenceEventId}.`] });
+    }
     return this.getVersion(version.id)!;
   }
 
@@ -393,7 +548,8 @@ export class SkillEvolutionEngine {
   isPromptEligible(skillName: string, registry: CapabilityRegistry): boolean {
     if (!this.isManaged(skillName)) return true;
     const active = this.getActiveVersion(skillName);
-    if (!active) return true;
+    if (!active) return false;
+    if (active.provenance.legacyBaseline === true) return true;
     return registry.isExecutionReady(`skill:${skillName}`);
   }
 
@@ -406,12 +562,20 @@ export class SkillEvolutionEngine {
       seen.add(version.skillName);
       const enabled = version.lifecycleState === "active";
       registry.registerSkillInventory({ name: version.skillName, description: version.definition.description, enabled }, this.projectionFor(version));
-      const state = version.lifecycleState === "active" ? "verified_available" : version.lifecycleState === "degraded" ? "degraded" : version.lifecycleState === "deprecated" ? "retired" : "unavailable";
+      const legacyBaseline = version.provenance.legacyBaseline === true;
+      const state = legacyBaseline
+        ? "discovered_unverified"
+        : version.lifecycleState === "active" ? "verified_available"
+          : version.lifecycleState === "degraded" ? "degraded"
+            : version.lifecycleState === "deprecated" ? "retired" : "unavailable";
       registry.recordProbe(`skill:${version.skillName}`, {
         state,
         authority: `skill-evolution:${version.id}`,
-        evidence: [`Restored skill version ${version.version} lifecycle=${version.lifecycleState} from durable skill evolution authority.`, ...version.evidenceEventIds.map((id) => `Evidence event ${id}`)],
+        evidence: legacyBaseline
+          ? [`Restored legacy runtime baseline version ${version.version}; this is compatibility evidence, not execution-readiness proof.`]
+          : [`Restored skill version ${version.version} lifecycle=${version.lifecycleState} from durable skill evolution authority.`, ...version.evidenceEventIds.map((id) => `Evidence event ${id}`)],
         observedAt: version.updatedAt,
+        metadata: { skillVersionId: version.id, skillVersion: version.version, legacyBaseline },
       });
     }
   }

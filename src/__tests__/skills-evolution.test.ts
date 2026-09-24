@@ -29,8 +29,8 @@ function candidate(engine: SkillEvolutionEngine, seedEvidence: string, overrides
     evidenceEventIds: [seedEvidence], ...overrides,
   });
 }
-function success(engine: SkillEvolutionEngine, versionId: string, evidenceEventId: string, kind = "replay") {
-  return engine.recordEvaluation({ versionId, evaluationKind: kind, outcome: "success", evidenceEventId });
+function success(engine: SkillEvolutionEngine, versionId: string, evidenceEventId: string, kind = "replay", taskId?: string, environmentId?: string) {
+  return engine.recordEvaluation({ versionId, evaluationKind: kind, outcome: "success", evidenceEventId, taskId, environmentId });
 }
 
 describe("P-021 skill evolution", () => {
@@ -44,8 +44,8 @@ describe("P-021 skill evolution", () => {
   });
   it("does not promote a critical skill from one isolated success", () => {
     const { db, engine, registry } = runtime(); const version = candidate(engine, evidence(db, "seed"), { verification: { method: "independent critical replay", critical: true, minimumIndependentSuccesses: 1 } });
-    success(engine, version.id, evidence(db, "success-1")); expect(() => engine.validateVersion(version.id, registry)).toThrow(/Need 2 independent/i);
-    success(engine, version.id, evidence(db, "success-2")); expect(engine.validateVersion(version.id, registry).lifecycleState).toBe("validated"); db.close();
+    success(engine, version.id, evidence(db, "success-1"), "replay", "incident-a"); expect(() => engine.validateVersion(version.id, registry)).toThrow(/Need 2 independent/i);
+    success(engine, version.id, evidence(db, "success-2"), "replay", "incident-b"); expect(engine.validateVersion(version.id, registry).lifecycleState).toBe("validated"); db.close();
   });
   it("blocks validation while a declared capability dependency is not execution-ready", () => {
     const { db, engine, registry } = runtime(); registry.register({ id: "tool:diagnostic", type: "tool", provider: "abos", description: "diagnostic", requirements: [], provides: ["diagnostic"], permissions: [], available: false, state: "unknown" });
@@ -78,8 +78,37 @@ describe("P-021 skill evolution", () => {
   it("does not let stale SKILL.md overwrite managed projection", () => {
     const { dir, db, engine, registry } = runtime(); const v1 = candidate(engine, evidence(db, "seed")); success(engine, v1.id, evidence(db, "ok")); engine.validateVersion(v1.id, registry); engine.activateVersion(v1.id, registry);
     const skillsDir = join(dir, "skills"); const skillDir = join(skillsDir, "incident-helper"); mkdirSync(skillDir, { recursive: true }); writeFileSync(join(skillDir, "SKILL.md"), `---\nname: incident-helper\ndescription: stale\nauto-activate: true\n---\n\nSTALE FILE INSTRUCTIONS`);
-    loadSkills(skillsDir, db); expect(db.getSkillByName("incident-helper")?.instructions).toContain("Inspect evidence"); expect(db.getSkillByName("incident-helper")?.instructions).not.toContain("STALE FILE"); db.close();
+    loadSkills(skillsDir, db); loadSkills(skillsDir, db); expect(db.getSkillByName("incident-helper")?.instructions).toContain("Inspect evidence"); expect(db.getSkillByName("incident-helper")?.instructions).not.toContain("STALE FILE"); const versions = engine.listVersions("incident-helper"); expect(versions).toHaveLength(2); expect(versions[0].lifecycleState).toBe("candidate"); expect(versions[0].definition.instructions).toContain("STALE FILE INSTRUCTIONS"); db.close();
   });
+  it("imports an existing runtime skill exactly once without fabricating capability readiness", () => {
+    const { db, engine, registry } = runtime();
+    db.upsertSkill({ name: "legacy-helper", description: "legacy", autoActivate: true, instructions: "Legacy instructions", source: "self", path: "legacy://helper", enabled: true, installedAt: new Date().toISOString() });
+    expect(engine.bootstrapLegacySkills()).toBe(1); expect(engine.bootstrapLegacySkills()).toBe(0);
+    registry.ingestSkills(db.getSkills(), (name) => engine.getCapabilityProjection(name)); engine.reconcileCapabilityRegistry(registry);
+    const versions = engine.listVersions("legacy-helper"); expect(versions).toHaveLength(1); expect(versions[0].lifecycleState).toBe("active"); expect(versions[0].provenance.legacyBaseline).toBe(true);
+    expect(registry.isExecutionReady("skill:legacy-helper")).toBe(false); expect(engine.isPromptEligible("legacy-helper", registry)).toBe(true); db.close();
+  });
+
+  it("requires distinct task or environment context when multiple independent successes are required", () => {
+    const { db, engine, registry } = runtime(); const version = candidate(engine, evidence(db, "seed-independent"), { verification: { method: "independent replay", critical: true, minimumIndependentSuccesses: 2 } });
+    success(engine, version.id, evidence(db, "same-context-1"), "replay", "incident-a"); success(engine, version.id, evidence(db, "same-context-2"), "replay", "incident-a");
+    expect(() => engine.validateVersion(version.id, registry)).toThrow(/found 1/i);
+    success(engine, version.id, evidence(db, "distinct-context"), "replay", "incident-b"); expect(engine.validateVersion(version.id, registry).lifecycleState).toBe("validated"); db.close();
+  });
+
+  it("rejects unsupported evaluation outcome strings before persistence", () => {
+    const { db, engine } = runtime(); const version = candidate(engine, evidence(db, "seed-outcome")); const proof = evidence(db, "bad-outcome");
+    expect(() => engine.recordEvaluation({ versionId: version.id, evaluationKind: "replay", outcome: "succes", evidenceEventId: proof })).toThrow(/Unsupported evaluation outcome/i);
+    expect(engine.listEvaluations(version.id)).toHaveLength(0); db.close();
+  });
+
+  it("deprecating superseded history does not disable or retire the active version", () => {
+    const { db, engine, registry } = runtime(); const v1 = candidate(engine, evidence(db, "dep-seed-1")); success(engine, v1.id, evidence(db, "dep-v1-ok")); engine.validateVersion(v1.id, registry); engine.activateVersion(v1.id, registry);
+    const v2 = candidate(engine, evidence(db, "dep-seed-2"), { parentVersionId: v1.id, definition: { ...v1.definition, instructions: "Version two stays active." } }); success(engine, v2.id, evidence(db, "dep-v2-ok")); engine.validateVersion(v2.id, registry); engine.activateVersion(v2.id, registry);
+    engine.deprecateVersion(v1.id, evidence(db, "dep-old"), "retire old history", registry);
+    expect(engine.getActiveVersion("incident-helper")?.id).toBe(v2.id); expect(db.getSkillByName("incident-helper")?.enabled).toBe(true); expect(registry.isExecutionReady("skill:incident-helper")).toBe(true); db.close();
+  });
+
   it("rejects secret-like material before persistence", () => {
     const { db, engine } = runtime(); expect(() => candidate(engine, evidence(db, "seed"), { definition: { name: "incident-helper", description: "bad candidate", autoActivate: true, requires: {}, instructions: "Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456", source: "self", path: "skill-evolution:incident-helper", capability: { requiredCapabilities: [], provides: [], permissions: [], effects: [], compatibility: [], environment: null, inputs: [], outputs: [] } } })).toThrow(/secret-like material/i); expect(engine.listVersions("incident-helper")).toHaveLength(0); db.close();
   });

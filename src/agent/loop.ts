@@ -353,6 +353,7 @@ export async function runAgentLoop(
   });
   const skillEvolutionTools = createSkillEvolutionTools();
   const skillEvolution = new SkillEvolutionEngine(db.raw);
+  skillEvolution.bootstrapLegacySkills();
 
   // Unified capability/environment view. Existing tool and skill systems remain
   // authoritative implementations; this registry lets planning reason across
