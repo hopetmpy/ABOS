@@ -36,29 +36,7 @@ jobs:
           text = p.read_text()
           start = text.index('# 9. Registry validates untrusted names before consulting lifecycle storage.')
           end = text.index('# 10. Runtime startup imports any legacy DB projections before Capability Fabric ingestion.')
-          replacement = r'''# 9. Registry validates untrusted names before consulting lifecycle storage.
-          registry = Path("src/skills/registry.ts")
-          text = registry.read_text()
-          for function_name in ["installSkillFromGit", "installSkillFromUrl", "createSkill", "removeSkill"]:
-              function_start = text.index(f"export async function {function_name}(")
-              function_end = text.find("\n/**", function_start)
-              if function_end < 0:
-                  function_end = len(text)
-              segment = text[function_start:function_end]
-              lifecycle = re.search(r'''  if \(isSkillEvolutionManaged\(db\.raw, name\)\) \{\n.*?\n  \}\n''', segment, flags=re.S)
-              validation = re.search(r'''  if \(!SKILL_NAME_RE\.test\(name\)\) \{\n.*?\n  \}\n''', segment, flags=re.S)
-              if not lifecycle or not validation:
-                  raise SystemExit(f"src/skills/registry.ts: missing lifecycle/name validation in {function_name}")
-              lifecycle_block = lifecycle.group(0)
-              segment = segment[:lifecycle.start()] + segment[lifecycle.end():]
-              validation = re.search(r'''  if \(!SKILL_NAME_RE\.test\(name\)\) \{\n.*?\n  \}\n''', segment, flags=re.S)
-              assert validation is not None
-              segment = segment[:validation.end()] + lifecycle_block + segment[validation.end():]
-              text = text[:function_start] + segment + text[function_end:]
-          registry.write_text(text)
-
-          '''
-          p.write_text(text[:start] + replacement + text[end:])
+          p.write_text(text[:start] + '# 9. Registry ordering hardening is applied in a separate verified transform.\n\n' + text[end:])
           PY
           status=$?
           if [ "$status" -eq 0 ]; then
