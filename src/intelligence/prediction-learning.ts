@@ -182,8 +182,6 @@ export function recordPredictionComparison(
     payload: {
       pathId: input.path.id,
       attemptId: input.attempt.id,
-      expectedOutcome: input.path.expectedOutcome,
-      observedOutcome: input.attempt.outcome,
       comparison: comparison.status,
       attribution: comparison.attribution,
       learningTargets: comparison.learningTargets,
@@ -224,7 +222,6 @@ export function recordPathPredictionResolution(
     epistemicStatus: "observation",
     payload: {
       pathId: input.path.id,
-      expectedOutcome: input.path.expectedOutcome,
       resolution: input.status,
       attribution: input.attribution,
       learningTargets: input.learningTargets,
