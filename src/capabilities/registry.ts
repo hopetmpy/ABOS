@@ -87,6 +87,19 @@ export interface CapabilityProbeObservation {
   metadata?: Record<string, unknown>;
 }
 
+export interface SkillCapabilityProjection {
+  version?: string | null;
+  dependencies?: string[];
+  provides?: string[];
+  permissions?: string[];
+  effects?: string[];
+  compatibility?: string[];
+  environment?: string | null;
+  inputs?: string[];
+  outputs?: string[];
+  metadata?: Record<string, unknown>;
+}
+
 export class CapabilityRegistry {
   private readonly entries = new Map<string, CapabilityDescriptor>();
   private readonly fingerprints = new Map<string, string>();
@@ -293,32 +306,58 @@ export class CapabilityRegistry {
     }
   }
 
-  ingestSkills(skills: Array<{ name: string; description?: string; enabled?: boolean }>): void {
+  registerSkillInventory(
+    skill: { name: string; description?: string; enabled?: boolean },
+    projection?: SkillCapabilityProjection,
+  ): CapabilityDescriptor {
     const observedAt = new Date().toISOString();
+    const descriptor: CapabilityDescriptor = {
+      id: `skill:${skill.name}`,
+      type: "skill",
+      provider: "abos",
+      description: skill.description ?? skill.name,
+      requirements: [],
+      provides:
+        projection?.provides && projection.provides.length > 0
+          ? [...projection.provides]
+          : [skill.name],
+      permissions: [...(projection?.permissions ?? [])],
+      effects: projection?.effects ? [...projection.effects] : undefined,
+      dependencies: projection?.dependencies
+        ? [...projection.dependencies]
+        : undefined,
+      version: projection?.version ?? null,
+      compatibility: projection?.compatibility
+        ? [...projection.compatibility]
+        : undefined,
+      environment: projection?.environment ?? null,
+      inputs: projection?.inputs ? [...projection.inputs] : undefined,
+      outputs: projection?.outputs ? [...projection.outputs] : undefined,
+      available: false,
+      state: skill.enabled === false ? "unavailable" : "discovered_unverified",
+      observedAt,
+      authority: "runtime:skill-inventory",
+      evidence: [
+        skill.enabled === false
+          ? "Skill is disabled in the current inventory."
+          : "Skill is enabled in inventory, but inventory state alone is not execution-readiness evidence.",
+      ],
+      metadata: projection?.metadata ? { ...projection.metadata } : undefined,
+    };
+    if (skill.enabled === false) {
+      this.register(descriptor);
+    } else {
+      this.registerInventory(descriptor);
+    }
+    return this.entries.get(descriptor.id)!;
+  }
+
+  ingestSkills(
+    skills: Array<{ name: string; description?: string; enabled?: boolean }>,
+    projectionFor?: (name: string) => SkillCapabilityProjection | undefined,
+  ): void {
     for (const skill of skills) {
-      const descriptor: CapabilityDescriptor = {
-        id: `skill:${skill.name}`,
-        type: "skill",
-        provider: "abos",
-        description: skill.description ?? skill.name,
-        requirements: [],
-        provides: [skill.name],
-        permissions: [],
-        available: false,
-        state: skill.enabled === false ? "unavailable" : "discovered_unverified",
-        observedAt,
-        authority: "runtime:skill-inventory",
-        evidence: [
-          skill.enabled === false
-            ? "Skill is disabled in the current inventory."
-            : "Skill is enabled in inventory, but inventory state alone is not execution-readiness evidence.",
-        ],
-      };
-      if (skill.enabled === false) {
-        this.register(descriptor);
-      } else {
-        this.registerInventory(descriptor);
-      }
+      this.registerSkillInventory(skill, projectionFor?.(skill.name));
     }
   }
 }

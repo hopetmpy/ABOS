@@ -14,6 +14,7 @@ import { parseSkillMd } from "./format.js";
 import { sanitizeInput } from "../agent/injection-defense.js";
 import { createLogger } from "../observability/logger.js";
 import { expandHomePath } from "../platform/home.js";
+import { isSkillEvolutionManaged } from "./evolution.js";
 
 const logger = createLogger("skills.loader");
 
@@ -61,18 +62,18 @@ export function loadSkills(
         if (!skill) continue;
 
         // Requirements are checked before refreshing the persisted definition.
-        if (!checkRequirements(skill)) {
+        if (!checkSkillRequirements(skill)) {
           continue;
         }
 
-        // Check if already in DB and preserve enabled state
-        const existing = db.getSkillByName(skill.name);
-        if (existing) {
-          skill.enabled = existing.enabled;
-          skill.installedAt = existing.installedAt;
+        if (!isSkillEvolutionManaged(db.raw, skill.name)) {
+          const existing = db.getSkillByName(skill.name);
+          if (existing) {
+            skill.enabled = existing.enabled;
+            skill.installedAt = existing.installedAt;
+          }
+          db.upsertSkill(skill);
         }
-
-        db.upsertSkill(skill);
       } catch {
         // Skip invalid skill files
       }
@@ -82,7 +83,7 @@ export function loadSkills(
   // DB inventory is durable across restart, but availability is not. Re-probe
   // requirements every load so a removed binary/env var cannot remain active
   // merely because the skill row survived in SQLite.
-  return db.getSkills(true).filter((skill) => checkRequirements(skill));
+  return db.getSkills(true).filter((skill) => checkSkillRequirements(skill));
 }
 
 /**
@@ -94,7 +95,7 @@ const BIN_NAME_RE = /^[a-zA-Z0-9._-]+$/;
  * Check if a skill's requirements are met.
  * Uses a platform-native binary locator with argument arrays to prevent shell injection.
  */
-function checkRequirements(skill: Skill): boolean {
+export function checkSkillRequirements(skill: Skill): boolean {
   if (!skill.requires) return true;
 
   // Check required binaries

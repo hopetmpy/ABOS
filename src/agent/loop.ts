@@ -95,6 +95,9 @@ import { CapabilityRegistry } from "../capabilities/registry.js";
 import { CapabilityStore } from "../capabilities/store.js";
 import { discoverConfiguredMcpTools } from "../mcp/runtime.js";
 import { createCapabilityTools } from "../capabilities/tools.js";
+import { SkillEvolutionEngine } from "../skills/evolution.js";
+import { createSkillEvolutionTools } from "../skills/evolution-tools.js";
+import { checkSkillRequirements } from "../skills/loader.js";
 import { EnvironmentRegistry } from "../environments/registry.js";
 import { LocalEnvironmentProvider } from "../environments/local.js";
 import { getLocalBrowserRuntime } from "../browser/local-runtime.js";
@@ -348,6 +351,8 @@ export async function runAgentLoop(
     lifecycle: environmentLifecycle,
     getMobility: () => environmentMobility,
   });
+  const skillEvolutionTools = createSkillEvolutionTools();
+  const skillEvolution = new SkillEvolutionEngine(db.raw);
 
   // Unified capability/environment view. Existing tool and skill systems remain
   // authoritative implementations; this registry lets planning reason across
@@ -358,8 +363,14 @@ export async function runAgentLoop(
     ...browserTools,
     ...installedTools,
     ...environmentTools,
+    ...skillEvolutionTools,
   ]);
-  capabilityRegistry.ingestSkills(skills ?? []);
+  const initialSkillInventory = db.getSkills();
+  capabilityRegistry.ingestSkills(
+    initialSkillInventory.length > 0 ? initialSkillInventory : (skills ?? []),
+    (name) => skillEvolution.getCapabilityProjection(name),
+  );
+  skillEvolution.reconcileCapabilityRegistry(capabilityRegistry);
 
   // Prime capability discovery once. Inspection failures are represented as
   // environment state (unavailable/unknown), never as a fatal agent-loop error.
@@ -375,6 +386,7 @@ export async function runAgentLoop(
       ...browserTools,
       ...installedTools,
       ...environmentTools,
+      ...skillEvolutionTools,
     ].map((tool) => tool.name),
   });
 
@@ -388,6 +400,7 @@ export async function runAgentLoop(
     ...browserTools,
     ...installedTools,
     ...environmentTools,
+    ...skillEvolutionTools,
     ...mcpTools,
     ...capabilityTools,
   ];
@@ -399,6 +412,7 @@ export async function runAgentLoop(
     conway,
     inference,
     social,
+    capabilityRegistry,
   };
 
   // Initialize inference router (Phase 2.3)
@@ -1277,6 +1291,11 @@ export async function runAgentLoop(
       const recentTurns = trimContext(
         meaningfulTurns.length > 0 ? meaningfulTurns : allTurns.slice(-2),
       );
+      const liveSkillInventory = db.getSkills();
+      capabilityRegistry.ingestSkills(liveSkillInventory, (name) => skillEvolution.getCapabilityProjection(name));
+      const promptSkills = liveSkillInventory
+        .filter((skill) => skill.enabled && checkSkillRequirements(skill))
+        .filter((skill) => skillEvolution.isPromptEligible(skill.name, capabilityRegistry));
       const systemPrompt = buildSystemPrompt({
         identity,
         config,
@@ -1284,7 +1303,7 @@ export async function runAgentLoop(
         state: db.getAgentState(),
         db,
         tools,
-        skills,
+        skills: promptSkills,
         isFirstRun,
       });
 

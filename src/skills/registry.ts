@@ -22,6 +22,7 @@ import type {
 } from "../types.js";
 import { parseSkillMd } from "./format.js";
 import { expandHomePath } from "../platform/home.js";
+import { isSkillEvolutionManaged } from "./evolution.js";
 
 // Validation patterns to prevent injection via path/URL arguments
 const SKILL_NAME_RE = /^[a-zA-Z0-9-]+$/;
@@ -55,6 +56,9 @@ export async function installSkillFromGit(
   db: AbosDatabase,
   _conway: ConwayClient,
 ): Promise<Skill | null> {
+  if (isSkillEvolutionManaged(db.raw, name)) {
+    throw new Error(`Skill ${name} is managed by Skill Evolution; create a new version instead of overwriting it.`);
+  }
   // Validate inputs to prevent injection
   if (!SKILL_NAME_RE.test(name)) {
     throw new Error(`Invalid skill name: "${name}". Must match ${SKILL_NAME_RE.source}`);
@@ -103,6 +107,9 @@ export async function installSkillFromUrl(
   db: AbosDatabase,
   _conway: ConwayClient,
 ): Promise<Skill | null> {
+  if (isSkillEvolutionManaged(db.raw, name)) {
+    throw new Error(`Skill ${name} is managed by Skill Evolution; create a new version instead of overwriting it.`);
+  }
   // Validate inputs to prevent injection
   if (!SKILL_NAME_RE.test(name)) {
     throw new Error(`Invalid skill name: "${name}". Must match ${SKILL_NAME_RE.source}`);
@@ -151,6 +158,9 @@ export async function createSkill(
   db: AbosDatabase,
   conway: ConwayClient,
 ): Promise<Skill> {
+  if (isSkillEvolutionManaged(db.raw, name)) {
+    throw new Error(`Skill ${name} is managed by Skill Evolution; create a new version instead of overwriting it.`);
+  }
   // Validate name to prevent path traversal/injection
   if (!SKILL_NAME_RE.test(name)) {
     throw new Error(`Invalid skill name: "${name}". Must match ${SKILL_NAME_RE.source}`);
@@ -203,6 +213,9 @@ export async function removeSkill(
   skillsDir: string,
   deleteFiles: boolean = false,
 ): Promise<void> {
+  if (isSkillEvolutionManaged(db.raw, name)) {
+    throw new Error(`Skill ${name} is managed by Skill Evolution; deprecate it through lifecycle instead of bypassing history.`);
+  }
   // Validate name to prevent path traversal/injection
   if (!SKILL_NAME_RE.test(name)) {
     throw new Error(`Invalid skill name: "${name}". Must match ${SKILL_NAME_RE.source}`);
