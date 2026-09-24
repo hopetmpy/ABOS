@@ -11,6 +11,7 @@ import { MIGRATION_V18_EVIDENCE_FABRIC } from "../state/schema.js";
 import {
   SIMULATION_SCHEMA,
   SIMULATION_SCHEMA_REVISION,
+  SIMULATION_SCHEMA_V1_TO_V2,
 } from "../state/simulation-schema.js";
 
 export type SimulationMode = "deterministic" | "stochastic";
@@ -134,6 +135,7 @@ export interface ExperimentRunRecord {
   derivedSeed: string | null;
   variables: Record<string, unknown>;
   output: unknown;
+  surprise: unknown | null;
   costCents: number;
   createdAt: string;
 }
@@ -142,8 +144,11 @@ export interface ReplayResult {
   experimentId: string;
   runIndex: number;
   matches: boolean;
+  surpriseMatches: boolean;
   expected: unknown;
   actual: unknown;
+  expectedSurprise: unknown | null;
+  actualSurprise: unknown | null;
 }
 
 export interface CalibrationInput {
@@ -160,12 +165,27 @@ export interface CalibrationRecord {
   createdAt: string;
 }
 
+export interface ExperimentListFilters {
+  goalId?: string | null;
+  pathId?: string | null;
+  status?: ExperimentStatus;
+  parentExperimentId?: string | null;
+  limit?: number;
+}
+
 const PROVENANCE = new Set<ParameterProvenance>([
   "OBSERVED",
   "ESTIMATED",
   "INFERRED",
   "ASSUMED",
   "UNKNOWN",
+]);
+const EXPERIMENT_STATUSES = new Set<ExperimentStatus>([
+  "draft",
+  "running",
+  "completed",
+  "failed",
+  "budget_exhausted",
 ]);
 
 function requireLabel(value: string, label: string): string {
@@ -195,7 +215,11 @@ function assertConfidence(value: number | undefined, label: string): void {
   }
 }
 
-function normalizeJson(value: unknown, label = "value", seen = new WeakSet<object>()): unknown {
+function normalizeJson(
+  value: unknown,
+  label = "value",
+  seen = new WeakSet<object>(),
+): unknown {
   if (value === null) return null;
   if (typeof value === "string" || typeof value === "boolean") return value;
   if (typeof value === "number") {
@@ -253,7 +277,9 @@ function normalizeVariables(
       value: normalizeJson(variable.value, `variable ${key}.value`),
       provenance: variable.provenance,
       ...(variable.confidence === undefined ? {} : { confidence: variable.confidence }),
-      ...(variable.note === undefined ? {} : { note: requireLabel(variable.note, `variable ${key}.note`) }),
+      ...(variable.note === undefined
+        ? {}
+        : { note: requireLabel(variable.note, `variable ${key}.note`) }),
     };
   }
   return normalized;
@@ -272,7 +298,18 @@ function normalizeAssumptions(values: string[] | undefined): string[] {
 }
 
 function normalizeExperimentSpec(input: ExperimentSpec): Required<
-  Omit<ExperimentSpec, "experimentId" | "goalId" | "pathId" | "seed" | "config" | "expectedInformationGain" | "assumptions" | "parentExperimentId" | "parentRunIndex">
+  Omit<
+    ExperimentSpec,
+    | "experimentId"
+    | "goalId"
+    | "pathId"
+    | "seed"
+    | "config"
+    | "expectedInformationGain"
+    | "assumptions"
+    | "parentExperimentId"
+    | "parentRunIndex"
+  >
 > & {
   experimentId: string;
   goalId: string | null;
@@ -289,7 +326,10 @@ function normalizeExperimentSpec(input: ExperimentSpec): Required<
     throw new Error(`unsupported simulation mode: ${String(mode)}`);
   }
   const expectedInformationGain = input.expectedInformationGain ?? null;
-  if (expectedInformationGain !== null && (!Number.isFinite(expectedInformationGain) || expectedInformationGain < 0)) {
+  if (
+    expectedInformationGain !== null &&
+    (!Number.isFinite(expectedInformationGain) || expectedInformationGain < 0)
+  ) {
     throw new Error("expectedInformationGain must be a finite non-negative number when provided");
   }
   const parentRunIndex = input.parentRunIndex ?? null;
@@ -389,6 +429,7 @@ function deserializeRun(row: any): ExperimentRunRecord {
     derivedSeed: row.derived_seed ?? null,
     variables: parseJson(row.variables_json, {}) as Record<string, unknown>,
     output: parseJson(row.output_json, null),
+    surprise: parseJson(row.surprise_json ?? null, null),
     costCents: row.cost_cents,
     createdAt: row.created_at,
   };
@@ -416,13 +457,15 @@ export class SimulationWorkspace {
   private readonly simulators = new Map<string, SimulatorDefinition>();
 
   constructor(private readonly db: Database) {
-    // Match AdaptiveStore's raw-DB compatibility pattern. Evidence remains the
-    // cross-domain fabric; these tables are the canonical E-xxx authority.
+    // The database remains globally owned by the state layer; this sidecar is
+    // domain-owned so raw SQLite embeddings/tests can activate it idempotently.
     db.exec(MIGRATION_V18_EVIDENCE_FABRIC);
     db.exec(SIMULATION_SCHEMA);
-    const meta = db.prepare(
-      "SELECT revision FROM simulation_schema_meta WHERE singleton = 1",
-    ).get() as { revision: number } | undefined;
+    let meta = this.readSchemaMeta();
+    if (meta?.revision === 1 && SIMULATION_SCHEMA_REVISION === 2) {
+      db.transaction(() => db.exec(SIMULATION_SCHEMA_V1_TO_V2))();
+      meta = this.readSchemaMeta();
+    }
     if (meta?.revision !== SIMULATION_SCHEMA_REVISION) {
       throw new Error(
         `unsupported simulation schema revision: ${String(meta?.revision ?? "missing")}`,
@@ -457,13 +500,12 @@ export class SimulationWorkspace {
         ? { ...input, seed: existingBeforeNormalize.seed }
         : input;
     const spec = normalizeExperimentSpec(normalizedInput);
+
     if (spec.parentExperimentId) {
       const parent = this.getExperiment(spec.parentExperimentId);
       if (!parent) throw new Error(`parent experiment not found: ${spec.parentExperimentId}`);
       if (spec.parentRunIndex !== null && !this.getRun(parent.id, spec.parentRunIndex)) {
-        throw new Error(
-          `parent run not found: ${spec.parentExperimentId}#${spec.parentRunIndex}`,
-        );
+        throw new Error(`parent run not found: ${spec.parentExperimentId}#${spec.parentRunIndex}`);
       }
     } else if (spec.parentRunIndex !== null) {
       throw new Error("parentRunIndex requires parentExperimentId");
@@ -531,10 +573,7 @@ export class SimulationWorkspace {
     input: CounterfactualSpec,
   ): ExperimentRecord {
     const base = this.requireExperiment(baseExperimentId);
-    const variables = {
-      ...base.variables,
-      ...normalizeVariables(input.overrides),
-    };
+    const variables = { ...base.variables, ...normalizeVariables(input.overrides) };
     return this.createExperiment({
       experimentId: input.experimentId,
       goalId: base.goalId,
@@ -572,9 +611,8 @@ export class SimulationWorkspace {
     const simulator = this.requireSimulator(experiment);
     const remaining = experiment.maxRuns - experiment.runCount;
     const target = Math.min(requestedRuns ?? remaining, remaining);
-    if (target <= 0) return this.finishIfComplete(experiment);
-
     let completedInCall = 0;
+
     try {
       while (completedInCall < target) {
         experiment = this.requireExperiment(experiment.id);
@@ -614,12 +652,19 @@ export class SimulationWorkspace {
     if (!persisted) throw new Error(`simulation run not found: ${experimentId}#${runIndex}`);
     const simulator = this.requireSimulator(experiment);
     const actual = this.invokeSimulator(experiment, simulator, runIndex, persisted.derivedSeed);
+    const actualSurprise = actual.surprise === undefined ? null : actual.surprise;
+    const outputMatches = canonicalStringify(actual.output) === canonicalStringify(persisted.output);
+    const surpriseMatches =
+      canonicalStringify(actualSurprise) === canonicalStringify(persisted.surprise);
     return {
       experimentId,
       runIndex,
-      matches: canonicalStringify(actual.output) === canonicalStringify(persisted.output),
+      matches: outputMatches && surpriseMatches,
+      surpriseMatches,
       expected: persisted.output,
       actual: actual.output,
+      expectedSurprise: persisted.surprise,
+      actualSurprise,
     };
   }
 
@@ -636,6 +681,10 @@ export class SimulationWorkspace {
         `calibration requires external observation evidence; got ${evidence.epistemicStatus}`,
       );
     }
+    if (evidence.domain === "simulation" || evidence.authorityType === "simulation_experiment") {
+      throw new Error("calibration requires an external observation, not simulation-owned evidence");
+    }
+
     const score = input.score ?? null;
     if (score !== null && !Number.isFinite(score)) {
       throw new Error("calibration score must be finite when provided");
@@ -683,7 +732,10 @@ export class SimulationWorkspace {
           score,
           comparison,
         },
-        provenance: { source: "simulation_workspace", schemaRevision: SIMULATION_SCHEMA_REVISION },
+        provenance: {
+          source: "simulation_workspace",
+          schemaRevision: SIMULATION_SCHEMA_REVISION,
+        },
       });
     })();
     return record;
@@ -718,6 +770,47 @@ export class SimulationWorkspace {
     return row ? deserializeExperiment(row) : undefined;
   }
 
+  listExperiments(filters: ExperimentListFilters = {}): ExperimentRecord[] {
+    const clauses: string[] = [];
+    const params: unknown[] = [];
+    const addNullableFilter = (column: string, value: string | null, label: string) => {
+      if (value === null) {
+        clauses.push(`${column} IS NULL`);
+      } else {
+        clauses.push(`${column} = ?`);
+        params.push(requireLabel(value, label));
+      }
+    };
+
+    if (filters.goalId !== undefined) addNullableFilter("goal_id", filters.goalId, "goalId");
+    if (filters.pathId !== undefined) addNullableFilter("path_id", filters.pathId, "pathId");
+    if (filters.parentExperimentId !== undefined) {
+      addNullableFilter(
+        "parent_experiment_id",
+        filters.parentExperimentId,
+        "parentExperimentId",
+      );
+    }
+    if (filters.status !== undefined) {
+      if (!EXPERIMENT_STATUSES.has(filters.status)) {
+        throw new Error(`unsupported experiment status: ${String(filters.status)}`);
+      }
+      clauses.push("status = ?");
+      params.push(filters.status);
+    }
+    const limit = filters.limit ?? 100;
+    requirePositiveInteger(limit, "limit");
+    if (limit > 1000) throw new Error("limit must be <= 1000");
+    params.push(limit);
+
+    const where = clauses.length > 0 ? ` WHERE ${clauses.join(" AND ")}` : "";
+    const rows = this.db.prepare(
+      `SELECT * FROM simulation_experiments${where}
+       ORDER BY created_at DESC, id DESC LIMIT ?`,
+    ).all(...params) as any[];
+    return rows.map(deserializeExperiment);
+  }
+
   getRuns(experimentId: string): ExperimentRunRecord[] {
     const rows = this.db.prepare(
       `SELECT * FROM simulation_runs
@@ -732,6 +825,12 @@ export class SimulationWorkspace {
        WHERE experiment_id = ? ORDER BY created_at ASC, id ASC`,
     ).all(experimentId) as any[];
     return rows.map((row) => this.deserializeCalibration(row));
+  }
+
+  private readSchemaMeta(): { revision: number } | undefined {
+    return this.db.prepare(
+      "SELECT revision FROM simulation_schema_meta WHERE singleton = 1",
+    ).get() as { revision: number } | undefined;
   }
 
   private requireExperiment(id: string): ExperimentRecord {
@@ -783,7 +882,9 @@ export class SimulationWorkspace {
       if (current.spentCents + simulator.costCentsPerRun > current.costBudgetCents) {
         throw new Error(`simulation budget changed before run ${runIndex}`);
       }
+
       const value = this.invokeSimulator(current, simulator, runIndex, derivedSeed);
+      const surprise = value.surprise === undefined ? null : value.surprise;
       const now = new Date().toISOString();
       const record: ExperimentRunRecord = {
         id: `R-${ulid()}`,
@@ -792,14 +893,15 @@ export class SimulationWorkspace {
         derivedSeed,
         variables: variableValues(current.variables),
         output: value.output,
+        surprise,
         costCents: simulator.costCentsPerRun,
         createdAt: now,
       };
       this.db.prepare(
         `INSERT INTO simulation_runs (
           id, experiment_id, run_index, derived_seed, variables_json,
-          output_json, cost_cents, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          output_json, surprise_json, cost_cents, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         record.id,
         record.experimentId,
@@ -807,6 +909,7 @@ export class SimulationWorkspace {
         record.derivedSeed,
         canonicalStringify(record.variables),
         canonicalStringify(record.output),
+        record.surprise === null ? null : canonicalStringify(record.surprise),
         record.costCents,
         record.createdAt,
       );
@@ -848,17 +951,30 @@ export class SimulationWorkspace {
     simulator: SimulatorDefinition,
   ): ExperimentRecord {
     const runs = this.getRuns(experimentId);
-    if (!simulator.summarize || runs.length === 0) return this.requireExperiment(experimentId);
-    const value = simulator.summarize(runs.map((run) => run.output));
-    if (value && typeof (value as any).then === "function") {
-      throw new Error("simulation summary must be synchronous");
+    if (runs.length === 0) return this.requireExperiment(experimentId);
+
+    const runSurprises = runs
+      .map((run) => run.surprise)
+      .filter((value): value is Exclude<unknown, null> => value !== null);
+    let summary: unknown | null = null;
+    let result: unknown | null = null;
+    let summarizerSurprises: unknown[] = [];
+
+    if (simulator.summarize) {
+      const value = simulator.summarize(runs.map((run) => run.output));
+      if (value && typeof (value as any).then === "function") {
+        throw new Error("simulation summary must be synchronous");
+      }
+      summary = value.summary === undefined ? null : normalizeJson(value.summary, "summary");
+      const normalizedSurprises = value.surprises === undefined
+        ? []
+        : normalizeJson(value.surprises, "surprises");
+      if (!Array.isArray(normalizedSurprises)) throw new Error("surprises must be an array");
+      summarizerSurprises = normalizedSurprises;
+      result = value.result === undefined ? null : normalizeJson(value.result, "result");
     }
-    const summary = value.summary === undefined ? null : normalizeJson(value.summary, "summary");
-    const surprises = value.surprises === undefined
-      ? []
-      : normalizeJson(value.surprises, "surprises");
-    if (!Array.isArray(surprises)) throw new Error("surprises must be an array");
-    const result = value.result === undefined ? null : normalizeJson(value.result, "result");
+
+    const surprises = [...runSurprises, ...summarizerSurprises];
     this.db.prepare(
       `UPDATE simulation_experiments
        SET summary_json = ?, surprises_json = ?, result_json = ?, updated_at = ?
