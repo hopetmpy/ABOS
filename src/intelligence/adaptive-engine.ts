@@ -12,6 +12,8 @@ import type {
   PersistedPath,
 } from "./types.js";
 
+export const STRATEGIC_PATH_BELIEF_KEY = "strategy.path_viability";
+
 export class AdaptivePathEngine {
   readonly store: AdaptiveStore;
   readonly possibilities: PossibilitySpace;
@@ -44,6 +46,7 @@ export class AdaptivePathEngine {
   ): { path: PersistedPath; novelty: NoveltyAssessment } {
     const assessed = this.assessCandidate(candidate, conditions);
     this.store.setPathStatus(assessed.path.id, "selected");
+    this.ensureStrategicPathBelief(assessed.path);
     return assessed;
   }
 
@@ -131,7 +134,7 @@ export class AdaptivePathEngine {
       retryEligible: diagnosis.technicalRetryEligible || novelty.conditionChanged,
     });
 
-    this.store.recordEvidence({
+    const failureEvidence = this.store.recordEvidence({
       goalId: input.candidate.goalId,
       pathId: path.id,
       attemptId: attempt.id,
@@ -186,6 +189,14 @@ export class AdaptivePathEngine {
         source: "path-learning",
         confidence: fact.confidence ?? 0.85,
       });
+    }
+
+    if (diagnosis.terminalForPath) {
+      this.invalidateStrategicPathBelief(
+        path,
+        diagnosis.reason,
+        failureEvidence.id,
+      );
     }
 
     this.store.setPathStatus(
@@ -328,6 +339,46 @@ export class AdaptivePathEngine {
           source: "path-completion",
         });
       }
+    }
+  }
+
+  private ensureStrategicPathBelief(path: PersistedPath): void {
+    const source = `path:${path.id}`;
+    const existing = this.store
+      .listActiveBeliefs(path.goalId, { key: STRATEGIC_PATH_BELIEF_KEY })
+      .find((belief) =>
+        belief.source === source &&
+        belief.value === path.hypothesis &&
+        belief.epistemicStatus === "inference"
+      );
+    if (existing) return;
+
+    this.store.recordBelief({
+      goalId: path.goalId,
+      key: STRATEGIC_PATH_BELIEF_KEY,
+      value: path.hypothesis,
+      epistemicStatus: "inference",
+      confidence: null,
+      source,
+      evidenceRefs: [],
+      falsificationConditions: [
+        `A terminal path failure occurs under materially equivalent conditions before the expected outcome is observed: ${path.expectedOutcome}`,
+      ],
+    });
+  }
+
+  private invalidateStrategicPathBelief(
+    path: PersistedPath,
+    reason: string,
+    evidenceEventId: string,
+  ): void {
+    const source = `path:${path.id}`;
+    const active = this.store
+      .listActiveBeliefs(path.goalId, { key: STRATEGIC_PATH_BELIEF_KEY })
+      .filter((belief) => belief.source === source);
+
+    for (const belief of active) {
+      this.store.invalidateBelief(belief.id, reason, [evidenceEventId]);
     }
   }
 
