@@ -1,12 +1,11 @@
-export const SIMULATION_SCHEMA_REVISION = 1;
+export const SIMULATION_SCHEMA_REVISION = 2;
 
 /**
  * P-024 canonical Simulation / Experiment sidecar schema.
  *
- * This schema is intentionally idempotent and domain-owned, matching the
- * AdaptiveStore compatibility pattern: callers using a raw SQLite database
- * can opt into the authority without knowing the global createDatabase()
- * migration sequence. The global state layer remains the database owner.
+ * The schema is domain-owned but the global state layer remains the database
+ * owner. Fresh databases are created at the current revision; older sidecar
+ * revisions are upgraded explicitly by SimulationWorkspace.
  */
 export const SIMULATION_SCHEMA = `
   CREATE TABLE IF NOT EXISTS simulation_schema_meta (
@@ -68,6 +67,7 @@ export const SIMULATION_SCHEMA = `
     derived_seed TEXT,
     variables_json TEXT NOT NULL,
     output_json TEXT NOT NULL,
+    surprise_json TEXT,
     cost_cents INTEGER NOT NULL CHECK(cost_cents >= 0),
     created_at TEXT NOT NULL,
     UNIQUE(experiment_id, run_index)
@@ -88,4 +88,12 @@ export const SIMULATION_SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS idx_simulation_calibrations_experiment
     ON simulation_calibrations(experiment_id, created_at);
+`;
+
+/** Upgrade a pre-merge revision-1 sidecar without losing persisted runs. */
+export const SIMULATION_SCHEMA_V1_TO_V2 = `
+  ALTER TABLE simulation_runs ADD COLUMN surprise_json TEXT;
+  UPDATE simulation_schema_meta
+  SET revision = 2, updated_at = datetime('now')
+  WHERE singleton = 1 AND revision = 1;
 `;
