@@ -421,6 +421,7 @@ export class AdaptivePathEngine {
     const paths = this.store.listPaths(goalId);
     const attempts = this.store.listAttempts(goalId, 30);
     const facts = this.store.listFacts(goalId);
+    const beliefs = this.store.listActiveBeliefs(goalId);
     const opportunities = this.store.listOpenOpportunities(goalId);
     const assumptions = this.store.listAssumptions(goalId);
     const evidence = this.store.listEvidence(goalId, { limit: 30 });
@@ -429,10 +430,11 @@ export class AdaptivePathEngine {
       paths.length === 0 &&
       attempts.length === 0 &&
       facts.length === 0 &&
+      beliefs.length === 0 &&
       assumptions.length === 0 &&
       evidence.length === 0
     ) {
-      return "No adaptive path history exists for this goal yet.";
+      return "No adaptive path history or current world state exists for this goal yet.";
     }
 
     const pathLines = paths.map((path) =>
@@ -459,6 +461,25 @@ export class AdaptivePathEngine {
       `${fact.epistemicStatus.toUpperCase()} ${fact.key}=${fact.value} confidence=${fact.confidence}`,
     );
 
+    const beliefLines = beliefs.slice(0, 40).map((belief) => {
+      const confidence = belief.confidence === null
+        ? "uncalibrated"
+        : String(belief.confidence);
+      const falsifiedIf = belief.falsificationConditions.length > 0
+        ? belief.falsificationConditions.join(" ; ")
+        : "unspecified";
+      const evidenceRefs = belief.evidenceRefs.length > 0
+        ? belief.evidenceRefs.join(",")
+        : "none";
+      return [
+        `${belief.epistemicStatus.toUpperCase()} ${belief.key}=${belief.value}`,
+        `confidence=${confidence}`,
+        `source=${belief.source}`,
+        `evidence_refs=${evidenceRefs}`,
+        `falsified_if=${falsifiedIf}`,
+      ].join(" | ");
+    });
+
     const assumptionLines = assumptions.slice(0, 30).map((assumption) =>
       `${assumption.status.toUpperCase()} confidence=${assumption.confidence}: ${assumption.statement}`,
     );
@@ -472,10 +493,13 @@ export class AdaptivePathEngine {
     );
 
     return [
-      "# Adaptive path history",
+      "# Adaptive path history and current world model",
       this.possibilities.describe(goalId),
       "Do not repeat a substantially equivalent failed path unless the supplied conditions have materially changed.",
       "A failed method is not the goal. Preserve the goal and search for a different route.",
+      "Treat multiple beliefs for the same key as competing alternatives until evidence discriminates them.",
+      "UNKNOWN is first-class uncertainty, not false or zero. Confidence=uncalibrated is not a probability estimate.",
+      "Only current, non-expired beliefs appear below; falsification conditions identify evidence that can change the decision.",
       "",
       "## Paths",
       ...(pathLines.length ? pathLines : ["none"]),
@@ -485,6 +509,9 @@ export class AdaptivePathEngine {
       "",
       "## World facts",
       ...(factLines.length ? factLines : ["none"]),
+      "",
+      "## Active world beliefs and competing hypotheses",
+      ...(beliefLines.length ? beliefLines : ["none"]),
       "",
       "## Assumptions",
       ...(assumptionLines.length ? assumptionLines : ["none"]),
