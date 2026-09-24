@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-021
 Active-Segment: continuity/C0017.md
-Active-Intervention: P021_SKILL_EVOLUTION — MERGED / REPAIR_BRANCH_CI_RED_P016_WINDOWS
+Active-Intervention: P021_SKILL_EVOLUTION — MERGED / P016_WINDOWS_GATE_CORRECTION_DECISION_READY
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,9 +15,9 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p021-p016-probe-stability
 Host-Head-At-Audit-Open: c07a1eb10c34792e2490c51196063fbac15df91c
-Last-Reconciled-Host-Head: 47128abdbf215d03c134a7b9cb31c38b0527e72b
-Last-Reconciled-Head-Semantics: P021_MERGED_P016_REPAIR_BRANCH_WINDOWS_22_24_RED
-ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
+Last-Reconciled-Host-Head: c8ffb8b4e980dc7ac854c5823eb15fcc133cb2e9
+Last-Reconciled-Head-Semantics: P021_MERGED_P016_WINDOWS_GATE_DECISION_READY
+ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6f0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
 ProjectOps-PR: 30
@@ -41,7 +41,7 @@ No existe otra capa de cadencia dentro de ProjectOps.
 - P-004: PLANIFICADO — track documental transversal/final.
 - P-005: PLANIFICADO — acceptance LIVE incremental.
 - P-006..P-020: HECHO para sus objetivos canónicos.
-- P-021: EN_EJECUCIÓN / MERGED / REPAIR_BRANCH_CI_RED_P016_WINDOWS.
+- P-021: EN_EJECUCIÓN / MERGED / P016_WINDOWS_GATE_CORRECTION_DECISION_READY.
 - P-022..P-036: ver estado explícito en `ProjectOps/PLAN.md`.
 
 ## P-021 — integración y evidencia posterior
@@ -61,60 +61,78 @@ Por Definition of Done P-021 no se cierra hasta revalidación terminal positiva 
 
 ## P-016 repair branch — estado real actual
 
-Rama activa de reparación: `abos/p021-p016-probe-stability`.
-Head actual reconciliado: `47128abdbf215d03c134a7b9cb31c38b0527e72b`.
+Rama activa: `abos/p021-p016-probe-stability`.
+Pre-reconcile head: `47128abdbf215d03c134a7b9cb31c38b0527e72b`.
+Main reconcile merge: `c8ffb8b4e980dc7ac854c5823eb15fcc133cb2e9`, con padres repair-head + `main 206cf74dcc68ade615989a1259540e73841fe7d6`.
 
-Cambios realizados en esa rama después del exact-main rojo:
-- `47aa17db689e0c2415053ccdf920541462632fff`: amplía el presupuesto de cold bootstrap del Windows Job provider;
-- `19ddc5320b77c0d01041202c121aa2d9f3efbf33`: evita cachear un `providerTimedOut` transitorio como indisponibilidad permanente;
-- `6738dd50bc19e5ba4cac4f7a9213668f0f802122`: añade regresión para probar que el timeout transitorio no es sticky;
-- `dd4142a6b26d76fa6b28e59d1df77317780ef947`: restaura el singleton export accidentalmente retirado durante la corrección;
-- `47128abdbf215d03c134a7b9cb31c38b0527e72b`: incorpora la regresión de estabilidad al lane Windows.
+La primera reparación contenía:
+- aumento del bootstrap budget Windows Job provider a 60 s;
+- semántica non-sticky para `providerTimedOut`;
+- regresión específica para retry posterior a timeout transitorio;
+- restauración del singleton runtime;
+- inclusión de la regresión en Windows CI.
 
-Validación del head `47128ab...`:
-- ProjectOps Integrity `35949853775`: SUCCESS;
-- CI `35949853711`: FAILURE;
-- Linux build/test Node 22/24: SUCCESS;
-- security audit: SUCCESS;
-- public distribution Node 22/24: SUCCESS;
-- rebrand integrity: SUCCESS;
-- `windows-regression (22)`: FAILURE;
-- `windows-regression (24)`: FAILURE.
+El CI `35949853711` sobre `47128ab...` falló sólo Windows 22/24; la regresión nueva sí pasó. Ambos lanes fallaron en el test existente `executes with explicit confined cwd and env` por `Test timed out in 30000ms`.
 
-Conclusión: la primera reparación P-016 no está validada y no debe seguir parchándose por inferencia. El siguiente paso correcto es discriminar los fallos Windows exactos del run `35949853711` antes de cualquier cambio productivo adicional.
+El `main 206cf74d...` aportó evidencia independiente: CI `35952635313` ejecutó un único workflow consolidado con ProjectOps dentro de CI; Windows 22 pasó y Windows 24 falló en el mismo test por timeout. Los demás lanes pasaron.
+
+El exact-main P-016 original `08b7a5cc...`, CI `35809162263`, había pasado 8/8 y el mismo test Windows Node 24 terminó en ~19.3 s. La combinación de source + historial demuestra sensibilidad de wall-clock, no una assertion semántica fallida.
+
+## F11 — decisión material P-016 Windows
+
+Authority/source:
+- readiness Windows se prueba y cachea por instancia de `LocalComputerRuntime`;
+- P-016 aceptado no define SLA de startup;
+- baseline Job provider usa bootstrap grace de 20 s;
+- el primer `exec(..., 10_000)` puede pagar probe de readiness más ejecución provider-bound;
+- el test completo estaba limitado por Vitest a 30 s, menor que el camino válido acotado que verifica.
+
+Hipótesis:
+- `WINDOWS_TEST_GATE_BUDGET_MISMATCH`: CONFIRMADA.
+- `TRANSIENT_PROVIDER_TIMEOUT_STICKINESS_IS_CURRENT_FAILURE`: FALSADA para el fallo actual; la corrección non-sticky sigue siendo hardening válida.
+- `INCREASE_PRODUCT_BOOTSTRAP_TO_60S`: FALSADA / REJECTED.
+- `REMOVE_READINESS_PROBE`: REJECTED por contradecir P-016 evidence-backed readiness.
+- `RUNNER_IMAGE_REGRESSION`: FALSADA como explicación suficiente.
+
+Decision-Class: `CORRECT_TEST_GATE / RETAIN_TRANSIENT_PROBE_HARDENING / REVERT_UNJUSTIFIED_BOOTSTRAP_EXTENSION / NO_ARCHITECTURE_CHANGE`.
+
+Corrección elegida:
+1. volver al bootstrap grace P-016 aceptado de 20 s;
+2. conservar provider timeout non-sticky y su regresión;
+3. ejecutar sólo las regresiones P-016 Windows con `--testTimeout=75000` en un paso CI dedicado;
+4. conservar timeout ordinario en el resto del lane Windows;
+5. no cambiar PLAN, AGENTS, PROJECT, Operating Protocol, Adaptive Reasoning ni source P-021;
+6. exigir exact-head CI completo antes de PR/merge y exact-main verde antes de cerrar P-021.
+
+Detalle y evidencia completa: `ProjectOps/continuity/C0017.md`.
 
 ## Auditoría de liveness del agente de desarrollo
 
-Comparación contra ZeroIQ:
-- root `AGENTS.md` mantiene el mismo kernel material probado: `NEXT_ELIGIBLE_WORK`, reroute local, stop gate terminal, recovery y ausencia de cuota temporal como frontera;
-- Operating Protocol y Adaptive Reasoning son `REFERENCE_ONLY_NON_SCHEDULER` en ambos;
-- ABOS tenía un workflow `ProjectOps Integrity` separado del workflow `CI`, ambos disparados por `push` y `pull_request`, lo que multiplicaba runs externos a observar para una misma frontera;
-- ZeroIQ integra `projectops:verify` dentro de su workflow principal.
+La corrección repo-side quedó materializada en `main 206cf74d...`:
+- ProjectOps Integrity se ejecuta dentro del workflow `CI` existente;
+- el workflow separado fue retirado;
+- CONTINUITY/C0017 fueron reconciliados con Git post-merge;
+- `AGENTS.md` quedó NO_CHANGE.
 
-Primera corrección de liveness decidida:
-1. consolidar ProjectOps Integrity dentro del workflow `CI` existente;
-2. retirar `.github/workflows/projectops-integrity.yml` como workflow separado;
-3. reconciliar este CONTINUITY y C0017 con Git real post-merge y con la rama P-016 realmente activa;
-4. no modificar `AGENTS.md`, producto, PLAN, Operating Protocol ni Adaptive Reasoning en esta pasada.
-
-Esta corrección reduce estados asíncronos externos sin añadir scheduler, watchdog, gate, state machine ni workflow nuevo.
+La consulta del exact `main 206cf74d...` confirmó una sola surface de workflow para esa push y ProjectOps verifier PASS dentro de CI. Esto valida la corrección repo-side; no demuestra que una UI/plataforma externa nunca pueda interrumpirse.
 
 ## Claims y límites
 
-- P-021 source está integrado, pero P-021 NO está HECHO porque exact-main no terminó verde.
+- P-021 source está integrado, pero P-021 NO está HECHO mientras falte exact-main terminal positivo.
 - P-022 no se abre mientras P-021 siga incompleto.
-- la rama P-016 actual sigue roja en Windows 22/24; ProjectOps sí está verde.
-- `AGENTS.md` queda `NO_CHANGE` en esta pasada de liveness.
-- ZeroIQ es comparator metodológico y no recibe modificaciones.
-- reducir workflows externos no demuestra por sí solo que una UI/plataforma externa nunca pueda interrumpirse; sí elimina una fuente repo-side de polling/duplicación observada.
+- la reparación F11 está DECISION_READY y todavía no validada en source al momento de este checkpoint.
+- no se fabrica PASS para los lanes Windows rojos previos.
+- `AGENTS.md` permanece NO_CHANGE.
+- PLAN permanece NO_CHANGE porque la evidencia no altera objetivo, arquitectura, secuencia, dependencias ni Definition of Done de P-021.
 
 ## Siguiente punto verificable
 
-1. validar esta consolidación ProjectOps dentro del workflow `CI` único;
-2. confirmar que no existe un run separado `ProjectOps Integrity` para el nuevo head;
-3. comprobar que el verifier sigue PASS dentro de CI;
-4. después, diagnosticar el fallo Windows 22/24 exacto de `35949853711` antes de cualquier otro cambio P-016;
-5. sólo si un retest conductual posterior vuelve a perder el reporte, reevaluar quirúrgicamente el contrato de espera externa en `AGENTS.md`.
+1. aplicar la corrección F11 ya registrada;
+2. exigir CI exact-head completo sobre la rama reconciliada;
+3. si todo queda verde, abrir PR de reparación contra `main` y validar su head exacto;
+4. integrar sólo si los gates permanecen verdes;
+5. revalidar exact-main resultante;
+6. sólo entonces cerrar P-021 y habilitar P-022.
 
 ## Política de rotación
 
