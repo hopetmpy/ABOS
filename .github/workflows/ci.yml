@@ -209,6 +209,7 @@ jobs:
           src/__tests__/skills-hardening.test.ts
           src/__tests__/command-injection.test.ts
           src/__tests__/p016-local-computer-runtime.test.ts
+          src/__tests__/p016-windows-probe-stability.test.ts
           src/__tests__/legacy-state-migration.test.ts
           src/__tests__/genesis-bootstrap.test.ts
           src/__tests__/heartbeat-scheduler.test.ts
