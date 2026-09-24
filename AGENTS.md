@@ -4,24 +4,6 @@
 
 Este archivo es la **única autoridad raíz sobre la cadencia de trabajo del agente en ABOS**. ProjectOps conserva estado, intención, contexto, evidencia e invariantes técnicas; no añade un segundo flujo de ejecución.
 
-## FRONTERA DE GOBIERNO RAÍZ VS PRODUCTO
-
-`AGENTS.md` raíz + ProjectOps gobiernan **cómo se desarrolla, audita, continúa, verifica e integra el proyecto**. No son una skill runtime del producto ni forman parte de `src/skills/`.
-
-El código bajo `src/**` —incluyendo `src/skills/**`, memory, capabilities, runtime, tools y cualquier skill/capability que ABOS posea o aprenda como producto— es **objeto gobernado por este kernel**, no el kernel que gobierna el desarrollo.
-
-`ROOT_GOVERNANCE_SCOPE_IS_DISTINCT_FROM_PRODUCT_SCOPE`: cuando el usuario se refiera a `AGENTS.md`, ProjectOps, al kernel/skill raíz, al comportamiento del agente que desarrolla el repositorio, a continuidad de ejecución o a cómo se gobierna el desarrollo, interpreta esa solicitud como **scope de gobierno raíz**. No la conviertas en trabajo sobre skills/capabilities/runtime internos del producto por coincidencia terminológica.
-
-`PRODUCT_SKILL_REQUIRES_EXPLICIT_SCOPE`: `src/skills/**` y cualquier skill/capability interna de ABOS sólo entran en scope cuando el usuario lo pida explícitamente o cuando la solicitud de producto las incluya inequívocamente. Una mención a “skill”, “agente”, “kernel” o “evolución” dentro de una conversación sobre `AGENTS.md`/ProjectOps **no autoriza por sí sola** tocar `src/**`.
-
-`ACTIVE_PRODUCT_PLAN_DOES_NOT_EXPAND_A_GOVERNANCE_REQUEST`: un `Active-Plan`, `Active-Segment`, `NEXT_ELIGIBLE_WORK` o pendiente de producto puede leerse como contexto, pero **no expande** una solicitud governance-only hacia implementación de producto. Mientras la frontera pedida sea el gobierno raíz, el trabajo elegible queda restringido a esa frontera; el producto se conserva intacto salvo autorización explícita del usuario.
-
-`NO_PRODUCT_FIX_FOR_GOVERNANCE_BUG_BY_DEFAULT`: si el problema observado es que el agente de desarrollo se corta, se enruta mal, se queda sin recovery, interpreta mal el scope o ejecuta ProjectOps incorrectamente, busca primero la causa en `AGENTS.md`, ProjectOps, routing, verifiers, acceptance, herramientas/plataforma y evidencia operacional. No “arregles” ese problema modificando skills/runtime del producto salvo causalidad demostrada **y** autorización explícita para ampliar el scope.
-
-`NAME_COLLISION_MUST_BE_DISAMBIGUATED`: si un término existe tanto en gobierno como en producto, usa ruta y authority para desambiguar. En contexto `AGENTS.md`/ProjectOps, “skill/kernel del agente” significa el mecanismo raíz de desarrollo. En contexto `src/skills/**`, significa una capacidad del producto. Si la intención sigue siendo realmente ambigua y puede cambiar qué archivos se modifican, aclara antes de escribir.
-
-Esta frontera es de **scope y routing**, no una nueva capa, scheduler, workflow, estado ni authority paralela.
-
 ## ACTIVACIÓN OBLIGATORIA
 
 Antes de modificar código, configuración, datos, documentación operativa, dependencias, arquitectura o estado del proyecto:
@@ -154,9 +136,7 @@ Cuando evidencia material posterior justifique una restricción, aplica la **mí
 
 Estas reglas son **principios de decisión dentro del flujo existente**. No crean fase, workflow, scheduler, gate, checkpoint, reconciliación, aprobación ni estado adicionales; no interrumpen `EJECUCIÓN CONTINUA Y RECONCILIACIÓN MACRO`. Una authority subordinada puede imponer una frontera técnica/productiva explícita, pero no puede convertir por implicación una autorización amplia en una lista cerrada de permisos ni introducir restricciones no demostradas. Si existe tensión interpretativa, preserva el work chaining, la intención explícita del usuario y la frontera real demostrable; no resuelvas la tensión añadiendo capas preventivas.
 
-## EVOLUCIÓN DEL KERNEL RAÍZ (`AGENTS.md` / PROJECTOPS)
-
-En esta sección, `kernel` o `skill del agente` significan exclusivamente el mecanismo raíz que gobierna el desarrollo del repositorio (`AGENTS.md` + authorities ProjectOps aplicables). **No significan `src/skills/**` ni ninguna skill/capability runtime del producto.**
+## EVOLUCIÓN DEL PROPIO SKILL / KERNEL
 
 `FUNCTIONAL_BASELINE → PLAN DELTA → EXTEND/CORRECT → VERIFY PRESERVATION → MACRO RECONCILE`.
 
