@@ -1,0 +1,61 @@
+name: P021 Skill Evolution Apply v2
+
+on:
+  push:
+    branches:
+      - abos/p021-skill-evolution
+    paths:
+      - .github/workflows/p021-skill-evolution-apply-v2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: abos/p021-skill-evolution
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Recover and apply audited P-021 draft
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show 248d18e3577033347f5e58ada5ffa78f4f1e7e11:.github/p021-skill-evolution-apply.py > /tmp/p021-apply.py
+          python3 /tmp/p021-apply.py
+          git diff --check
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Focused P-021 validation
+        run: pnpm exec vitest run src/__tests__/skills-evolution.test.ts src/__tests__/skill-runtime-truth.test.ts src/__tests__/skills-hardening.test.ts
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Commit staged product source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src
+          if git diff --cached --quiet; then
+            echo 'No product source changes to commit.'
+            exit 1
+          fi
+          git commit -m 'feat: stage P-021 skill evolution lifecycle'
+          git push origin HEAD:abos/p021-skill-evolution
