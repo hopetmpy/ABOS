@@ -192,6 +192,7 @@ export function classifyFailure(error: string): FailureDiagnosis {
     /produced (?:an )?invalid result/,
     /result (?:is |was )?(?:invalid|incorrect|wrong)/,
     /strategy .*failed/,
+    /\bstrategic (?:mismatch|contradiction)\b/,
     /expected outcome .*not (?:achieved|reached|observed)/,
     /acceptance criteria .*not (?:met|satisfied)/,
   ])) {
