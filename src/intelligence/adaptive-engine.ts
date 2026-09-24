@@ -2,6 +2,11 @@ import type { Database } from "better-sqlite3";
 import { classifyFailure } from "./failure-classifier.js";
 import { assessPathNovelty } from "./novelty.js";
 import { conditionFingerprint } from "./path-signature.js";
+import {
+  comparePredictionAttempt,
+  recordPathPredictionResolution,
+  recordPredictionComparison,
+} from "./prediction-learning.js";
 import { AdaptiveStore } from "./store.js";
 import { PossibilitySpace } from "./possibility-space.js";
 import type {
@@ -13,6 +18,25 @@ import type {
 } from "./types.js";
 
 export const STRATEGIC_PATH_BELIEF_KEY = "strategy.path_viability";
+
+type RecordFailureInput = {
+  candidate: PathCandidate;
+  pathId?: string | null;
+  error: string;
+  observations?: string[];
+  evidence?: string[];
+  learnedFacts?: Array<{ key: string; value: string; confidence?: number }>;
+  conditions?: Record<string, unknown>;
+};
+
+type RecordSuccessInput = {
+  candidate: PathCandidate;
+  pathId?: string | null;
+  markPathSucceeded?: boolean;
+  observations?: string[];
+  evidence?: string[];
+  conditions?: Record<string, unknown>;
+};
 
 export class AdaptivePathEngine {
   readonly store: AdaptiveStore;
@@ -50,15 +74,11 @@ export class AdaptivePathEngine {
     return assessed;
   }
 
-  recordFailure(input: {
-    candidate: PathCandidate;
-    pathId?: string | null;
-    error: string;
-    observations?: string[];
-    evidence?: string[];
-    learnedFacts?: Array<{ key: string; value: string; confidence?: number }>;
-    conditions?: Record<string, unknown>;
-  }): AdaptiveDecision {
+  recordFailure(input: RecordFailureInput): AdaptiveDecision {
+    return this.db.transaction(() => this.recordFailureWithinTransaction(input))();
+  }
+
+  private recordFailureWithinTransaction(input: RecordFailureInput): AdaptiveDecision {
     const { path, novelty } = this.assessAttemptTarget(
       input.candidate,
       input.pathId,
@@ -123,7 +143,9 @@ export class AdaptivePathEngine {
               diagnosis.classification === "resource_unavailable" ||
               diagnosis.classification === "authorization"
             ? "unavailable"
-            : "failed",
+            : diagnosis.classification === "unknown"
+              ? "inconclusive"
+              : "failed",
       failureClass: diagnosis.classification,
       failureReason: input.error,
       observations: input.observations,
@@ -191,12 +213,30 @@ export class AdaptivePathEngine {
       });
     }
 
+    const comparison = comparePredictionAttempt({
+      path,
+      attempt,
+      terminalForPath: diagnosis.terminalForPath,
+    });
+    recordPredictionComparison(this.db, {
+      path,
+      attempt,
+      terminalForPath: diagnosis.terminalForPath,
+    });
+
     if (diagnosis.terminalForPath) {
       this.invalidateStrategicPathBelief(
         path,
         diagnosis.reason,
         failureEvidence.id,
       );
+      recordPathPredictionResolution(this.db, {
+        path,
+        status: "contradicted",
+        attribution: comparison.attribution,
+        reason: comparison.reason,
+        learningTargets: comparison.learningTargets,
+      });
     }
 
     this.store.setPathStatus(
@@ -213,7 +253,9 @@ export class AdaptivePathEngine {
                   diagnosis.classification === "resource_unavailable" ||
                   diagnosis.classification === "authorization"
                 ? "unavailable"
-                : "failed",
+                : diagnosis.classification === "unknown"
+                  ? "unknown"
+                  : "failed",
     );
 
     const action = actionForDiagnosis(diagnosis.classification);
@@ -238,14 +280,11 @@ export class AdaptivePathEngine {
     };
   }
 
-  recordSuccess(input: {
-    candidate: PathCandidate;
-    pathId?: string | null;
-    markPathSucceeded?: boolean;
-    observations?: string[];
-    evidence?: string[];
-    conditions?: Record<string, unknown>;
-  }): void {
+  recordSuccess(input: RecordSuccessInput): void {
+    this.db.transaction(() => this.recordSuccessWithinTransaction(input))();
+  }
+
+  private recordSuccessWithinTransaction(input: RecordSuccessInput): void {
     const { path, novelty } = this.assessAttemptTarget(
       input.candidate,
       input.pathId,
@@ -299,6 +338,12 @@ export class AdaptivePathEngine {
       });
     }
 
+    recordPredictionComparison(this.db, {
+      path,
+      attempt,
+      finalPathSuccess: input.markPathSucceeded !== false,
+    });
+
     if (input.markPathSucceeded !== false) {
       this.completePath(
         path.id,
@@ -340,6 +385,14 @@ export class AdaptivePathEngine {
         });
       }
     }
+
+    recordPathPredictionResolution(this.db, {
+      path,
+      status: "confirmed",
+      attribution: "none",
+      reason: "The selected path reached its terminal expected outcome after execution completed.",
+      learningTargets: ["adaptive_path", "adaptive_assumption"],
+    });
   }
 
   private ensureStrategicPathBelief(path: PersistedPath): void {

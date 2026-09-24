@@ -31,8 +31,8 @@ Master-Transformation-Plan: P-007
 | P-019 | Mantener model/connection fabric abierto y añadir adaptive inference | HECHO | PR #53 integrado; `main 3e8c0eb31652175b0f3b22ff0296d52c16e758f1` revalidado por CI `35918621864` + ProjectOps `35918621868` SUCCESS | plan/P-019.md |
 | P-020 | Unificar Cognitive Fabric: memory, context, knowledge y activation | HECHO | PR #54 integrado; `main c07a1eb10c34792e2490c51196063fbac15df91c` revalidado por CI `35929847027` + ProjectOps `35929847097` SUCCESS | plan/P-020.md |
 | P-021 | Construir Skill Evolution Engine sobre experiencia verificable | HECHO | PR #56 integrado; repair P-016 PR #58 integrado; `main 6eb836be2325048e7ac243415e59e9565fc93d08` revalidado por CI `35954954278` SUCCESS 8/8 | plan/P-021.md |
-| P-022 | Implementar World Model, beliefs e hipótesis falsables | EN_EJECUCIÓN | P-020 + P-021 + P-013 HECHO; activado desde `main 6eb836be...` E3 green | plan/P-022.md |
-| P-023 | Cerrar loop Prediction → Outcome → Error → Learning | PLANIFICADO | P-013 + P-020 + P-022 | plan/P-023.md |
+| P-022 | Implementar World Model, beliefs e hipótesis falsables | HECHO | PR #62 integrado; `main ade7d29148f6c49df94464c52dc22b8b2e2cb77f` revalidado por CI `36048851506` SUCCESS 8/8 | plan/P-022.md |
+| P-023 | Cerrar loop Prediction → Outcome → Error → Learning | EN_EJECUCIÓN | P-013 + P-020 + P-022 HECHO; auditoría activa desde exact-main `ade7d291...` | plan/P-023.md |
 | P-024 | Crear Simulation, Counterfactual y Experiment Workspace | PLANIFICADO | P-022 + P-023 + P-014 + P-018 | plan/P-024.md |
 | P-025 | Evolucionar Strategic Cognition, Plan Review y Adaptive Path v2 | PLANIFICADO | P-009 + P-010 + P-013 + P-014 + P-018 + P-022..P-024 | plan/P-025.md |
 | P-026 | Implementar Cognitive Cost Controller y adaptive compute | PLANIFICADO | P-019..P-025 + P-013 | plan/P-026.md |
@@ -79,7 +79,7 @@ Cada bloque puede poseer componentes especializados, pero debe conservar una aut
 1. **P-006 — HECHO**: security-audit restaurado sin debilitar gate e integrado en `main` por PR #32.
 2. **P-003 — HECHO**: child capital semantics reconciliadas por PR #33, integradas y revalidadas en `main`.
 
-La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth, P-009 Authority/Provenance, P-010 Policy/Authorization, P-011 Lifecycle/Recovery, P-012 transactional self-modification y P-013 observability/evidence están HECHO con evidencia E3 exacta. PR #42 cerró canónicamente P-013 en `main 21911888b8271662f1b546bc637f49d76610c132`; P-014..P-021 también están integradas y revalidadas; la intervención activa es P-022 World Model, beliefs e hipótesis falsables.
+La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth, P-009 Authority/Provenance, P-010 Policy/Authorization, P-011 Lifecycle/Recovery, P-012 transactional self-modification y P-013 observability/evidence están HECHO con evidencia E3 exacta. P-014..P-022 también están integradas y revalidadas; la intervención activa es P-023 Prediction → Outcome → Error → Learning.
 
 ### Ola 1 — verdad, autoridad y recovery
 

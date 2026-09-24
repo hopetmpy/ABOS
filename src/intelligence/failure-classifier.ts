@@ -188,20 +188,41 @@ export function classifyFailure(error: string): FailureDiagnosis {
     };
   }
 
+  if (matches(text, [
+    /produced (?:an )?invalid result/,
+    /result (?:is |was )?(?:invalid|incorrect|wrong)/,
+    /strategy .*failed/,
+    /\bstrategic (?:mismatch|contradiction)\b/,
+    /expected outcome .*not (?:achieved|reached|observed)/,
+    /acceptance criteria .*not (?:met|satisfied)/,
+  ])) {
+    return {
+      classification: "strategic_failure",
+      reason: "Observed evidence contradicts the selected strategy or its expected outcome.",
+      technicalRetryEligible: false,
+      strategicReplanRequired: true,
+      waitForConditionChange: false,
+      terminalForPath: true,
+      suggestedActions: [
+        "Update the world model from the contradictory evidence.",
+        "Generate a materially different path.",
+      ],
+    };
+  }
+
   return {
-    classification: "strategic_failure",
-    reason: "The path failed without evidence of a merely transient technical condition.",
+    classification: "unknown",
+    reason: "Available evidence does not support a specific failure attribution.",
     technicalRetryEligible: false,
     strategicReplanRequired: true,
     waitForConditionChange: false,
-    terminalForPath: true,
+    terminalForPath: false,
     suggestedActions: [
-      "Update the world model from the failure evidence.",
-      "Generate a materially different path.",
+      "Collect discriminating evidence before treating the path as contradicted.",
+      "Preserve UNKNOWN explicitly while evaluating another evidence-gathering route.",
     ],
   };
 }
-
 
 function extractMissingCapability(error: string): string | undefined {
   const patterns = [
