@@ -50,6 +50,8 @@ Mientras exista trabajo elegible dentro del alcance autorizado y el entorno actu
 
 `LOCAL_BLOCK_IS_NOT_TOTAL_BLOCK`: si una ruta queda bloqueada y existe otra ruta independiente elegible dentro del mismo trabajo, registra el bloqueo mínimo y continúa.
 
+Usa **CHECKPOINT LIGERO → CONTINUAR** cuando aporte recuperabilidad o visibilidad, sin convertirlo en cierre.
+
 `NO_TIME_QUOTA_AS_BOUNDARY`: no inventes una cuota fija de minutos como criterio de parada.
 
 `NO_GLOBAL_PROCESS_KILL_BY_TIMEOUT`: el timeout o fallo de una tool/comando limita esa ruta; no convierte por sí solo todo el trabajo en terminado.
