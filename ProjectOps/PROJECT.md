@@ -2,6 +2,8 @@
 
 Format-Version: 3
 Authority: CANONICAL_PROJECT_BASELINE
+ProjectOps-Model: SINGLE_OPERATING_SYSTEM
+Execution-Kernel: `AGENTS.md`
 Project: ABOS — Autonomous Business Operating System
 Identity-Model: TARGET_VISION_PLUS_EVIDENCE_BASELINE
 Runtime-Package: `@abos/runtime`
@@ -10,13 +12,17 @@ Supported-Node-Majors: `22,24`
 Recommended-Node-Major: `22`
 State-Root: `~/.abos`
 Source-Root: repository checkout
-Schema-Version-Observed-In-Source: `19`
+Schema-Version-Observed-In-Source: `20`
 ProjectOps-Protocol: `ProjectOps/system/ABOS_OPERATING_PROTOCOL.md`
 Adaptive-Reasoning: `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md`
 Plan-Authority: `ProjectOps/PLAN.md`
 Continuity-Authority: `ProjectOps/CONTINUITY.md`
 Product-Constitution: `constitution.md`
 Host-Mode: `ProjectOps/system/PUBLIC_TRACKED_MATRIX.md`
+
+`AGENTS.md` es el único kernel/scheduler de ejecución. CONTINUITY conserva estado/recovery; PLAN conserva intención/dependencias; PROJECT conserva identidad e invariantes. Operating Protocol y Adaptive Reasoning son referencias `REFERENCE_ONLY_NON_SCHEDULER`. Si un documento subordinado parece decidir cadencia, handoff o cierre, prevalece `AGENTS.md`.
+
+Este archivo no posee rama activa, HEAD activo, `Active-Plan` ni estado operativo vivo. Esos valores pertenecen a `ProjectOps/CONTINUITY.md`, su segmento activo, `ProjectOps/PLAN.md` y Git/runtime/tests.
 
 ## 1. Identidad canónica
 
@@ -66,9 +72,9 @@ Checkout source y `~/.abos` son dominios distintos. `~/.abos` contiene estado ru
 
 ### 3.2 Persistencia
 
-`src/state/schema.ts` declara `SCHEMA_VERSION = 19`. v16 extendió `policy_decisions` para lifecycle de policy/authorization; v17 añadió el journal/lease transaccional P-012 (`self_mod_transactions` / `self_mod_leases`); v18 añade `evidence_events` como fabric transversal de causalidad/correlación P-013, separado del `event_stream` comprimible de memoria y sin reemplazar authorities de dominio; v19 añade `capability_records` como backing durable del `CapabilityRegistry` canónico P-014, sin convertir inventory en readiness ni reemplazar authorities upstream de environment/probe.
+`src/state/schema.ts` declara `SCHEMA_VERSION = 20`. v16 extendió `policy_decisions` para lifecycle de policy/authorization; v17 añadió el journal/lease transaccional P-012 (`self_mod_transactions` / `self_mod_leases`); v18 añadió `evidence_events` como fabric transversal de causalidad/correlación P-013; v19 añadió `capability_records` como backing durable del `CapabilityRegistry` canónico P-014; v20 añade history/evaluations durables para Skill Evolution sin retirar `skills` como proyección runtime compatible.
 
-La SQLite canónica conserva identity, turns/tool calls, heartbeat, finanzas, skills, children, registry, memory/soul, orchestration/adaptive/environment state, policy lifecycle, self-mod recovery y migrations acumuladas. P-009 añadió provenance de inbox/turns de forma aditiva; legacy ambiguity degrada a UNKNOWN en vez de inventar trust.
+La SQLite canónica conserva identity, turns/tool calls, heartbeat, finanzas, skills, skill lifecycle/history, children, registry, memory/soul, orchestration/adaptive/environment state, policy lifecycle, self-mod recovery y migrations acumuladas. P-009 añadió provenance de inbox/turns de forma aditiva; legacy ambiguity degrada a UNKNOWN en vez de inventar trust.
 
 ### 3.3 Ciclo principal
 
@@ -211,11 +217,9 @@ E3 nunca se promociona a E5/E6 por narrativa.
 
 Codex OAuth humano, AWS billable, providers externos, saldos/revenue atribuibles y otras fronteras E5/E6 requieren evidencia real; CI/source no las autocertifican.
 
-### 7.4 P-017 activo
+### 7.4 Estado operativo fuera de PROJECT
 
-P-011 Lifecycle/Health/Restart/Recovery, P-012 transactional self-modification, P-013 Observability/Audit/Evidence Fabric, P-014 Capability Fabric, P-015 MCP runtime y P-016 computer/browser/GUI hands están HECHO / INTEGRATION_VERIFIED para sus objetivos exactos. P-016 fue integrado por PR #48 y el `main 08b7a5cce8f18c57c52e6a2f43048b6f1c214e50` resultante fue revalidado por CI `35809162263` + ProjectOps `35809162403` SUCCESS.
-
-P-017 se activa para hacer real el pipeline abierto de discovery, acquisition, composition y construction de capacidades cuando exista un capability gap legítimo. Debe reutilizar P-014 como capability authority, P-015/P-016 como rutas existentes y P-012 para construction transaccional; no puede crear un registry, installer o control plane paralelo. La activación no modifica product source: primero se audita qué discovery/acquisition/composition/construction ya existe, quién lo produce/consume y qué evidence/policy/treasury/supply-chain boundaries gobiernan cada ruta.
+El estado activo de P-xxx, rama, HEAD, intervención y siguiente trabajo no vive en PROJECT. Consúltalo exclusivamente en `ProjectOps/CONTINUITY.md` + segmento activo, `ProjectOps/PLAN.md` + módulo aplicable y Git/runtime/tests. La historia de fases anteriores puede conservarse como evidencia, pero no puede competir con esas authorities vivas.
 
 ## 8. Anti-contaminación entre proyectos
 
