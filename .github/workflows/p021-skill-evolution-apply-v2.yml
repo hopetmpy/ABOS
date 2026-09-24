@@ -29,9 +29,23 @@ jobs:
       - name: Apply audited hardening
         shell: bash
         run: |
-          set -euo pipefail
-          python3 .github/p021-skill-evolution-hardening.py
-          git diff --check
+          set +e
+          python3 .github/p021-skill-evolution-hardening.py > /tmp/p021-hardening-apply.log 2>&1
+          status=$?
+          if [ "$status" -eq 0 ]; then
+            git diff --check >> /tmp/p021-hardening-apply.log 2>&1
+            status=$?
+          fi
+          cat /tmp/p021-hardening-apply.log
+          exit "$status"
+
+      - name: Upload hardening transform evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p021-hardening-transform-evidence
+          path: /tmp/p021-hardening-apply.log
+          if-no-files-found: error
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
