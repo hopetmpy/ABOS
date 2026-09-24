@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-024
 Active-Segment: continuity/C0020.md
-Active-Intervention: P024_SIMULATION_EXPERIMENTS — EN_EJECUCIÓN / SOURCE_CANDIDATE / GATE_REPAIR
+Active-Intervention: P024_SIMULATION_EXPERIMENTS — EN_EJECUCIÓN / ADVERSARIAL_HARDENED / EXACT_HEAD_GATE_PENDING
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,10 +15,12 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p024-simulation-experiments
 Host-Head-At-Audit-Open: 5cd1ba2238c5790b4bfe76e906dccc93bc1ca7b4
-Last-Reconciled-Host-Head: 5cd1ba2238c5790b4bfe76e906dccc93bc1ca7b4
+Last-Reconciled-Host-Head: 24cb7c6e2293f32130233e4ced63c1b3496c552a
 Observed-Main-Head: 5cd1ba2238c5790b4bfe76e906dccc93bc1ca7b4
-Last-Product-Head: 631e62715b724e1b0fdb97e91ef7b64555308a53
-Last-Product-CI: 36069543167 — FAIL / PROJECTOPS_INTEGRITY; PRODUCT_GATES_SKIPPED
+Last-Product-Head: ddc9c3369d860bf024937f32344124b260863036
+Last-Product-CI: PENDING_EXACT_HEAD_AFTER_ADVERSARIAL_HARDENING
+Last-Green-Superseded-Head: 35ce13a0e0bf0c5459230a12770e7e12be57932a
+Last-Green-Superseded-CI: 36069696406 — SUCCESS 8/8
 Last-Completed-Plan: P-023
 Last-Completed-Merge: b25dfebf0454f488766b14a816ed1997beeb407a
 Last-Completed-CI: 36057756301 — SUCCESS 8/8
@@ -44,7 +46,7 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 - P-004: PLANIFICADO — track documental transversal/final.
 - P-005: PLANIFICADO — acceptance LIVE incremental.
 - P-006..P-023: HECHO.
-- P-024: EN_EJECUCIÓN / DECISION_READY / SOURCE_CANDIDATE / GATE_REPAIR.
+- P-024: EN_EJECUCIÓN / DECISION_READY / ADVERSARIAL_HARDENED / EXACT_HEAD_GATE_PENDING.
 - P-025..P-036: usar estado explícito de `ProjectOps/PLAN.md`; no se adelantan mientras P-024 siga no terminal.
 
 ## Cierre P-023
@@ -57,46 +59,35 @@ P-023 Prediction → Outcome → Error → Learning está terminalmente demostra
 
 Detalle histórico: `continuity/C0019.md` + `plan/P-023.md`.
 
-## P-024 — decisión y source candidate
+## P-024 — estado recuperable
 
 Decision-Class:
 `CREATE_EXPERIMENT_AUTHORITY + REUSE_WORLD_ADAPTIVE_INPUTS + REFERENCE_EVIDENCE_FABRIC + KEEP_EXTERNAL_EXECUTION_BEHIND_POLICY`.
 
-Arquitectura decidida:
-- E-xxx posee estado canónico propio y persistente;
-- Adaptive/World Model son inputs/correlation, no owner;
-- Evidence es fabric referencial y resultados simulados permanecen `inference`;
-- simulator exacto `id + version`, seed/config y runs persistidos habilitan replay/restart;
-- counterfactuals derivan de un experimento base sin mutarlo;
-- budget se valida antes de cada run;
-- calibration exige evidence `observation`;
-- P-025 conserva ownership de la selección estratégica de cuándo simular.
+PR #65: OPEN / DRAFT.
 
-Source candidate `631e62715b724e1b0fdb97e91ef7b64555308a53` añadió:
-- `src/state/simulation-schema.ts`;
-- `src/intelligence/simulation-workspace.ts`;
-- `src/__tests__/p024-simulation-workspace.test.ts`.
+Source actual:
+- `src/state/simulation-schema.ts` — E-xxx sidecar revisionado;
+- `src/intelligence/simulation-workspace.ts` — lifecycle, replay, stochastic reproducibility, budget, counterfactuals, calibration y Evidence inferencial;
+- `src/__tests__/p024-simulation-workspace.test.ts` — suite funcional/adversarial inicial;
+- `src/__tests__/p024-simulation-adversarial.test.ts` — retry stochastic seed + failure de summarization.
 
-PR #65 está OPEN/DRAFT.
+Adversarial review descubrió y corrigió después del candidate inicial:
+- retry de stochastic experiment con ID fijo + seed omitida no era idempotente → corregido en `dcddc7bd94557b99e4d2b38a94fc197ebfea7b82`;
+- fallo de summarizer después de runs persistidos podía dejar estado `running` → corregido en `dcddc7bd...`;
+- tests de regresión añadidos en `ddc9c3369d860bf024937f32344124b260863036`.
 
-## Validación actual
+Boundary: el workspace no entrega ToolContext/executors ni acepta async output como run válido, pero un callback JavaScript registrado sigue siendo código del proceso y no constituye un sandbox universal. No se reclama aislamiento que no existe.
 
-CI `36069543167` sobre `631e627...`:
-- security audit: PASS;
-- rebrand integrity: PASS;
-- build-and-test Node 22/24: FAIL en `ProjectOps integrity` antes de typecheck/build/tests;
-- causa exacta: `CONTINUITY.md` omitió el campo contractual `Last-Reconciled-Host-Head` durante la transición P-023→P-024;
-- typecheck/build/tests/security tests de esos jobs: SKIPPED, por tanto **NO VERIFICADOS**;
-- jobs Windows/public-distribution no se usan como evidencia del producto hasta completar el run.
+## Evidencia de gates
 
-La causa reduce incertidumbre: es un defecto de authority/checkpoint, no evidencia todavía a favor ni en contra del source P-024.
+1. CI `36069543167` sobre `631e627...`: FAIL en ProjectOps integrity por continuity incompleta; producto posterior SKIPPED.
+2. PR CI `36069696406` sobre `35ce13a0...`: SUCCESS 8/8 — ProjectOps, typecheck/build, full tests/security 22/24, Windows 22/24, public distribution 22/24, security audit y rebrand.
+3. Ese SUCCESS quedó superado por `dcddc7bd...` + `ddc9c336...`; por tanto el HEAD actual requiere gate nuevo y permanece **NO VERIFICADO** hasta que termine.
 
 ## Siguiente punto verificable
 
-1. Restaurar el campo contractual y reconciliar la cabecera de continuity.
-2. Gatear el nuevo exact-head.
-3. Si ProjectOps pasa, usar typecheck/tests reales para atacar source P-024.
-4. Corregir cualquier defecto producto descubierto; no convertir PR #65 a ready ni cerrar P-024 antes de exact-head verde.
+Gatear el exact-head creado por este checkpoint. Si falla, leer evidencia exacta y corregir en P-024. Si queda verde, reauditar PR #65, convertirlo a integración sólo si el diff sigue limitado a P-024 y luego exigir merge + exact-main verification antes de HECHO.
 
 ## Política de rotación
 
