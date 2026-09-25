@@ -26,6 +26,23 @@ const plannerOutput = {
     preferredEnvironment: null,
     expectedOutcome: "The objective reaches its acceptance condition.",
   },
+  alternatives: [
+    {
+      label: "alternate-sequence",
+      strategy: "Use a different sequence before committing.",
+      hypothesis: "A probe-first route could satisfy the same objective.",
+      assumptions: ["A probe can reduce uncertainty before execution."],
+      requiredCapabilities: [],
+      preferredEnvironment: null,
+      sequence: ["Probe uncertainty", "Execute alternate route"],
+      expectedOutcome: "The objective reaches its acceptance condition.",
+      estimatedCostCents: 120,
+      discriminants: ["Trades extra probe cost for lower uncertainty."],
+    },
+  ],
+  decisionFactors: ["The selected route has sufficient current evidence and lower coordination cost."],
+  preMortem: ["Runtime conditions could change after review and invalidate the route."],
+  falsificationConditions: ["A material runtime condition changes before execution."],
   customRoles: [],
   tasks: [
     {
@@ -190,76 +207,47 @@ describe("integration/plan-execute-flow", () => {
     vi.resetAllMocks();
   });
 
-  // ─── Full lifecycle ──────────────────────────────────────────────────────
-
   describe("full lifecycle: idle → classifying → planning → plan_review → executing → complete", () => {
     it("tick 1: idle with active goal transitions to classifying", async () => {
       insertGoal(db, { status: "active" });
       setState(db, { phase: "idle", goalId: null, replanCount: 0, failedTaskId: null, failedError: null });
-
       mocks.inference.chat.mockResolvedValue({
         content: JSON.stringify({ estimatedSteps: 5, reason: "complex", stepOutline: ["step1"] }),
         usage: {},
       });
-
-      const orc = makeOrchestrator(db, mocks);
-      const result = await orc.tick();
-
-      // idle picks up the goal, classifying runs the inference in the same tick
-      // and since estimatedSteps > 3, moves to "planning"
+      const result = await makeOrchestrator(db, mocks).tick();
       expect(["classifying", "planning"]).toContain(result.phase);
     });
 
     it("tick 2: classifying with complex goal transitions to planning", async () => {
       const goalId = insertGoal(db, { status: "active" });
       setState(db, { phase: "classifying", goalId, replanCount: 0, failedTaskId: null, failedError: null });
-
       mocks.inference.chat.mockResolvedValue({
         content: JSON.stringify({ estimatedSteps: 5, reason: "complex", stepOutline: ["step1"] }),
         usage: {},
       });
-
-      const orc = makeOrchestrator(db, mocks);
-      const result = await orc.tick();
-
-      expect(result.phase).toBe("planning");
+      expect((await makeOrchestrator(db, mocks).tick()).phase).toBe("planning");
     });
 
     it("tick 3: planning persists a candidate without materializing tasks before review", async () => {
       const goalId = insertGoal(db, { status: "active" });
       setState(db, { phase: "planning", goalId, replanCount: 0, failedTaskId: null, failedError: null });
-
-      mocks.inference.chat.mockResolvedValue({
-        content: JSON.stringify(plannerOutput),
-        usage: {},
-      });
-
-      const orc = makeOrchestrator(db, mocks);
-      const result = await orc.tick();
-
+      mocks.inference.chat.mockResolvedValue({ content: JSON.stringify(plannerOutput), usage: {} });
+      const result = await makeOrchestrator(db, mocks).tick();
       expect(result.phase).toBe("plan_review");
       expect(getTasksForGoal(db, goalId)).toHaveLength(0);
-
-      const storedPlan = db.prepare("SELECT value FROM kv WHERE key = ?").get(
-        `orchestrator.plan.${goalId}`,
-      ) as { value: string } | undefined;
+      const storedPlan = db.prepare("SELECT value FROM kv WHERE key = ?").get(`orchestrator.plan.${goalId}`) as { value: string } | undefined;
       expect(storedPlan).toBeDefined();
-      expect(JSON.parse(storedPlan?.value ?? "{}").path.hypothesis).toBe(
-        plannerOutput.path.hypothesis,
-      );
+      expect(JSON.parse(storedPlan?.value ?? "{}").path.hypothesis).toBe(plannerOutput.path.hypothesis);
+      expect(JSON.parse(storedPlan?.value ?? "{}").alternatives).toHaveLength(1);
     });
 
     it("tick 4: plan_review substantively approves before materializing and executing", async () => {
       const goalId = insertGoal(db, { status: "active" });
-      db.prepare(
-        "INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))",
-      ).run(`orchestrator.plan.${goalId}`, JSON.stringify(plannerOutput));
-
+      db.prepare("INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))")
+        .run(`orchestrator.plan.${goalId}`, JSON.stringify(plannerOutput));
       setState(db, { phase: "plan_review", goalId, replanCount: 0, failedTaskId: null, failedError: null });
-
-      const orc = makeOrchestrator(db, mocks);
-      const result = await orc.tick();
-
+      const result = await makeOrchestrator(db, mocks).tick();
       expect(result.phase).toBe("executing");
       expect(getTasksForGoal(db, goalId).length).toBeGreaterThan(0);
     });
@@ -267,210 +255,92 @@ describe("integration/plan-execute-flow", () => {
     it("tick 5-6: executing assigns tasks, receives results, and completes goal", async () => {
       const goalId = insertGoal(db, { status: "active" });
       const taskId = ulid();
-      db.prepare(
-        `INSERT INTO task_graph (id, goal_id, title, description, status, agent_role, priority, dependencies, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(taskId, goalId, "Task 1", "Do the thing", "pending", "generalist", 1, "[]", new Date().toISOString());
-
+      db.prepare(`INSERT INTO task_graph (id, goal_id, title, description, status, agent_role, priority, dependencies, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(taskId, goalId, "Task 1", "Do the thing", "pending", "generalist", 1, "[]", new Date().toISOString());
       setState(db, { phase: "executing", goalId, replanCount: 0, failedTaskId: null, failedError: null });
-
-      mocks.agentTracker.getIdle.mockReturnValue([
-        { address: "0xchild", name: "Worker", role: "generalist", status: "healthy" },
-      ]);
-
+      mocks.agentTracker.getIdle.mockReturnValue([{ address: "0xchild", name: "Worker", role: "generalist", status: "healthy" }]);
       mocks.messaging.processInbox.mockResolvedValue([]);
       const orc = makeOrchestrator(db, mocks);
       await orc.tick();
-
-      const tasks = getTasksForGoal(db, goalId);
-      expect(tasks[0].assigned_to).toBe("0xchild");
-
-      mocks.messaging.processInbox.mockResolvedValue([
-        makeTaskResultInboxEntry(goalId, taskId),
-      ]);
+      expect(getTasksForGoal(db, goalId)[0].assigned_to).toBe("0xchild");
+      mocks.messaging.processInbox.mockResolvedValue([makeTaskResultInboxEntry(goalId, taskId)]);
       const result2 = await orc.tick();
-
       expect(result2.phase).toBe("complete");
       expect(getGoalStatus(db, goalId)).toBe("completed");
     });
   });
 
-  // ─── Replan on task failure ──────────────────────────────────────────────
-
   describe("replan on task failure", () => {
     it("task failure transitions executing phase to replanning", async () => {
       const goalId = insertGoal(db, { status: "active" });
       const taskId = ulid();
-      db.prepare(
-        `INSERT INTO task_graph (id, goal_id, title, description, status, agent_role, priority, dependencies, max_retries, retry_count, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(taskId, goalId, "Task 1", "Do the thing", "pending", "generalist", 1, "[]", 0, 0, new Date().toISOString());
-
+      db.prepare(`INSERT INTO task_graph (id, goal_id, title, description, status, agent_role, priority, dependencies, max_retries, retry_count, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(taskId, goalId, "Task 1", "Do the thing", "pending", "generalist", 1, "[]", 0, 0, new Date().toISOString());
       setState(db, { phase: "executing", goalId, replanCount: 0, failedTaskId: null, failedError: null });
-
-      mocks.agentTracker.getIdle.mockReturnValue([
-        { address: "0xchild", name: "Worker", role: "generalist", status: "healthy" },
-      ]);
-
-      mocks.messaging.processInbox.mockResolvedValue([
-        {
-          success: true,
-          message: {
-            id: "m2",
-            type: "task_result",
-            from: "0xchild",
-            to: "0xparent",
-            goalId,
-            taskId,
-            content: JSON.stringify({
-              taskId,
-              result: { success: false, output: "error: something broke", artifacts: [], costCents: 10, duration: 50 },
-            }),
-            priority: "normal",
-            requiresResponse: false,
-            expiresAt: null,
-            createdAt: new Date().toISOString(),
-          },
-          handledBy: "test",
-        },
-      ]);
-
-      const orc = makeOrchestrator(db, mocks);
-      const result = await orc.tick();
-
-      expect(result.phase).toBe("replanning");
+      mocks.agentTracker.getIdle.mockReturnValue([{ address: "0xchild", name: "Worker", role: "generalist", status: "healthy" }]);
+      mocks.messaging.processInbox.mockResolvedValue([{ success: true, message: { id: "m2", type: "task_result", from: "0xchild", to: "0xparent", goalId, taskId, content: JSON.stringify({ taskId, result: { success: false, output: "error: something broke", artifacts: [], costCents: 10, duration: 50 } }), priority: "normal", requiresResponse: false, expiresAt: null, createdAt: new Date().toISOString() }, handledBy: "test" }]);
+      expect((await makeOrchestrator(db, mocks).tick()).phase).toBe("replanning");
     });
 
     it("replanning preserves the failed route until review, then supersedes it", async () => {
       const goalId = insertGoal(db, { status: "active" });
       const taskId = ulid();
-      db.prepare(
-        `INSERT INTO task_graph (id, goal_id, title, description, status, agent_role, priority, dependencies, max_retries, retry_count, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(taskId, goalId, "Task 1", "Do the thing", "failed", "generalist", 1, "[]", 0, 0, new Date().toISOString());
-
+      db.prepare(`INSERT INTO task_graph (id, goal_id, title, description, status, agent_role, priority, dependencies, max_retries, retry_count, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(taskId, goalId, "Task 1", "Do the thing", "failed", "generalist", 1, "[]", 0, 0, new Date().toISOString());
       setState(db, { phase: "replanning", goalId, replanCount: 0, failedTaskId: taskId, failedError: "it broke" });
-
-      mocks.inference.chat.mockResolvedValue({
-        content: JSON.stringify(plannerOutput),
-        usage: {},
-      });
-
+      mocks.inference.chat.mockResolvedValue({ content: JSON.stringify(plannerOutput), usage: {} });
       const orc = makeOrchestrator(db, mocks);
       const draftResult = await orc.tick();
-
       expect(draftResult.phase).toBe("plan_review");
       expect(readState(db)?.replanCount).toBe(1);
-
-      const beforeReview = db.prepare(
-        "SELECT status FROM task_graph WHERE id = ?",
-      ).get(taskId) as { status: string };
-      expect(beforeReview.status).toBe("failed");
-
+      expect((db.prepare("SELECT status FROM task_graph WHERE id = ?").get(taskId) as { status: string }).status).toBe("failed");
       const reviewedResult = await orc.tick();
       expect(reviewedResult.phase).toBe("executing");
-
-      const superseded = db.prepare(
-        "SELECT status FROM task_graph WHERE id = ?",
-      ).get(taskId) as { status: string };
-      expect(superseded.status).toBe("cancelled");
-
-      const activeNewTasks = db.prepare(
-        `SELECT COUNT(*) AS count
-         FROM task_graph
-         WHERE goal_id = ? AND status != 'cancelled'`,
-      ).get(goalId) as { count: number };
+      expect((db.prepare("SELECT status FROM task_graph WHERE id = ?").get(taskId) as { status: string }).status).toBe("cancelled");
+      const activeNewTasks = db.prepare(`SELECT COUNT(*) AS count FROM task_graph WHERE goal_id = ? AND status != 'cancelled'`).get(goalId) as { count: number };
       expect(activeNewTasks.count).toBeGreaterThan(0);
     });
 
     it("replan count does not terminate a still-valid objective", async () => {
       const goalId = insertGoal(db, { status: "active" });
       const taskId = ulid();
-      db.prepare(
-        `INSERT INTO task_graph (id, goal_id, title, description, status, agent_role, priority, dependencies, max_retries, retry_count, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(taskId, goalId, "Task 1", "Do the thing", "pending", "generalist", 1, "[]", 0, 0, new Date().toISOString());
-
+      db.prepare(`INSERT INTO task_graph (id, goal_id, title, description, status, agent_role, priority, dependencies, max_retries, retry_count, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(taskId, goalId, "Task 1", "Do the thing", "pending", "generalist", 1, "[]", 0, 0, new Date().toISOString());
       setState(db, { phase: "executing", goalId, replanCount: 3, failedTaskId: null, failedError: null });
-
-      mocks.agentTracker.getIdle.mockReturnValue([
-        { address: "0xchild", name: "Worker", role: "generalist", status: "healthy" },
-      ]);
-
-      mocks.messaging.processInbox.mockResolvedValue([
-        {
-          success: true,
-          message: {
-            id: "m3",
-            type: "task_result",
-            from: "0xchild",
-            to: "0xparent",
-            goalId,
-            taskId,
-            content: JSON.stringify({
-              taskId,
-              result: { success: false, output: "fatal failure", artifacts: [], costCents: 0, duration: 0 },
-            }),
-            priority: "normal",
-            requiresResponse: false,
-            expiresAt: null,
-            createdAt: new Date().toISOString(),
-          },
-          handledBy: "test",
-        },
-      ]);
-
-      const orc = makeOrchestrator(db, mocks, { maxReplans: 3 });
-      const result = await orc.tick();
-
+      mocks.agentTracker.getIdle.mockReturnValue([{ address: "0xchild", name: "Worker", role: "generalist", status: "healthy" }]);
+      mocks.messaging.processInbox.mockResolvedValue([{ success: true, message: { id: "m3", type: "task_result", from: "0xchild", to: "0xparent", goalId, taskId, content: JSON.stringify({ taskId, result: { success: false, output: "fatal failure", artifacts: [], costCents: 0, duration: 0 } }), priority: "normal", requiresResponse: false, expiresAt: null, createdAt: new Date().toISOString() }, handledBy: "test" }]);
+      const result = await makeOrchestrator(db, mocks, { maxReplans: 3 }).tick();
       expect(result.phase).toBe("replanning");
-      const goal = db.prepare("SELECT status FROM goals WHERE id = ?").get(goalId) as { status: string };
-      expect(goal.status).toBe("active");
+      expect((db.prepare("SELECT status FROM goals WHERE id = ?").get(goalId) as { status: string }).status).toBe("active");
     });
 
     it("explicit failed phase still marks a goal failed for genuine terminal/runtime failure", async () => {
       const goalId = insertGoal(db, { status: "active" });
-
-      setState(db, {
-        phase: "failed",
-        goalId,
-        replanCount: 3,
-        failedTaskId: null,
-        failedError: "No more replans",
-      });
-
-      const orc = makeOrchestrator(db, mocks);
-      await orc.tick();
-
+      setState(db, { phase: "failed", goalId, replanCount: 3, failedTaskId: null, failedError: "No more replans" });
+      await makeOrchestrator(db, mocks).tick();
       expect(getGoalStatus(db, goalId)).toBe("failed");
     });
   });
-
-  // ─── Plan review scenarios ───────────────────────────────────────────────
 
   describe("plan review", () => {
     it("plan_review with no canonical plan fails closed instead of executing stale tasks", async () => {
       const goalId = insertGoal(db, { status: "active" });
       setState(db, { phase: "plan_review", goalId, replanCount: 0, failedTaskId: null, failedError: null });
-
-      const orc = makeOrchestrator(db, mocks);
-      const result = await orc.tick();
-
+      const result = await makeOrchestrator(db, mocks).tick();
       expect(result.phase).toBe("planning");
       expect(getTasksForGoal(db, goalId)).toHaveLength(0);
     });
 
     it("plan_review with strategically valid plan materializes and transitions to executing", async () => {
       const goalId = insertGoal(db, { status: "active" });
-      db.prepare(
-        "INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))",
-      ).run(`orchestrator.plan.${goalId}`, JSON.stringify(plannerOutput));
-
+      db.prepare("INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))")
+        .run(`orchestrator.plan.${goalId}`, JSON.stringify(plannerOutput));
       setState(db, { phase: "plan_review", goalId, replanCount: 0, failedTaskId: null, failedError: null });
-
-      const orc = makeOrchestrator(db, mocks);
-      const result = await orc.tick();
-
+      const result = await makeOrchestrator(db, mocks).tick();
       expect(result.phase).toBe("executing");
       expect(getTasksForGoal(db, goalId).length).toBeGreaterThan(0);
     });
@@ -478,29 +348,19 @@ describe("integration/plan-execute-flow", () => {
     it("fixed budget scrutiny marker does not decide approval by itself", async () => {
       const goalId = insertGoal(db, { status: "active" });
       const highCostPlan = { ...plannerOutput, estimatedTotalCostCents: 6000 };
-      db.prepare(
-        "INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))",
-      ).run(`orchestrator.plan.${goalId}`, JSON.stringify(highCostPlan));
-
+      db.prepare("INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))")
+        .run(`orchestrator.plan.${goalId}`, JSON.stringify(highCostPlan));
       setState(db, { phase: "plan_review", goalId, replanCount: 0, failedTaskId: null, failedError: null });
-
-      const orc = makeOrchestrator(db, mocks);
-      const result = await orc.tick();
-
+      const result = await makeOrchestrator(db, mocks).tick();
       expect(result.phase).toBe("executing");
       expect(getTasksForGoal(db, goalId).length).toBeGreaterThan(0);
     });
   });
 
-  // ─── Edge cases ──────────────────────────────────────────────────────────
-
   describe("edge cases", () => {
     it("no active goals keeps orchestrator idle", async () => {
       setState(db, { phase: "idle", goalId: null, replanCount: 0, failedTaskId: null, failedError: null });
-
-      const orc = makeOrchestrator(db, mocks);
-      const result = await orc.tick();
-
+      const result = await makeOrchestrator(db, mocks).tick();
       expect(result.phase).toBe("idle");
       expect(result.goalsActive).toBe(0);
     });
@@ -508,13 +368,9 @@ describe("integration/plan-execute-flow", () => {
     it("goal deleted mid-execution causes orchestrator to return to idle", async () => {
       const goalId = ulid();
       setState(db, { phase: "executing", goalId, replanCount: 0, failedTaskId: null, failedError: null });
-
-      const orc = makeOrchestrator(db, mocks);
-      const result = await orc.tick();
-
+      const result = await makeOrchestrator(db, mocks).tick();
       expect(result.phase).toBe("idle");
-      const state = readState(db);
-      expect(state?.goalId).toBeNull();
+      expect(readState(db)?.goalId).toBeNull();
     });
   });
 });
