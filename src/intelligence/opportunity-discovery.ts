@@ -345,6 +345,11 @@ export class OpportunityDiscovery {
       : requireText(input.uncertainty, "uncertainty");
     const falsificationConditions = uniqueTexts(input.falsificationConditions);
     const epistemicStatus = input.epistemicStatus ?? "inference";
+    if (epistemicStatus === "observation") {
+      throw new Error(
+        "a value hypothesis cannot be opened as observation; external observations must be recorded through recordObservedOutcome",
+      );
+    }
     const confidence = validateConfidence(input.confidence);
     const idempotencyKey = input.idempotencyKey == null
       ? null
@@ -779,14 +784,18 @@ export class OpportunityDiscovery {
     if (!hypothesis) throw new Error(`opportunity hypothesis not found: ${input.opportunityId}`);
     const external = getEvidenceEvent(this.db, requireText(input.evidenceEventId, "evidenceEventId"));
     if (!external) throw new Error(`evidence event not found: ${input.evidenceEventId}`);
-    if (external.epistemicStatus !== "observation") {
-      throw new Error(`opportunity outcome requires observation evidence; got ${external.epistemicStatus}`);
-    }
     if (external.domain === "simulation" || external.authorityType === "simulation_experiment") {
       throw new Error("simulation evidence cannot be promoted to external opportunity outcome evidence");
     }
+    if (external.epistemicStatus !== "observation") {
+      throw new Error(`opportunity outcome requires observation evidence; got ${external.epistemicStatus}`);
+    }
     if (external.goalId !== hypothesis.opportunity.goalId) {
       throw new Error("external opportunity outcome evidence must belong to the same goal");
+    }
+    const linkedOpportunityId = sameString(payloadRecord(external).opportunityId);
+    if (linkedOpportunityId !== input.opportunityId) {
+      throw new Error("external opportunity outcome evidence must explicitly reference the same opportunity");
     }
 
     const existingEvents = getEvidenceByAuthority(this.db, OPPORTUNITY_AUTHORITY, input.opportunityId);
