@@ -68,6 +68,11 @@ import { DEFAULT_MEMORY_BUDGET } from "../types.js";
 import { formatMemoryBlock } from "./context.js";
 import { createLogger } from "../observability/logger.js";
 import { correlationIdFor } from "../observability/evidence.js";
+import { CognitiveCostController } from "../intelligence/cognitive-cost-controller.js";
+import {
+  agentTurnInferenceRouteId,
+  buildAgentTurnCognitiveCandidates,
+} from "./cognitive-preflight.js";
 import {
   Orchestrator,
   calculateTaskFundingCents,
@@ -443,6 +448,7 @@ export async function runAgentLoop(
   const runtimeModelBinding = new RuntimeModelBinding(modelStrategyConfig);
   const contextManager = new ContextManager(createTokenCounter());
   const enhancedRetriever = new EnhancedRetriever(db.raw, DEFAULT_MEMORY_BUDGET);
+  const cognitiveCostController = new CognitiveCostController(db.raw);
 
   // Optional orchestration bootstrap (requires V9 goals/task tables)
   let planModeController: PlanModeController | undefined;
@@ -1440,12 +1446,14 @@ export async function runAgentLoop(
       );
 
       const cognitiveMemoryBlocks: string[] = [];
+      let retrievedMemoryBlockCount = 0;
       try {
         const sessionId = db.getKV("session_id") || "default";
         const retriever = new MemoryRetriever(db.raw, DEFAULT_MEMORY_BUDGET);
         const memories = retriever.retrieve(sessionId, currentInput?.content);
         if (memories.totalTokens > 0) {
           cognitiveMemoryBlocks.push(formatMemoryBlock(memories));
+          retrievedMemoryBlockCount = 1;
         }
 
         const knowledgeBudget = calculateMemoryBudget(
@@ -1512,22 +1520,91 @@ export async function runAgentLoop(
       // P-013: one durable turn identity must correlate inference cost, persisted
       // turn state, policy decisions and every tool call spawned by this turn.
       const turnId = ulid();
-      const routerResult = await inferenceRouter.route(
-        {
-          messages: messages,
-          taskType: "agent_turn",
-          connectionProvider: activeConnectionProvider,
-          tier: survivalTier,
-          sessionId: db.getKV("session_id") || "default",
-          turnId,
-          tools: inferenceTools,
-          dailyBudgetCents:
-            liveConfig?.treasuryPolicy?.maxInferenceDailyCents ??
-            config.treasuryPolicy?.maxInferenceDailyCents ??
-            DEFAULT_TREASURY_POLICY.maxInferenceDailyCents,
+      let inferenceEstimate = {
+        sampleCount: 0,
+        averageCostCents: null as number | null,
+        averageLatencyMs: null as number | null,
+        averageTokens: null as number | null,
+      };
+      try {
+        inferenceEstimate = cognitiveCostController.estimateInferenceResources(
+          "agent_turn",
+          survivalTier,
+        );
+      } catch (error) {
+        logger.warn("Cognitive inference estimate unavailable; preserving UNKNOWN", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      const cognitiveDecision = cognitiveCostController.decide({
+        taskClass: "agent:turn",
+        candidates: buildAgentTurnCognitiveCandidates({
+          survivalTier,
+          inferenceAvailable: Boolean(selectedModelEntry),
+          inferenceEstimate,
+          retrievedMemoryBlocks: retrievedMemoryBlockCount,
+          retrievedKnowledgeEntries: retrievedKnowledgeIds.length,
+          promptEligibleSkills: promptSkills.length,
+          availableTools: tools.length,
+        }),
+        baselineRouteId: agentTurnInferenceRouteId(survivalTier),
+        correlationId: correlationIdFor("turn", turnId),
+        turnId,
+      });
+
+      if (
+        cognitiveDecision.action !== "execute" ||
+        cognitiveDecision.selectedRouteId !== agentTurnInferenceRouteId(survivalTier)
+      ) {
+        throw new Error(
+          `No verified executable main-turn cognitive route is available (decision=${cognitiveDecision.id}, action=${cognitiveDecision.action}, selected=${cognitiveDecision.selectedRouteId}).`,
+        );
+      }
+
+      let routerResult;
+      try {
+        routerResult = await inferenceRouter.route(
+          {
+            messages: messages,
+            taskType: "agent_turn",
+            connectionProvider: activeConnectionProvider,
+            tier: survivalTier,
+            sessionId: db.getKV("session_id") || "default",
+            turnId,
+            tools: inferenceTools,
+            dailyBudgetCents:
+              liveConfig?.treasuryPolicy?.maxInferenceDailyCents ??
+              config.treasuryPolicy?.maxInferenceDailyCents ??
+              DEFAULT_TREASURY_POLICY.maxInferenceDailyCents,
+          },
+          (msgs, opts) => inference.chat(msgs, { ...opts, tools: inferenceTools }),
+        );
+      } catch (error) {
+        cognitiveCostController.recordExecution(cognitiveDecision.id, {
+          evidence: [
+            `Canonical inference routing failed before a quality-validating turn outcome: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          ],
+          metadata: { executionOutcome: "error" },
+        });
+        throw error;
+      }
+
+      cognitiveCostController.recordExecution(cognitiveDecision.id, {
+        actualCostCents: routerResult.costCents,
+        latencyMs: routerResult.latencyMs,
+        contextTokens: routerResult.inputTokens + routerResult.outputTokens,
+        evidence: [
+          `InferenceRouter executed provider=${routerResult.provider} model=${routerResult.model} for the main agent turn.`,
+        ],
+        metadata: {
+          provider: routerResult.provider,
+          model: routerResult.model,
+          finishReason: routerResult.finishReason,
+          survivalTier,
         },
-        (msgs, opts) => inference.chat(msgs, { ...opts, tools: inferenceTools }),
-      );
+      });
 
       // Build a compatible response for the rest of the loop
       const response = {
@@ -1618,6 +1695,33 @@ export async function runAgentLoop(
           markInboxProcessed(db.raw, claimedIds);
         }
       });
+
+      try {
+        const toolErrors = turn.toolCalls.filter((toolCall) => Boolean(toolCall.error)).length;
+        cognitiveCostController.recordOutcome(cognitiveDecision.id, {
+          success: toolErrors === 0,
+          qualityValidated: false,
+          actualCostCents: routerResult.costCents,
+          latencyMs: routerResult.latencyMs,
+          contextTokens: routerResult.inputTokens + routerResult.outputTokens,
+          reworkCount: toolErrors > 0 ? 1 : 0,
+          outcomeEvidence: [
+            toolErrors > 0
+              ? `Turn persisted with ${toolErrors} tool error(s); no quality claim is inferred.`
+              : "Turn persisted without a downstream quality validator; completion is not treated as validated quality.",
+          ],
+          metadata: {
+            finishReason: routerResult.finishReason,
+            toolCallCount: turn.toolCalls.length,
+            toolErrorCount: toolErrors,
+          },
+        });
+      } catch (error) {
+        logger.error(
+          "Cognitive main-turn outcome receipt failed",
+          error instanceof Error ? error : undefined,
+        );
+      }
 
       if (retrievedKnowledgeIds.length > 0) {
         try {
