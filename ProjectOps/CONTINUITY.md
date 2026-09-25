@@ -4,27 +4,24 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
-Active-Plan: P-024
-Active-Segment: continuity/C0020.md
-Active-Intervention: P024_SIMULATION_EXPERIMENTS — EN_EJECUCIÓN / ADVERSARIAL_HARDENED_V2 / EXACT_HEAD_GATE_PENDING
+Active-Plan: P-025
+Active-Segment: continuity/C0021.md
+Active-Intervention: P025_STRATEGIC_COGNITION_V2 — EN_EJECUCIÓN / DECISION_READY / IMPLEMENTATION_PENDING
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p024-simulation-experiments
-Host-Head-At-Audit-Open: 5cd1ba2238c5790b4bfe76e906dccc93bc1ca7b4
-Last-Reconciled-Host-Head: 09d145a8fdd712b2328a0b488953567daa2e38aa
-Observed-Main-Head: 976747d9af4bb3c262444c3dfd199757d05d8f96
-Last-Kernel-Reconcile: a282a0219286a498628b686d587dd138b0f8a73e
-Last-Product-Head: 09d145a8fdd712b2328a0b488953567daa2e38aa
-Last-Product-CI: PENDING_EXACT_HEAD_AFTER_V2_BOUNDARY_TESTS
-Last-Green-Superseded-Head: 8e7a9fd0cc8d5b0a4773539de79bb1f47f997893
-Last-Green-Superseded-CI: 36070697224 — SUCCESS 8/8
-Last-Completed-Plan: P-023
-Last-Completed-Merge: b25dfebf0454f488766b14a816ed1997beeb407a
-Last-Completed-CI: 36057756301 — SUCCESS 8/8
+Current-Host-Branch: abos/p025-strategic-cognition-v2
+Host-Head-At-Audit-Open: 8bae92562566e619be905906a2ff00835cf28f1a
+Last-Reconciled-Host-Head: ac0e0785e9b0bd4d27301f71119e92b58ddef8c4
+Observed-Main-Head: 815b932b3b1f08091fefca9886cc1934d4ac186a
+Last-Product-Head: 8bae92562566e619be905906a2ff00835cf28f1a
+Last-Product-CI: 36072559876 — SUCCESS 8/8
+Last-Completed-Plan: P-024
+Last-Completed-Merge: 8bae92562566e619be905906a2ff00835cf28f1a
+Last-Completed-CI: 36072559876 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -34,80 +31,77 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 ## Autoridad operativa
 
-- `AGENTS.md`: único kernel/scheduler conductual.
-- CONTINUITY + segmento activo: estado vivo/recovery.
-- PLAN + módulo activo: intención/Definition of Done.
+- `AGENTS.md`: **única authority de comportamiento/cadencia**. Decide cómo encadenar, reconciliar y entregar; ninguna P-xxx, continuity, plan, verifier o reference document lo sustituye como protocolo del agente de desarrollo.
+- CONTINUITY + segmento activo: **única authority del estado operativo vivo/recovery** y del siguiente punto verificable registrado.
+- PLAN + módulo activo: blueprint/intención/Definition of Done; no es scheduler ni almacén alternativo de estado vivo.
 - PROJECT: identidad/invariantes estables.
 - Git/source/runtime/tests: realidad observable.
 - Operating Protocol / Adaptive Reasoning: authorities técnicas subordinadas, no scheduler.
+
+Si PLAN/módulo contiene un snapshot histórico que contradice CONTINUITY/Git/evidencia actual, `AGENTS.md` reconcilia la contradicción usando estas authorities: el estado vivo se corrige en CONTINUITY/segmento; el módulo conserva únicamente blueprint/criterios y no obliga a repetir trabajo ya demostrado.
+
+## Reconciliación de authority — 2026-09-24
+
+Se confirmó una contradicción real en P-025: CONTINUITY/C0021 ya acreditaban `DECISION_READY / IMPLEMENTATION_PENDING`, mientras `plan/P-025.md` todavía persistía `Decision-State: AUDIT_OPEN / NOT_DECISION_READY` y un bloque de auditoría redactado como instrucción de reanudación. Eso hacía que el routing correcto `AGENTS → CONTINUITY → PLAN` reintrodujera trabajo de auditoría ya cerrado.
+
+Corrección aplicada sin tocar `AGENTS.md` ni ZeroIQ:
+- `plan/P-025.md` quedó como blueprint técnico, con `Dynamic-State-Authority: ProjectOps/CONTINUITY.md` y `Execution-Scheduler: AGENTS.md`;
+- se retiró `Decision-State` del módulo de plan y las instrucciones stale fueron convertidas en criterios de auditoría condicionales;
+- `PLAN.md` dejó de declarar “audit abierto” para P-025 y explicita que el estado operativo/siguiente punto vive sólo en CONTINUITY/segmento;
+- `scripts/projectops-integrity-verify.mjs` sigue siendo un verifier estructural, no scheduler, y ahora rechaza un módulo activo que intente persistir `Decision-State` o que no delegue live state/cadencia a CONTINUITY/AGENTS.
+
+Head de reconciliación previo a este checkpoint: `ac0e0785e9b0bd4d27301f71119e92b58ddef8c4`.
 
 ## Estado canónico actual
 
 - P-001..P-003: HECHO.
 - P-004: PLANIFICADO — track documental transversal/final.
 - P-005: PLANIFICADO — acceptance LIVE incremental.
-- P-006..P-023: HECHO.
-- P-024: EN_EJECUCIÓN / DECISION_READY / ADVERSARIAL_HARDENED_V2 / EXACT_HEAD_GATE_PENDING.
-- P-025..P-036: usar estado explícito de `ProjectOps/PLAN.md`; no se adelantan mientras P-024 siga no terminal.
+- P-006..P-024: HECHO.
+- P-025: EN_EJECUCIÓN / DECISION_READY / IMPLEMENTATION_PENDING.
+- P-026..P-036: usar estado explícito de `ProjectOps/PLAN.md`; no se adelantan mientras P-025 siga no terminal.
 
-## P-023 — cierre verificado
+## P-024 — cierre verificado
 
-- PR #63 merge `b25dfebf0454f488766b14a816ed1997beeb407a`.
-- exact-main CI `36057756301`: SUCCESS 8/8.
+- Objective: Simulation, Counterfactual y Experiment Workspace persistente E-xxx.
+- PR #65 exact-head `23e3a8e6c3c4fa549167615891f261db74f8566d`, CI `36072249157` SUCCESS 8/8.
+- Merge `main`: `8bae92562566e619be905906a2ff00835cf28f1a`.
+- Exact-main CI `36072559876`: SUCCESS 8/8.
 - Estado: `HECHO / SOURCE_COMPLETE / E3_MAIN_GREEN / INTEGRATION_VERIFIED`.
-- Historial: `continuity/C0019.md` + `plan/P-023.md`.
+- Historial y adversarial review: `continuity/C0020.md` + `plan/P-024.md`.
 
-## P-024 — estado recuperable
+## P-025 — estado recuperable
 
-Decision-Class:
-`CREATE_EXPERIMENT_AUTHORITY + REUSE_WORLD_ADAPTIVE_INPUTS + REFERENCE_EVIDENCE_FABRIC + KEEP_EXTERNAL_EXECUTION_BEHIND_POLICY`.
+Baseline product exacto: `main 8bae92562566e619be905906a2ff00835cf28f1a`, CI `36072559876` SUCCESS 8/8.
 
-PR #65 permanece OPEN / DRAFT.
+`main` avanzó después a `815b932b3b1f08091fefca9886cc1934d4ac186a` por el kernel `AGENTS.md`. La branch activa no contiene ese commit en ancestry, pero sí contiene el mismo blob efectivo de `AGENTS.md`; no se observó divergencia de product source para P-025. Ancestry queda pendiente de reconciliación antes de integración.
 
-Source/capacidad actual:
-- `src/state/simulation-schema.ts`: E-xxx sidecar revision 2 + upgrade v1→v2.
-- `src/intelligence/simulation-workspace.ts`: deterministic/stochastic seeded runs, exact-version replay, budgets, counterfactuals, calibration externality, surprise persistence, restart discovery y Evidence inferencial.
-- `src/__tests__/p024-simulation-workspace.test.ts`: suite funcional/adversarial original.
-- `src/__tests__/p024-simulation-adversarial.test.ts`: stochastic retry + summary failure recovery.
-- `src/__tests__/p024-simulation-boundaries.test.ts`: schema upgrade, surprise replay, calibration externality y restart discovery.
+La auditoría Required-Context/product/history alcanzó `DECISION_READY` sin modificar product source. Resultado:
+- `NO_CHANGE`: FALSADO;
+- `EXTEND_ADAPTIVE_PATH` como ownership primario: RECHAZADO; Adaptive Path se REUTILIZA;
+- `CORRECT_PLAN_MODE_REVIEW`: CONFIRMADO;
+- `UNIFY_STRATEGIC_DECISION_FLOW`: CONFIRMADO;
+- `CREATE_NEW_STRATEGIC_AUTHORITY`: FALSADO.
 
-Hardening relevante:
-- `dcddc7bd...`: fixed-ID stochastic retry reutiliza seed persistida; summary failure deja estado `failed` explícito.
-- `74a6a2ee...`: schema revision 2 y `surprise_json` con upgrade declarativo.
-- `6be6162f...`: wiring transaccional v1→v2, surprise persistida/replay, calibration rechaza Evidence simulation-owned, `listExperiments()` para recovery discovery.
-- `09d145a8...`: regresiones de fronteras v2.
+Decisión canónica: **CORRECT + UNIFY + targeted EXTEND** sobre authorities existentes.
 
-Boundary explícito: el workspace no entrega ToolContext/executors ni acepta async output como run válido, pero un simulator callback JS sigue siendo código del proceso. No se reclama sandbox universal.
+Hallazgos materiales:
+- `reviewPlan()` mantiene autoapproval y consensus stub; `supervised` sustituye juicio por human gate;
+- tests actuales codifican esos placeholders como PASS;
+- production hardcodea `mode: auto` y puede avanzar a execution si el plan persistido falta o no parsea;
+- path/tasks se materializan antes de review suficiente;
+- planner ya consume Adaptive Path/capability/environment evidence, pero P-024 simulation/decision-impact no llega al strategic context;
+- policy/creator authorization sí constituye `REAL_BOUNDARY` durable y no debe eliminarse;
+- Task/transport/idempotence/recovery existentes se preservan.
 
-## Reconciliación con main
+Invariantes: objective != method; UNKNOWN first-class; no bypass de auth/prohibition; no human gate ficticio para `GOVERNABLE_RISK`; no autoapproval/consensus ficticio; P-024 simulation es capacidad consumible, no planner; no segunda fuente de verdad por conveniencia.
 
-`main` avanzó durante P-024 a `976747d9af4bb3c262444c3dfd199757d05d8f96` por cambio exclusivo de `AGENTS.md`. El kernel actualizado fue re-leído y la branch fue reconciliada con merge real `a282a0219286a498628b686d587dd138b0f8a73e`. No cambió la arquitectura P-024.
-
-## Evidencia de gates
-
-1. `36069543167` / `631e627...`: FAIL informativo en ProjectOps integrity; producto posterior SKIPPED.
-2. `36069696406` / `35ce13a...`: SUCCESS 8/8.
-3. `36070176676` / `dcddc7bd...`: SUCCESS 8/8.
-4. `36070697224` / `8e7a9fd...`: SUCCESS 8/8; quedó superado deliberadamente por hardening v2.
-5. HEAD posterior a `09d145a8...` + este checkpoint: **NO VERIFICADO TODAVÍA**. No se hereda PASS para cambios posteriores.
-
-## Hallazgos v2 resueltos pendientes de gate
-
-- `RUN_SURPRISE_DURABLE`: antes FALSADO; corregido y cubierto por regresión.
-- `SCHEMA_V2_UPGRADE_PATH_IS_WIRED`: antes FALSADO; corregido con upgrade transaccional y prueba de reopen.
-- `CALIBRATION_EXTERNALITY`: antes FALSADO; calibration ya rechaza observation originada en simulation authority y tiene regresión negativa.
-- `RECOVERY_DISCOVERY_WITHOUT_DIRECT_SQL`: antes FALSADO; `listExperiments()` permite recovery por goal/path/status/parent y tiene prueba tras restart.
-
-La decisión arquitectónica no cambió; correspondió `CORRECT` dentro de la misma authority.
+El detalle de hipótesis, causalidad, ownership, adversarial review y evidence está en `continuity/C0021.md`.
 
 ## Siguiente punto verificable
 
-1. Gatear el exact-head creado por este checkpoint.
-2. Ante rojo: leer job/log exacto, clasificar y corregir sin saltar P-024.
-3. Si todo queda verde: reauditar branch vs main y PR #65; reconciliar si main avanzó.
-4. Sólo con exact-head verde y sin HARD abierto pasar PR a ready/merge.
-5. Exigir merge + exact-main CI antes de marcar P-024 HECHO.
+Primera unidad técnica P-025: corregir strategic review + tests y wiring mínimo de production sin crear authority paralela; luego reauditar ordering/persistencia/consumers antes de ampliar la unidad. No avanzar a P-026 mientras P-025 siga no terminal.
 
 ## Política de rotación
 
-`C0000-legacy.md` conserva historia pre-cutover. `C0001`..`C0019` son históricos cerrados; `C0020` es el único segmento ACTIVE. Nunca se crea un segundo `CONTINUITY.md`.
+`C0000-legacy.md` conserva historia pre-cutover. `C0001`..`C0020` son históricos cerrados; `C0021` es el único segmento ACTIVE. Nunca se crea un segundo `CONTINUITY.md`.
