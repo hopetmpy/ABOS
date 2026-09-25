@@ -43,7 +43,11 @@ export interface OrchestrationInferenceResult {
   metadata?: {
     providerId: string;
     modelId: string;
+    /** Requested caller tier retained for compatibility. */
     tier: OrchestrationInferenceTier;
+    /** Actual cognitive tier selected before delegating model/provider choice to InferenceRouter. */
+    effectiveTier?: OrchestrationInferenceTier;
+    cognitiveDecisionId?: string;
     latencyMs: number;
     retries?: number;
     failedProviders?: string[];

@@ -1,6 +1,7 @@
 import type BetterSqlite3 from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ulid } from "ulid";
+import { CognitiveCostController } from "../../intelligence/cognitive-cost-controller.js";
 import { SimulationWorkspace } from "../../intelligence/simulation-workspace.js";
 import { latestEvidenceByAuthority } from "../../observability/evidence.js";
 import { Orchestrator } from "../../orchestration/orchestrator.js";
@@ -156,7 +157,7 @@ function registerTestSimulator(workspace: SimulationWorkspace): void {
   });
 }
 
-describe("P-025 simulation evidence causality", () => {
+describe("P-025/P-026 simulation evidence causality", () => {
   let db: BetterSqlite3.Database;
 
   beforeEach(() => {
@@ -167,7 +168,7 @@ describe("P-025 simulation evidence causality", () => {
     db.close();
   });
 
-  it("injects executed E-xxx as inference before choice and persists only a real explicitly cited Evidence Fabric ref", async () => {
+  it("injects executed E-xxx as inference before choice, persists only a real cited ref, and turns strategic approval into validated cognitive quality evidence", async () => {
     const goalId = insertGoal(db);
     const workspace = new SimulationWorkspace(db);
     registerTestSimulator(workspace);
@@ -228,8 +229,48 @@ describe("P-025 simulation evidence causality", () => {
     expect(systemPrompt).toContain("run_count=1");
     expect(systemPrompt).toContain("never external observation or ground truth");
 
+    // This test uses a minimal inference double, so create the same durable
+    // P-026 planning receipt that the RouterBacked client owns in production.
+    // The strategic review must validate the cognitive decision rather than the
+    // mere API response.
+    const cognitive = new CognitiveCostController(db);
+    const planningDecision = cognitive.decide({
+      taskClass: "orchestration:planning",
+      candidates: [{
+        id: "inference:planning:reasoning",
+        kind: "inference",
+        availability: "available",
+        expectedCostCents: 10,
+        expectedLatencyMs: 100,
+        expectedContextTokens: 500,
+      }],
+      baselineRouteId: "inference:planning:reasoning",
+      goalId,
+    });
+    cognitive.recordExecution(planningDecision.id, {
+      actualCostCents: 10,
+      latencyMs: 100,
+      contextTokens: 500,
+    });
+
     const reviewed = await orchestrator.tick();
     expect(reviewed.phase).toBe("executing");
+
+    const cognitiveOutcome = db.prepare(
+      `SELECT payload_json
+       FROM evidence_events
+       WHERE authority_type = 'cognitive_decision'
+         AND authority_id = ?
+         AND event_type = 'cognitive.outcome_recorded'`,
+    ).get(planningDecision.id) as { payload_json: string };
+    expect(JSON.parse(cognitiveOutcome.payload_json)).toMatchObject({
+      taskClass: "orchestration:planning",
+      routeId: "inference:planning:reasoning",
+      success: true,
+      qualityValidated: true,
+      qualityScore: 1,
+      reworkCount: 0,
+    });
 
     const path = db.prepare(
       "SELECT evidence, status FROM adaptive_paths WHERE goal_id = ? ORDER BY created_at DESC LIMIT 1",
