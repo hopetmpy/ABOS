@@ -140,6 +140,21 @@ describe("P-027 opportunity identity and hypothesis lifecycle", () => {
     }
   });
 
+  it("rejects reuse of an idempotency key for a different hypothesis payload", () => {
+    const db = prepareDb();
+    try {
+      const discovery = new OpportunityDiscovery(db);
+      const first = open(discovery);
+      expect(() => open(discovery, {
+        observedNeed: "A materially different need must not inherit the original receipt.",
+      })).toThrow(/idempotency key collision/i);
+      expect(discovery.listOpportunities("goal-1")).toHaveLength(1);
+      expect(discovery.listOpportunities("goal-1")[0]?.id).toBe(first.opportunity.id);
+    } finally {
+      db.close();
+    }
+  });
+
   it("supports the declared opportunity status lifecycle without reopening terminal state", () => {
     const db = prepareDb();
     try {
@@ -236,6 +251,21 @@ describe("P-027 cheapest discriminating experiment selection", () => {
       db.close();
     }
   });
+
+  it("rejects candidate-id reuse when the experiment specification changes", () => {
+    const db = prepareDb();
+    try {
+      const discovery = new OpportunityDiscovery(db);
+      const hypothesis = open(discovery);
+      discovery.selectExperiment(hypothesis.opportunity.id, [simulationCandidate("stable-id")]);
+      expect(() => discovery.selectExperiment(hypothesis.opportunity.id, [{
+        ...simulationCandidate("stable-id"),
+        question: "A different discriminating question must not reuse the old candidate receipt.",
+      }])).toThrow(/candidate id collision/i);
+    } finally {
+      db.close();
+    }
+  });
 });
 
 describe("P-027 simulation and external-observation boundaries", () => {
@@ -262,6 +292,52 @@ describe("P-027 simulation and external-observation boundaries", () => {
         .filter((event) => event.eventType === "opportunity.experiment_executed");
       expect(executions).toHaveLength(1);
       expect(executions[0]?.payload).toMatchObject({ externalDemandObserved: false });
+    } finally {
+      db.close();
+    }
+  });
+
+  it("reconstructs a generated simulation id from the persisted execution receipt", () => {
+    const db = prepareDb();
+    try {
+      const workspace = new SimulationWorkspace(db);
+      workspace.registerSimulator(simulator);
+      const discovery = new OpportunityDiscovery(db, { simulation: workspace });
+      const hypothesis = open(discovery);
+      const candidate = simulationCandidate("generated-id");
+      delete candidate.simulationSpec?.experimentId;
+      const selection = discovery.selectExperiment(hypothesis.opportunity.id, [candidate]);
+      const first = discovery.executeSelectedExperiment(selection);
+      const restarted = new OpportunityDiscovery(db, { simulation: workspace });
+      const second = restarted.executeSelectedExperiment(selection);
+      expect(first.kind).toBe("simulation");
+      expect(second.kind).toBe("simulation");
+      if (first.kind === "simulation" && second.kind === "simulation") {
+        expect(second.experiment.id).toBe(first.experiment.id);
+        expect(second.experiment.runCount).toBe(1);
+      }
+      const count = db.prepare("SELECT COUNT(*) AS count FROM simulation_experiments").get() as { count: number };
+      expect(count.count).toBe(1);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("rejects a stale or forged selection whose candidate no longer matches its receipt", () => {
+    const db = prepareDb();
+    try {
+      const workspace = new SimulationWorkspace(db);
+      workspace.registerSimulator(simulator);
+      const discovery = new OpportunityDiscovery(db, { simulation: workspace });
+      const hypothesis = open(discovery);
+      const selection = discovery.selectExperiment(hypothesis.opportunity.id, [simulationCandidate("receipt-bound")]);
+      const forged = {
+        ...selection,
+        selected: selection.selected
+          ? { ...selection.selected, hypothesis: "A changed hypothesis cannot inherit the original receipt." }
+          : null,
+      };
+      expect(() => discovery.executeSelectedExperiment(forged)).toThrow(/selection receipt does not match/i);
     } finally {
       db.close();
     }
@@ -475,6 +551,38 @@ describe("P-027 simulation and external-observation boundaries", () => {
         evidenceEventId: external.id,
         assessment: "supports",
       })).toThrow(/cannot be reinterpreted/i);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("rejects replay of the same observed outcome with different confidence", () => {
+    const db = prepareDb();
+    try {
+      const discovery = new OpportunityDiscovery(db);
+      const hypothesis = open(discovery);
+      const external = appendEvidenceEvent(db, {
+        correlationId: "goal:goal-1",
+        eventType: "market.interview_observed",
+        domain: "market",
+        authorityType: "external_interview",
+        authorityId: "interview-confidence",
+        goalId: "goal-1",
+        epistemicStatus: "observation",
+        payload: { opportunityId: hypothesis.opportunity.id },
+      });
+      discovery.recordObservedOutcome({
+        opportunityId: hypothesis.opportunity.id,
+        evidenceEventId: external.id,
+        assessment: "supports",
+        confidence: 0.6,
+      });
+      expect(() => discovery.recordObservedOutcome({
+        opportunityId: hypothesis.opportunity.id,
+        evidenceEventId: external.id,
+        assessment: "supports",
+        confidence: 0.7,
+      })).toThrow(/different confidence/i);
     } finally {
       db.close();
     }
