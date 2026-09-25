@@ -52,7 +52,6 @@ import type {
 } from "./types.js";
 import {
   Orchestrator as ExecutionCoreOrchestrator,
-  calculateTaskFundingCents,
 } from "./orchestrator-core.js";
 
 export { calculateTaskFundingCents } from "./orchestrator-core.js";
@@ -162,8 +161,8 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
     }
 
     this.saveStrategicState(next);
-    this.persistTodo();
-    return this.tickResult(next);
+    this.persistStrategicTodo();
+    return this.strategicTickResult(next);
   }
 
   private async handleStrategicPlanning(
@@ -177,7 +176,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
     try {
       output = await planGoal(
         goalToPlannerInput(goalRowToGoal(goal)),
-        await this.buildAdaptivePlannerContext(goal.id),
+        await this.buildStrategicPlannerContext(goal.id),
         this.strategicParams.inference,
       );
     } catch (error) {
@@ -211,7 +210,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
     const candidate = plannerOutputToPathCandidate(goalRowToGoal(goal), output);
     const novelty = this.strategicAdaptive.isCandidateEligible(
       candidate,
-      await this.currentConditions(),
+      await this.strategicConditions(),
     );
     if (!novelty.novel) {
       this.strategicAdaptive.store.addOpportunity({
@@ -228,9 +227,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       };
     }
 
-    // Draft only. No path selection, Goal strategy mutation or Task graph
-    // materialization is permitted before substantive strategic review.
-    await this.persistPlannerOutput(goal.id, output, "plan");
+    await this.persistStrategicPlannerOutput(goal.id, output, "plan");
     return {
       ...state,
       phase: "plan_review",
@@ -259,7 +256,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       output = await replanAfterFailure(
         goalToPlannerInput(goalRowToGoal(goal)),
         taskToPlannerFailureInput(taskRowToTaskNode(failedTaskRow)),
-        await this.buildAdaptivePlannerContext(goal.id),
+        await this.buildStrategicPlannerContext(goal.id),
         this.strategicParams.inference,
       );
     } catch (error) {
@@ -294,7 +291,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
     }
 
     const candidate = plannerOutputToPathCandidate(goalRowToGoal(goal), output);
-    const conditions = await this.currentConditions(
+    const conditions = await this.strategicConditions(
       taskRowToTaskNode(failedTaskRow),
     );
     const novelty = this.strategicAdaptive.isCandidateEligible(
@@ -317,9 +314,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       };
     }
 
-    // Preserve the currently failed/superseded graph as evidence until the new
-    // path has passed review. A rejected draft must not destroy recovery state.
-    await this.persistPlannerOutput(goal.id, output, "replan");
+    await this.persistStrategicPlannerOutput(goal.id, output, "replan");
     return {
       ...state,
       phase: "plan_review",
@@ -390,14 +385,11 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       };
     }
 
-    // Re-check novelty at the actual execution boundary. Conditions may have
-    // changed since draft creation and concurrent work may have selected an
-    // equivalent path in the meantime.
     const failedTask = state.failedTaskId
       ? getTaskById(this.strategicParams.db, state.failedTaskId)
       : undefined;
     const candidate = plannerOutputToPathCandidate(goalRowToGoal(goal), output);
-    const conditions = await this.currentConditions(
+    const conditions = await this.strategicConditions(
       failedTask ? taskRowToTaskNode(failedTask) : undefined,
     );
     const novelty = this.strategicAdaptive.isCandidateEligible(
@@ -416,9 +408,6 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       return this.rejectReview(state, fallbackPhase, reason);
     }
 
-    // Atomic-enough local handoff: first neutralize any unexecuted legacy or
-    // superseded work, then bind the reviewed path and its fresh Tasks. Completed
-    // work remains immutable evidence and is not rewritten.
     this.cancelSupersededTasks(goal.id);
     updateGoalStatus(this.strategicParams.db, goal.id, "active");
     this.strategicParams.db
@@ -434,7 +423,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       goal.id,
       plannerOutputToTasks(goal.id, output),
     );
-    this.bindPlannedTasks(
+    this.bindReviewedTasks(
       goal.id,
       selected.path.id,
       taskIds,
@@ -487,7 +476,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
     goalId: string,
     output: PlannerOutput,
   ): Promise<StrategicReviewContext> {
-    const plannerContext = await this.buildAdaptivePlannerContext(goalId);
+    const plannerContext = await this.buildStrategicPlannerContext(goalId);
     const environmentSnapshots = plannerContext.environmentSnapshots ?? [];
     const capabilityResolutions: CapabilityResolution[] = [];
 
@@ -537,7 +526,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
     };
   }
 
-  private async buildAdaptivePlannerContext(
+  private async buildStrategicPlannerContext(
     goalId: string,
   ): Promise<PlannerContext> {
     const environmentSnapshots = this.strategicParams.environmentRegistry
@@ -559,7 +548,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       idleAgents: this.strategicParams.agentTracker.getIdle().length,
       busyAgents: Math.max(
         0,
-        this.getActiveAgentCount() - this.strategicParams.agentTracker.getIdle().length,
+        this.getStrategicActiveAgentCount() - this.strategicParams.agentTracker.getIdle().length,
       ),
       maxAgents: Number(this.strategicParams.config?.maxChildren ?? 3),
       adaptiveContext: this.strategicAdaptive.buildPlannerContext(goalId),
@@ -568,7 +557,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
     });
   }
 
-  private async currentConditions(
+  private async strategicConditions(
     task?: TaskNode,
   ): Promise<Record<string, unknown>> {
     const environmentSnapshots = this.strategicParams.environmentRegistry
@@ -587,7 +576,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
     };
   }
 
-  private bindPlannedTasks(
+  private bindReviewedTasks(
     goalId: string,
     pathId: string,
     taskIds: string[],
@@ -607,7 +596,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
     }
   }
 
-  private async persistPlannerOutput(
+  private async persistStrategicPlannerOutput(
     goalId: string,
     output: PlannerOutput,
     mode: "plan" | "replan",
@@ -667,28 +656,28 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
     ).run(ORCHESTRATOR_STATE_KEY, JSON.stringify(state));
   }
 
-  private persistTodo(): void {
+  private persistStrategicTodo(): void {
     const todoMd = generateTodoMd(this.strategicParams.db);
     this.strategicParams.db.prepare(
       "INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))",
     ).run(ORCHESTRATOR_TODO_KEY, todoMd);
   }
 
-  private getActiveAgentCount(): number {
+  private getStrategicActiveAgentCount(): number {
     const row = this.strategicParams.db.prepare(
       `SELECT COUNT(*) AS count FROM children WHERE status IN ('running', 'healthy')`,
     ).get() as { count: number } | undefined;
     return row?.count ?? 0;
   }
 
-  private tickResult(state: OrchestratorState): OrchestratorTickResult {
+  private strategicTickResult(state: OrchestratorState): OrchestratorTickResult {
     return {
       phase: state.phase,
       tasksAssigned: 0,
       tasksCompleted: 0,
       tasksFailed: 0,
       goalsActive: getActiveGoals(this.strategicParams.db).length,
-      agentsActive: this.getActiveAgentCount(),
+      agentsActive: this.getStrategicActiveAgentCount(),
     };
   }
 }
