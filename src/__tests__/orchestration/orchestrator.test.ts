@@ -322,6 +322,65 @@ describe("P-025 canonical strategic orchestration boundary", () => {
     expect(feedback.value).toContain("Capability registry is unavailable");
   });
 
+  it("rolls back selected path, Tasks and bindings if the durable execution-state commit fails, then restarts once", async () => {
+    const goalId = insertGoal(db);
+    const legacyTaskId = insertTask(db, goalId, "pending");
+    storePlan(db, goalId, validPlan());
+    setState(db, { phase: "plan_review", goalId });
+
+    db.exec(`
+      CREATE TRIGGER p025_fail_execution_state_commit
+      BEFORE INSERT ON kv
+      WHEN NEW.key = 'orchestrator.state'
+      BEGIN
+        SELECT RAISE(ABORT, 'p025 injected state commit failure');
+      END;
+    `);
+
+    await expect(
+      makeOrchestrator(db, { chat: vi.fn() }).tick(),
+    ).rejects.toThrow("p025 injected state commit failure");
+
+    expect(
+      (db.prepare("SELECT status FROM task_graph WHERE id = ?").get(legacyTaskId) as { status: string }).status,
+    ).toBe("pending");
+    expect(taskCounts(db, goalId)).toEqual({ total: 1, pending: 1, cancelled: 0 });
+    expect(
+      db.prepare("SELECT COUNT(*) AS count FROM adaptive_paths WHERE goal_id = ?").get(goalId),
+    ).toEqual({ count: 0 });
+    expect(
+      db.prepare("SELECT COUNT(*) AS count FROM adaptive_task_bindings WHERE goal_id = ?").get(goalId),
+    ).toEqual({ count: 0 });
+    expect(
+      db.prepare("SELECT value FROM kv WHERE key = ?").get(`orchestrator.review_feedback.${goalId}`),
+    ).toBeUndefined();
+
+    const preservedState = db.prepare(
+      "SELECT value FROM kv WHERE key = 'orchestrator.state'",
+    ).get() as { value: string };
+    expect(JSON.parse(preservedState.value).phase).toBe("plan_review");
+
+    db.exec("DROP TRIGGER p025_fail_execution_state_commit");
+
+    const restarted = await makeOrchestrator(db, { chat: vi.fn() }).tick();
+    expect(restarted.phase).toBe("executing");
+    expect(taskCounts(db, goalId)).toEqual({ total: 2, pending: 1, cancelled: 1 });
+
+    const paths = db.prepare(
+      "SELECT id, status FROM adaptive_paths WHERE goal_id = ?",
+    ).all(goalId) as Array<{ id: string; status: string }>;
+    expect(paths).toHaveLength(1);
+    expect(paths[0]?.status).toBe("selected");
+    expect(
+      db.prepare("SELECT COUNT(*) AS count FROM adaptive_task_bindings WHERE goal_id = ?").get(goalId),
+    ).toEqual({ count: 1 });
+
+    const committedState = db.prepare(
+      "SELECT value FROM kv WHERE key = 'orchestrator.state'",
+    ).get() as { value: string };
+    expect(JSON.parse(committedState.value).phase).toBe("executing");
+  });
+
   it("keeps a failed path intact while a replan is only a draft, then supersedes it after review", async () => {
     const goalId = insertGoal(db);
     const failedTaskId = insertTask(db, goalId, "failed");
