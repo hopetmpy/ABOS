@@ -6,6 +6,7 @@ import type { CapabilityRegistry } from "../capabilities/registry.js";
 import { CapabilityResolver } from "../capabilities/resolver.js";
 import type { CapabilityResolution } from "../capabilities/model.js";
 import { AdaptivePathEngine } from "../intelligence/adaptive-engine.js";
+import { CognitiveCostController } from "../intelligence/cognitive-cost-controller.js";
 import { plannerOutputToPathCandidate } from "../intelligence/task-path.js";
 import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import {
@@ -63,6 +64,9 @@ export { calculateTaskFundingCents } from "./orchestrator-core.js";
 const logger = createLogger("orchestration.orchestrator.strategic");
 const ORCHESTRATOR_STATE_KEY = "orchestrator.state";
 const ORCHESTRATOR_TODO_KEY = "orchestrator.todo_md";
+const STRATEGIC_CLASSIFICATION_TASK_CLASS = "strategic:classification";
+const MATERIALIZED_GRAPH_ROUTE = "deterministic:materialized-task-graph";
+const PLANNING_ROUTE = "inference:strategic-planning";
 
 export type ExecutionPhase =
   | "idle"
@@ -124,10 +128,12 @@ const DEFAULT_STATE: OrchestratorState = {
  */
 export class Orchestrator extends ExecutionCoreOrchestrator {
   private readonly strategicAdaptive: AdaptivePathEngine;
+  private readonly strategicCognitive: CognitiveCostController;
 
   constructor(private readonly strategicParams: StrategicOrchestratorParams) {
     super(strategicParams);
     this.strategicAdaptive = new AdaptivePathEngine(strategicParams.db);
+    this.strategicCognitive = new CognitiveCostController(strategicParams.db);
   }
 
   override async tick(): Promise<OrchestratorTickResult> {
@@ -184,13 +190,84 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
     const goal = getGoalById(this.strategicParams.db, state.goalId);
     if (!goal) return { ...state, phase: "idle", goalId: null };
 
+    const existingTasks = getTasksByGoal(this.strategicParams.db, goal.id);
+
     // A pre-existing Task graph is already a materialized execution boundary.
-    // Preserve that restart/compatibility path. A new top-level Goal without a
-    // Task graph must first establish a reviewed strategic route; action-step
-    // count is not evidence that review is unnecessary.
-    if (getTasksByGoal(this.strategicParams.db, goal.id).length > 0) {
+    // Preserve that restart/compatibility path. P-026 now records why this
+    // classification does not need another model call instead of inferring
+    // savings from the mere absence of inference telemetry.
+    if (existingTasks.length > 0) {
+      const decision = this.strategicCognitive.decide({
+        taskClass: STRATEGIC_CLASSIFICATION_TASK_CLASS,
+        candidates: [{
+          id: MATERIALIZED_GRAPH_ROUTE,
+          kind: "deterministic",
+          availability: "available",
+          expectedCostCents: 0,
+          expectedLatencyMs: 0,
+          expectedContextTokens: 0,
+          qualityValidated: true,
+          qualityConfidence: 1,
+          reversibility: 1,
+          evidence: [
+            `Goal ${goal.id} already has ${existingTasks.length} materialized Task(s).`,
+            "P-025 requires a reviewed strategic route before a new Task graph is materialized.",
+          ],
+        }],
+        baselineRouteId: MATERIALIZED_GRAPH_ROUTE,
+        goalId: goal.id,
+      });
+      this.strategicCognitive.recordExecution(decision.id, {
+        actualCostCents: 0,
+        latencyMs: 0,
+        contextTokens: 0,
+        evidence: [
+          "Classification reused the existing reviewed Task graph without an additional model call.",
+        ],
+      });
+      this.strategicCognitive.recordOutcome(decision.id, {
+        success: true,
+        qualityValidated: true,
+        qualityScore: 1,
+        actualCostCents: 0,
+        latencyMs: 0,
+        contextTokens: 0,
+        reworkCount: 0,
+        outcomeEvidence: [
+          "The existing materialized execution boundary was preserved and phase advanced to executing.",
+        ],
+      });
       return { ...state, phase: "executing", failedError: null };
     }
+
+    // A new top-level Goal has no validated execution boundary to reuse.
+    // Record the causal need for planning; actual provider/model availability,
+    // model lock, fallback and budgets are still resolved later by InferenceRouter.
+    this.strategicCognitive.decide({
+      taskClass: STRATEGIC_CLASSIFICATION_TASK_CLASS,
+      candidates: [
+        {
+          id: MATERIALIZED_GRAPH_ROUTE,
+          kind: "deterministic",
+          availability: "unavailable",
+          expectedCostCents: 0,
+          expectedLatencyMs: 0,
+          expectedContextTokens: 0,
+          evidence: ["No materialized Task graph exists for this Goal."],
+        },
+        {
+          id: PLANNING_ROUTE,
+          kind: "inference",
+          availability: "available",
+          evidence: [
+            "A new top-level Goal must establish a reviewed strategic route before execution.",
+            "External inference availability remains subject to the canonical InferenceRouter at dispatch time.",
+          ],
+        },
+      ],
+      baselineRouteId: PLANNING_ROUTE,
+      goalId: goal.id,
+    });
 
     return { ...state, phase: "planning", failedError: null };
   }
@@ -405,13 +482,48 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       reviewTimeoutMs: 30 * 60_000,
       reviewContext,
     });
+    const planningDecision = this.strategicCognitive.latestDecision({
+      taskClass: "orchestration:planning",
+      goalId: goal.id,
+      withoutOutcome: true,
+    });
 
     if (!result.approved) {
+      if (planningDecision) {
+        this.strategicCognitive.recordOutcome(planningDecision.id, {
+          success: false,
+          qualityValidated: false,
+          reworkCount: 1,
+          outcomeEvidence: [
+            result.feedback ?? "Strategic plan requires revision.",
+          ],
+          metadata: {
+            attribution: "review_not_approved_but_quality_cause_not_proven",
+          },
+        });
+      }
       return this.rejectReview(
         state,
         fallbackPhase,
         result.feedback ?? "Strategic plan requires revision.",
       );
+    }
+
+    // Strategic review is the first canonical downstream quality gate that can
+    // positively validate the planner output. Record that success separately
+    // from provider/API success so future de-escalation never learns from mere
+    // completion of an inference request.
+    if (planningDecision) {
+      this.strategicCognitive.recordOutcome(planningDecision.id, {
+        success: true,
+        qualityValidated: true,
+        qualityScore: 1,
+        reworkCount: 0,
+        outcomeEvidence: [
+          result.feedback ?? "Strategic review approved the plan.",
+        ],
+        metadata: { attribution: "strategic_review" },
+      });
     }
 
     const failedTask = state.failedTaskId
