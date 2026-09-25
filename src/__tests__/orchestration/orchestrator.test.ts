@@ -120,6 +120,23 @@ function validPlan(overrides: Record<string, unknown> = {}) {
       preferredEnvironment: null,
       expectedOutcome: "The objective reaches its acceptance condition.",
     },
+    alternatives: [
+      {
+        label: "probe-first",
+        strategy: "Probe first, then execute if evidence supports the route.",
+        hypothesis: "A probe-first route can satisfy the objective with lower uncertainty.",
+        assumptions: ["A probe can discriminate the critical runtime uncertainty."],
+        requiredCapabilities: [],
+        preferredEnvironment: null,
+        sequence: ["Probe runtime uncertainty", "Execute reviewed task"],
+        expectedOutcome: "The objective reaches its acceptance condition.",
+        estimatedCostCents: 70,
+        discriminants: ["Adds probe cost in exchange for lower uncertainty before commitment."],
+      },
+    ],
+    decisionFactors: ["Current evidence makes the selected route lower-cost without hiding uncertainty."],
+    preMortem: ["A runtime condition could change between review and execution."],
+    falsificationConditions: ["A material runtime condition changes before the selected task starts."],
     customRoles: [],
     tasks: [
       {
@@ -184,9 +201,9 @@ describe("P-025 canonical strategic orchestration boundary", () => {
     expect(
       db.prepare("SELECT COUNT(*) AS count FROM adaptive_paths WHERE goal_id = ?").get(goalId),
     ).toEqual({ count: 0 });
-    expect(
-      db.prepare("SELECT value FROM kv WHERE key = ?").get(`orchestrator.plan.${goalId}`),
-    ).toBeDefined();
+    const artifact = db.prepare("SELECT value FROM kv WHERE key = ?").get(`orchestrator.plan.${goalId}`) as { value: string } | undefined;
+    expect(artifact).toBeDefined();
+    expect(JSON.parse(artifact?.value ?? "{}").alternatives).toHaveLength(1);
   });
 
   it("materializes a reviewed path and Tasks only after substantive approval", async () => {
@@ -205,15 +222,52 @@ describe("P-025 canonical strategic orchestration boundary", () => {
     expect(counts.pending).toBe(1);
     expect(counts.cancelled).toBe(1);
 
+    const paths = db.prepare(
+      "SELECT id, status FROM adaptive_paths WHERE goal_id = ? ORDER BY created_at ASC",
+    ).all(goalId) as Array<{ id: string; status: string }>;
+    expect(paths).toHaveLength(1);
+    expect(paths[0].status).toBe("selected");
+
     const binding = db.prepare(
       "SELECT path_id FROM adaptive_task_bindings WHERE goal_id = ?",
     ).get(goalId) as { path_id: string } | undefined;
-    expect(binding?.path_id).toBeTruthy();
+    expect(binding?.path_id).toBe(paths[0].id);
     const feedback = db.prepare(
       "SELECT value FROM kv WHERE key = ?",
     ).get(`orchestrator.review_feedback.${goalId}`) as { value: string };
     expect(feedback.value).toContain("disposition=approve");
     expect(feedback.value).toContain("materialized_path=");
+    expect(feedback.value).toContain("material_differences=");
+  });
+
+  it("refuses a nominal alternative without materializing either route", async () => {
+    const goalId = insertGoal(db);
+    storePlan(db, goalId, validPlan({
+      alternatives: [
+        {
+          label: "renamed-selected-route",
+          strategy: "Different wording, same route",
+          hypothesis: "Different wording, same route",
+          assumptions: ["Current runtime conditions remain materially stable."],
+          requiredCapabilities: [],
+          preferredEnvironment: null,
+          sequence: ["Reviewed task"],
+          expectedOutcome: "The objective reaches its acceptance condition.",
+          estimatedCostCents: 55,
+          discriminants: ["Nominal wording difference only."],
+        },
+      ],
+    }));
+    setState(db, { phase: "plan_review", goalId });
+
+    const result = await makeOrchestrator(db, { chat: vi.fn() }).tick();
+    expect(result.phase).toBe("planning");
+    expect(taskCounts(db, goalId).total).toBe(0);
+    expect(
+      db.prepare("SELECT COUNT(*) AS count FROM adaptive_paths WHERE goal_id = ?").get(goalId),
+    ).toEqual({ count: 0 });
+    const feedback = db.prepare("SELECT value FROM kv WHERE key = ?").get(`orchestrator.review_feedback.${goalId}`) as { value: string };
+    expect(feedback.value).toContain("only nominally different");
   });
 
   it("fails closed when the canonical plan artifact is missing", async () => {
