@@ -114,8 +114,9 @@ const DEFAULT_STATE: OrchestratorState = {
  *
  * The inherited execution core remains byte-for-byte the proven P-024 runtime
  * for assignment, transport, recovery, receipts and completion. P-025 owns the
- * three strategic phases here so a proposed route is reviewed before it is
- * selected or materialized into executable Tasks.
+ * strategic classification/planning/review boundary so a new top-level Goal
+ * cannot become executable merely because a lexical classifier estimates few
+ * action steps.
  */
 export class Orchestrator extends ExecutionCoreOrchestrator {
   private readonly strategicAdaptive: AdaptivePathEngine;
@@ -128,6 +129,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
   override async tick(): Promise<OrchestratorTickResult> {
     const state = this.loadStrategicState();
     if (
+      state.phase !== "classifying" &&
       state.phase !== "planning" &&
       state.phase !== "replanning" &&
       state.phase !== "plan_review"
@@ -137,7 +139,9 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
 
     let next = state;
     try {
-      if (state.phase === "planning") {
+      if (state.phase === "classifying") {
+        next = this.handleStrategicClassification(state);
+      } else if (state.phase === "planning") {
         next = await this.handleStrategicPlanning(state);
       } else if (state.phase === "replanning") {
         next = await this.handleStrategicReplanning(state);
@@ -167,6 +171,24 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
     }
     this.persistStrategicTodo();
     return this.strategicTickResult(next);
+  }
+
+  private handleStrategicClassification(
+    state: OrchestratorState,
+  ): OrchestratorState {
+    if (!state.goalId) return { ...state, phase: "idle" };
+    const goal = getGoalById(this.strategicParams.db, state.goalId);
+    if (!goal) return { ...state, phase: "idle", goalId: null };
+
+    // A pre-existing Task graph is already a materialized execution boundary.
+    // Preserve that restart/compatibility path. A new top-level Goal without a
+    // Task graph must first establish a reviewed strategic route; action-step
+    // count is not evidence that review is unnecessary.
+    if (getTasksByGoal(this.strategicParams.db, goal.id).length > 0) {
+      return { ...state, phase: "executing", failedError: null };
+    }
+
+    return { ...state, phase: "planning", failedError: null };
   }
 
   private async handleStrategicPlanning(
