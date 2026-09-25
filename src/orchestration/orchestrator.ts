@@ -160,7 +160,11 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       };
     }
 
-    this.saveStrategicState(next);
+    const reviewCommitAlreadyPersisted =
+      state.phase === "plan_review" && next.phase === "executing";
+    if (!reviewCommitAlreadyPersisted) {
+      this.saveStrategicState(next);
+    }
     this.persistStrategicTodo();
     return this.strategicTickResult(next);
   }
@@ -375,14 +379,13 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       reviewTimeoutMs: 30 * 60_000,
       reviewContext,
     });
-    this.persistReviewFeedback(goal.id, result.feedback ?? "review completed");
 
     if (!result.approved) {
-      return {
-        ...state,
-        phase: fallbackPhase,
-        failedError: result.feedback ?? "Strategic plan requires revision.",
-      };
+      return this.rejectReview(
+        state,
+        fallbackPhase,
+        result.feedback ?? "Strategic plan requires revision.",
+      );
     }
 
     const failedTask = state.failedTaskId
@@ -408,38 +411,44 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       return this.rejectReview(state, fallbackPhase, reason);
     }
 
-    this.cancelSupersededTasks(goal.id);
-    updateGoalStatus(this.strategicParams.db, goal.id, "active");
-    this.strategicParams.db
-      .prepare("UPDATE goals SET strategy = ? WHERE id = ?")
-      .run(output.strategy, goal.id);
-
-    const selected = this.strategicAdaptive.selectCandidate(
-      candidate,
-      conditions,
-    );
-    const taskIds = decomposeGoal(
-      this.strategicParams.db,
-      goal.id,
-      plannerOutputToTasks(goal.id, output),
-    );
-    this.bindReviewedTasks(
-      goal.id,
-      selected.path.id,
-      taskIds,
-      output.tasks,
-    );
-
-    this.persistReviewFeedback(
-      goal.id,
-      `${result.feedback ?? "approved"} ; materialized_path=${selected.path.id}`,
-    );
-    return {
+    const nextState: OrchestratorState = {
       ...state,
       phase: "executing",
       failedTaskId: null,
       failedError: null,
     };
+
+    this.strategicParams.db.transaction(() => {
+      this.cancelSupersededTasks(goal.id);
+      updateGoalStatus(this.strategicParams.db, goal.id, "active");
+      this.strategicParams.db
+        .prepare("UPDATE goals SET strategy = ? WHERE id = ?")
+        .run(output.strategy, goal.id);
+
+      const selected = this.strategicAdaptive.selectCandidate(
+        candidate,
+        conditions,
+      );
+      const taskIds = decomposeGoal(
+        this.strategicParams.db,
+        goal.id,
+        plannerOutputToTasks(goal.id, output),
+      );
+      this.bindReviewedTasks(
+        goal.id,
+        selected.path.id,
+        taskIds,
+        output.tasks,
+      );
+
+      this.persistReviewFeedback(
+        goal.id,
+        `${result.feedback ?? "approved"} ; materialized_path=${selected.path.id}`,
+      );
+      this.saveStrategicState(nextState);
+    })();
+
+    return nextState;
   }
 
   private rejectReview(
