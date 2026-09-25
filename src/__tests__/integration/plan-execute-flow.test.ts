@@ -19,6 +19,13 @@ const IDENTITY = {
 const plannerOutput = {
   analysis: "Analysis",
   strategy: "Strategy",
+  path: {
+    hypothesis: "The reviewed route can satisfy the objective.",
+    assumptions: ["Current runtime conditions remain materially stable."],
+    requiredCapabilities: [],
+    preferredEnvironment: null,
+    expectedOutcome: "The objective reaches its acceptance condition.",
+  },
   customRoles: [],
   tasks: [
     {
@@ -218,7 +225,7 @@ describe("integration/plan-execute-flow", () => {
       expect(result.phase).toBe("planning");
     });
 
-    it("tick 3: planning phase decomposes goal and transitions to plan_review", async () => {
+    it("tick 3: planning persists a candidate without materializing tasks before review", async () => {
       const goalId = insertGoal(db, { status: "active" });
       setState(db, { phase: "planning", goalId, replanCount: 0, failedTaskId: null, failedError: null });
 
@@ -231,19 +238,22 @@ describe("integration/plan-execute-flow", () => {
       const result = await orc.tick();
 
       expect(result.phase).toBe("plan_review");
+      expect(getTasksForGoal(db, goalId)).toHaveLength(0);
 
-      // Tasks should be decomposed into task_graph
-      const tasks = getTasksForGoal(db, goalId);
-      expect(tasks.length).toBeGreaterThan(0);
+      const storedPlan = db.prepare("SELECT value FROM kv WHERE key = ?").get(
+        `orchestrator.plan.${goalId}`,
+      ) as { value: string } | undefined;
+      expect(storedPlan).toBeDefined();
+      expect(JSON.parse(storedPlan?.value ?? "{}").path.hypothesis).toBe(
+        plannerOutput.path.hypothesis,
+      );
     });
 
-    it("tick 4: plan_review auto-approves and transitions to executing", async () => {
+    it("tick 4: plan_review substantively approves before materializing and executing", async () => {
       const goalId = insertGoal(db, { status: "active" });
-      // Insert a task so executing phase has work to pick up
       db.prepare(
-        `INSERT INTO task_graph (id, goal_id, title, description, status, agent_role, priority, dependencies, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(ulid(), goalId, "Task 1", "Do the thing", "pending", "generalist", 1, "[]", new Date().toISOString());
+        "INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))",
+      ).run(`orchestrator.plan.${goalId}`, JSON.stringify(plannerOutput));
 
       setState(db, { phase: "plan_review", goalId, replanCount: 0, failedTaskId: null, failedError: null });
 
@@ -251,6 +261,7 @@ describe("integration/plan-execute-flow", () => {
       const result = await orc.tick();
 
       expect(result.phase).toBe("executing");
+      expect(getTasksForGoal(db, goalId).length).toBeGreaterThan(0);
     });
 
     it("tick 5-6: executing assigns tasks, receives results, and completes goal", async () => {
@@ -263,21 +274,17 @@ describe("integration/plan-execute-flow", () => {
 
       setState(db, { phase: "executing", goalId, replanCount: 0, failedTaskId: null, failedError: null });
 
-      // Provide an idle agent so task assignment succeeds
       mocks.agentTracker.getIdle.mockReturnValue([
         { address: "0xchild", name: "Worker", role: "generalist", status: "healthy" },
       ]);
 
-      // First tick: assigns the task (inbox empty)
       mocks.messaging.processInbox.mockResolvedValue([]);
       const orc = makeOrchestrator(db, mocks);
       await orc.tick();
 
-      // Verify task was assigned
       const tasks = getTasksForGoal(db, goalId);
       expect(tasks[0].assigned_to).toBe("0xchild");
 
-      // Second tick: process task result
       mocks.messaging.processInbox.mockResolvedValue([
         makeTaskResultInboxEntry(goalId, taskId),
       ]);
@@ -305,7 +312,6 @@ describe("integration/plan-execute-flow", () => {
         { address: "0xchild", name: "Worker", role: "generalist", status: "healthy" },
       ]);
 
-      // Return a failed task result
       mocks.messaging.processInbox.mockResolvedValue([
         {
           success: true,
@@ -335,7 +341,7 @@ describe("integration/plan-execute-flow", () => {
       expect(result.phase).toBe("replanning");
     });
 
-    it("replanning produces new tasks and transitions to plan_review", async () => {
+    it("replanning preserves the failed route until review, then supersedes it", async () => {
       const goalId = insertGoal(db, { status: "active" });
       const taskId = ulid();
       db.prepare(
@@ -351,11 +357,18 @@ describe("integration/plan-execute-flow", () => {
       });
 
       const orc = makeOrchestrator(db, mocks);
-      const result = await orc.tick();
+      const draftResult = await orc.tick();
 
-      expect(result.phase).toBe("plan_review");
-      const state = readState(db);
-      expect(state?.replanCount).toBe(1);
+      expect(draftResult.phase).toBe("plan_review");
+      expect(readState(db)?.replanCount).toBe(1);
+
+      const beforeReview = db.prepare(
+        "SELECT status FROM task_graph WHERE id = ?",
+      ).get(taskId) as { status: string };
+      expect(beforeReview.status).toBe("failed");
+
+      const reviewedResult = await orc.tick();
+      expect(reviewedResult.phase).toBe("executing");
 
       const superseded = db.prepare(
         "SELECT status FROM task_graph WHERE id = ?",
@@ -378,15 +391,12 @@ describe("integration/plan-execute-flow", () => {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(taskId, goalId, "Task 1", "Do the thing", "pending", "generalist", 1, "[]", 0, 0, new Date().toISOString());
 
-      // Historical telemetry may already show multiple replans. This is not
-      // itself evidence that the objective is impossible.
       setState(db, { phase: "executing", goalId, replanCount: 3, failedTaskId: null, failedError: null });
 
       mocks.agentTracker.getIdle.mockReturnValue([
         { address: "0xchild", name: "Worker", role: "generalist", status: "healthy" },
       ]);
 
-      // Return a failed task result
       mocks.messaging.processInbox.mockResolvedValue([
         {
           success: true,
@@ -439,30 +449,19 @@ describe("integration/plan-execute-flow", () => {
   // ─── Plan review scenarios ───────────────────────────────────────────────
 
   describe("plan review", () => {
-    it("plan_review with no plan in KV advances directly to executing", async () => {
+    it("plan_review with no canonical plan fails closed instead of executing stale tasks", async () => {
       const goalId = insertGoal(db, { status: "active" });
-      db.prepare(
-        `INSERT INTO task_graph (id, goal_id, title, description, status, agent_role, priority, dependencies, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(ulid(), goalId, "Task 1", "Do the thing", "pending", "generalist", 1, "[]", new Date().toISOString());
-
       setState(db, { phase: "plan_review", goalId, replanCount: 0, failedTaskId: null, failedError: null });
-      // Deliberately do NOT store any plan in KV
 
       const orc = makeOrchestrator(db, mocks);
       const result = await orc.tick();
 
-      expect(result.phase).toBe("executing");
+      expect(result.phase).toBe("planning");
+      expect(getTasksForGoal(db, goalId)).toHaveLength(0);
     });
 
-    it("plan_review with valid plan in KV auto-approves and transitions to executing", async () => {
+    it("plan_review with strategically valid plan materializes and transitions to executing", async () => {
       const goalId = insertGoal(db, { status: "active" });
-      db.prepare(
-        `INSERT INTO task_graph (id, goal_id, title, description, status, agent_role, priority, dependencies, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(ulid(), goalId, "Task 1", "Do the thing", "pending", "generalist", 1, "[]", new Date().toISOString());
-
-      // Store a valid plan in KV under the expected key
       db.prepare(
         "INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))",
       ).run(`orchestrator.plan.${goalId}`, JSON.stringify(plannerOutput));
@@ -473,17 +472,12 @@ describe("integration/plan-execute-flow", () => {
       const result = await orc.tick();
 
       expect(result.phase).toBe("executing");
+      expect(getTasksForGoal(db, goalId).length).toBeGreaterThan(0);
     });
 
-    it("plan_review with high-cost plan still auto-approves in auto mode", async () => {
+    it("fixed budget scrutiny marker does not decide approval by itself", async () => {
       const goalId = insertGoal(db, { status: "active" });
-      db.prepare(
-        `INSERT INTO task_graph (id, goal_id, title, description, status, agent_role, priority, dependencies, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(ulid(), goalId, "Task 1", "Do the thing", "pending", "generalist", 1, "[]", new Date().toISOString());
-
-      // Store a plan with cost below auto-approve threshold (5000 cents)
-      const highCostPlan = { ...plannerOutput, estimatedTotalCostCents: 4999 };
+      const highCostPlan = { ...plannerOutput, estimatedTotalCostCents: 6000 };
       db.prepare(
         "INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))",
       ).run(`orchestrator.plan.${goalId}`, JSON.stringify(highCostPlan));
@@ -493,8 +487,8 @@ describe("integration/plan-execute-flow", () => {
       const orc = makeOrchestrator(db, mocks);
       const result = await orc.tick();
 
-      // auto mode approves when cost is below autoBudgetThreshold (5000)
       expect(result.phase).toBe("executing");
+      expect(getTasksForGoal(db, goalId).length).toBeGreaterThan(0);
     });
   });
 
@@ -502,7 +496,6 @@ describe("integration/plan-execute-flow", () => {
 
   describe("edge cases", () => {
     it("no active goals keeps orchestrator idle", async () => {
-      // No goals inserted
       setState(db, { phase: "idle", goalId: null, replanCount: 0, failedTaskId: null, failedError: null });
 
       const orc = makeOrchestrator(db, mocks);
@@ -513,7 +506,7 @@ describe("integration/plan-execute-flow", () => {
     });
 
     it("goal deleted mid-execution causes orchestrator to return to idle", async () => {
-      const goalId = ulid(); // Use an ID but don't insert the goal
+      const goalId = ulid();
       setState(db, { phase: "executing", goalId, replanCount: 0, failedTaskId: null, failedError: null });
 
       const orc = makeOrchestrator(db, mocks);
