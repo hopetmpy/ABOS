@@ -1,5 +1,8 @@
 import type { Database } from "better-sqlite3";
-import { latestEvidenceByAuthority } from "../observability/evidence.js";
+import {
+  getEvidenceEvent,
+  latestEvidenceByAuthority,
+} from "../observability/evidence.js";
 import { SimulationWorkspace } from "../intelligence/simulation-workspace.js";
 import type { PlannerOutput } from "./planner.js";
 
@@ -77,19 +80,34 @@ export function renderPlanningSimulationContext(
   ].join("\n");
 }
 
+/**
+ * Persist only Evidence Fabric events that the planner explicitly cited in its
+ * decision factors and that resolve to goal-scoped simulation inference. This
+ * preserves causal provenance without treating every visible experiment as a
+ * reason for the selected route or trusting a fabricated identifier.
+ */
 export function referencedSimulationEvidence(
+  db: Database,
+  goalId: string,
   output: PlannerOutput,
-  records: readonly PlanningSimulationEvidence[],
 ): string[] {
-  const decisionText = (output.decisionFactors ?? []).join("\n");
+  const decisionText = (output.decisionFactors ?? []).join("\n").toUpperCase();
   if (!decisionText) return [];
 
-  const refs = records
-    .map((record) => record.evidenceRef)
-    .filter((ref): ref is string => typeof ref === "string" && ref.length > 0)
-    .filter((ref) => decisionText.includes(ref));
+  const candidates = decisionText.match(/\b[0-9A-HJKMNP-TV-Z]{26}\b/gu) ?? [];
+  const refs: string[] = [];
 
-  return [...new Set(refs)];
+  for (const candidate of [...new Set(candidates)]) {
+    const event = getEvidenceEvent(db, candidate);
+    if (!event) continue;
+    if (event.goalId !== goalId) continue;
+    if (event.domain !== "simulation") continue;
+    if (event.authorityType !== "simulation_experiment") continue;
+    if (event.epistemicStatus !== "inference") continue;
+    refs.push(event.id);
+  }
+
+  return refs;
 }
 
 function compact(value: unknown, maxLength = 360): string {
