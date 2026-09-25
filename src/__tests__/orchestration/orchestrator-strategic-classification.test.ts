@@ -94,7 +94,19 @@ function readPhase(db: BetterSqlite3.Database): string {
   return JSON.parse(row.value).phase as string;
 }
 
-describe("P-025 strategic classification boundary", () => {
+function cognitiveEvents(
+  db: BetterSqlite3.Database,
+  goalId: string,
+): Array<{ event_type: string; payload_json: string }> {
+  return db.prepare(
+    `SELECT event_type, payload_json
+     FROM evidence_events
+     WHERE goal_id = ? AND domain = 'cognitive'
+     ORDER BY sequence ASC`,
+  ).all(goalId) as Array<{ event_type: string; payload_json: string }>;
+}
+
+describe("P-025/P-026 strategic classification boundary", () => {
   let db: BetterSqlite3.Database;
 
   beforeEach(() => {
@@ -105,7 +117,7 @@ describe("P-025 strategic classification boundary", () => {
     db.close();
   });
 
-  it("routes a new top-level Goal to planning without consulting the legacy step-count classifier", async () => {
+  it("routes a new top-level Goal to planning without consulting the legacy step-count classifier and records why planning is needed", async () => {
     const goalId = insertGoal(db);
     setClassifyingState(db, goalId);
     const inference = {
@@ -127,9 +139,21 @@ describe("P-025 strategic classification boundary", () => {
     expect(
       db.prepare("SELECT COUNT(*) AS count FROM task_graph WHERE goal_id = ?").get(goalId),
     ).toEqual({ count: 0 });
+
+    const events = cognitiveEvents(db, goalId);
+    expect(events.map((event) => event.event_type)).toEqual([
+      "cognitive.route_selected",
+    ]);
+    expect(JSON.parse(events[0]!.payload_json)).toMatchObject({
+      taskClass: "strategic:classification",
+      baselineRouteId: "inference:strategic-planning",
+      selectedRouteId: "inference:strategic-planning",
+      selectedKind: "inference",
+      action: "execute",
+    });
   });
 
-  it("preserves execution when a Goal already has a materialized Task graph", async () => {
+  it("preserves execution when a Goal already has a materialized Task graph and records a quality-validated no-model receipt", async () => {
     const goalId = insertGoal(db);
     db.prepare(
       `INSERT INTO task_graph
@@ -153,5 +177,26 @@ describe("P-025 strategic classification boundary", () => {
     expect(
       db.prepare("SELECT COUNT(*) AS count FROM task_graph WHERE goal_id = ?").get(goalId),
     ).toEqual({ count: 1 });
+
+    const events = cognitiveEvents(db, goalId);
+    expect(events.map((event) => event.event_type)).toEqual([
+      "cognitive.route_selected",
+      "cognitive.route_executed",
+      "cognitive.outcome_recorded",
+    ]);
+    expect(JSON.parse(events[0]!.payload_json)).toMatchObject({
+      taskClass: "strategic:classification",
+      selectedRouteId: "deterministic:materialized-task-graph",
+      selectedKind: "deterministic",
+      action: "execute",
+    });
+    expect(JSON.parse(events[2]!.payload_json)).toMatchObject({
+      routeId: "deterministic:materialized-task-graph",
+      success: true,
+      qualityValidated: true,
+      qualityScore: 1,
+      actualCostCents: 0,
+      reworkCount: 0,
+    });
   });
 });
