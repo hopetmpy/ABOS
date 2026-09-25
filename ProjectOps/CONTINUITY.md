@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-025
 Active-Segment: continuity/C0021.md
-Active-Intervention: P025_STRATEGIC_COGNITION_V2 — EN_EJECUCIÓN / DOD_AUDIT
+Active-Intervention: P025_STRATEGIC_COGNITION_V2 — EN_EJECUCIÓN / SOURCE_COMPLETE / INTEGRATION_READY
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,10 +15,10 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p025-strategic-cognition-v2
 Host-Head-At-Audit-Open: 8bae92562566e619be905906a2ff00835cf28f1a
-Last-Reconciled-Host-Head: c65469e3881377d969a5b60a2c72689fb2b8bab4
+Last-Reconciled-Host-Head: a5581a156aa82d0028c549cb35ea5ca74284c844
 Observed-Main-Head: a3041eb9cc96d16b885e7a17aba5cfb263de4453
-Last-Product-Head: c65469e3881377d969a5b60a2c72689fb2b8bab4
-Last-Product-CI: 36087892258 — SUCCESS 8/8
+Last-Product-Head: a5581a156aa82d0028c549cb35ea5ca74284c844
+Last-Product-CI: 36095740595 — SUCCESS 8/8 (attempt 2 exact-SHA rerun)
 Last-Completed-Plan: P-024
 Last-Completed-Merge: 8bae92562566e619be905906a2ff00835cf28f1a
 Last-Completed-CI: 36072559876 — SUCCESS 8/8
@@ -154,21 +154,32 @@ El CI exacto del HEAD producto `c65469e3881377d969a5b60a2c72689fb2b8bab4`, run `
 
 Clasificación: `ATOMIC_REVIEW_COMMIT` RESUELTO y verificado. P-025 no se declara HECHO por este bloque; continúa la auditoría adversarial contra su Definition of Done.
 
-## Auditoría DoD posterior al clamp atómico — ABIERTA
+## Auditoría DoD posterior al clamp atómico — RESUELTA
 
-El cruce directo de `plan/P-025.md` contra source actual encontró un posible remanente de juicio por thresholds que debe discriminarse antes de cerrar P-025:
+El cruce directo de `plan/P-025.md` contra source actual encontró un posible remanente de juicio por thresholds y se discriminó antes de cierre source:
 - `reviewPlan()` conserva `autoBudgetThreshold=5000` sólo como `legacy_scrutiny_marker` de telemetría y sus tests demuestran que no concede ni niega approval, por lo que ese número no es actualmente una authority estratégica.
-- `plan-mode.ts::shouldReplan()` todavía codifica `actual > estimated * 1.5`, `conflictScore >= 0.55` y longitud mínima de opportunity; sus tests fijan literalmente esos thresholds.
-- el execution core canónico de fallos ya usa `AdaptivePathEngine.recordFailure()` y evidence/conditions/novelty para llevar un Task fallido a replanning, por lo que no se debe asumir que `shouldReplan()` siga gobernando el runtime sólo porque exista/exporte.
-- `orchestrator-core.ts` sí conserva una clasificación `estimatedSteps > 3` para decidir si un goal sin Tasks entra inicialmente a planning estratégico o se materializa como Task simple; debe discriminarse si esto es sólo un classifier de forma o si puede omitir indebidamente review estratégico material.
+- `plan-mode.ts::shouldReplan()` todavía codifica thresholds legacy, pero el wrapper estratégico productivo no lo importa ni lo usa para decidir replanning/juicio.
+- el execution core canónico de fallos usa `AdaptivePathEngine.recordFailure()` y evidence/conditions/novelty para llevar un Task fallido a replanning.
+- aunque `orchestrator-core.ts` conserva una clasificación histórica por `estimatedSteps`, `src/orchestration/orchestrator.ts` enruta todo Goal top-level sin Task graph existente a planning estratégico; por tanto ese classifier no gobierna la entrada canónica P-025.
 
-Hipótesis abiertas de esta unidad:
-- `H_THRESHOLD_DEAD_COMPAT`: los thresholds de `shouldReplan()` son API/tests legacy sin consumers productivos; corregirlos no cambiaría runtime y su tratamiento correcto sería NO_CHANGE o cleanup explícito, no rediseño.
-- `H_THRESHOLD_LIVE_STRATEGIC_GATE`: algún consumer productivo aún usa esos thresholds para decidir replanning/juicio; si se confirma, contradice la dirección P-025 y debe converger sobre evidence/adaptive reasoning existente.
-- `H_COMPLEXITY_CLASSIFIER_OK`: `>3` sólo elige forma de ejecución para un objetivo realmente simple y no sustituye juicio material.
-- `H_COMPLEXITY_CAN_BYPASS_STRATEGY`: el classifier puede enviar un objetivo materialmente riesgoso/ambiguo directo a ejecución por estimar ≤3 pasos; requeriría corrección mínima en la entrada al boundary, no una nueva strategic authority.
+Hipótesis cerradas:
+- `H_THRESHOLD_DEAD_COMPAT`: CONFIRMADA respecto del strategic wrapper productivo; no se reescribe runtime por ceremonia.
+- `H_THRESHOLD_LIVE_STRATEGIC_GATE`: FALSADA para el boundary canónico P-025.
+- `H_COMPLEXITY_CLASSIFIER_OK` / `H_COMPLEXITY_CAN_BYPASS_STRATEGY`: la disyuntiva queda superada en el wrapper canónico porque new top-level Goal entra a planning independientemente del step estimate; los tests de clasificación estratégica fijan esa semántica.
 
-No se modifica esta zona hasta resolver reachability y falsar las alternativas con callers/tests/runtime actuales.
+No se modifica esta zona: `NO_CHANGE` es la decisión correcta para P-025; cleanup legacy futuro pertenece a P-035 si sigue siendo material.
+
+## Reconciliación source-ready — 2026-09-24/25
+
+La reauditoría exacta del HEAD producto `a5581a156aa82d0028c549cb35ea5ca74284c844` no encontró HARD source restante que invalide el DoD de P-025.
+
+Además:
+- la evidencia P-024 citada por planning exige ahora al menos un run durable real del experimento; metadata/interpretation sin run no se promociona a evidence ejecutada;
+- P-037/P-038/P-039 materializan los tres gaps históricos demostrados de la compactación pre-P-007 y P-033/P-035/P-036 ya los incluyen en sus gates de integración/cleanup/cierre;
+- el primer attempt del CI `36095740595` tuvo un timeout Node 22 aislado en `loop.test.ts`; Node 24 y los tests P-025 pasaron;
+- se reejecutó exactamente el job Node 22 sobre el mismo SHA sin cambiar código ni timeouts y el workflow quedó **SUCCESS 8/8** en attempt 2.
+
+Clasificación: **P-025 SOURCE_COMPLETE / INTEGRATION_READY / EN_EJECUCIÓN**. `HECHO` sigue prohibido hasta merge + exact-main green.
 
 ## Estado canónico actual
 
@@ -176,8 +187,8 @@ No se modifica esta zona hasta resolver reachability y falsar las alternativas c
 - P-004: PLANIFICADO — track documental transversal/final.
 - P-005: PLANIFICADO — acceptance LIVE incremental.
 - P-006..P-024: HECHO.
-- P-025: EN_EJECUCIÓN / DOD_AUDIT; alternatives/discriminants/pre-mortem/falsification están implementados y verdes, capability/human-gate default no requiere cambio y el atomic review commit está corregido/validado; permanece abierta la discriminación de gates/thresholds legacy versus runtime estratégico real antes de evaluar cierre.
-- P-026..P-036: usar estado explícito de `ProjectOps/PLAN.md`; no se adelantan mientras P-025 siga no terminal.
+- P-025: EN_EJECUCIÓN / SOURCE_COMPLETE / INTEGRATION_READY; no queda HARD source conocido y el CI exacto del product head está verde.
+- P-026..P-039: usar estado explícito de `ProjectOps/PLAN.md`; P-037..P-039 preservan gaps históricos demostrados y no son dependencia retroactiva de P-025.
 
 ## P-024 — cierre verificado
 
@@ -203,11 +214,11 @@ Decisión canónica: **CORRECT + UNIFY + targeted EXTEND** sobre authorities exi
 
 Invariantes: objective != method; UNKNOWN first-class; no bypass de auth/prohibition; no human gate ficticio para `GOVERNABLE_RISK`; no autoapproval/consensus ficticio; P-024 simulation es capacidad consumible, no planner; no segunda fuente de verdad por conveniencia; Task/transport/idempotence/recovery existentes deben preservarse.
 
-El detalle de hipótesis, causalidad, ownership y decisión original vive en `continuity/C0021.md`; esta authority registra el estado vivo reconstruido.
+El detalle de hipótesis, causalidad, ownership, reconciliación histórica y decisión vive en `continuity/C0021.md`; esta authority registra el estado vivo.
 
 ## Siguiente punto verificable
 
-Resolver reachability real de `shouldReplan()` y de los thresholds asociados fuera de tests, y atacar el classifier inicial `estimatedSteps > 3` con casos donde pocas acciones tengan alta incertidumbre/riesgo/dependencias. Si los thresholds son legacy no productivos, clasificarlos sin reescribir runtime por ceremonia; si alguno gobierna una decisión estratégica real, sustituir ese gate por evidencia/contexto usando las authorities P-025 ya existentes. Ejecutar aceptación discriminante y CI exacto antes de evaluar el cierre de P-025. No avanzar a P-026 mientras P-025 siga no terminal.
+Abrir PR `abos/p025-strategic-cognition-v2` → `main`, reconciliar mergeability contra `Observed-Main-Head` vigente sin force ni pérdida de commits governance main-only, ejecutar CI exacto del PR y, sólo después de merge + exact-main green, cerrar P-025 como HECHO. No avanzar a P-026 antes de esa integración.
 
 ## Política de rotación
 
