@@ -6,7 +6,6 @@ import type { CapabilityRegistry } from "../capabilities/registry.js";
 import { CapabilityResolver } from "../capabilities/resolver.js";
 import type { CapabilityResolution } from "../capabilities/model.js";
 import { AdaptivePathEngine } from "../intelligence/adaptive-engine.js";
-import { SimulationWorkspace } from "../intelligence/simulation-workspace.js";
 import { plannerOutputToPathCandidate } from "../intelligence/task-path.js";
 import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import {
@@ -27,6 +26,11 @@ import {
 } from "./planner.js";
 import { reviewPlan } from "./plan-mode.js";
 import type { StrategicReviewContext } from "./strategic-review.js";
+import {
+  loadPlanningSimulationEvidence,
+  referencedSimulationEvidence,
+  renderPlanningSimulationContext,
+} from "./simulation-planning-context.js";
 import {
   buildPlannerContext,
   getNextPlannerVersion,
@@ -233,7 +237,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       return { ...state, phase: "planning", failedError: output.analysis };
     }
 
-    const candidate = plannerOutputToPathCandidate(goalRowToGoal(goal), output);
+    const candidate = this.buildStrategicCandidate(goalRowToGoal(goal), output);
     const novelty = this.strategicAdaptive.isCandidateEligible(
       candidate,
       await this.strategicConditions(),
@@ -316,7 +320,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       };
     }
 
-    const candidate = plannerOutputToPathCandidate(goalRowToGoal(goal), output);
+    const candidate = this.buildStrategicCandidate(goalRowToGoal(goal), output);
     const conditions = await this.strategicConditions(
       taskRowToTaskNode(failedTaskRow),
     );
@@ -413,7 +417,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
     const failedTask = state.failedTaskId
       ? getTaskById(this.strategicParams.db, state.failedTaskId)
       : undefined;
-    const candidate = plannerOutputToPathCandidate(goalRowToGoal(goal), output);
+    const candidate = this.buildStrategicCandidate(goalRowToGoal(goal), output);
     const conditions = await this.strategicConditions(
       failedTask ? taskRowToTaskNode(failedTask) : undefined,
     );
@@ -538,16 +542,16 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       );
     }
 
-    const simulationEvidence = new SimulationWorkspace(
+    const simulationEvidence = loadPlanningSimulationEvidence(
       this.strategicParams.db,
-    )
-      .listExperiments({ goalId, limit: 20 })
-      .map((experiment) => ({
-        experimentId: experiment.id,
-        status: experiment.status,
-        decisionImpact: experiment.decisionImpact,
-        lesson: experiment.lesson,
-      }));
+      goalId,
+      20,
+    ).map((experiment) => ({
+      experimentId: experiment.experimentId,
+      status: experiment.status,
+      decisionImpact: experiment.decisionImpact,
+      lesson: experiment.lesson,
+    }));
 
     return {
       capabilityResolutions,
@@ -570,6 +574,16 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       }
     }
 
+    const simulationEvidence = loadPlanningSimulationEvidence(
+      this.strategicParams.db,
+      goalId,
+      20,
+    );
+    const adaptiveContext = [
+      this.strategicAdaptive.buildPlannerContext(goalId),
+      renderPlanningSimulationContext(simulationEvidence),
+    ].join("\n\n");
+
     return buildPlannerContext({
       db: this.strategicParams.db,
       workspace: new AgentWorkspace(goalId),
@@ -582,10 +596,23 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
         this.getStrategicActiveAgentCount() - this.strategicParams.agentTracker.getIdle().length,
       ),
       maxAgents: Number(this.strategicParams.config?.maxChildren ?? 3),
-      adaptiveContext: this.strategicAdaptive.buildPlannerContext(goalId),
+      adaptiveContext,
       environmentSnapshots,
       capabilities: this.strategicParams.capabilityRegistry?.list() ?? [],
     });
+  }
+
+  private buildStrategicCandidate(
+    goal: Goal,
+    output: PlannerOutput,
+  ) {
+    const candidate = plannerOutputToPathCandidate(goal, output);
+    candidate.evidence = referencedSimulationEvidence(
+      this.strategicParams.db,
+      goal.id,
+      output,
+    );
+    return candidate;
   }
 
   private async strategicConditions(
