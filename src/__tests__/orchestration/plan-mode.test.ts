@@ -19,6 +19,13 @@ function makePlan(overrides: Partial<PlannerOutput> = {}): PlannerOutput {
   return {
     analysis: "Analyze constraints",
     strategy: "Ship incrementally",
+    path: {
+      hypothesis: "The incremental path can satisfy the objective.",
+      assumptions: ["The declared task graph remains valid during execution."],
+      requiredCapabilities: [],
+      preferredEnvironment: null,
+      expectedOutcome: "The objective reaches its acceptance condition.",
+    },
     customRoles: [],
     tasks: [
       {
@@ -363,23 +370,58 @@ describe("orchestration/plan-mode", () => {
       reviewTimeoutMs: 10_000,
     };
 
-    it("auto mode approves immediately under threshold", async () => {
+    it("auto mode approves only after substantive structural review", async () => {
       const result = await reviewPlan(makePlan({ estimatedTotalCostCents: 1200 }), autoConfig);
-      expect(result).toEqual({ approved: true });
+      expect(result.approved).toBe(true);
+      expect(result.feedback).toContain("disposition=approve");
+      expect(result.feedback).toContain("task-cost floor");
     });
 
-    it("auto mode approves above threshold with feedback", async () => {
+    it("legacy budget marker never grants or denies approval by itself", async () => {
       const result = await reviewPlan(makePlan({ estimatedTotalCostCents: 9000 }), autoConfig);
       expect(result.approved).toBe(true);
-      expect(result.feedback).toContain("Auto-approved above threshold");
+      expect(result.feedback).toContain("legacy_scrutiny_marker_exceeded=9000c>5000c");
+      expect(result.feedback).toContain("this marker does not decide approval");
     });
 
-    it("supervised mode throws awaiting approval", async () => {
+    it("auto mode rejects a complex plan without explicit path intent", async () => {
+      const result = await reviewPlan(
+        makePlan({ path: undefined }),
+        autoConfig,
+      );
+      expect(result.approved).toBe(false);
+      expect(result.feedback).toContain("disposition=revise");
+      expect(result.feedback).toContain("explicit path hypothesis");
+    });
+
+    it("auto mode preserves unresolved capability state as UNKNOWN", async () => {
+      const result = await reviewPlan(
+        makePlan({
+          path: {
+            hypothesis: "Use a CLI capability.",
+            assumptions: ["The capability may exist."],
+            requiredCapabilities: ["cli:example"],
+            preferredEnvironment: null,
+            expectedOutcome: "CLI work completes.",
+          },
+        }),
+        autoConfig,
+      );
+      expect(result.approved).toBe(false);
+      expect(result.feedback).toContain("disposition=unknown");
+      expect(result.feedback).toContain("no canonical resolution");
+    });
+
+    it("supervised mode performs substantive review before awaiting explicit human approval", async () => {
       const supervised: PlanApprovalConfig = { ...autoConfig, mode: "supervised" };
       await expect(reviewPlan(makePlan(), supervised)).rejects.toThrow("awaiting human approval");
+
+      const rejected = await reviewPlan(makePlan({ path: undefined }), supervised);
+      expect(rejected.approved).toBe(false);
+      expect(rejected.feedback).toContain("disposition=revise");
     });
 
-    it("consensus mode returns approval feedback", async () => {
+    it("consensus mode refuses nominal consensus without independent evidence", async () => {
       const consensus: PlanApprovalConfig = {
         ...autoConfig,
         mode: "consensus",
@@ -387,11 +429,40 @@ describe("orchestration/plan-mode", () => {
         reviewTimeoutMs: 9000,
       };
       const result = await reviewPlan(makePlan(), consensus);
-      expect(result.approved).toBe(true);
-      expect(result.feedback).toContain("critic role 'critic'");
+      expect(result.approved).toBe(false);
+      expect(result.feedback).toContain("consensus_not_demonstrated");
+      expect(result.feedback).toContain("reviews=0");
     });
 
-    it("normalizes invalid config values", async () => {
+    it("consensus mode approves only when distinct evidence-backed reviewers agree", async () => {
+      const consensus: PlanApprovalConfig = {
+        ...autoConfig,
+        mode: "consensus",
+        reviewContext: {
+          independentReviews: [
+            {
+              reviewer: "critic-a",
+              disposition: "approve",
+              critique: [],
+              evidence: ["Capability and environment evidence checked."],
+              conditions: [],
+            },
+            {
+              reviewer: "critic-b",
+              disposition: "approve",
+              critique: [],
+              evidence: ["Cost floor and path assumptions checked."],
+              conditions: [],
+            },
+          ],
+        },
+      };
+      const result = await reviewPlan(makePlan(), consensus);
+      expect(result.approved).toBe(true);
+      expect(result.feedback).toContain("consensus_demonstrated reviews=2 distinct=2");
+    });
+
+    it("normalizes invalid config values without inventing approval semantics", async () => {
       const result = await reviewPlan(makePlan({ estimatedTotalCostCents: 99999 }), {
         mode: "unknown" as unknown as "auto",
         autoBudgetThreshold: Number.NaN,
@@ -400,7 +471,7 @@ describe("orchestration/plan-mode", () => {
       });
 
       expect(result.approved).toBe(true);
-      expect(result.feedback).toContain("5000");
+      expect(result.feedback).toContain("legacy_scrutiny_marker_exceeded=99999c>5000c");
     });
   });
 
