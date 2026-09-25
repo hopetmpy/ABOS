@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-025
 Active-Segment: continuity/C0021.md
-Active-Intervention: P025_STRATEGIC_COGNITION_V2 — EN_EJECUCIÓN / DECISION_READY / CORRECTION_REQUIRED
+Active-Intervention: P025_STRATEGIC_COGNITION_V2 — EN_EJECUCIÓN / DOD_AUDIT
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,10 +15,10 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p025-strategic-cognition-v2
 Host-Head-At-Audit-Open: 8bae92562566e619be905906a2ff00835cf28f1a
-Last-Reconciled-Host-Head: 92f184340595164a304c7b7de80d270fcaf5062c
+Last-Reconciled-Host-Head: c65469e3881377d969a5b60a2c72689fb2b8bab4
 Observed-Main-Head: a3041eb9cc96d16b885e7a17aba5cfb263de4453
-Last-Product-Head: 92f184340595164a304c7b7de80d270fcaf5062c
-Last-Product-CI: 36084255766 — SUCCESS 8/8
+Last-Product-Head: c65469e3881377d969a5b60a2c72689fb2b8bab4
+Last-Product-CI: 36087892258 — SUCCESS 8/8
 Last-Completed-Plan: P-024
 Last-Completed-Merge: 8bae92562566e619be905906a2ff00835cf28f1a
 Last-Completed-CI: 36072559876 — SUCCESS 8/8
@@ -127,7 +127,7 @@ La auditoría del boundary material de `handleStrategicReview()` encontró un de
 7. el handler retorna `phase=executing`;
 8. **recién fuera del handler** `tick()` persiste `orchestrator.state`.
 
-Las operaciones 2-6 no forman una única transacción junto con el cambio durable de phase. Una caída/error después de materializar pero antes de `saveStrategicState(next)` puede dejar path/Tasks/bindings persistidos mientras el state durable continúa en `plan_review`. En restart, la novelty puede considerar el path ya seleccionado/equivalente y rechazar el review, dejando residuos materializados fuera del estado causal esperado.
+Las operaciones 2-6 no formaban una única transacción junto con el cambio durable de phase. Una caída/error después de materializar pero antes de `saveStrategicState(next)` podía dejar path/Tasks/bindings persistidos mientras el state durable continuaba en `plan_review`. En restart, la novelty podía considerar el path ya seleccionado/equivalente y rechazar el review, dejando residuos materializados fuera del estado causal esperado.
 
 Hipótesis:
 - `NO_CHANGE_IDEMPOTENCY`: FALSADA por ordering observable del source.
@@ -136,13 +136,47 @@ Hipótesis:
 
 Decision gate: **DECISION_READY**. Invariantes: ningún Task/selected path debe sobrevivir si el commit falla; un commit exitoso debe dejar `orchestrator.state=executing` durable antes de exponer éxito; no crear una segunda authority/receipt si el state+path+bindings canónicos bastan; conservar fail-closed y novelty recheck inmediatamente antes del commit.
 
+## Corrección atómica de review/materialización — 2026-09-24
+
+El defecto anterior quedó corregido sin crear tablas, recovery paralelo ni segunda authority:
+- `6c6d22b58b61158dad85020b2dc30332ff99e96c` mueve supersession, goal strategy, selección/persistencia Adaptive Path, Task decomposition, bindings, review feedback y `orchestrator.state=executing` dentro de una única transacción SQLite canónica; `tick()` ya no vuelve a persistir el mismo estado fuera de ese commit cuando el review aprobado cruza a ejecución.
+- `c65469e3881377d969a5b60a2c72689fb2b8bab4` añade fault injection real mediante trigger SQLite exactamente sobre la escritura durable de `orchestrator.state`: el fallo obliga rollback y demuestra que el Task anterior sigue pendiente, no queda selected path, no quedan bindings, no queda receipt final y el state durable continúa en `plan_review`; después de retirar el fault, una instancia nueva materializa exactamente una vez y termina durablemente en `executing`.
+
+El diff de esta corrección quedó limitado a `src/orchestration/orchestrator.ts` y `src/__tests__/orchestration/orchestrator.test.ts`; no se modificó `src/agent/**`, policy, schema ni otra authority de producto.
+
+El CI exacto del HEAD producto `c65469e3881377d969a5b60a2c72689fb2b8bab4`, run `36087892258`, terminó **SUCCESS 8/8**:
+- ProjectOps integrity PASS;
+- typecheck/build/full tests/security tests PASS Node 22 y Node 24;
+- Windows regressions PASS Node 22/24;
+- public-distribution smoke PASS Node 22/24;
+- security-audit PASS;
+- rebrand-integrity PASS.
+
+Clasificación: `ATOMIC_REVIEW_COMMIT` RESUELTO y verificado. P-025 no se declara HECHO por este bloque; continúa la auditoría adversarial contra su Definition of Done.
+
+## Auditoría DoD posterior al clamp atómico — ABIERTA
+
+El cruce directo de `plan/P-025.md` contra source actual encontró un posible remanente de juicio por thresholds que debe discriminarse antes de cerrar P-025:
+- `reviewPlan()` conserva `autoBudgetThreshold=5000` sólo como `legacy_scrutiny_marker` de telemetría y sus tests demuestran que no concede ni niega approval, por lo que ese número no es actualmente una authority estratégica.
+- `plan-mode.ts::shouldReplan()` todavía codifica `actual > estimated * 1.5`, `conflictScore >= 0.55` y longitud mínima de opportunity; sus tests fijan literalmente esos thresholds.
+- el execution core canónico de fallos ya usa `AdaptivePathEngine.recordFailure()` y evidence/conditions/novelty para llevar un Task fallido a replanning, por lo que no se debe asumir que `shouldReplan()` siga gobernando el runtime sólo porque exista/exporte.
+- `orchestrator-core.ts` sí conserva una clasificación `estimatedSteps > 3` para decidir si un goal sin Tasks entra inicialmente a planning estratégico o se materializa como Task simple; debe discriminarse si esto es sólo un classifier de forma o si puede omitir indebidamente review estratégico material.
+
+Hipótesis abiertas de esta unidad:
+- `H_THRESHOLD_DEAD_COMPAT`: los thresholds de `shouldReplan()` son API/tests legacy sin consumers productivos; corregirlos no cambiaría runtime y su tratamiento correcto sería NO_CHANGE o cleanup explícito, no rediseño.
+- `H_THRESHOLD_LIVE_STRATEGIC_GATE`: algún consumer productivo aún usa esos thresholds para decidir replanning/juicio; si se confirma, contradice la dirección P-025 y debe converger sobre evidence/adaptive reasoning existente.
+- `H_COMPLEXITY_CLASSIFIER_OK`: `>3` sólo elige forma de ejecución para un objetivo realmente simple y no sustituye juicio material.
+- `H_COMPLEXITY_CAN_BYPASS_STRATEGY`: el classifier puede enviar un objetivo materialmente riesgoso/ambiguo directo a ejecución por estimar ≤3 pasos; requeriría corrección mínima en la entrada al boundary, no una nueva strategic authority.
+
+No se modifica esta zona hasta resolver reachability y falsar las alternativas con callers/tests/runtime actuales.
+
 ## Estado canónico actual
 
 - P-001..P-003: HECHO.
 - P-004: PLANIFICADO — track documental transversal/final.
 - P-005: PLANIFICADO — acceptance LIVE incremental.
 - P-006..P-024: HECHO.
-- P-025: EN_EJECUCIÓN / DECISION_READY / CORRECTION_REQUIRED; alternatives/discriminants/pre-mortem/falsification están implementados y verdes, capability/human-gate default no requiere cambio, pero el atomic review commit todavía no está corregido/validado.
+- P-025: EN_EJECUCIÓN / DOD_AUDIT; alternatives/discriminants/pre-mortem/falsification están implementados y verdes, capability/human-gate default no requiere cambio y el atomic review commit está corregido/validado; permanece abierta la discriminación de gates/thresholds legacy versus runtime estratégico real antes de evaluar cierre.
 - P-026..P-036: usar estado explícito de `ProjectOps/PLAN.md`; no se adelantan mientras P-025 siga no terminal.
 
 ## P-024 — cierre verificado
@@ -173,7 +207,7 @@ El detalle de hipótesis, causalidad, ownership y decisión original vive en `co
 
 ## Siguiente punto verificable
 
-Corregir el commit de review/materialización para que selected path + supersession + Task graph + bindings + durable `orchestrator.state=executing` sean atómicos. Añadir fault-injection/restart acceptance que demuestre rollback total ante fallo intermedio y ausencia de double materialization/residuos. Después ejecutar CI exacto completo y continuar la auditoría del DoD P-025; no avanzar a P-026 mientras P-025 siga no terminal.
+Resolver reachability real de `shouldReplan()` y de los thresholds asociados fuera de tests, y atacar el classifier inicial `estimatedSteps > 3` con casos donde pocas acciones tengan alta incertidumbre/riesgo/dependencias. Si los thresholds son legacy no productivos, clasificarlos sin reescribir runtime por ceremonia; si alguno gobierna una decisión estratégica real, sustituir ese gate por evidencia/contexto usando las authorities P-025 ya existentes. Ejecutar aceptación discriminante y CI exacto antes de evaluar el cierre de P-025. No avanzar a P-026 mientras P-025 siga no terminal.
 
 ## Política de rotación
 
