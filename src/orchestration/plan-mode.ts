@@ -4,10 +4,15 @@ import path from "node:path";
 import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import type { PlannerOutput } from "./planner.js";
 import { validatePlannerOutput } from "./planner.js";
+import {
+  assessStrategicPlan,
+  summarizeStrategicReview,
+  type StrategicReviewContext,
+} from "./strategic-review.js";
 
 const PLAN_MODE_STATE_KEY = "plan_mode.state";
 // Compatibility seed for persisted pre-adaptive state. This field is telemetry only;
- // it MUST NOT govern whether an objective may be replanned.
+// it MUST NOT govern whether an objective may be replanned.
 const LEGACY_REPLAN_TELEMETRY_SEED = 3;
 const DEFAULT_AUTO_BUDGET_THRESHOLD = 5_000;
 const DEFAULT_CONSENSUS_CRITIC_ROLE = "reviewer";
@@ -39,9 +44,16 @@ export type PlanApprovalMode = "auto" | "supervised" | "consensus";
 
 export interface PlanApprovalConfig {
   mode: PlanApprovalMode;
+  /**
+   * Legacy scrutiny marker retained for compatibility. Crossing it may be
+   * reported in review feedback, but it never grants or denies approval by
+   * itself.
+   */
   autoBudgetThreshold: number;
   consensusCriticRole: string;
   reviewTimeoutMs: number;
+  /** Canonical evidence supplied by orchestration for this proposed path. */
+  reviewContext?: StrategicReviewContext;
 }
 
 export type ReplanTrigger =
@@ -248,32 +260,80 @@ export async function reviewPlan(
   config: PlanApprovalConfig,
 ): Promise<{ approved: boolean; feedback?: string }> {
   const normalized = normalizeApprovalConfig(config);
+  let assessment;
+  try {
+    assessment = assessStrategicPlan(plan, normalized.reviewContext);
+  } catch (error) {
+    return {
+      approved: false,
+      feedback: `Strategic review rejected an invalid plan: ${toErrorMessage(error)}`,
+    };
+  }
+
+  const feedback: string[] = [summarizeStrategicReview(assessment)];
+  if (plan.estimatedTotalCostCents > normalized.autoBudgetThreshold) {
+    feedback.push(
+      `legacy_scrutiny_marker_exceeded=${plan.estimatedTotalCostCents}c>${normalized.autoBudgetThreshold}c; this marker does not decide approval`,
+    );
+  }
+
+  if (assessment.disposition !== "approve") {
+    return {
+      approved: false,
+      feedback: feedback.join(" ; "),
+    };
+  }
 
   switch (normalized.mode) {
-    case "auto": {
-      if (plan.estimatedTotalCostCents > normalized.autoBudgetThreshold) {
-        return {
-          approved: true,
-          feedback: `Auto-approved above threshold (${plan.estimatedTotalCostCents} > ${normalized.autoBudgetThreshold}).`,
-        };
-      }
-      return { approved: true };
-    }
-
-    case "supervised": {
-      throw new Error("awaiting human approval");
-    }
-
-    case "consensus": {
+    case "auto":
       return {
         approved: true,
-        feedback: `Consensus review stub (critic role '${normalized.consensusCriticRole}', timeout ${normalized.reviewTimeoutMs}ms).`,
+        feedback: feedback.join(" ; "),
+      };
+
+    case "supervised":
+      // Supervision is an explicitly configured external boundary layered on
+      // top of substantive review. It is never used as a substitute for it.
+      throw new Error("awaiting human approval");
+
+    case "consensus": {
+      const reviews = normalized.reviewContext?.independentReviews ?? [];
+      const distinctReviewers = new Set(
+        reviews.map((review) => normalizedReviewer(review.reviewer)).filter(Boolean),
+      );
+      const evidenceBacked = reviews.every(
+        (review) => review.evidence.some((item) => item.trim().length > 0),
+      );
+      const allApprove = reviews.every(
+        (review) => review.disposition === "approve",
+      );
+
+      if (
+        reviews.length < 2 ||
+        distinctReviewers.size < 2 ||
+        !evidenceBacked ||
+        !allApprove
+      ) {
+        return {
+          approved: false,
+          feedback: [
+            ...feedback,
+            `consensus_not_demonstrated role=${normalized.consensusCriticRole} reviews=${reviews.length} distinct=${distinctReviewers.size} evidence_backed=${evidenceBacked} all_approve=${allApprove}`,
+          ].join(" ; "),
+        };
+      }
+
+      return {
+        approved: true,
+        feedback: [
+          ...feedback,
+          `consensus_demonstrated reviews=${reviews.length} distinct=${distinctReviewers.size}`,
+        ].join(" ; "),
       };
     }
 
-    default: {
+    default:
       return { approved: false, feedback: "Unsupported review mode." };
-    }
   }
 }
 
@@ -462,7 +522,12 @@ function normalizeApprovalConfig(config: PlanApprovalConfig): PlanApprovalConfig
     reviewTimeoutMs: Number.isFinite(config.reviewTimeoutMs)
       ? Math.max(1, Math.floor(config.reviewTimeoutMs))
       : DEFAULT_REVIEW_TIMEOUT_MS,
+    reviewContext: config.reviewContext,
   };
+}
+
+function normalizedReviewer(value: string): string {
+  return value.toLowerCase().replace(/\s+/gu, " ").trim();
 }
 
 async function fileExists(filePath: string): Promise<boolean> {

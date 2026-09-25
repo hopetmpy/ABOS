@@ -7,9 +7,18 @@ export interface PlannerOutput {
   strategy: string;
   /**
    * Optional structured identity for the strategic path. Older planner fixtures
-   * remain valid; when absent ABOS derives a path from strategy + tasks.
+   * remain valid at schema-validation time; complex strategic review decides
+   * whether the metadata is sufficient to cross the execution boundary.
    */
   path?: PlannerPathIntent;
+  /** Materially distinct routes considered before choosing `strategy`/`path`. */
+  alternatives?: PlannerAlternative[];
+  /** Evidence/value/risk dimensions that discriminated the selected route. */
+  decisionFactors?: string[];
+  /** Concrete failure modes considered before execution. */
+  preMortem?: string[];
+  /** Evidence or observations that would falsify the selected route. */
+  falsificationConditions?: string[];
   customRoles: CustomRoleDef[];
   tasks: PlannedTask[];
   risks: string[];
@@ -23,6 +32,24 @@ export interface PlannerPathIntent {
   requiredCapabilities: string[];
   preferredEnvironment: string | null;
   expectedOutcome: string;
+}
+
+/**
+ * A strategic alternative is intentionally not an executable task graph.
+ * It describes a competing route well enough to compare material identity
+ * without allowing an unselected route to cross the Task materialization gate.
+ */
+export interface PlannerAlternative {
+  label: string;
+  strategy: string;
+  hypothesis: string;
+  assumptions: string[];
+  requiredCapabilities: string[];
+  preferredEnvironment: string | null;
+  sequence: string[];
+  expectedOutcome: string;
+  estimatedCostCents: number;
+  discriminants: string[];
 }
 
 export interface CustomRoleDef {
@@ -288,13 +315,16 @@ without further planning decisions.
 7. Explicitly prohibited paths are excluded. Do not invent prohibitions or arbitrary method allowlists.
 8. Prefer evidence-driven replanning over retry counters.
 9. When a path fails, use the supplied adaptive history to generate a materially different route unless conditions genuinely changed.
-10. Every plan should expose its strategic hypothesis, assumptions, required capabilities, preferred environment, and expected outcome through the optional \`path\` field.
+10. Every complex plan must expose its selected strategic hypothesis, assumptions, required capabilities, preferred environment, and expected outcome through \`path\`.
+11. Before selecting that path, generate at least one materially distinct alternative. A wording-only rename is not an alternative: vary capability, environment, assumptions, or execution sequence in a way that could change the decision.
+12. State the evidence/value/risk dimensions that discriminated the selected path in \`decisionFactors\` and each competing route's decisive differences in \`discriminants\`.
+13. Perform a pre-mortem before execution: list concrete failure modes in \`preMortem\` and observations that would falsify the selected route in \`falsificationConditions\`.
 </adaptive_path_principles>
 
 <state_machine>
 Your operational cycle:
 
-RECEIVE -> ANALYZE -> DECOMPOSE -> VALIDATE -> OUTPUT
+RECEIVE -> ANALYZE -> EXPLORE -> DECOMPOSE -> VALIDATE -> OUTPUT
 
 1. RECEIVE: Accept goal specification
    - Parse goal title, description, budget, constraints
@@ -307,11 +337,19 @@ RECEIVE -> ANALYZE -> DECOMPOSE -> VALIDATE -> OUTPUT
    - Check if similar goals were previously attempted (learn from outcomes)
    - Identify external dependencies and blockers
    - Determine if any custom agent roles are needed
-   -> Trigger: an executable route is supported by current evidence -> DECOMPOSE
+   -> Trigger: at least one executable route is supported by current evidence -> EXPLORE
    -> Trigger: no executable route is currently known -> OUTPUT with \`tasks: []\`, classify the route as UNKNOWN/UNAVAILABLE/BLOCKED as appropriate, and explain what evidence/capability/condition is missing
    -> Trigger: authoritative evidence proves the objective itself prohibited or impossible -> OUTPUT with \`tasks: []\` and that terminal evidence in \`analysis\`
 
-3. DECOMPOSE: Break goal into task graph
+3. EXPLORE: Compare the possibility space before commitment
+   - Generate the selected route plus at least one materially distinct alternative
+   - Reject alternatives that merely rename the same capability/environment/assumptions/sequence
+   - Identify discriminating evidence, value, cost, risk and contingency differences
+   - Pre-mortem the selected route and state falsification conditions that would force review/replan
+   -> Trigger: a route is decision-ready -> DECOMPOSE
+   -> Trigger: evidence cannot discriminate the routes -> OUTPUT with discovery/probe work rather than inventing certainty
+
+4. DECOMPOSE: Break the selected route into task graph
    - Create ordered task list with dependencies
    - Assign each task to the best-fit agent role from current context or a justified custom role
    - Define custom roles if no predefined role fits (see Custom Roles)
@@ -321,18 +359,19 @@ RECEIVE -> ANALYZE -> DECOMPOSE -> VALIDATE -> OUTPUT
    - Identify parallelizable tasks (tasks with no mutual dependencies)
    -> Always proceed to VALIDATE
 
-4. VALIDATE: Self-check the plan
+5. VALIDATE: Self-check the plan
    - Verify known budget is sufficient for the planned spend; if budget is UNKNOWN, do not manufacture a numeric authority
    - Verify no circular dependencies
    - Verify every task has at least one success criterion
    - Verify every agentRole maps to a currently injected predefined role or a custom role created in this plan
-   - Verify critical path is reasonable (no single task > 30% of total time)
+   - Verify critical path is reasonable and recovery is observable; do not use an arbitrary duration percentage as a correctness rule
    - Check for single points of failure (one agent blocking everything)
+   - Verify alternatives are materially distinct and the selected route has explicit falsification conditions
    -> Trigger: validation passes -> OUTPUT
-   -> Trigger: validation fails -> DECOMPOSE (revise)
+   -> Trigger: validation fails -> EXPLORE or DECOMPOSE as appropriate
 
-5. OUTPUT: Produce PlannerOutput JSON
-   - Include analysis, strategy, customRoles, tasks, risks, estimates
+6. OUTPUT: Produce PlannerOutput JSON
+   - Include analysis, selected strategy/path, alternatives, decisionFactors, preMortem, falsificationConditions, customRoles, tasks, risks and estimates
    -> Done
 </state_machine>
 
@@ -364,10 +403,11 @@ ${adaptiveContext}
 <planner_functions>
 These are planning functions, not claims that the ABOS runtime can currently execute every resulting task:
 - Decompose a goal into a task graph with dependency ordering
+- Compare materially distinct strategic routes before selecting one for decomposition
 - Assign tasks only to one of the ${availableRoleCount} predefined roles actually injected above, or to a justified custom role defined in the plan
 - Define new custom agent roles with scoped system prompts and tool permissions
 - Estimate costs using supplied evidence and clearly identified assumptions
-- Identify risks and propose mitigations
+- Identify risks, pre-mortem failure modes and falsification conditions
 - Recommend objective termination only when authoritative evidence proves the objective itself prohibited/impossible or an authorized cancellation applies; otherwise preserve UNKNOWN/UNAVAILABLE/BLOCKED
 - Reference prior workspace outputs supplied in context as inputs to new tasks
 - Split large tasks into parallelizable sub-tasks when execution evidence supports that structure
@@ -383,6 +423,7 @@ You CANNOT:
 - Make commitments about timelines to external parties
 - Override budget limits or treasury policies
 - Create an execution task that assumes a capability is available when the supplied runtime evidence does not support that claim; use probe/discovery/acquisition work instead
+- Materialize or execute an unselected alternative; alternatives are reasoning candidates only until a later review selects one
 </constraints>
 
 <decomposition_rules>
@@ -459,14 +500,31 @@ Respond with a JSON object matching the PlannerOutput schema:
 \`\`\`json
 {
   "analysis": "2-3 sentence situation analysis",
-  "strategy": "1-2 sentence chosen approach and why",
+  "strategy": "1-2 sentence selected approach and why it wins on the decision factors",
   "path": {
-    "hypothesis": "Why this strategic route should achieve the objective",
+    "hypothesis": "Why this selected strategic route should achieve the objective",
     "assumptions": ["Material assumption 1"],
     "requiredCapabilities": ["capability requirement"],
     "preferredEnvironment": "local | conway | aws | another registered environment | null",
     "expectedOutcome": "Observable result that would validate this path"
   },
+  "alternatives": [
+    {
+      "label": "materially-distinct-route",
+      "strategy": "Competing approach",
+      "hypothesis": "Why this alternative could achieve the same objective",
+      "assumptions": ["Alternative-specific assumption"],
+      "requiredCapabilities": ["different or differently composed capability"],
+      "preferredEnvironment": "local | conway | aws | another registered environment | null",
+      "sequence": ["first strategic step", "second strategic step"],
+      "expectedOutcome": "Observable result for the same objective",
+      "estimatedCostCents": 60000,
+      "discriminants": ["Evidence/value/risk condition that distinguishes this route from the selected path"]
+    }
+  ],
+  "decisionFactors": ["Why current evidence favors the selected route over each alternative"],
+  "preMortem": ["Concrete way the selected route could fail and why"],
+  "falsificationConditions": ["Observation that would invalidate the selected route and force review/replan"],
   "customRoles": [
     {
       "name": "role-name",
@@ -516,6 +574,7 @@ NEVER:
 - Assign revenue-critical tasks to unvalidated custom roles
 - Create long-running plans without evidence, checkpoints, and recovery points
 - Ignore prior failed attempts at the same goal (learn from history)
+- Treat a renamed strategy/hypothesis as a materially different alternative when capability, environment, assumptions and sequence are unchanged
 </anti_patterns>
 
 <pre_action_mandates>
@@ -527,6 +586,8 @@ Before producing ANY plan:
 5. If no existing role fits, prefer capability composition; create a custom role when it materially improves execution.
 6. If goal involves external services: include connectivity/authorization validation when relevant.
 7. Review critical-path risk and add checkpoints where failure recovery would otherwise be expensive.
+8. Compare at least one materially distinct alternative before selecting a route; document the discriminating factors.
+9. State what would falsify the selected route before any irreversible execution.
 </pre_action_mandates>
 
 <circuit_breakers>
@@ -547,6 +608,20 @@ export function validatePlannerOutput(output: unknown): PlannerOutput {
   const analysis = requiredString(record.analysis, "analysis");
   const strategy = requiredString(record.strategy, "strategy");
   const pathIntent = record.path === undefined ? undefined : validatePlannerPathIntent(record.path);
+  const alternatives = record.alternatives === undefined
+    ? undefined
+    : requiredArray(record.alternatives, "alternatives").map((entry, index) =>
+        validatePlannerAlternative(entry, `alternatives[${index}]`),
+      );
+  const decisionFactors = record.decisionFactors === undefined
+    ? undefined
+    : requiredStringArray(record.decisionFactors, "decisionFactors");
+  const preMortem = record.preMortem === undefined
+    ? undefined
+    : requiredStringArray(record.preMortem, "preMortem");
+  const falsificationConditions = record.falsificationConditions === undefined
+    ? undefined
+    : requiredStringArray(record.falsificationConditions, "falsificationConditions");
 
   const customRolesValue = requiredArray(record.customRoles, "customRoles");
   const customRoles = customRolesValue.map((entry, index) =>
@@ -581,6 +656,10 @@ export function validatePlannerOutput(output: unknown): PlannerOutput {
     analysis,
     strategy,
     ...(pathIntent ? { path: pathIntent } : {}),
+    ...(alternatives ? { alternatives } : {}),
+    ...(decisionFactors ? { decisionFactors } : {}),
+    ...(preMortem ? { preMortem } : {}),
+    ...(falsificationConditions ? { falsificationConditions } : {}),
     customRoles,
     tasks,
     risks,
@@ -611,6 +690,35 @@ function validatePlannerPathIntent(value: unknown): PlannerPathIntent {
     requiredCapabilities,
     preferredEnvironment,
     expectedOutcome: requiredString(record.expectedOutcome, "path.expectedOutcome"),
+  };
+}
+
+function validatePlannerAlternative(value: unknown, path: string): PlannerAlternative {
+  const record = asRecord(value, path);
+  const assumptions = requiredStringArray(record.assumptions, `${path}.assumptions`);
+  const requiredCapabilities = requiredStringArray(
+    record.requiredCapabilities,
+    `${path}.requiredCapabilities`,
+  );
+  const preferredEnvironment =
+    record.preferredEnvironment === null || record.preferredEnvironment === undefined
+      ? null
+      : requiredString(record.preferredEnvironment, `${path}.preferredEnvironment`);
+
+  return {
+    label: requiredString(record.label, `${path}.label`),
+    strategy: requiredString(record.strategy, `${path}.strategy`),
+    hypothesis: requiredString(record.hypothesis, `${path}.hypothesis`),
+    assumptions,
+    requiredCapabilities,
+    preferredEnvironment,
+    sequence: requiredStringArray(record.sequence, `${path}.sequence`),
+    expectedOutcome: requiredString(record.expectedOutcome, `${path}.expectedOutcome`),
+    estimatedCostCents: requiredNonNegativeNumber(
+      record.estimatedCostCents,
+      `${path}.estimatedCostCents`,
+    ),
+    discriminants: requiredStringArray(record.discriminants, `${path}.discriminants`),
   };
 }
 
@@ -648,7 +756,7 @@ function buildPlannerUserPrompt(params: {
         result: params.failedTask.result,
         metadata: params.failedTask.metadata,
       },
-      note: "Replan around this failure. Preserve successful work where possible.",
+      note: "Replan around this failure. Preserve successful work where possible and choose a materially different route unless evidence shows conditions changed.",
     };
   }
 
