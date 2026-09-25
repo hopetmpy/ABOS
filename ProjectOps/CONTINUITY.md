@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-025
 Active-Segment: continuity/C0021.md
-Active-Intervention: P025_STRATEGIC_COGNITION_V2 — EN_EJECUCIÓN / DECISION_READY / PARCIAL
+Active-Intervention: P025_STRATEGIC_COGNITION_V2 — EN_EJECUCIÓN / DECISION_READY / CORRECTION_REQUIRED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,10 +15,10 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p025-strategic-cognition-v2
 Host-Head-At-Audit-Open: 8bae92562566e619be905906a2ff00835cf28f1a
-Last-Reconciled-Host-Head: eda8c6fa519e9f4feac906c59c3fe46b124c9169
+Last-Reconciled-Host-Head: 92f184340595164a304c7b7de80d270fcaf5062c
 Observed-Main-Head: a3041eb9cc96d16b885e7a17aba5cfb263de4453
-Last-Product-Head: eda8c6fa519e9f4feac906c59c3fe46b124c9169
-Last-Product-CI: 36083178870 — SUCCESS 8/8
+Last-Product-Head: 92f184340595164a304c7b7de80d270fcaf5062c
+Last-Product-CI: 36084255766 — SUCCESS 8/8
 Last-Completed-Plan: P-024
 Last-Completed-Merge: 8bae92562566e619be905906a2ff00835cf28f1a
 Last-Completed-CI: 36072559876 — SUCCESS 8/8
@@ -80,22 +80,61 @@ El CI exacto del HEAD `eda8c6fa519e9f4feac906c59c3fe46b124c9169`, run `360831788
 
 Conclusión del gate: la hipótesis “el nuevo boundary estratégico rompe el runtime probado” no obtuvo soporte en esta ronda; el HARD de regressions stale queda resuelto. Esto **no** cierra P-025.
 
-## Gap material restante — P-025
+## Extensión estratégica first-class — 2026-09-24
 
-La reauditoría contra el Definition of Done encontró un gap distinto y material:
-- `PlannerOutput` representa un único `path` candidato elegido;
-- `strategic-review` evalúa sustantivamente ese candidato, capability/environment/simulation/adaptive evidence y UNKNOWN, pero no recibe ni compara alternativas estratégicas first-class;
-- no existe en el contract de planning una representación explícita de motivos discriminantes entre rutas ni de pre-mortem/falsificación pre-acción;
-- Adaptive Path **sí** posee las primitives canónicas que deben reutilizarse: `PathCandidate`, signatures/novelty, possibility-space, beliefs, assumptions y falsification conditions;
-- P-024 Simulation Workspace sigue siendo evidencia consumible y no debe convertirse en una segunda planning authority.
+La reauditoría contra el Definition of Done encontró un gap distinto y material: `PlannerOutput` representaba un único `path` candidato elegido y `strategic-review` no recibía alternatives/discriminants/pre-mortem/falsification first-class. Adaptive Path ya poseía las primitives canónicas (`PathCandidate`, signatures/novelty, possibility-space, beliefs, assumptions y falsification conditions), por lo que crear otra authority fue rechazado.
 
-Hipótesis discriminadas para este gap:
-- `NO_CHANGE_AFTER_CI`: FALSADA; CI verde demuestra consistencia del boundary actual, no satisfacción del DoD de alternatives/discriminants/pre-mortem.
-- `EXTEND_EXISTING_PLANNER_REVIEW_WITH_ADAPTIVE_PRIMITIVES`: CONFIRMADA como dirección de menor duplicación; ownership continúa en Planner/Strategic Review + Adaptive Path.
-- `CREATE_NEW_STRATEGIC_AUTHORITY`: RECHAZADA; duplicaría ownership ya existente.
-- `PROMOTE_SIMULATION_WORKSPACE_TO_PLANNER`: RECHAZADA; contradice la separación de responsabilidades P-024/P-025.
+Hipótesis discriminadas:
+- `NO_CHANGE_AFTER_CI`: FALSADA; CI verde sólo demostraba consistencia del boundary anterior, no satisfacción del DoD estratégico.
+- `EXTEND_EXISTING_PLANNER_REVIEW_WITH_ADAPTIVE_PRIMITIVES`: CONFIRMADA.
+- `CREATE_NEW_STRATEGIC_AUTHORITY`: RECHAZADA.
+- `PROMOTE_SIMULATION_WORKSPACE_TO_PLANNER`: RECHAZADA; P-024 sigue siendo evidence consumible.
 
-Decision gate: **DECISION_READY** para extensión acotada del contract Planner/Strategic Review, reutilizando Adaptive Path para identidad/novelty de rutas y P-024 únicamente como evidence. Invariantes: no materializar alternatives; no convertir alternatives en Tasks; no seleccionar una ruta por threshold fijo; no inventar disponibilidad; no degradar UNKNOWN; no crear segunda truth source; no saltar capability/auth/environment boundaries.
+Implementación:
+- `d43095e96ffb20b1d011458efcbe46380e0f075d`: PlannerOutput/Planner prompt incorporan alternatives, decisionFactors, preMortem y falsificationConditions como reasoning candidates no ejecutables;
+- `edd33e7e9b843843f83dd5e38709ba542a901285`: Strategic Review exige esos elementos y rechaza alternativas nominales usando identidad Adaptive Path más diferencia estructural observable en assumptions/capabilities/environment/sequence;
+- `3898fb9bb96d9b7712840f741dfb60cec155fac7`, `5355c6d7f5a6b1f73f0bcfe87ac68bf50f02b8b9`, `92f184340595164a304c7b7de80d270fcaf5062c`: integration/plan-mode/canonical orchestrator acceptance comprueban persistencia del reasoning, rechazo de ruta renombrada, ausencia de pre-mortem/falsifiers y que sólo la ruta elegida cruza materialización.
+
+Adversarial finding resuelto en diseño: la novelty canónica por signature exacta no bastaba por sí sola contra una estrategia renombrada, porque strategy/hypothesis forman parte de la firma. Review ahora exige diferencia operacional estructural y no sólo diferente hash/texto.
+
+El CI exacto del HEAD `92f184340595164a304c7b7de80d270fcaf5062c`, run `36084255766`, terminó **SUCCESS 8/8**:
+- ProjectOps integrity PASS;
+- typecheck/build/full tests/security tests PASS Node 22 y Node 24;
+- Windows regressions PASS Node 22/24;
+- public-distribution smoke PASS Node 22/24;
+- security-audit PASS;
+- rebrand-integrity PASS.
+
+## Capability/Judgment gate — auditoría
+
+La auditoría del producer real de creator authorization no confirmó human-gating ficticio en el ruleset default actual:
+- `PolicyEngine` sólo eleva a `quarantine` si una regla concreta produce esa acción;
+- `createDefaultRules()` actualmente agrega runtime-truth, validation, command-safety, path-protection, financial, authority y rate-limit rules; las reglas inspeccionadas producen `deny` o `allow/null`, no quarantine genérico;
+- `financial.ts` declara explícitamente que un monto no es creator-authority evidence, conserva caps como guards transitorios de denegación y difiere juicio treasury contextual a P-030;
+- authority/path/runtime rules representan boundaries concretos (source authority, immutable/sensitive path, verified runtime) en vez de escalar dificultad/riesgo genérico a creator.
+
+Conclusión actual: `H_GATE_NO_CHANGE` CONFIRMADA para el default ruleset inspeccionado; `H_GATE_CORRECT_GENERIC_QUARANTINE` FALSADA hasta evidencia contraria. Creator-signed authorization permanece como lifecycle válido para una regla futura/externa que represente boundary real o manual oversight, no como fallback automático de P-025. No se modifica policy source en esta unidad.
+
+## Defecto adversarial de restart/idempotencia — DECISION_READY
+
+La auditoría del boundary material de `handleStrategicReview()` encontró un defecto material independiente del CI verde:
+1. review/novelty se aprueban;
+2. se cancelan Tasks anteriores;
+3. se actualiza goal strategy;
+4. Adaptive Path selecciona/persiste el path;
+5. `decomposeGoal()` materializa Tasks;
+6. bindings se persisten;
+7. el handler retorna `phase=executing`;
+8. **recién fuera del handler** `tick()` persiste `orchestrator.state`.
+
+Las operaciones 2-6 no forman una única transacción junto con el cambio durable de phase. Una caída/error después de materializar pero antes de `saveStrategicState(next)` puede dejar path/Tasks/bindings persistidos mientras el state durable continúa en `plan_review`. En restart, la novelty puede considerar el path ya seleccionado/equivalente y rechazar el review, dejando residuos materializados fuera del estado causal esperado.
+
+Hipótesis:
+- `NO_CHANGE_IDEMPOTENCY`: FALSADA por ordering observable del source.
+- `ADD_SECOND_RECOVERY_AUTHORITY`: RECHAZADA; duplicaría state/recovery.
+- `ATOMIC_REVIEW_COMMIT`: CONFIRMADA como corrección mínima: cancel/supersede + goal strategy + selected path/belief + Task decomposition + bindings + review receipt/state `executing` deben comprometerse atómicamente en la DB canónica.
+
+Decision gate: **DECISION_READY**. Invariantes: ningún Task/selected path debe sobrevivir si el commit falla; un commit exitoso debe dejar `orchestrator.state=executing` durable antes de exponer éxito; no crear una segunda authority/receipt si el state+path+bindings canónicos bastan; conservar fail-closed y novelty recheck inmediatamente antes del commit.
 
 ## Estado canónico actual
 
@@ -103,7 +142,7 @@ Decision gate: **DECISION_READY** para extensión acotada del contract Planner/S
 - P-004: PLANIFICADO — track documental transversal/final.
 - P-005: PLANIFICADO — acceptance LIVE incremental.
 - P-006..P-024: HECHO.
-- P-025: EN_EJECUCIÓN / DECISION_READY / PARCIAL; gate de regressions corregido y CI exacto verde, pero faltan alternatives/discriminants/pre-mortem/falsification first-class y su acceptance.
+- P-025: EN_EJECUCIÓN / DECISION_READY / CORRECTION_REQUIRED; alternatives/discriminants/pre-mortem/falsification están implementados y verdes, capability/human-gate default no requiere cambio, pero el atomic review commit todavía no está corregido/validado.
 - P-026..P-036: usar estado explícito de `ProjectOps/PLAN.md`; no se adelantan mientras P-025 siga no terminal.
 
 ## P-024 — cierre verificado
@@ -126,7 +165,7 @@ La auditoría original alcanzó `DECISION_READY` con:
 - `UNIFY_STRATEGIC_DECISION_FLOW`: CONFIRMADO;
 - `CREATE_NEW_STRATEGIC_AUTHORITY`: FALSADO.
 
-Decisión canónica: **CORRECT + UNIFY + targeted EXTEND** sobre authorities existentes. Esa dirección sigue vigente; la evidencia nueva no cambia intención, arquitectura, dependencias ni Definition of Done, por lo que `PLAN.md`/`plan/P-025.md` no requieren cambio en esta reconciliación.
+Decisión canónica: **CORRECT + UNIFY + targeted EXTEND** sobre authorities existentes. Esa dirección sigue vigente; la evidencia nueva no cambia intención, arquitectura, dependencias ni Definition of Done, por lo que `PLAN.md`/`plan/P-025.md` no requieren cambio.
 
 Invariantes: objective != method; UNKNOWN first-class; no bypass de auth/prohibition; no human gate ficticio para `GOVERNABLE_RISK`; no autoapproval/consensus ficticio; P-024 simulation es capacidad consumible, no planner; no segunda fuente de verdad por conveniencia; Task/transport/idempotence/recovery existentes deben preservarse.
 
@@ -134,7 +173,7 @@ El detalle de hipótesis, causalidad, ownership y decisión original vive en `co
 
 ## Siguiente punto verificable
 
-Extender de forma compatible el contract de planning/review para que una decisión compleja pueda transportar al menos una alternativa materialmente distinta, sus discriminantes y condiciones de falsación/pre-mortem; comparar identidad de rutas reutilizando Adaptive Path/signatures; asegurar que sólo la ruta elegida pueda cruzar el boundary de materialización. Añadir acceptance negativa para alternativas equivalentes/nominales y ausencia de pre-mortem en review complejo. Después ejecutar CI exacto completo y reauditar contra el DoD restante. No avanzar a P-026 mientras P-025 siga no terminal.
+Corregir el commit de review/materialización para que selected path + supersession + Task graph + bindings + durable `orchestrator.state=executing` sean atómicos. Añadir fault-injection/restart acceptance que demuestre rollback total ante fallo intermedio y ausencia de double materialization/residuos. Después ejecutar CI exacto completo y continuar la auditoría del DoD P-025; no avanzar a P-026 mientras P-025 siga no terminal.
 
 ## Política de rotación
 
