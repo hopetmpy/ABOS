@@ -15,7 +15,7 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p025-strategic-cognition-v2
 Host-Head-At-Audit-Open: 8bae92562566e619be905906a2ff00835cf28f1a
-Last-Reconciled-Host-Head: 7b235824a2a4dc053717292aee29bd60a753ae5a
+Last-Reconciled-Host-Head: ac0e0785e9b0bd4d27301f71119e92b58ddef8c4
 Observed-Main-Head: 815b932b3b1f08091fefca9886cc1934d4ac186a
 Last-Product-Head: 8bae92562566e619be905906a2ff00835cf28f1a
 Last-Product-CI: 36072559876 — SUCCESS 8/8
@@ -31,12 +31,26 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 ## Autoridad operativa
 
-- `AGENTS.md`: único kernel/scheduler conductual.
-- CONTINUITY + segmento activo: estado vivo/recovery.
-- PLAN + módulo activo: intención/Definition of Done.
+- `AGENTS.md`: **única authority de comportamiento/cadencia**. Decide cómo encadenar, reconciliar y entregar; ninguna P-xxx, continuity, plan, verifier o reference document lo sustituye como protocolo del agente de desarrollo.
+- CONTINUITY + segmento activo: **única authority del estado operativo vivo/recovery** y del siguiente punto verificable registrado.
+- PLAN + módulo activo: blueprint/intención/Definition of Done; no es scheduler ni almacén alternativo de estado vivo.
 - PROJECT: identidad/invariantes estables.
 - Git/source/runtime/tests: realidad observable.
 - Operating Protocol / Adaptive Reasoning: authorities técnicas subordinadas, no scheduler.
+
+Si PLAN/módulo contiene un snapshot histórico que contradice CONTINUITY/Git/evidencia actual, `AGENTS.md` reconcilia la contradicción usando estas authorities: el estado vivo se corrige en CONTINUITY/segmento; el módulo conserva únicamente blueprint/criterios y no obliga a repetir trabajo ya demostrado.
+
+## Reconciliación de authority — 2026-09-24
+
+Se confirmó una contradicción real en P-025: CONTINUITY/C0021 ya acreditaban `DECISION_READY / IMPLEMENTATION_PENDING`, mientras `plan/P-025.md` todavía persistía `Decision-State: AUDIT_OPEN / NOT_DECISION_READY` y un bloque de auditoría redactado como instrucción de reanudación. Eso hacía que el routing correcto `AGENTS → CONTINUITY → PLAN` reintrodujera trabajo de auditoría ya cerrado.
+
+Corrección aplicada sin tocar `AGENTS.md` ni ZeroIQ:
+- `plan/P-025.md` quedó como blueprint técnico, con `Dynamic-State-Authority: ProjectOps/CONTINUITY.md` y `Execution-Scheduler: AGENTS.md`;
+- se retiró `Decision-State` del módulo de plan y las instrucciones stale fueron convertidas en criterios de auditoría condicionales;
+- `PLAN.md` dejó de declarar “audit abierto” para P-025 y explicita que el estado operativo/siguiente punto vive sólo en CONTINUITY/segmento;
+- `scripts/projectops-integrity-verify.mjs` sigue siendo un verifier estructural, no scheduler, y ahora rechaza un módulo activo que intente persistir `Decision-State` o que no delegue live state/cadencia a CONTINUITY/AGENTS.
+
+Head de reconciliación previo a este checkpoint: `ac0e0785e9b0bd4d27301f71119e92b58ddef8c4`.
 
 ## Estado canónico actual
 
