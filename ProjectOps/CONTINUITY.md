@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-026
 Active-Segment: continuity/C0022.md
-Active-Intervention: P026_COGNITIVE_COST_CONTROLLER — EN_EJECUCIÓN / DECISION_READY / IMPLEMENTATION_PENDING
+Active-Intervention: P026_COGNITIVE_COST_CONTROLLER — EN_EJECUCIÓN / SOURCE_COMPLETE / E3_BRANCH_GREEN / INTEGRATION_PENDING
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,10 +15,10 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p026-cognitive-cost-controller
 Host-Head-At-Audit-Open: 8f57ae64971bbf369d5bcfc387a3352e97b91426
-Last-Reconciled-Host-Head: 466e71eaa7f453aa2dc2b4d5ed22ab919aa5047f
+Last-Reconciled-Host-Head: c6b999a3be0782083e1d11a1b23e7c0513b1e505
 Observed-Main-Head: 13be4447507a5cac242ddb29a0008fb1ddbb3e94
-Last-Product-Head: 8f57ae64971bbf369d5bcfc387a3352e97b91426
-Last-Product-CI: P-026_SOURCE_UNCHANGED_AT_DECISION_GATE
+Last-Product-Head: a1b5975dafc1976039b0b1b9daab55e2df5bcc4e
+Last-Product-CI: 36189024714 — SUCCESS 8/8
 Last-Completed-Plan: P-025
 Last-Completed-Merge: 8f57ae64971bbf369d5bcfc387a3352e97b91426
 Last-Completed-CI: 36101081385 — SUCCESS 8/8
@@ -51,37 +51,57 @@ Evidencia exacta:
 - PR #68 merged como `8f57ae64971bbf369d5bcfc387a3352e97b91426`;
 - exact-main CI `36101081385`: SUCCESS 8/8.
 
-La historia material, decisiones y adversarial findings de P-025 quedan archivados en `continuity/C0021.md`. P-037/P-038/P-039 permanecen como gaps históricos planificados; no fueron convertidos retroactivamente en dependencias de P-025.
+La historia material, decisiones y adversarial findings de P-025 quedan archivados en `continuity/C0021.md`.
 
 ## P-026 — estado vivo
 
 P-026 se abrió desde el `main` exacto verde `8f57ae64971bbf369d5bcfc387a3352e97b91426` en `abos/p026-cognitive-cost-controller`.
 
-Dependencias del módulo demostradas HECHO: P-013, P-019, P-020, P-021, P-023 y P-025.
+Dependencias demostradas HECHO: P-013, P-019, P-020, P-021, P-023 y P-025.
 
-Antes del gate de decisión se reconcilió la branch P-026 con el `AGENTS.md` vigente de `main` `13be4447507a5cac242ddb29a0008fb1ddbb3e94`. El merge/reconciliation commit `49f8a7c8d672973a754a7865c8b020fb542ce4d3` preservó ProjectOps P-026 y no modificó product source.
+La branch se reconcilió con el `AGENTS.md` vigente de `main` `13be4447507a5cac242ddb29a0008fb1ddbb3e94` mediante commit `49f8a7c8d672973a754a7865c8b020fb542ce4d3`, sin modificar producto en esa reconciliación.
 
-El owner/caller/state/test audit queda completo y registrado con detalle en `continuity/C0022.md`:
-- `InferenceRouter`/`InferenceBudgetTracker` ya poseen model/provider selection, model lock/fallback y inference ledger/budgets;
-- Cognitive Fabric ya posee retrieval/context budgets y relevancia, pero hoy enriquece el prompt antes de una llamada de inference; no decide una ruta autónoma final;
-- Skill Evolution posee lifecycle/evaluations evidence-backed;
-- Adaptive Path/Prediction Learning poseen path/outcome learning estratégico;
-- Simulation Workspace posee cost budget, spent cost, information gain, lesson y decision impact;
-- Evidence Fabric + `inference_costs` ya proporcionan persistence suficiente para receipts/learning derivados sin una nueva database authority;
-- strategic orchestration demuestra boundaries reales model/no-model por encima del router.
-
-Hipótesis discriminadas:
+Owner/caller/state/test audit y discriminación de hipótesis completos en `continuity/C0022.md`:
 - `H0 NO_CHANGE`: FALSADA;
 - `H1 EXTEND_INFERENCE_ROUTER_ONLY`: FALSADA;
 - `H2 CREATE_COGNITIVE_COST_CONTROLLER_OVER_EXISTING_AUTHORITIES`: CONFIRMADA;
-- `H3 UNIFY_OUTCOME_COST_LEARNING_WITH_EXISTING_EVIDENCE`: CONFIRMADA y combinada con H2;
+- `H3 UNIFY_OUTCOME_COST_LEARNING_WITH_EXISTING_EVIDENCE`: CONFIRMADA;
 - `H4 CREATE_PARALLEL_COST_OR_MEMORY_OR_MODEL_AUTHORITY`: RECHAZADA.
 
-Decision-State: `DECISION_READY / IMPLEMENTATION_PENDING`.
 Decision: `CREATE_NARROW_CONTROLLER + REUSE_EXISTING_EVIDENCE/AUTHORITIES`.
 
-El controller autorizado será únicamente una authority de decisión/orquestación: compara candidates existentes, preserva UNKNOWN y quality evidence, registra rationale/execution/outcome en Evidence Fabric y delega. No será executor, model/provider router, inference ledger, memory/skill/simulation owner ni database owner. `src/state/schema.ts` permanece `NO_CHANGE` salvo evidencia falsadora nueva.
+## P-026 — implementación verificada en branch
 
-Una alternativa más barata no podrá reclamar ahorro ni desplazar una baseline sólo por precio: requiere outcome/quality comparable. Savings materiales requieren baseline comparable + coste observado + quality-valided success. Provider/model lock, fallback y budgets permanecen authority de inference fabric.
+State: `SOURCE_COMPLETE / E3_BRANCH_GREEN / INTEGRATION_PENDING`.
 
-NEXT_ELIGIBLE_WORK: implementar el controller estrecho y wiring mínimo en orchestration inference + strategic classification/review; añadir adversarial tests de quality regression, UNKNOWN, restart/idempotency, escalation/de-escalation y preservación de model/provider/budget boundaries; después ejecutar typecheck/build/tests/CI pertinentes.
+Source-complete product HEAD: `a1b5975dafc1976039b0b1b9daab55e2df5bcc4e`.
+Exact source-complete CI: `36189024714` — **SUCCESS 8/8**.
+Observed main remains `13be4447507a5cac242ddb29a0008fb1ddbb3e94`; P-026 branch is ahead and 0 behind.
+
+Implementado:
+- nuevo `CognitiveCostController` sobre Evidence Fabric e `inference_costs`, sin schema/ledger/router paralelo;
+- candidates `memory | deterministic | skill | simulation | inference` con UNKNOWN preservado;
+- causal decision/execution/outcome receipts, restart learning e idempotencia;
+- orchestration tier adaptation sobre el router canónico, preservando provider/model lock/fallback/budgets;
+- strategic model/no-model receipts y downstream quality validation en strategic review;
+- main-turn cognitive preflight antes de inference, sin convertir memoria/skills/tools contextuales en falsos direct-answer routes;
+- tests adversariales de UNKNOWN, quality regression, downgrade/escalation, restart, idempotency, no-fake-savings, inference-ledger reuse y strategic quality boundary.
+
+Adversarial correction material: se eliminaron defaults numéricos de quality/min samples que no tenían authority. Sin policy explícita de dominio, el controller usa evidencia validada y no empeora quality comparable; no presenta una threshold estática como inteligencia adaptativa.
+
+Validación exacta `36189024714`:
+- Linux Node 22/24: ProjectOps integrity, typecheck, build, tests y security tests PASS;
+- Windows Node 22/24: typecheck, build, smoke/state persistence, P-016 y portability PASS;
+- public-distribution-smoke Node 22/24 PASS;
+- security-audit PASS;
+- rebrand-integrity PASS.
+
+No demostrado aún:
+- integration/merge en `main`;
+- exact-main CI post-merge;
+- LIVE/production material savings;
+- direct memory-only/skill-only/tool-only answer en main ReAct, porque sus contracts actuales no ofrecen binding directo quality-validado; esos candidatos permanecen UNKNOWN cuando sólo enriquecen inference.
+
+`src/state/schema.ts` permanece `NO_CHANGE`. InferenceRouter continúa como único owner de provider/model/model lock/fallback/budgets. Cognitive Fabric, Skill Evolution, Adaptive/Prediction y Simulation Workspace mantienen sus authorities.
+
+NEXT_ELIGIBLE_WORK: validar el nuevo ProjectOps checkpoint exact-head CI; abrir/integrar PR P-026 a `main` sólo si permanece verde; validar exact-main CI; después reconciliar estado terminal de P-026. No abrir P-027 antes de demostrar esas dependencias.
