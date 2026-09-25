@@ -1,6 +1,8 @@
 import type { CapabilityResolution } from "../capabilities/model.js";
 import type { EnvironmentSnapshot } from "../environments/types.js";
-import type { PlannerOutput } from "./planner.js";
+import { pathSignature } from "../intelligence/path-signature.js";
+import type { PathCandidate } from "../intelligence/types.js";
+import type { PlannerAlternative, PlannerOutput } from "./planner.js";
 import { validatePlannerOutput } from "./planner.js";
 
 export type StrategicReviewDisposition = "approve" | "revise" | "unknown";
@@ -43,6 +45,21 @@ function unique(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
+function normalizedSet(values: readonly string[]): string[] {
+  return [...new Set(values.map(normalized).filter(Boolean))].sort();
+}
+
+function sameStringSet(left: readonly string[], right: readonly string[]): boolean {
+  const a = normalizedSet(left);
+  const b = normalizedSet(right);
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+function sameSequence(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => normalized(value) === normalized(right[index]));
+}
+
 function sameRequirement(left: string, right: string): boolean {
   return normalized(left) === normalized(right);
 }
@@ -55,6 +72,66 @@ function matchingEnvironment(
   return snapshots.find((snapshot) =>
     normalized(snapshot.id) === expected || normalized(snapshot.label) === expected
   );
+}
+
+function selectedCandidate(plan: PlannerOutput): PathCandidate | null {
+  if (!plan.path) return null;
+  return {
+    goalId: "strategic-review",
+    hypothesis: plan.path.hypothesis,
+    strategy: plan.strategy,
+    assumptions: [...plan.path.assumptions],
+    requiredCapabilities: [...plan.path.requiredCapabilities],
+    environment: plan.path.preferredEnvironment,
+    sequence: plan.tasks.map((task) => task.title),
+    expectedOutcome: plan.path.expectedOutcome,
+    expectedCostCents: plan.estimatedTotalCostCents,
+    evidence: [],
+  };
+}
+
+function alternativeCandidate(alternative: PlannerAlternative): PathCandidate {
+  return {
+    goalId: "strategic-review",
+    hypothesis: alternative.hypothesis,
+    strategy: alternative.strategy,
+    assumptions: [...alternative.assumptions],
+    requiredCapabilities: [...alternative.requiredCapabilities],
+    environment: alternative.preferredEnvironment,
+    sequence: [...alternative.sequence],
+    expectedOutcome: alternative.expectedOutcome,
+    expectedCostCents: alternative.estimatedCostCents,
+    evidence: [],
+  };
+}
+
+/**
+ * Deliberately excludes hypothesis/strategy wording and raw cost. A renamed
+ * route or a different price estimate is not by itself a materially different
+ * method. At least one operational dimension must differ.
+ */
+function materialRouteDifferences(
+  plan: PlannerOutput,
+  alternative: PlannerAlternative,
+): string[] {
+  if (!plan.path) return [];
+  const differences: string[] = [];
+  if (!sameStringSet(plan.path.assumptions, alternative.assumptions)) {
+    differences.push("assumptions");
+  }
+  if (!sameStringSet(plan.path.requiredCapabilities, alternative.requiredCapabilities)) {
+    differences.push("capabilities");
+  }
+  if (
+    normalized(plan.path.preferredEnvironment ?? "")
+      !== normalized(alternative.preferredEnvironment ?? "")
+  ) {
+    differences.push("environment");
+  }
+  if (!sameSequence(plan.tasks.map((task) => task.title), alternative.sequence)) {
+    differences.push("sequence");
+  }
+  return differences;
 }
 
 /**
@@ -110,6 +187,77 @@ export function assessStrategicPlan(
       evidence.push(
         `Declared assumptions: ${plan.path.assumptions.join(" ; ")}`,
       );
+    }
+
+    if (!plan.decisionFactors || plan.decisionFactors.length === 0) {
+      critique.push(
+        "Complex strategic review requires explicit decisionFactors that discriminate the selected route from alternatives.",
+      );
+    } else {
+      evidence.push(`Decision factors: ${plan.decisionFactors.join(" ; ")}`);
+    }
+
+    if (!plan.preMortem || plan.preMortem.length === 0) {
+      critique.push(
+        "Complex strategic review requires a pre-mortem before the selected route may execute.",
+      );
+    } else {
+      evidence.push(`Pre-mortem: ${plan.preMortem.join(" ; ")}`);
+    }
+
+    if (!plan.falsificationConditions || plan.falsificationConditions.length === 0) {
+      critique.push(
+        "Complex strategic review requires explicit falsification conditions for the selected route.",
+      );
+    } else {
+      evidence.push(
+        `Falsification conditions: ${plan.falsificationConditions.join(" ; ")}`,
+      );
+    }
+
+    const selected = selectedCandidate(plan);
+    const selectedSignature = selected ? pathSignature(selected) : null;
+    const alternativeSignatures = new Set<string>();
+    if (!plan.alternatives || plan.alternatives.length === 0) {
+      critique.push(
+        "Complex strategic review requires at least one materially distinct alternative before commitment.",
+      );
+    } else {
+      plan.alternatives.forEach((alternative, index) => {
+        const label = alternative.label || `alternative-${index + 1}`;
+        if (alternative.discriminants.length === 0) {
+          critique.push(
+            `Alternative "${label}" has no discriminating evidence/value/risk factors.`,
+          );
+        }
+        if (alternative.sequence.length === 0) {
+          critique.push(`Alternative "${label}" has no strategic sequence.`);
+        }
+
+        const signature = pathSignature(alternativeCandidate(alternative));
+        if (selectedSignature && signature === selectedSignature) {
+          critique.push(
+            `Alternative "${label}" is an exact duplicate of the selected Adaptive Path identity.`,
+          );
+        }
+        if (alternativeSignatures.has(signature)) {
+          critique.push(
+            `Alternative "${label}" duplicates another alternative path identity.`,
+          );
+        }
+        alternativeSignatures.add(signature);
+
+        const materialDifferences = materialRouteDifferences(plan, alternative);
+        if (materialDifferences.length === 0) {
+          critique.push(
+            `Alternative "${label}" is only nominally different: capability, environment, assumptions and sequence are unchanged.`,
+          );
+        } else {
+          evidence.push(
+            `Alternative "${label}" material_differences=${materialDifferences.join(",")} ; discriminants=${alternative.discriminants.join(" | ")}.`,
+          );
+        }
+      });
     }
 
     const taskCapabilities = unique(
