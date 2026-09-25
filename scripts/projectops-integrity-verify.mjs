@@ -57,7 +57,7 @@ for(const retired of [
   "scripts/projectops-integrity-verify.test.mjs",
 ])if(existsSync(at(retired)))fail(`retired governance artifact still exists: ${retired}`);
 
-// AGENTS is the only behavior/cadence authority. This verifier checks that boundary;
+// AGENTS is a behavior protocol/router. This verifier checks only that boundary;
 // it does NOT prescribe cadence, phase transitions, handoff rules, headings or wording.
 const agents=read(p.agents);
 for(const marker of [
@@ -175,13 +175,12 @@ const activeSegmentPath=`ProjectOps/${activeSegment}`;
 needFile(activeSegmentPath);
 const segment=read(activeSegmentPath);
 need(segment,"State: ACTIVE","active continuity segment not ACTIVE");
-need(segment,"Execution-Kernel: `AGENTS.md`","active segment must defer execution authority to AGENTS.md");
 if(statSync(at(activeSegmentPath)).size>100*1024)fail("active continuity segment exceeded rotation threshold");
 const segmentBranch=segment.match(/^Host-Branch:\s*`?([^`\n]+)`?$/m)?.[1]?.trim();
 if(segmentBranch&&segmentBranch!==activeBranch)fail(`active segment branch mismatch: ${segmentBranch} != ${activeBranch}`);
 
-// PLAN owns blueprint/intention. It may expose coarse planning state, but it must not
-// become a second live-state authority or execution scheduler.
+// PLAN owns planning and module state. The verifier checks consistency only;
+// it never selects, opens, closes or advances work.
 const plan=read(p.plan);
 for(const forbidden of ["Authority: ONLY_EXECUTION_SCHEDULER","Authority: MANDATORY_ADDITIVE_REASONING_LAYER"])
   forbid(plan,forbidden,`PLAN competes with AGENTS as behavior authority: ${forbidden}`);
@@ -201,12 +200,7 @@ const activeState=rows.get(activePlan).state;
 if(!new Set(["ABIERTO","EN_EJECUCIÓN","PARCIAL","BLOQUEADO","PLANIFICADO"]).has(activeState))fail(`active plan ${activePlan} has non-active state: ${activeState}`);
 
 const activePlanPath=`ProjectOps/${rows.get(activePlan).modulePath}`;
-const activePlanSource=read(activePlanPath);
-need(activePlanSource,"Dynamic-State-Authority: `ProjectOps/CONTINUITY.md`",`${activePlanPath} must defer live state to CONTINUITY`);
-need(activePlanSource,"Execution-Scheduler: `AGENTS.md`",`${activePlanPath} must defer execution cadence to AGENTS`);
-if(/^Decision-State:\s*.+$/m.test(activePlanSource))
-  fail(`${activePlanPath} must not persist live Decision-State; keep it in CONTINUITY/active segment`);
-const active=activePlanSource.split(/\r?\n/);
+const active=read(activePlanPath).split(/\r?\n/);
 const rci=active.findIndex(line=>line.trim()==="Required-Context:");
 if(rci<0)fail(`${activePlanPath} lacks Required-Context`);
 let count=0;
@@ -220,4 +214,4 @@ for(let i=rci+1;i<active.length;i++){
 if(!count)fail(`${activePlanPath} Required-Context has no local paths`);
 
 console.log("PROJECTOPS_INTEGRITY_VERIFY: PASS");
-console.log("PROJECTOPS_INTEGRITY_VERIFY: structural integrity only; AGENTS owns behavior/cadence, CONTINUITY owns live state/recovery, PLAN owns blueprint/planning");
+console.log("PROJECTOPS_INTEGRITY_VERIFY: structural integrity only; AGENTS owns behavior, CONTINUITY owns live state, PLAN owns planning");
