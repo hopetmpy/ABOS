@@ -118,6 +118,21 @@ describe("P-027 opportunity identity and hypothesis lifecycle", () => {
     }
   });
 
+  it("does not allow a value hypothesis to self-promote into observation truth", () => {
+    const db = prepareDb();
+    try {
+      const discovery = new OpportunityDiscovery(db);
+      expect(() => open(discovery, {
+        idempotencyKey: "fake-observation",
+        epistemicStatus: "observation",
+      })).toThrow(/cannot be opened as observation/i);
+      const count = db.prepare("SELECT COUNT(*) AS count FROM adaptive_opportunities").get() as { count: number };
+      expect(count.count).toBe(0);
+    } finally {
+      db.close();
+    }
+  });
+
   it("supports the declared opportunity status lifecycle without reopening terminal state", () => {
     const db = prepareDb();
     try {
@@ -267,7 +282,7 @@ describe("P-027 simulation and external-observation boundaries", () => {
     }
   });
 
-  it("records same-goal external support once and upgrades the belief without fabricating revenue", () => {
+  it("records explicitly attributed external support once and upgrades the belief without fabricating revenue", () => {
     const db = prepareDb();
     try {
       const discovery = new OpportunityDiscovery(db);
@@ -280,7 +295,10 @@ describe("P-027 simulation and external-observation boundaries", () => {
         authorityId: "interview-1",
         goalId: "goal-1",
         epistemicStatus: "observation",
-        payload: { responseClass: "accepted-pain-point" },
+        payload: {
+          opportunityId: hypothesis.opportunity.id,
+          responseClass: "accepted-pain-point",
+        },
       });
 
       const first = discovery.recordObservedOutcome({
@@ -328,7 +346,10 @@ describe("P-027 simulation and external-observation boundaries", () => {
         authorityId: "probe-1",
         goalId: "goal-1",
         epistemicStatus: "observation",
-        payload: { responseClass: "no-response" },
+        payload: {
+          opportunityId: hypothesis.opportunity.id,
+          responseClass: "no-response",
+        },
       });
       const result = discovery.recordObservedOutcome({
         opportunityId: hypothesis.opportunity.id,
@@ -344,7 +365,7 @@ describe("P-027 simulation and external-observation boundaries", () => {
     }
   });
 
-  it("rejects cross-goal outcome contamination", () => {
+  it("rejects cross-goal outcome contamination before opportunity attribution", () => {
     const db = prepareDb();
     try {
       const discovery = new OpportunityDiscovery(db);
@@ -357,12 +378,66 @@ describe("P-027 simulation and external-observation boundaries", () => {
         authorityId: "probe-other-goal",
         goalId: "goal-2",
         epistemicStatus: "observation",
+        payload: { opportunityId: hypothesis.opportunity.id },
       });
       expect(() => discovery.recordObservedOutcome({
         opportunityId: hypothesis.opportunity.id,
         evidenceEventId: external.id,
         assessment: "supports",
       })).toThrow(/same goal/i);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("rejects same-goal evidence attributed to another opportunity", () => {
+    const db = prepareDb();
+    try {
+      const discovery = new OpportunityDiscovery(db);
+      const first = open(discovery);
+      const second = open(discovery, {
+        idempotencyKey: "p027-open-2",
+        observedNeed: "A second distinct need under the same goal.",
+      });
+      const external = appendEvidenceEvent(db, {
+        correlationId: "goal:goal-1",
+        eventType: "market.experiment_observed",
+        domain: "market",
+        authorityType: "external_market_probe",
+        authorityId: "probe-second-opportunity",
+        goalId: "goal-1",
+        epistemicStatus: "observation",
+        payload: { opportunityId: second.opportunity.id },
+      });
+      expect(() => discovery.recordObservedOutcome({
+        opportunityId: first.opportunity.id,
+        evidenceEventId: external.id,
+        assessment: "supports",
+      })).toThrow(/same opportunity/i);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("rejects same-goal market evidence that lacks explicit opportunity attribution", () => {
+    const db = prepareDb();
+    try {
+      const discovery = new OpportunityDiscovery(db);
+      const hypothesis = open(discovery);
+      const external = appendEvidenceEvent(db, {
+        correlationId: "goal:goal-1",
+        eventType: "market.experiment_observed",
+        domain: "market",
+        authorityType: "external_market_probe",
+        authorityId: "probe-unattributed",
+        goalId: "goal-1",
+        epistemicStatus: "observation",
+      });
+      expect(() => discovery.recordObservedOutcome({
+        opportunityId: hypothesis.opportunity.id,
+        evidenceEventId: external.id,
+        assessment: "supports",
+      })).toThrow(/explicitly reference the same opportunity/i);
     } finally {
       db.close();
     }
@@ -381,6 +456,7 @@ describe("P-027 simulation and external-observation boundaries", () => {
         authorityId: "probe-stable",
         goalId: "goal-1",
         epistemicStatus: "observation",
+        payload: { opportunityId: hypothesis.opportunity.id },
       });
       discovery.recordObservedOutcome({
         opportunityId: hypothesis.opportunity.id,
