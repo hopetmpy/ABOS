@@ -57,7 +57,9 @@ export interface CognitiveDecisionInput {
   taskClass: string;
   candidates: CognitiveRouteCandidate[];
   baselineRouteId: string;
+  /** Optional domain policy. The controller does not invent a global quality floor. */
   minimumQuality?: number;
+  /** Optional domain evidence-count policy. Without one, one validated outcome is sufficient evidence but never proof of generality. */
   minimumValidatedOutcomes?: number;
   correlationId?: string;
   causationId?: string | null;
@@ -117,9 +119,6 @@ type StoredDecisionPayload = {
   baselineExpectedCostCents?: unknown;
 };
 
-const DEFAULT_MINIMUM_QUALITY = 0.8;
-const DEFAULT_MINIMUM_VALIDATED_OUTCOMES = 2;
-
 /**
  * P-026 decision authority only.
  *
@@ -127,6 +126,12 @@ const DEFAULT_MINIMUM_VALIDATED_OUTCOMES = 2;
  * selection, inference accounting, memory, skills, simulation or domain state.
  * It reads those authorities, compares supplied candidates conservatively and
  * writes causal decision/execution/outcome receipts into Evidence Fabric.
+ *
+ * There is intentionally no global quality threshold here. Domain authorities
+ * may supply one explicitly. Without one, de-escalation requires validated
+ * success without validated failure/rework and may not be worse than an
+ * observed baseline quality score. This prevents a static tuning constant from
+ * masquerading as adaptive intelligence.
  */
 export class CognitiveCostController {
   constructor(private readonly db: Database) {}
@@ -143,12 +148,12 @@ export class CognitiveCostController {
       throw new Error(`Cognitive baseline route is missing: ${input.baselineRouteId}`);
     }
 
-    const minimumQuality = clamp01(input.minimumQuality ?? DEFAULT_MINIMUM_QUALITY);
+    const minimumQuality = input.minimumQuality === undefined
+      ? null
+      : clamp01(input.minimumQuality);
     const minimumValidatedOutcomes = Math.max(
       1,
-      Math.floor(
-        input.minimumValidatedOutcomes ?? DEFAULT_MINIMUM_VALIDATED_OUTCOMES,
-      ),
+      Math.floor(input.minimumValidatedOutcomes ?? 1),
     );
 
     const enriched = candidates.map((candidate) => ({
@@ -157,10 +162,12 @@ export class CognitiveCostController {
     }));
     const baselineEntry = enriched.find((entry) => entry.candidate.id === baseline.id)!;
     const baselineQuality = resolvedQuality(baselineEntry.candidate, baselineEntry.stats);
-    const baselineQualityDegraded =
-      baselineEntry.stats.validatedOutcomes >= minimumValidatedOutcomes &&
-      baselineQuality !== null &&
-      baselineQuality < minimumQuality;
+    const baselineQualityDegraded = hasValidatedDegradation(
+      baselineEntry.candidate,
+      baselineEntry.stats,
+      minimumValidatedOutcomes,
+      minimumQuality,
+    );
 
     let selected = baselineEntry;
     let action: CognitiveDecision["action"] =
@@ -171,14 +178,14 @@ export class CognitiveCostController {
       const fallback = chooseQualityFallback(
         enriched,
         baseline.id,
-        minimumQuality,
         minimumValidatedOutcomes,
+        minimumQuality,
       );
       if (fallback) {
         selected = fallback;
         action = "execute";
         rationale.push(
-          `Baseline quality is below the validated floor (${formatMetric(baselineQuality)} < ${formatMetric(minimumQuality)}); selected a caller-designated quality fallback.`,
+          "Baseline has validated quality degradation or rework; selected a caller-designated quality fallback rather than optimizing for lower resource use.",
         );
       }
     }
@@ -188,16 +195,14 @@ export class CognitiveCostController {
         .filter((entry) => entry.candidate.id !== baseline.id)
         .filter((entry) => entry.candidate.availability === "available")
         .filter((entry) =>
-          hasValidatedQuality(
+          satisfiesQualityPolicy(
             entry.candidate,
             entry.stats,
             minimumValidatedOutcomes,
+            minimumQuality,
+            baselineQuality,
           )
         )
-        .filter((entry) => {
-          const quality = resolvedQuality(entry.candidate, entry.stats);
-          return quality !== null && quality >= minimumQuality;
-        })
         .map((entry) => ({
           entry,
           comparison: compareResourceBurden(
@@ -212,7 +217,7 @@ export class CognitiveCostController {
         selected = challengers[0]!.entry;
         action = "execute";
         rationale.push(
-          "Selected a lower-resource challenger only after validated quality evidence and Pareto improvement over the baseline.",
+          "Selected a lower-resource challenger only after validated outcome evidence showed no validated failure/rework and a Pareto resource improvement over the baseline.",
         );
       }
     }
@@ -220,7 +225,7 @@ export class CognitiveCostController {
     if (selected.candidate.id === baseline.id) {
       if (baseline.availability === "available") {
         rationale.push(
-          "Preserved the baseline because no available challenger proved both sufficient quality and a non-worsening resource profile.",
+          "Preserved the baseline because no available challenger proved both acceptable outcome quality and a non-worsening resource profile.",
         );
       } else {
         rationale.push(
@@ -243,11 +248,18 @@ export class CognitiveCostController {
       selected.stats,
       minimumValidatedOutcomes,
     );
+    const selectedQualityAcceptable = satisfiesQualityPolicy(
+      selected.candidate,
+      selected.stats,
+      minimumValidatedOutcomes,
+      minimumQuality,
+      baselineQuality,
+    );
     const expectedSavingsCents =
       action === "execute" &&
+      selected.candidate.id !== baseline.id &&
       selectedQualitySupported &&
-      selectedQuality !== null &&
-      selectedQuality >= minimumQuality &&
+      selectedQualityAcceptable &&
       baselineResources.totalCostCents !== null &&
       selectedResources.totalCostCents !== null
         ? baselineResources.totalCostCents - selectedResources.totalCostCents
@@ -278,6 +290,9 @@ export class CognitiveCostController {
         selectedKind: selected.candidate.kind,
         action,
         rationale,
+        qualityPolicy: minimumQuality === null
+          ? "validated-success/no-validated-failure-or-rework; non-worse-than-observed-baseline-when-comparable"
+          : "explicit-domain-minimum-quality",
         minimumQuality,
         minimumValidatedOutcomes,
         expectedSavingsCents,
@@ -288,12 +303,15 @@ export class CognitiveCostController {
         baselineQuality,
         selectedQuality,
         selectedQualitySupported,
+        selectedQualityAcceptable,
         candidates: enriched.map(({ candidate, stats }) => ({
           id: candidate.id,
           kind: candidate.kind,
           availability: candidate.availability,
           quality: resolvedQuality(candidate, stats),
           validatedOutcomes: stats.validatedOutcomes,
+          validatedSuccesses: stats.validatedSuccesses,
+          averageReworkCount: stats.averageReworkCount,
           resources: effectiveResources(candidate, stats),
           expectedInformationGain: finiteOrNull(candidate.expectedInformationGain),
           uncertainty: finiteOrNull(candidate.uncertainty),
@@ -511,8 +529,7 @@ export class CognitiveCostController {
     const rows = this.db.prepare(
       `SELECT * FROM evidence_events
        WHERE event_type = 'cognitive.route_selected'
-       ORDER BY sequence DESC
-       LIMIT 200`,
+       ORDER BY sequence DESC`,
     ).all() as any[];
     const taskClass = requireLabel(params.taskClass, "taskClass");
 
@@ -607,37 +624,71 @@ function hasValidatedQuality(
     || stats.validatedOutcomes >= minimumValidatedOutcomes;
 }
 
+function hasValidatedDegradation(
+  candidate: CognitiveRouteCandidate,
+  stats: CognitiveRouteStats,
+  minimumValidatedOutcomes: number,
+  minimumQuality: number | null,
+): boolean {
+  if (stats.validatedOutcomes < minimumValidatedOutcomes) return false;
+  if (stats.validatedSuccesses < stats.validatedOutcomes) return true;
+  if (stats.averageReworkCount !== null && stats.averageReworkCount > 0) return true;
+  if (minimumQuality === null) return false;
+  const quality = resolvedQuality(candidate, stats);
+  return quality !== null && quality < minimumQuality;
+}
+
+function satisfiesQualityPolicy(
+  candidate: CognitiveRouteCandidate,
+  stats: CognitiveRouteStats,
+  minimumValidatedOutcomes: number,
+  minimumQuality: number | null,
+  baselineQuality: number | null,
+): boolean {
+  if (!hasValidatedQuality(candidate, stats, minimumValidatedOutcomes)) {
+    return false;
+  }
+
+  const explicitAuthority = Boolean(
+    candidate.qualityValidated && candidate.qualityConfidence != null,
+  );
+  if (!explicitAuthority) {
+    if (stats.validatedSuccesses < stats.validatedOutcomes) return false;
+    if (stats.averageReworkCount !== null && stats.averageReworkCount > 0) {
+      return false;
+    }
+  }
+
+  const quality = resolvedQuality(candidate, stats);
+  if (minimumQuality !== null) {
+    return quality !== null && quality >= minimumQuality;
+  }
+  if (baselineQuality !== null && quality !== null && quality < baselineQuality) {
+    return false;
+  }
+  return true;
+}
+
 function chooseQualityFallback(
   entries: Array<{ candidate: CognitiveRouteCandidate; stats: CognitiveRouteStats }>,
   baselineId: string,
-  minimumQuality: number,
   minimumValidatedOutcomes: number,
+  minimumQuality: number | null,
 ): { candidate: CognitiveRouteCandidate; stats: CognitiveRouteStats } | undefined {
-  return entries
+  const fallbacks = entries
     .filter((entry) => entry.candidate.id !== baselineId)
     .filter((entry) => entry.candidate.availability === "available")
-    .filter((entry) => entry.candidate.qualityFallback === true)
-    .sort((left, right) => {
-      const leftQuality = resolvedQuality(left.candidate, left.stats);
-      const rightQuality = resolvedQuality(right.candidate, right.stats);
-      const leftValidated = hasValidatedQuality(
-        left.candidate,
-        left.stats,
-        minimumValidatedOutcomes,
-      );
-      const rightValidated = hasValidatedQuality(
-        right.candidate,
-        right.stats,
-        minimumValidatedOutcomes,
-      );
-      const leftSafe = leftValidated && leftQuality !== null && leftQuality >= minimumQuality;
-      const rightSafe = rightValidated && rightQuality !== null && rightQuality >= minimumQuality;
-      if (leftSafe !== rightSafe) return leftSafe ? -1 : 1;
-      return compareResourceBurden(
-        effectiveResources(left.candidate, left.stats),
-        effectiveResources(right.candidate, right.stats),
-      ).worse;
-    })[0];
+    .filter((entry) => entry.candidate.qualityFallback === true);
+
+  return fallbacks.find((entry) =>
+    satisfiesQualityPolicy(
+      entry.candidate,
+      entry.stats,
+      minimumValidatedOutcomes,
+      minimumQuality,
+      null,
+    )
+  ) ?? fallbacks[0];
 }
 
 function effectiveResources(
@@ -757,8 +808,4 @@ function isRouteKind(value: unknown): value is CognitiveRouteKind {
     || value === "skill"
     || value === "simulation"
     || value === "inference";
-}
-
-function formatMetric(value: number): string {
-  return value.toFixed(2);
 }
