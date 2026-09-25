@@ -89,7 +89,7 @@ function setPlanningState(db: BetterSqlite3.Database, goalId: string): void {
   );
 }
 
-function reviewedPlan(evidenceRef: string) {
+function reviewedPlan(evidenceRef: string, fabricatedRef: string) {
   return {
     analysis: "The experiment changes the relative attractiveness of the routes without becoming ground truth.",
     strategy: "Use the lower-uncertainty route and preserve a falsification boundary.",
@@ -116,6 +116,7 @@ function reviewedPlan(evidenceRef: string) {
     ],
     decisionFactors: [
       `Evidence Fabric ref ${evidenceRef} is inferential support for the selected route, not an external observation.`,
+      `Fabricated ref ${fabricatedRef} must never become path evidence.`,
     ],
     preMortem: ["The experiment assumptions may not hold in the execution environment."],
     falsificationConditions: ["Observed execution conditions contradict the experiment assumptions."],
@@ -148,7 +149,7 @@ describe("P-025 simulation evidence causality", () => {
     db.close();
   });
 
-  it("injects E-xxx as inference before choice and persists only the explicitly cited Evidence Fabric ref", async () => {
+  it("injects E-xxx as inference before choice and persists only a real explicitly cited Evidence Fabric ref", async () => {
     const goalId = insertGoal(db);
     const workspace = new SimulationWorkspace(db);
     const experiment = workspace.createExperiment({
@@ -181,10 +182,11 @@ describe("P-025 simulation evidence causality", () => {
     expect(evidenceRef).toBeTruthy();
     expect(records[0]?.epistemicStatus).toBe("inference");
 
+    const fabricatedRef = ulid();
     setPlanningState(db, goalId);
     const inference = {
       chat: vi.fn().mockResolvedValue({
-        content: JSON.stringify(reviewedPlan(evidenceRef!)),
+        content: JSON.stringify(reviewedPlan(evidenceRef!, fabricatedRef)),
         usage: {},
       }),
     };
@@ -211,18 +213,6 @@ describe("P-025 simulation evidence causality", () => {
     ).get(goalId) as { evidence: string; status: string };
     expect(path.status).toBe("selected");
     expect(JSON.parse(path.evidence)).toEqual([evidenceRef]);
-
-    const fabricated = ulid();
-    const planRow = db.prepare(
-      "SELECT value FROM kv WHERE key = ?",
-    ).get(`orchestrator.plan.${goalId}`) as { value: string };
-    const storedPlan = JSON.parse(planRow.value);
-    storedPlan.decisionFactors.push(`Fabricated ref ${fabricated} must never become path evidence.`);
-    db.prepare(
-      "UPDATE kv SET value = ?, updated_at = datetime('now') WHERE key = ?",
-    ).run(JSON.stringify(storedPlan), `orchestrator.plan.${goalId}`);
-
-    const pathEvidence = JSON.parse(path.evidence) as string[];
-    expect(pathEvidence).not.toContain(fabricated);
+    expect(JSON.parse(path.evidence)).not.toContain(fabricatedRef);
   });
 });
