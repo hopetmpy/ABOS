@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-027
 Active-Segment: continuity/C0023.md
-Active-Intervention: P027_OPPORTUNITY_DISCOVERY — EN_EJECUCIÓN / AUDIT_OPEN / NOT_DECISION_READY
+Active-Intervention: P027_OPPORTUNITY_DISCOVERY — EN_EJECUCIÓN / DECISION_READY / IMPLEMENTATION_PENDING
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,7 +15,7 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p027-opportunity-discovery
 Host-Head-At-Audit-Open: b024bb2246541f2867c91ac824380b2b4525a670
-Last-Reconciled-Host-Head: 1438129e1ef9c25c9d6a9fa607e5d02f08b2833b
+Last-Reconciled-Host-Head: 808132bab3fa570e3a9bd908bf041a5d11e86dd7
 Observed-Main-Head: b024bb2246541f2867c91ac824380b2b4525a670
 Last-Product-Head: b024bb2246541f2867c91ac824380b2b4525a670
 Last-Product-CI: 36190206972 — SUCCESS 8/8
@@ -84,16 +84,29 @@ Historia material y findings en `continuity/C0022.md`.
 
 P-027 se abrió desde el exact-main verde `b024bb2246541f2867c91ac824380b2b4525a670` en `abos/p027-opportunity-discovery`.
 
-Dependencias demostradas HECHO: P-003 y P-014..P-026 según el grafo del módulo. P-029/P-030 siguen planificados y no se adelantan.
+Dependencias demostradas HECHO: P-003 y P-014..P-026 según el grafo del módulo. P-029/P-030/P-039 siguen planificados y no se adelantan.
 
-State: `EN_EJECUCIÓN / AUDIT_OPEN / NOT_DECISION_READY`.
+State: `EN_EJECUCIÓN / DECISION_READY / IMPLEMENTATION_PENDING`.
 Product source: UNCHANGED desde el baseline de apertura.
 
-Hipótesis iniciales registradas en `continuity/C0023.md`:
-- H0 `NO_CHANGE`;
-- H1 `EXTEND_EXISTING_STRATEGIC_OR_SIMULATION_AUTHORITY`;
-- H2 `CREATE_NARROW_OPPORTUNITY_DISCOVERY_LAYER_OVER_EXISTING_AUTHORITIES`;
-- H3 `UNIFY_PARALLEL_ECONOMIC_EXPERIMENT_PATHS`;
-- H4 `CREATE_PARALLEL_TREASURY_OR_BUSINESS_STRATEGY_AUTHORITY` — presunción inicial REJECT salvo evidencia falsadora.
+Owner/caller/state/test audit completo en `continuity/C0023.md` demuestra:
+- `adaptive_opportunities` ya es la identity canónica; lifecycle parcial (`open` + list) requiere EXTEND, no segundo registry;
+- World Model ya posee hypotheses/UNKNOWN/falsification/lifecycle;
+- Simulation Workspace ya posee experiment/replay/cost/information-gain y separa simulation de external observation;
+- planner estratégico recibe Goal ya elegido y excluye market opportunity discovery;
+- Capability Resolver posee readiness/authorization distinctions; lexical match no autoriza ejecución;
+- P-003/P-013 preservan causal economics y transaction/spend authorities;
+- P-030 posee Treasury y P-039 business-strategy lifecycle.
 
-NEXT_ELIGIBLE_WORK: completar owner/caller/state/test audit de opportunity/economic/experiment mechanisms y discriminar H0-H4. No modificar product source hasta `DECISION_READY` o conclusión `NO_CHANGE`.
+Hipótesis resueltas:
+- H0 `NO_CHANGE`: FALSADA;
+- H1 `EXTEND_EXISTING_STRATEGIC_OR_SIMULATION_AUTHORITY` como solución única: FALSADA;
+- H2 `CREATE_NARROW_OPPORTUNITY_DISCOVERY_LAYER_OVER_EXISTING_AUTHORITIES`: CONFIRMADA, combinada con EXTEND del `adaptive_opportunity` canónico;
+- H3 `UNIFY_PARALLEL_ECONOMIC_EXPERIMENT_PATHS`: FALSADA;
+- H4 `CREATE_PARALLEL_TREASURY_OR_BUSINESS_STRATEGY_AUTHORITY`: RECHAZADA.
+
+Decision: `EXTEND_CANONICAL_ADAPTIVE_OPPORTUNITY + CREATE_NARROW_DISCOVERY_ORCHESTRATOR + REUSE_WORLD_MODEL/SIMULATION/EVIDENCE/CAPABILITY/POLICY`.
+
+No se justifica schema/migration nueva con la evidencia actual. Opportunity mutable lifecycle permanece en `adaptive_opportunities`; hypotheses en World Model; experiment state en Simulation; causal links/receipts en Evidence Fabric. LIVE side effects siguen sujetos a Policy/authorization/P-005 y no se autoautorizan desde P-027.
+
+NEXT_ELIGIBLE_WORK: implementar la extensión mínima de `AdaptiveStore` y la capa P-027 con tests focales/adversariales; reauditar boundaries antes de wiring adicional. Product source queda autorizado por DECISION_READY pero todavía no está implementado ni validado.
