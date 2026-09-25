@@ -42,10 +42,13 @@ Master-Transformation-Plan: P-007
 | P-030 | Construir Family Economics y Treasury causal | PLANIFICADO | P-003 HECHO + P-009 + P-010 + P-013 + P-027 + P-029 | plan/P-030.md |
 | P-031 | Habilitar autonomous resource acquisition y reinvestment bajo autoridad | PLANIFICADO | P-010 + P-017 + P-018 + P-026 + P-027 + P-030 | plan/P-031.md |
 | P-032 | Evolucionar Soul y Self-Model semántico sin rigidizar identidad | PLANIFICADO | P-020 + P-022 + P-023 + P-029 | plan/P-032.md |
-| P-033 | Integrar End-to-End Autonomous Runtime como una sola trayectoria | PLANIFICADO | P-008..P-032 según rutas ejercitadas | plan/P-033.md |
+| P-033 | Integrar End-to-End Autonomous Runtime como una sola trayectoria | PLANIFICADO | P-008..P-032 + gaps reconciliados P-037..P-039 según rutas ejercitadas | plan/P-033.md |
 | P-034 | Ejecutar fault injection, recovery y sustained-operation campaign | PLANIFICADO | P-011 + P-012 + P-013 + P-033 | plan/P-034.md |
-| P-035 | Retirar stubs, duplicados y autoridades legacy después de integración | PLANIFICADO | P-008..P-034 materialmente aplicables | plan/P-035.md |
-| P-036 | Cerrar campaña SOURCE_COMPLETE / INTEGRATION_VERIFIED y preparar LIVE | PLANIFICADO | P-003 + P-006 + P-008..P-035 + P-004; P-005 exacto aunque esté externamente bloqueado | plan/P-036.md |
+| P-035 | Retirar stubs, duplicados y autoridades legacy después de integración | PLANIFICADO | P-008..P-034 + P-037..P-039 materialmente aplicables | plan/P-035.md |
+| P-036 | Cerrar campaña SOURCE_COMPLETE / INTEGRATION_VERIFIED y preparar LIVE | PLANIFICADO | P-003 + P-006 + P-008..P-035 + P-037..P-039 + P-004; P-005 exacto aunque esté externamente bloqueado | plan/P-036.md |
+| P-037 | Reconciliar Branching Memory y progressive disclosure | PLANIFICADO | gap histórico; P-013 + P-020; auditar equivalencia antes de extender | plan/P-037.md |
+| P-038 | Reconciliar Open Knowledge Graph y conocimiento relacional | PLANIFICADO | gap histórico; P-013 + P-020 + P-022; no presumir graph DB nueva | plan/P-038.md |
+| P-039 | Reconciliar Business Strategy Generation y Evolution Fabric | PLANIFICADO | gap histórico; P-013 + P-023 + P-025 + P-027; auditar equivalencia antes de crear authority | plan/P-039.md |
 
 ## 1. Regla de autoridad
 
@@ -57,7 +60,7 @@ Master-Transformation-Plan: P-007
 - Los IDs no se reutilizan ni se renumeran para ordenar la campaña.
 - Un estado HECHO acredita únicamente el objetivo exacto de su módulo y debe estar reconciliado por AGENTS contra CONTINUITY + evidencia.
 - Un PR/branch/source escrito no equivale a integración en `main`.
-- El grafo de dependencias gobierna más que el número. P-004/P-005 son tracks transversales/finales aunque tengan IDs antiguos.
+- El grafo de dependencias gobierna más que el número. P-004/P-005 son tracks transversales/finales aunque tengan IDs antiguos; P-037..P-039 son gaps históricos añadidos después de P-036 y se ejecutan por dependencia antes de integración/cierre cuando corresponda.
 
 ## 2. Objetivo global de esta campaña
 
@@ -96,19 +99,19 @@ Gate: un capability gap puede resolverse, probarse y registrarse por rutas abier
 
 ### Ola 3 — una sola mente que aprende
 
-P-020 Cognitive Fabric; P-021 skills; P-022 world model; P-023 prediction-error learning; P-024 simulation/experiments; P-025 strategic cognition/review; P-026 cognitive cost.
+P-020 Cognitive Fabric; P-021 skills; P-022 world model; P-023 prediction-error learning; P-024 simulation/experiments; P-025 strategic cognition/review; P-026 cognitive cost; P-037 Branching Memory/progressive disclosure y P-038 Open Knowledge Graph como gaps históricos reconciliados antes del E2E cuando la auditoría material confirme delta.
 
-Gate: amplio conocimiento no exige prompt masivo y decisiones relevantes dejan hipótesis, predicción, outcome y aprendizaje trazables.
+Gate: amplio conocimiento no exige prompt masivo y decisiones relevantes dejan hipótesis, predicción, outcome y aprendizaje trazables. La compactación histórica no puede usar P-020 como evidencia automática de branching/graph semantics que su DoD no demostró.
 
 ### Ola 4 — organización y economía
 
-P-027 opportunities; P-028 delegation; P-029 children/family knowledge; P-030 treasury/family economics; P-031 resource acquisition/reinvestment; P-032 soul/self-model.
+P-027 opportunities; P-039 Business Strategy Generation/Evolution gap reconciliation; P-028 delegation; P-029 children/family knowledge; P-030 treasury/family economics; P-031 resource acquisition/reinvestment; P-032 soul/self-model.
 
-Gate: autonomía económica significa crear valor y asignar recursos con causalidad/authority/judgment, no hardcodear un negocio, fabricar rentabilidad ni convertir thresholds arbitrarios en dependencia humana.
+Gate: autonomía económica significa crear valor y asignar recursos con causalidad/authority/judgment, no hardcodear un negocio, fabricar rentabilidad ni convertir thresholds arbitrarios en dependencia humana. Opportunity text no se considera strategy lifecycle por similitud nominal.
 
 ### Ola 5 — integración y ataque
 
-P-033 E2E; P-034 fault/sustained; P-035 cleanup/authority retirement; P-004 docs final; P-036 source/integration closure. P-005 se ejecuta incrementalmente cuando cada frontera externa esté autorizada/disponible.
+P-033 E2E después de reconciliar P-037..P-039; P-034 fault/sustained; P-035 cleanup/authority retirement incluyendo gaps materializados; P-004 docs final; P-036 source/integration closure incluyendo P-037..P-039. P-005 se ejecuta incrementalmente cuando cada frontera externa esté autorizada/disponible.
 
 ## 5. Invariantes transversales
 
