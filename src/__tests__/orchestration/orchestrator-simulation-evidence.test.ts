@@ -2,8 +2,12 @@ import type BetterSqlite3 from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ulid } from "ulid";
 import { SimulationWorkspace } from "../../intelligence/simulation-workspace.js";
+import { latestEvidenceByAuthority } from "../../observability/evidence.js";
 import { Orchestrator } from "../../orchestration/orchestrator.js";
-import { loadPlanningSimulationEvidence } from "../../orchestration/simulation-planning-context.js";
+import {
+  loadPlanningSimulationEvidence,
+  referencedSimulationEvidence,
+} from "../../orchestration/simulation-planning-context.js";
 import type { AgentTracker, FundingProtocol } from "../../orchestration/types.js";
 import { ColonyMessaging, type MessageTransport } from "../../orchestration/messaging.js";
 import type { AbosDatabase } from "../../types.js";
@@ -138,6 +142,20 @@ function reviewedPlan(evidenceRef: string, fabricatedRef: string) {
   };
 }
 
+function registerTestSimulator(workspace: SimulationWorkspace): void {
+  workspace.registerSimulator({
+    id: "p025-test-simulator",
+    version: "1.0.0",
+    mode: "deterministic",
+    costCentsPerRun: 1,
+    run: () => ({ output: { viable: true, uncertainty: "lower" } }),
+    summarize: (outputs) => ({
+      summary: { runs: outputs.length },
+      result: { selectedRouteViable: true },
+    }),
+  });
+}
+
 describe("P-025 simulation evidence causality", () => {
   let db: BetterSqlite3.Database;
 
@@ -149,9 +167,10 @@ describe("P-025 simulation evidence causality", () => {
     db.close();
   });
 
-  it("injects E-xxx as inference before choice and persists only a real explicitly cited Evidence Fabric ref", async () => {
+  it("injects executed E-xxx as inference before choice and persists only a real explicitly cited Evidence Fabric ref", async () => {
     const goalId = insertGoal(db);
     const workspace = new SimulationWorkspace(db);
+    registerTestSimulator(workspace);
     const experiment = workspace.createExperiment({
       experimentId: "E-P025-CAUSAL-001",
       goalId,
@@ -172,6 +191,7 @@ describe("P-025 simulation evidence causality", () => {
       expectedInformationGain: 0.8,
       assumptions: ["The modeled condition approximates the relevant execution state."],
     });
+    workspace.runExperiment(experiment.id);
     workspace.setInterpretation(experiment.id, {
       lesson: "The selected route was stable in the modeled condition.",
       decisionImpact: "Prefer the selected route only while the modeled assumption remains plausible.",
@@ -180,6 +200,8 @@ describe("P-025 simulation evidence causality", () => {
     const records = loadPlanningSimulationEvidence(db, goalId);
     const evidenceRef = records[0]?.evidenceRef;
     expect(evidenceRef).toBeTruthy();
+    expect(records[0]?.status).toBe("completed");
+    expect(records[0]?.runCount).toBe(1);
     expect(records[0]?.epistemicStatus).toBe("inference");
 
     const fabricatedRef = ulid();
@@ -203,6 +225,7 @@ describe("P-025 simulation evidence causality", () => {
     expect(systemPrompt).toContain("# Simulation evidence (INFERENCE ONLY)");
     expect(systemPrompt).toContain(experiment.id);
     expect(systemPrompt).toContain(evidenceRef!);
+    expect(systemPrompt).toContain("run_count=1");
     expect(systemPrompt).toContain("never external observation or ground truth");
 
     const reviewed = await orchestrator.tick();
@@ -214,5 +237,57 @@ describe("P-025 simulation evidence causality", () => {
     expect(path.status).toBe("selected");
     expect(JSON.parse(path.evidence)).toEqual([evidenceRef]);
     expect(JSON.parse(path.evidence)).not.toContain(fabricatedRef);
+  });
+
+  it("keeps zero-run interpretations non-citable and out of planner result context", () => {
+    const goalId = insertGoal(db);
+    const workspace = new SimulationWorkspace(db);
+    const experiment = workspace.createExperiment({
+      experimentId: "E-P025-ZERO-RUN-001",
+      goalId,
+      pathId: null,
+      question: "Can a draft experiment justify a route before any simulator execution?",
+      hypothesis: "No simulated outcome exists until at least one run is durable.",
+      variables: {
+        modeled_condition: {
+          value: "nominal",
+          provenance: "ASSUMED",
+        },
+      },
+      simulatorId: "p025-test-simulator",
+      simulatorVersion: "1.0.0",
+      mode: "deterministic",
+      maxRuns: 1,
+      costBudgetCents: 10,
+      assumptions: ["This interpretation is deliberately attached before execution."],
+    });
+    workspace.setInterpretation(experiment.id, {
+      lesson: "This must not be exposed as a simulated lesson yet.",
+      decisionImpact: "This must not influence route evidence before a run.",
+    });
+
+    const rawEvidenceRef = latestEvidenceByAuthority(
+      db,
+      "simulation_experiment",
+      experiment.id,
+    )?.id;
+    expect(rawEvidenceRef).toBeTruthy();
+
+    const records = loadPlanningSimulationEvidence(db, goalId);
+    expect(records).toHaveLength(1);
+    expect(records[0]?.status).toBe("draft");
+    expect(records[0]?.runCount).toBe(0);
+    expect(records[0]?.evidenceRef).toBeNull();
+    expect(records[0]?.summary).toBeNull();
+    expect(records[0]?.surprises).toEqual([]);
+    expect(records[0]?.lesson).toBeNull();
+    expect(records[0]?.decisionImpact).toBeNull();
+
+    const cited = referencedSimulationEvidence(
+      db,
+      goalId,
+      reviewedPlan(rawEvidenceRef!, ulid()),
+    );
+    expect(cited).toEqual([]);
   });
 });
