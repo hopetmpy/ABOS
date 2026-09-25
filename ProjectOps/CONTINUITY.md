@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-026
 Active-Segment: continuity/C0022.md
-Active-Intervention: P026_COGNITIVE_COST_CONTROLLER — EN_EJECUCIÓN / AUDIT_OPEN / SOURCE_UNCHANGED
+Active-Intervention: P026_COGNITIVE_COST_CONTROLLER — EN_EJECUCIÓN / DECISION_READY / IMPLEMENTATION_PENDING
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,10 +15,10 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p026-cognitive-cost-controller
 Host-Head-At-Audit-Open: 8f57ae64971bbf369d5bcfc387a3352e97b91426
-Last-Reconciled-Host-Head: 8f57ae64971bbf369d5bcfc387a3352e97b91426
-Observed-Main-Head: 8f57ae64971bbf369d5bcfc387a3352e97b91426
+Last-Reconciled-Host-Head: 466e71eaa7f453aa2dc2b4d5ed22ab919aa5047f
+Observed-Main-Head: 13be4447507a5cac242ddb29a0008fb1ddbb3e94
 Last-Product-Head: 8f57ae64971bbf369d5bcfc387a3352e97b91426
-Last-Product-CI: P-026_SOURCE_UNCHANGED_AT_AUDIT_OPEN
+Last-Product-CI: P-026_SOURCE_UNCHANGED_AT_DECISION_GATE
 Last-Completed-Plan: P-025
 Last-Completed-Merge: 8f57ae64971bbf369d5bcfc387a3352e97b91426
 Last-Completed-CI: 36101081385 — SUCCESS 8/8
@@ -55,20 +55,33 @@ La historia material, decisiones y adversarial findings de P-025 quedan archivad
 
 ## P-026 — estado vivo
 
-P-026 se abre desde el `main` exacto verde `8f57ae64971bbf369d5bcfc387a3352e97b91426` en `abos/p026-cognitive-cost-controller`.
+P-026 se abrió desde el `main` exacto verde `8f57ae64971bbf369d5bcfc387a3352e97b91426` en `abos/p026-cognitive-cost-controller`.
 
 Dependencias del módulo demostradas HECHO: P-013, P-019, P-020, P-021, P-023 y P-025.
 
-El source de P-026 permanece sin cambios. La auditoría inicial ya demuestra piezas reutilizables:
-- `InferenceBudgetTracker` posee ledger/caps de coste de inferencia;
-- `InferenceRouter` posee selección de modelos, provider boundary, budgets y evidencia de tokens/coste/latencia;
-- Cognitive Fabric posee memory/context/retrieval y presupuesto de contexto;
-- Skill Evolution posee registry/evolution;
-- Prediction Learning y Simulation Workspace aportan outcome/error/simulation evidence;
-- `src/state` ya es la persistence authority canónica.
+Antes del gate de decisión se reconcilió la branch P-026 con el `AGENTS.md` vigente de `main` `13be4447507a5cac242ddb29a0008fb1ddbb3e94`. El merge/reconciliation commit `49f8a7c8d672973a754a7865c8b020fb542ce4d3` preservó ProjectOps P-026 y no modificó product source.
 
-No se crea otro ledger, model router, memory store, skill authority, simulation authority ni database por reflejo. El audit debe discriminar si P-026 requiere `NO_CHANGE`, extensión localizada o un controller de decisión que orqueste estas authorities sin apropiarse de ellas.
+El owner/caller/state/test audit queda completo y registrado con detalle en `continuity/C0022.md`:
+- `InferenceRouter`/`InferenceBudgetTracker` ya poseen model/provider selection, model lock/fallback y inference ledger/budgets;
+- Cognitive Fabric ya posee retrieval/context budgets y relevancia, pero hoy enriquece el prompt antes de una llamada de inference; no decide una ruta autónoma final;
+- Skill Evolution posee lifecycle/evaluations evidence-backed;
+- Adaptive Path/Prediction Learning poseen path/outcome learning estratégico;
+- Simulation Workspace posee cost budget, spent cost, information gain, lesson y decision impact;
+- Evidence Fabric + `inference_costs` ya proporcionan persistence suficiente para receipts/learning derivados sin una nueva database authority;
+- strategic orchestration demuestra boundaries reales model/no-model por encima del router.
 
-Decision-State: AUDIT_OPEN / NOT_DECISION_READY.
+Hipótesis discriminadas:
+- `H0 NO_CHANGE`: FALSADA;
+- `H1 EXTEND_INFERENCE_ROUTER_ONLY`: FALSADA;
+- `H2 CREATE_COGNITIVE_COST_CONTROLLER_OVER_EXISTING_AUTHORITIES`: CONFIRMADA;
+- `H3 UNIFY_OUTCOME_COST_LEARNING_WITH_EXISTING_EVIDENCE`: CONFIRMADA y combinada con H2;
+- `H4 CREATE_PARALLEL_COST_OR_MEMORY_OR_MODEL_AUTHORITY`: RECHAZADA.
 
-NEXT_ELIGIBLE_WORK: completar owner/caller/state/test audit de P-026, discriminar las hipótesis registradas en `continuity/C0022.md`, alcanzar `DECISION_READY` y sólo entonces modificar product source.
+Decision-State: `DECISION_READY / IMPLEMENTATION_PENDING`.
+Decision: `CREATE_NARROW_CONTROLLER + REUSE_EXISTING_EVIDENCE/AUTHORITIES`.
+
+El controller autorizado será únicamente una authority de decisión/orquestación: compara candidates existentes, preserva UNKNOWN y quality evidence, registra rationale/execution/outcome en Evidence Fabric y delega. No será executor, model/provider router, inference ledger, memory/skill/simulation owner ni database owner. `src/state/schema.ts` permanece `NO_CHANGE` salvo evidencia falsadora nueva.
+
+Una alternativa más barata no podrá reclamar ahorro ni desplazar una baseline sólo por precio: requiere outcome/quality comparable. Savings materiales requieren baseline comparable + coste observado + quality-valided success. Provider/model lock, fallback y budgets permanecen authority de inference fabric.
+
+NEXT_ELIGIBLE_WORK: implementar el controller estrecho y wiring mínimo en orchestration inference + strategic classification/review; añadir adversarial tests de quality regression, UNKNOWN, restart/idempotency, escalation/de-escalation y preservación de model/provider/budget boundaries; después ejecutar typecheck/build/tests/CI pertinentes.
