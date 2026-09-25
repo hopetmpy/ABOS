@@ -12,6 +12,7 @@ import {
 import {
   CognitiveCostController,
   type CognitiveRouteCandidate,
+  type InferenceResourceEstimate,
 } from "../intelligence/cognitive-cost-controller.js";
 import { UnifiedInferenceClient } from "./inference-client.js";
 import { ProviderRegistry } from "./provider-registry.js";
@@ -77,32 +78,46 @@ export class RouterBackedOrchestrationInferenceClient
       : request.tools;
 
     const tierByRoute = new Map<string, OrchestrationInferenceTier>();
+    const selector = (this.canonical.router as any).selectModel;
     const candidates = orchestrationTiers().map((candidateTier) => {
       const mappedTier = mapTier(candidateTier);
       const routeId = cognitiveRouteId(taskType, candidateTier);
       tierByRoute.set(routeId, candidateTier);
-      const model = this.canonical.router.selectModel(
-        mappedTier,
+      const model = typeof selector === "function"
+        ? selector.call(
+            this.canonical.router,
+            mappedTier,
+            taskType,
+            connectionProvider,
+          )
+        : undefined;
+      const estimate = safeInferenceEstimate(
+        this.cognitive,
         taskType,
-        connectionProvider,
-      );
-      const estimate = this.cognitive.estimateInferenceResources(
-        taskType,
         mappedTier,
       );
+      const availability = typeof selector === "function"
+        ? model
+          ? "available"
+          : "unavailable"
+        : candidateTier === request.tier
+          ? "available"
+          : "unknown";
       return {
         id: routeId,
         kind: "inference",
-        availability: model ? "available" : "unavailable",
+        availability,
         expectedCostCents: estimate.averageCostCents,
         expectedLatencyMs: estimate.averageLatencyMs,
         expectedContextTokens: estimate.averageTokens,
         qualityFallback:
           candidateTier === "reasoning" && request.tier !== "reasoning",
         evidence: [
-          model
-            ? `InferenceRouter currently resolves ${mappedTier}/${taskType} to model ${model.modelId}.`
-            : `InferenceRouter currently has no model for ${mappedTier}/${taskType} on connection ${connectionProvider}.`,
+          typeof selector !== "function"
+            ? "The injected compatibility router does not expose selectModel(); challenger availability remains UNKNOWN and the requested baseline tier is preserved."
+            : model
+              ? `InferenceRouter currently resolves ${mappedTier}/${taskType} to model ${model.modelId}.`
+              : `InferenceRouter currently has no model for ${mappedTier}/${taskType} on connection ${connectionProvider}.`,
           estimate.sampleCount > 0
             ? `Existing inference ledger estimate uses ${estimate.sampleCount} observed calls.`
             : "No historical inference resource sample exists for this tier/task type; resource cost remains UNKNOWN.",
@@ -272,6 +287,25 @@ function cognitiveRouteId(
   tier: OrchestrationInferenceTier,
 ): string {
   return `inference:${taskType}:${tier}`;
+}
+
+function safeInferenceEstimate(
+  controller: CognitiveCostController,
+  taskType: InferenceTaskType,
+  tier: SurvivalTier,
+): InferenceResourceEstimate {
+  try {
+    return controller.estimateInferenceResources(taskType, tier);
+  } catch {
+    // Compatibility/raw test embeddings may not expose the inference ledger.
+    // Preserve UNKNOWN rather than inventing zero cost.
+    return {
+      sampleCount: 0,
+      averageCostCents: null,
+      averageLatencyMs: null,
+      averageTokens: null,
+    };
+  }
 }
 
 function mapTier(tier: OrchestrationInferenceTier): SurvivalTier {
