@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Database } from "better-sqlite3";
 import type { CapabilityResolution } from "../capabilities/model.js";
 import {
@@ -250,6 +251,73 @@ function stringArray(value: unknown): string[] {
     : [];
 }
 
+function canonicalFingerprintValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalFingerprintValue);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, entry]) => entry !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, canonicalFingerprintValue(entry)]),
+    );
+  }
+  return value;
+}
+
+function fingerprint(value: unknown): string {
+  return createHash("sha256")
+    .update(JSON.stringify(canonicalFingerprintValue(value)))
+    .digest("hex");
+}
+
+function sortedTexts(values: readonly string[]): string[] {
+  return [...values].sort((left, right) => left.localeCompare(right));
+}
+
+function hypothesisFingerprint(input: {
+  goalId: string;
+  observedNeed: string;
+  beneficiaryClass: string;
+  valueHypothesis: string;
+  candidateOffer: string | null;
+  sourcePathId: string | null;
+  evidenceRefs: string[];
+  requiredCapabilities: string[];
+  requiredResources: string[];
+  expectedCostCents: number | null;
+  expectedUpsideCents: number | null;
+  uncertainty: string | null;
+  falsificationConditions: string[];
+  epistemicStatus: BeliefEpistemicStatus;
+  confidence: number | null;
+}): string {
+  return fingerprint({
+    ...input,
+    evidenceRefs: sortedTexts(input.evidenceRefs),
+    requiredCapabilities: sortedTexts(input.requiredCapabilities),
+    requiredResources: sortedTexts(input.requiredResources),
+    falsificationConditions: sortedTexts(input.falsificationConditions),
+  });
+}
+
+function experimentCandidateFingerprint(candidate: OpportunityExperimentCandidate): string {
+  return fingerprint({
+    id: candidate.id,
+    kind: candidate.kind,
+    question: candidate.question,
+    hypothesis: candidate.hypothesis,
+    discriminates: candidate.discriminates,
+    expectedCostCents: candidate.expectedCostCents,
+    expectedInformationGain: candidate.expectedInformationGain ?? null,
+    authorityState: candidate.authorityState,
+    capabilityResolution: candidate.capabilityResolution ?? null,
+    downsideBounded: candidate.downsideBounded ?? null,
+    evidenceRefs: sortedTexts(uniqueTexts(candidate.evidenceRefs)),
+    simulationSpec: candidate.simulationSpec ?? null,
+    replay: candidate.replay ?? null,
+  });
+}
+
 function asHypothesisReceipt(event: EvidenceEventRecord): HypothesisReceiptPayload | null {
   const payload = payloadRecord(event);
   const beliefId = sameString(payload.beliefId);
@@ -335,6 +403,9 @@ export class OpportunityDiscovery {
     const candidateOffer = input.candidateOffer == null
       ? null
       : requireText(input.candidateOffer, "candidateOffer");
+    const sourcePathId = input.sourcePathId == null
+      ? null
+      : requireText(input.sourcePathId, "sourcePathId");
     const evidenceRefs = uniqueTexts(input.evidenceRefs);
     const requiredCapabilities = uniqueTexts(input.requiredCapabilities);
     const requiredResources = uniqueTexts(input.requiredResources);
@@ -354,6 +425,23 @@ export class OpportunityDiscovery {
     const idempotencyKey = input.idempotencyKey == null
       ? null
       : requireText(input.idempotencyKey, "idempotencyKey");
+    const profileFingerprint = hypothesisFingerprint({
+      goalId,
+      observedNeed,
+      beneficiaryClass,
+      valueHypothesis,
+      candidateOffer,
+      sourcePathId,
+      evidenceRefs,
+      requiredCapabilities,
+      requiredResources,
+      expectedCostCents,
+      expectedUpsideCents,
+      uncertainty,
+      falsificationConditions,
+      epistemicStatus,
+      confidence,
+    });
 
     if (idempotencyKey) {
       const existing = getEvidenceByCorrelation(this.db, correlationIdFor("goal", goalId))
@@ -364,14 +452,36 @@ export class OpportunityDiscovery {
         );
       if (existing?.authorityId) {
         const recovered = this.getHypothesis(existing.authorityId);
-        if (recovered) return recovered;
+        if (recovered) {
+          const recoveredFingerprint = sameString(payloadRecord(existing).profileFingerprint) ?? hypothesisFingerprint({
+            goalId: recovered.opportunity.goalId,
+            observedNeed: recovered.observedNeed,
+            beneficiaryClass: recovered.beneficiaryClass,
+            valueHypothesis: recovered.belief.value,
+            candidateOffer: recovered.candidateOffer,
+            sourcePathId: recovered.opportunity.sourcePathId ?? null,
+            evidenceRefs: recovered.evidenceRefs,
+            requiredCapabilities: recovered.requiredCapabilities,
+            requiredResources: recovered.requiredResources,
+            expectedCostCents: recovered.expectedCostCents,
+            expectedUpsideCents: recovered.expectedUpsideCents,
+            uncertainty: recovered.uncertainty,
+            falsificationConditions: recovered.falsificationConditions,
+            epistemicStatus: recovered.belief.epistemicStatus,
+            confidence: recovered.belief.confidence,
+          });
+          if (recoveredFingerprint !== profileFingerprint) {
+            throw new Error(`idempotency key collision with different opportunity hypothesis: ${idempotencyKey}`);
+          }
+          return recovered;
+        }
       }
     }
 
     return this.db.transaction(() => {
       const opportunity = this.store.addOpportunity({
         goalId,
-        sourcePathId: input.sourcePathId ?? null,
+        sourcePathId,
         description: observedNeed,
         evidence: evidenceRefs,
       });
@@ -408,6 +518,7 @@ export class OpportunityDiscovery {
           falsificationConditions,
           evidenceRefs,
           idempotencyKey,
+          profileFingerprint,
         },
         provenance: {
           source: "OpportunityDiscovery",
@@ -558,6 +669,7 @@ export class OpportunityDiscovery {
       candidate.expectedInformationGain = validateOptionalInformationGain(
         candidate.expectedInformationGain,
       );
+      candidate.evidenceRefs = uniqueTexts(candidate.evidenceRefs);
     }
 
     const rejected: RejectedOpportunityExperimentCandidate[] = [];
@@ -610,11 +722,18 @@ export class OpportunityDiscovery {
       };
     }
 
+    const selectedFingerprint = experimentCandidateFingerprint(selected);
     const previous = getEvidenceByAuthority(this.db, OPPORTUNITY_AUTHORITY, opportunityId)
       .find((event) =>
         event.eventType === SELECTION_EVENT &&
         sameString(payloadRecord(event).candidateId) === selected!.id
       );
+    if (previous) {
+      const previousFingerprint = sameString(payloadRecord(previous).candidateFingerprint);
+      if (previousFingerprint !== selectedFingerprint) {
+        throw new Error(`experiment candidate id collision with different specification: ${selected.id}`);
+      }
+    }
     const selectionEvent = previous ?? appendEvidenceEvent(this.db, {
       correlationId: correlationIdFor("goal", hypothesis.opportunity.goalId),
       causationId: latestEvidenceByAuthority(this.db, OPPORTUNITY_AUTHORITY, opportunityId)?.id ?? null,
@@ -626,6 +745,7 @@ export class OpportunityDiscovery {
       epistemicStatus: "inference",
       payload: {
         candidateId: selected.id,
+        candidateFingerprint: selectedFingerprint,
         kind: selected.kind,
         expectedCostCents: selected.expectedCostCents,
         expectedInformationGain: selected.expectedInformationGain ?? null,
@@ -660,20 +780,53 @@ export class OpportunityDiscovery {
     const candidate = selection.selected;
     const hypothesis = this.getHypothesis(selection.opportunityId);
     if (!hypothesis) throw new Error(`opportunity hypothesis not found: ${selection.opportunityId}`);
+    const candidateFingerprint = experimentCandidateFingerprint(candidate);
+    const selectionReceipt = selection.selectionEvidenceId
+      ? getEvidenceEvent(this.db, selection.selectionEvidenceId)
+      : undefined;
+    if (
+      !selectionReceipt ||
+      selectionReceipt.eventType !== SELECTION_EVENT ||
+      selectionReceipt.authorityType !== OPPORTUNITY_AUTHORITY ||
+      selectionReceipt.authorityId !== selection.opportunityId ||
+      sameString(payloadRecord(selectionReceipt).candidateId) !== candidate.id ||
+      sameString(payloadRecord(selectionReceipt).candidateFingerprint) !== candidateFingerprint
+    ) {
+      throw new Error("selection receipt does not match the selected experiment candidate");
+    }
 
-    const previousExecution = getEvidenceByAuthority(
+    const executionEvents = getEvidenceByAuthority(
       this.db,
       OPPORTUNITY_AUTHORITY,
       selection.opportunityId,
-    ).find((event) =>
+    ).filter((event) =>
       (event.eventType === EXECUTION_EVENT || event.eventType === LIVE_BLOCK_EVENT) &&
       sameString(payloadRecord(event).candidateId) === candidate.id
+    );
+    const conflictingExecution = executionEvents.find((event) =>
+      sameString(payloadRecord(event).candidateFingerprint) !== candidateFingerprint
+    );
+    if (conflictingExecution) {
+      throw new Error(`experiment candidate id collision with prior execution: ${candidate.id}`);
+    }
+    const previousExecution = executionEvents.find((event) =>
+      sameString(payloadRecord(event).candidateFingerprint) === candidateFingerprint
     );
 
     this.transitionOpportunity(selection.opportunityId, "selected", candidate.evidenceRefs ?? []);
 
     if (candidate.kind === "live") {
-      const event = previousExecution ?? appendEvidenceEvent(this.db, {
+      if (previousExecution) {
+        return {
+          status: "live_blocked_external",
+          kind: "live",
+          opportunityId: selection.opportunityId,
+          candidateId: candidate.id,
+          reason: "LIVE execution is deliberately not auto-authorized by Opportunity Discovery.",
+          evidenceEventId: previousExecution.id,
+        };
+      }
+      const event = appendEvidenceEvent(this.db, {
         correlationId: correlationIdFor("goal", hypothesis.opportunity.goalId),
         causationId: selection.selectionEvidenceId,
         eventType: LIVE_BLOCK_EVENT,
@@ -684,6 +837,7 @@ export class OpportunityDiscovery {
         epistemicStatus: "unknown",
         payload: {
           candidateId: candidate.id,
+          candidateFingerprint,
           reason: "LIVE experiment execution remains outside P-027 runner and requires canonical Policy/authorization plus P-005 external validation.",
         },
         provenance: { source: "OpportunityDiscovery" },
@@ -699,13 +853,30 @@ export class OpportunityDiscovery {
     }
 
     if (candidate.kind === "simulation") {
+      if (previousExecution) {
+        const experimentId = sameString(payloadRecord(previousExecution).experimentId);
+        const existingExperiment = experimentId
+          ? this.simulation.getExperiment(experimentId)
+          : undefined;
+        if (!existingExperiment) {
+          throw new Error("persisted simulation execution receipt references a missing experiment");
+        }
+        return {
+          status: "completed",
+          kind: "simulation",
+          opportunityId: selection.opportunityId,
+          candidateId: candidate.id,
+          experiment: existingExperiment,
+          evidenceEventId: previousExecution.id,
+        };
+      }
       const spec = candidate.simulationSpec!;
       const experiment = this.simulation.createExperiment({
         ...spec,
         goalId: spec.goalId ?? hypothesis.opportunity.goalId,
       });
       const completed = this.simulation.runExperiment(experiment.id);
-      const event = previousExecution ?? appendEvidenceEvent(this.db, {
+      const event = appendEvidenceEvent(this.db, {
         correlationId: correlationIdFor("goal", hypothesis.opportunity.goalId),
         causationId: selection.selectionEvidenceId,
         eventType: EXECUTION_EVENT,
@@ -716,6 +887,7 @@ export class OpportunityDiscovery {
         epistemicStatus: "inference",
         payload: {
           candidateId: candidate.id,
+          candidateFingerprint,
           kind: candidate.kind,
           experimentId: completed.id,
           experimentStatus: completed.status,
@@ -738,11 +910,25 @@ export class OpportunityDiscovery {
       };
     }
 
+    if (previousExecution) {
+      const replay = this.simulation.replayRun(
+        candidate.replay!.experimentId,
+        candidate.replay!.runIndex,
+      );
+      return {
+        status: "completed",
+        kind: "replay",
+        opportunityId: selection.opportunityId,
+        candidateId: candidate.id,
+        replay,
+        evidenceEventId: previousExecution.id,
+      };
+    }
     const replay = this.simulation.replayRun(
       candidate.replay!.experimentId,
       candidate.replay!.runIndex,
     );
-    const event = previousExecution ?? appendEvidenceEvent(this.db, {
+    const event = appendEvidenceEvent(this.db, {
       correlationId: correlationIdFor("goal", hypothesis.opportunity.goalId),
       causationId: selection.selectionEvidenceId,
       eventType: EXECUTION_EVENT,
@@ -753,6 +939,7 @@ export class OpportunityDiscovery {
       epistemicStatus: "inference",
       payload: {
         candidateId: candidate.id,
+        candidateFingerprint,
         kind: candidate.kind,
         experimentId: replay.experimentId,
         runIndex: replay.runIndex,
@@ -798,6 +985,7 @@ export class OpportunityDiscovery {
       throw new Error("external opportunity outcome evidence must explicitly reference the same opportunity");
     }
 
+    const confidence = validateConfidence(input.confidence);
     const existingEvents = getEvidenceByAuthority(this.db, OPPORTUNITY_AUTHORITY, input.opportunityId);
     const existing = existingEvents.find((event) =>
       event.eventType === OUTCOME_EVENT &&
@@ -807,6 +995,10 @@ export class OpportunityDiscovery {
       const recordedAssessment = sameString(payloadRecord(existing).assessment);
       if (recordedAssessment !== input.assessment) {
         throw new Error("the same observed outcome cannot be reinterpreted with a different assessment");
+      }
+      const recordedConfidence = sameNullableNumber(payloadRecord(existing).confidence);
+      if (recordedConfidence !== confidence) {
+        throw new Error("the same observed outcome cannot be replayed with different confidence");
       }
       const currentBelief = this.store.getBelief(
         sameString(payloadRecord(existing).currentBeliefId) ?? hypothesis.belief.id,
@@ -821,7 +1013,6 @@ export class OpportunityDiscovery {
       };
     }
 
-    const confidence = validateConfidence(input.confidence);
     let currentBelief = hypothesis.belief;
     if (input.assessment === "supports") {
       const supersede = hypothesis.belief.lifecycleStatus === "active"
@@ -858,6 +1049,7 @@ export class OpportunityDiscovery {
       payload: {
         evidenceEventId: external.id,
         assessment: input.assessment,
+        confidence,
         currentBeliefId: currentBelief.id,
         opportunityStatus: this.getOpportunity(input.opportunityId)?.status ?? null,
         closesOpportunity: false,
