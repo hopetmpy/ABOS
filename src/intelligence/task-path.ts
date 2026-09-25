@@ -2,8 +2,6 @@ import type { Goal, TaskNode } from "../orchestration/task-graph.js";
 import type { PlannerOutput } from "../orchestration/planner.js";
 import type { AdaptiveTaskBinding, PathCandidate } from "./types.js";
 
-const DECISION_EVIDENCE_REF_PATTERN = /\bevidence_ref:([A-Za-z0-9._:-]+)\b/gu;
-
 function inferEnvironment(assignedTo: string | null): string | null {
   if (!assignedTo) return null;
   if (assignedTo.startsWith("local://")) return "local";
@@ -11,21 +9,6 @@ function inferEnvironment(assignedTo: string | null): string | null {
   if (assignedTo.startsWith("conway://")) return "conway";
   if (/^0x[0-9a-f]{40}$/i.test(assignedTo)) return "conway";
   return null;
-}
-
-/**
- * Decision evidence must be explicitly claimed by the planner. Merely making
- * evidence available in context does not prove it causally informed the route.
- */
-export function plannerDecisionEvidenceRefs(output: PlannerOutput): string[] {
-  const refs = new Set<string>();
-  for (const factor of output.decisionFactors ?? []) {
-    for (const match of factor.matchAll(DECISION_EVIDENCE_REF_PATTERN)) {
-      const ref = match[1]?.trim();
-      if (ref) refs.add(ref);
-    }
-  }
-  return [...refs];
 }
 
 export function taskToPathCandidate(
@@ -76,6 +59,6 @@ export function plannerOutputToPathCandidate(
     sequence: output.tasks.map((task) => task.title),
     expectedOutcome: path?.expectedOutcome ?? goal.title,
     expectedCostCents: output.estimatedTotalCostCents,
-    evidence: plannerDecisionEvidenceRefs(output),
+    evidence: [],
   };
 }
