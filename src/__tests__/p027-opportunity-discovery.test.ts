@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { appendEvidenceEvent, getEvidenceByAuthority } from "../observability/evidence.js";
 import { OpportunityDiscovery, type OpportunityExperimentCandidate } from "../intelligence/opportunity-discovery.js";
+import { PossibilitySpace } from "../intelligence/possibility-space.js";
 import { SimulationWorkspace, type SimulatorDefinition } from "../intelligence/simulation-workspace.js";
 
 function prepareDb(): Database.Database {
@@ -91,14 +92,16 @@ function simulationCandidate(id = "sim-1"): OpportunityExperimentCandidate {
 }
 
 describe("P-027 opportunity identity and hypothesis lifecycle", () => {
-  it("reuses adaptive_opportunities, preserves UNKNOWN economics, and is idempotent by explicit key", () => {
+  it("reuses adaptive_opportunities, reconstructs after restart, and feeds canonical possibility space", () => {
     const db = prepareDb();
     try {
       const discovery = new OpportunityDiscovery(db);
       const first = open(discovery);
-      const second = open(discovery);
+      const restarted = new OpportunityDiscovery(db);
+      const second = open(restarted);
 
       expect(second.opportunity.id).toBe(first.opportunity.id);
+      expect(second.belief.id).toBe(first.belief.id);
       expect(first.expectedCostCents).toBeNull();
       expect(first.expectedUpsideCents).toBeNull();
       expect(first.belief.confidence).toBeNull();
@@ -113,6 +116,10 @@ describe("P-027 opportunity identity and hypothesis lifecycle", () => {
       const profileEvents = getEvidenceByAuthority(db, "adaptive_opportunity", first.opportunity.id)
         .filter((event) => event.eventType === "opportunity.hypothesis_recorded");
       expect(profileEvents).toHaveLength(1);
+
+      const possibilitySpace = new PossibilitySpace(restarted.store).snapshot("goal-1");
+      expect(possibilitySpace.openOpportunities.map((item) => item.id)).toContain(first.opportunity.id);
+      expect(possibilitySpace.beliefs.map((item) => item.id)).toContain(first.belief.id);
     } finally {
       db.close();
     }
