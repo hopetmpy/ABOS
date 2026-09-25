@@ -35,8 +35,8 @@ Master-Transformation-Plan: P-007
 | P-023 | Cerrar loop Prediction → Outcome → Error → Learning | HECHO | PR #63 integrado; `main b25dfebf0454f488766b14a816ed1997beeb407a` revalidado por CI `36057756301` SUCCESS 8/8 | plan/P-023.md |
 | P-024 | Crear Simulation, Counterfactual y Experiment Workspace | HECHO | PR #65 integrado; `main 8bae92562566e619be905906a2ff00835cf28f1a` revalidado por CI `36072559876` SUCCESS 8/8 | plan/P-024.md |
 | P-025 | Evolucionar Strategic Cognition, Plan Review y Adaptive Path v2 | HECHO | PR #68 integrado; `main 8f57ae64971bbf369d5bcfc387a3352e97b91426` revalidado por CI `36101081385` SUCCESS 8/8 | plan/P-025.md |
-| P-026 | Implementar Cognitive Cost Controller y adaptive compute | EN_EJECUCIÓN | P-013 + P-019 + P-020 + P-021 + P-023 + P-025 HECHO; estado vivo en CONTINUITY/C0022 | plan/P-026.md |
-| P-027 | Implementar Opportunity Discovery y economic experimentation abiertos | PLANIFICADO | P-003 + capabilities/cognition P-014..P-026 según ruta | plan/P-027.md |
+| P-026 | Implementar Cognitive Cost Controller y adaptive compute | HECHO | PR #69 integrado; `main b024bb2246541f2867c91ac824380b2b4525a670` revalidado por CI `36190206972` SUCCESS 8/8 | plan/P-026.md |
+| P-027 | Implementar Opportunity Discovery y economic experimentation abiertos | EN_EJECUCIÓN | P-003 + capabilities/cognition P-014..P-026 HECHO; estado vivo en CONTINUITY/C0023 | plan/P-027.md |
 | P-028 | Implementar delegation por competencia, evidencia y coste | PLANIFICADO | P-014 + P-018 + P-022 + P-023 + P-025 + P-026 | plan/P-028.md |
 | P-029 | Hacer real child bootstrap, Constitution gate y Family Knowledge Fabric | PLANIFICADO | P-009 + P-010 + P-011 + P-014 + P-020 + P-021 + P-028 | plan/P-029.md |
 | P-030 | Construir Family Economics y Treasury causal | PLANIFICADO | P-003 HECHO + P-009 + P-010 + P-013 + P-027 + P-029 | plan/P-030.md |
@@ -83,7 +83,7 @@ Cada bloque puede poseer componentes especializados, pero debe conservar una aut
 1. **P-006 — HECHO**: security-audit restaurado sin debilitar gate e integrado en `main` por PR #32.
 2. **P-003 — HECHO**: child capital semantics reconciliadas por PR #33, integradas y revalidadas en `main`.
 
-La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth, P-009 Authority/Provenance, P-010 Policy/Authorization, P-011 Lifecycle/Recovery, P-012 transactional self-modification y P-013 observability/evidence están HECHO con evidencia E3 exacta. P-014..P-025 también están integradas y revalidadas; la intervención activa P-026 se resuelve desde CONTINUITY.
+La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth, P-009 Authority/Provenance, P-010 Policy/Authorization, P-011 Lifecycle/Recovery, P-012 transactional self-modification y P-013 observability/evidence están HECHO con evidencia E3 exacta. P-014..P-026 también están integradas y revalidadas; la intervención activa P-027 se resuelve desde CONTINUITY.
 
 ### Ola 1 — verdad, autoridad y recovery
 
