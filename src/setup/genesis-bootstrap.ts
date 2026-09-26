@@ -152,9 +152,9 @@ function applyFamilyKnowledgeBootstrap(
  * - null when this is not a parent-provisioned child;
  * - a newly persisted config after successful non-interactive bootstrap.
  *
- * Provisioning or Family Knowledge import failure is fatal. Persisting a config
- * without a usable Conway API key or required family bootstrap would only defer
- * failure until --run and create a false initialized state.
+ * Provisioning or Family Knowledge import failure is fatal. The new config is
+ * persisted only after required family context has imported successfully, so a
+ * failed gate cannot leave a runnable-looking abos.json behind.
  */
 export async function bootstrapFromGenesisIfPresent(): Promise<AbosConfig | null> {
   const genesis = readGenesis();
@@ -199,6 +199,9 @@ export async function bootstrapFromGenesisIfPresent(): Promise<AbosConfig | null
     chainType,
   });
 
+  // Required inherited context is imported before publishing a runnable config.
+  // A failed import may leave an inert DB file, but never abos.json.
+  applyFamilyKnowledgeBootstrap(config, genesis);
   saveConfig(config);
   writeDefaultHeartbeatConfig();
 
@@ -218,7 +221,6 @@ export async function bootstrapFromGenesisIfPresent(): Promise<AbosConfig | null
   }
 
   installDefaultSkills(config.skillsDir || "~/.abos/skills");
-  applyFamilyKnowledgeBootstrap(config, genesis);
 
   return config;
 }
