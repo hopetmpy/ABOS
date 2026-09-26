@@ -1,4 +1,5 @@
 import type { Database } from "better-sqlite3";
+import { ulid } from "ulid";
 import { createLogger } from "../observability/logger.js";
 import type { AbosIdentity } from "../types.js";
 import type { EnvironmentRegistry } from "../environments/registry.js";
@@ -13,6 +14,7 @@ import {
   decomposeGoal,
   type Goal,
   type TaskNode,
+  type TaskResult,
   normalizeTaskResult,
 } from "./task-graph.js";
 import {
@@ -55,6 +57,14 @@ import type {
   FundingProtocol,
   OrchestratorTickResult,
 } from "./types.js";
+import {
+  delegationTaskClass,
+  recordDelegationDecision,
+  selectDelegationActor,
+  type DelegationActorCandidate,
+  type DelegationDecision,
+} from "./competence-delegation.js";
+import { recordDelegationAttemptOutcome } from "./delegation-outcome.js";
 import {
   Orchestrator as ExecutionCoreOrchestrator,
 } from "./orchestrator-core.js";
@@ -101,12 +111,12 @@ interface StrategicOrchestratorParams {
   dispatchAgentTask?: (
     assignment: AgentAssignment,
     task: TaskNode,
-  ) => Promise<import("./task-graph.js").TaskResult | void>;
+  ) => Promise<TaskResult | void>;
   prepareTaskResultForPersistence?: (
     sourceAddress: string,
     task: TaskNode,
-    result: import("./task-graph.js").TaskResult,
-  ) => Promise<import("./task-graph.js").TaskResult>;
+    result: TaskResult,
+  ) => Promise<TaskResult>;
 }
 
 const DEFAULT_STATE: OrchestratorState = {
@@ -131,7 +141,11 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
   private readonly strategicCognitive: CognitiveCostController;
 
   constructor(private readonly strategicParams: StrategicOrchestratorParams) {
-    super(strategicParams);
+    // Observe actor-caused negative TaskResults at the transport/result
+    // boundary, before failTask clears assigned_to. Do not learn competence
+    // from later persistence/review failures that merely pass through
+    // handleFailure. Successes remain attributable in terminal task_graph rows.
+    super(withDelegationOutcomeObservation(strategicParams));
     this.strategicAdaptive = new AdaptivePathEngine(strategicParams.db);
     this.strategicCognitive = new CognitiveCostController(strategicParams.db);
   }
@@ -181,6 +195,150 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
     }
     this.persistStrategicTodo();
     return this.strategicTickResult(next);
+  }
+
+  /**
+   * P-028: one canonical actor-selection boundary.
+   *
+   * Roles remain weak hints. Competence/cost/outcome/authority are derived from
+   * existing Task, Capability, Environment and Evidence authorities. Spawning
+   * remains owned by Environment Mobility through config.spawnAgent; this method
+   * never performs provider selection itself.
+   */
+  override async matchTaskToAgent(task: TaskNode): Promise<AgentAssignment> {
+    const actors: DelegationActorCandidate[] =
+      this.strategicParams.agentTracker.getIdle().map((agent) => ({
+        address: agent.address,
+        name: agent.name,
+        role: agent.role,
+        status: agent.status,
+        kind: "worker",
+        spawned: false,
+      }));
+
+    if (this.strategicParams.identity?.address) {
+      actors.push({
+        address: this.strategicParams.identity.address,
+        name: this.strategicParams.identity.name ?? "parent",
+        role: "parent",
+        status: "running",
+        kind: "parent",
+        spawned: false,
+      });
+    }
+
+    const evaluate = (candidates: DelegationActorCandidate[]) =>
+      selectDelegationActor({
+        db: this.strategicParams.db,
+        task,
+        actors: candidates,
+        parentAddress: this.strategicParams.identity.address,
+        capabilityRegistry: this.strategicParams.capabilityRegistry,
+        resolveAgentEnvironment: this.strategicParams.resolveAgentEnvironment,
+        isActorAlive: this.strategicParams.isWorkerAlive,
+        delegatedDispatchConfigured:
+          typeof this.strategicParams.dispatchAgentTask === "function",
+      });
+
+    let decision = evaluate(actors);
+    const spawn = this.strategicParams.config?.spawnAgent;
+    const canSpawn =
+      this.strategicParams.config?.disableSpawn !== true &&
+      typeof spawn === "function";
+    const shouldDiscoverDelegatedActor =
+      canSpawn && shouldExploreDelegatedActor(task, decision);
+
+    if (decision.selected && !shouldDiscoverDelegatedActor) {
+      return persistAndReturnDelegation(
+        this.strategicParams.db,
+        task,
+        decision,
+        "existing",
+      );
+    }
+
+    if (shouldDiscoverDelegatedActor) {
+      let spawned: any;
+      try {
+        spawned = await spawn(task);
+      } catch (error) {
+        if (decision.selected) {
+          const fallbackDecision: DelegationDecision = {
+            ...decision,
+            reason:
+              `${decision.reason} Canonical spawn/mobility discovery failed; retained the already-eligible actor instead: ${normalizeError(error).message}`,
+          };
+          return persistAndReturnDelegation(
+            this.strategicParams.db,
+            task,
+            fallbackDecision,
+            "existing_after_spawn_unavailable",
+          );
+        }
+
+        recordDelegationDecision(this.strategicParams.db, task, {
+          ...decision,
+          reason:
+            `${decision.reason} Canonical spawn/mobility attempt failed: ${normalizeError(error).message}`,
+        });
+        throw error;
+      }
+
+      if (
+        spawned &&
+        typeof spawned.address === "string" &&
+        spawned.address.trim() &&
+        typeof spawned.name === "string" &&
+        spawned.name.trim()
+      ) {
+        const spawnedActor: DelegationActorCandidate = {
+          address: spawned.address,
+          name: spawned.name,
+          role: task.agentRole?.trim() || "generalist",
+          status: "running",
+          kind: "worker",
+          spawned: true,
+        };
+
+        this.strategicParams.agentTracker.register({
+          address: spawnedActor.address,
+          name: spawnedActor.name,
+          role: spawnedActor.role ?? "generalist",
+          sandboxId:
+            typeof spawned.sandboxId === "string" && spawned.sandboxId.trim()
+              ? spawned.sandboxId
+              : ulid(),
+        });
+        this.strategicParams.agentTracker.updateStatus(
+          spawnedActor.address,
+          "running",
+        );
+
+        decision = evaluate([...actors, spawnedActor]);
+        if (decision.selected) {
+          return persistAndReturnDelegation(
+            this.strategicParams.db,
+            task,
+            decision,
+            "after_spawn",
+          );
+        }
+      }
+    }
+
+    if (decision.selected) {
+      return persistAndReturnDelegation(
+        this.strategicParams.db,
+        task,
+        decision,
+        "existing_after_spawn_no_improvement",
+      );
+    }
+
+    recordDelegationDecision(this.strategicParams.db, task, decision);
+    throw new Error(
+      `No available agent for task ${task.id}: ${decision.reason}`,
+    );
   }
 
   private handleStrategicClassification(
@@ -849,6 +1007,121 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       goalsActive: getActiveGoals(this.strategicParams.db).length,
       agentsActive: this.getStrategicActiveAgentCount(),
     };
+  }
+}
+
+function shouldExploreDelegatedActor(
+  task: TaskNode,
+  decision: DelegationDecision,
+): boolean {
+  if (!decision.selected) return true;
+  if (decision.selected.actor.kind !== "parent") return false;
+  if (decision.selected.capabilityState === "verified") return false;
+
+  const requestedRole = task.agentRole?.trim().toLowerCase() ?? "";
+  const explicitDelegationHint = Boolean(
+    requestedRole && requestedRole !== "parent" && requestedRole !== "self",
+  );
+  const unresolvedCapabilityNeed =
+    (task.requiredCapabilities?.length ?? 0) > 0 &&
+    decision.selected.unresolvedCapabilities.length > 0;
+
+  return explicitDelegationHint || unresolvedCapabilityNeed;
+}
+
+function persistAndReturnDelegation(
+  db: Database,
+  task: TaskNode,
+  decision: DelegationDecision,
+  stage: string,
+): AgentAssignment {
+  if (!decision.selected) {
+    throw new Error(`Cannot persist delegation without selected actor for task ${task.id}.`);
+  }
+  recordDelegationDecision(db, task, decision);
+  logger.info("Competence delegation selected actor", {
+    taskId: task.id,
+    actor: decision.selected.actor.address,
+    stage,
+    spawned: decision.selected.actor.spawned ?? false,
+    capabilityState: decision.selected.capabilityState,
+    environment: decision.selected.environmentId,
+    expectedCostCents: decision.selected.expectedCostCents,
+    evidenceSamples: decision.selected.history.samples,
+  });
+  return {
+    agentAddress: decision.selected.actor.address,
+    agentName: decision.selected.actor.name,
+    spawned: decision.selected.actor.spawned ?? false,
+  };
+}
+
+function withDelegationOutcomeObservation(
+  params: StrategicOrchestratorParams,
+): StrategicOrchestratorParams {
+  const dispatch = params.dispatchAgentTask;
+  const prepare = params.prepareTaskResultForPersistence;
+
+  return {
+    ...params,
+    dispatchAgentTask: dispatch
+      ? async (assignment, task) => {
+          const result = await dispatch(assignment, task);
+          if (result && !result.success) {
+            recordObservedDelegationFailure(
+              params.db,
+              assignment.agentAddress,
+              task,
+              result,
+            );
+          }
+          return result;
+        }
+      : undefined,
+    // Install an observer even when no downstream normalization hook exists so
+    // asynchronous Colony/remote results still produce causal attempt evidence.
+    prepareTaskResultForPersistence: async (sourceAddress, task, result) => {
+      if (!result.success) {
+        recordObservedDelegationFailure(
+          params.db,
+          sourceAddress,
+          task,
+          result,
+        );
+      }
+      return prepare
+        ? prepare(sourceAddress, task, result)
+        : result;
+    },
+  };
+}
+
+function recordObservedDelegationFailure(
+  db: Database,
+  actorAddress: string,
+  task: TaskNode,
+  result: TaskResult,
+): void {
+  try {
+    recordDelegationAttemptOutcome(db, task, {
+      actorAddress,
+      success: false,
+      taskClass: delegationTaskClass(task),
+      requiredCapabilities: task.requiredCapabilities ?? [],
+      costCents: result.costCents,
+      durationMs: result.duration,
+      evidence: [
+        `Observed negative TaskResult from selected actor ${actorAddress}.`,
+        ...result.artifacts,
+      ],
+    });
+  } catch (error) {
+    // Evidence capture must never replace the canonical Task result path.
+    logger.warn("Failed to record delegation attempt outcome", {
+      taskId: task.id,
+      actorAddress,
+      error: normalizeError(error).message,
+    });
   }
 }
 
