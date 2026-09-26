@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import type { Database as DatabaseType } from "better-sqlite3";
 import type { AbosDatabase, ConwayClient, Skill } from "../types.js";
 import {
   KnowledgeStore,
@@ -82,8 +83,20 @@ export interface FamilyKnowledgeVerification {
   receipt?: FamilyKnowledgeReceipt;
 }
 
+type KvReader = Pick<AbosDatabase, "getKV"> | DatabaseType;
+
 function sha256(content: string): string {
   return createHash("sha256").update(content, "utf-8").digest("hex");
+}
+
+function readKv(db: KvReader, key: string): string | undefined {
+  if ("getKV" in db && typeof db.getKV === "function") {
+    return db.getKV(key);
+  }
+  const row = (db as DatabaseType)
+    .prepare("SELECT value FROM kv WHERE key = ?")
+    .get(key) as { value: string } | undefined;
+  return row?.value;
 }
 
 function knowledgeToProjection(entry: KnowledgeEntry): FamilyKnowledgeItem {
@@ -388,10 +401,10 @@ export async function writeFamilyKnowledgeBundle(
 export async function verifyFamilyKnowledgeBootstrap(
   childConway: ConwayClient,
   sandboxId: string,
-  db: AbosDatabase,
+  db: KvReader,
   expectedWalletAddress: string,
 ): Promise<FamilyKnowledgeVerification> {
-  const storedHash = db.getKV(`family_knowledge_hash:${sandboxId}`);
+  const storedHash = readKv(db, `family_knowledge_hash:${sandboxId}`);
   if (!storedHash) {
     return { valid: false, detail: "no stored family knowledge hash found" };
   }
