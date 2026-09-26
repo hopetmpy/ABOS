@@ -5,6 +5,7 @@ import {
   correlationIdFor,
   type EvidenceEventRecord,
 } from "../observability/evidence.js";
+import { listDelegationAttemptOutcomes } from "./delegation-outcome.js";
 import type { TaskNode } from "./task-graph.js";
 
 export type DelegationActorKind = "parent" | "worker";
@@ -87,12 +88,6 @@ interface ResourceRow {
   actualCostCents: number | null;
   metadata: string;
   updatedAt: string;
-}
-
-interface DelegationReceiptPayload {
-  selectedActor?: {
-    address?: string;
-  };
 }
 
 const TERMINAL_TASK_STATUSES = new Set(["completed", "failed"]);
@@ -518,24 +513,33 @@ function deriveHistory(
     return emptyHistory(taskClass, "Task history table is unavailable; competence outcome remains UNKNOWN.");
   }
 
-  const byId = new Map<string, HistoricalTaskRow>();
-  for (const row of directHistoricalRows(db, actorAddress)) {
-    byId.set(row.id, row);
-  }
-  for (const taskId of receiptAttributedTaskIds(db, actorAddress)) {
-    if (byId.has(taskId)) continue;
-    const row = historicalTaskById(db, taskId);
-    if (row) byId.set(row.id, row);
-  }
+  const explicitAttempts = listDelegationAttemptOutcomes(
+    db,
+    actorAddress,
+    taskClass,
+  );
+  const explicitFailureTaskIds = new Set(
+    explicitAttempts
+      .filter((attempt) => !attempt.success)
+      .map((attempt) => attempt.taskId),
+  );
 
-  const contextual = [...byId.values()]
+  const contextualTerminal = directHistoricalRows(db, actorAddress)
     .filter((row) => TERMINAL_TASK_STATUSES.has(row.status))
-    .filter((row) => historicalTaskClass(row) === taskClass);
+    .filter((row) => historicalTaskClass(row) === taskClass)
+    // P-028 failure attempts are recorded before failTask clears assignment.
+    // If a legacy/direct failed row still retains the actor, suppress it when
+    // an explicit causal attempt event already exists for the same Task.
+    .filter(
+      (row) =>
+        row.status !== "failed" ||
+        !explicitFailureTaskIds.has(row.id),
+    );
 
-  if (contextual.length === 0) {
+  if (contextualTerminal.length === 0 && explicitAttempts.length === 0) {
     return emptyHistory(
       taskClass,
-      `No terminal Task outcomes are attributable to this actor for class ${taskClass}; outcome quality remains UNKNOWN.`,
+      `No attributable Task outcomes or delegation-attempt outcomes exist for this actor under class ${taskClass}; outcome quality remains UNKNOWN.`,
     );
   }
 
@@ -544,7 +548,7 @@ function deriveHistory(
   const costs: number[] = [];
   const latencies: number[] = [];
 
-  for (const row of contextual) {
+  for (const row of contextualTerminal) {
     const parsed = parseTaskResult(row.result);
     const success = parsed?.success ?? (row.status === "completed");
     if (success) successes += 1;
@@ -566,6 +570,13 @@ function deriveHistory(
     }
   }
 
+  for (const attempt of explicitAttempts) {
+    if (attempt.success) successes += 1;
+    else failures += 1;
+    if (attempt.costCents != null) costs.push(attempt.costCents);
+    if (attempt.durationMs != null) latencies.push(attempt.durationMs);
+  }
+
   const samples = successes + failures;
   return {
     taskClass,
@@ -577,12 +588,17 @@ function deriveHistory(
     averageLatencyMs: average(latencies),
     evidence: [
       `Contextual actor history class=${taskClass}: successes=${successes}, failures=${failures}, samples=${samples}.`,
+      ...(explicitAttempts.length > 0
+        ? [
+            `Causal delegation-attempt evidence contributes ${explicitAttempts.length} attempt sample(s); old selection receipts are never promoted into outcomes.`,
+          ]
+        : []),
       ...(costs.length > 0
-        ? [`Observed TaskResult cost average=${average(costs)} cents across ${costs.length} sample(s).`]
-        : ["Contextual cost remains UNKNOWN; no attributable TaskResult cost observation was found."]),
+        ? [`Observed attributable cost average=${average(costs)} cents across ${costs.length} sample(s).`]
+        : ["Contextual cost remains UNKNOWN; no attributable cost observation was found."]),
       ...(latencies.length > 0
-        ? [`Observed TaskResult latency average=${average(latencies)} ms across ${latencies.length} sample(s).`]
-        : ["Contextual latency remains UNKNOWN; no attributable TaskResult duration observation was found."]),
+        ? [`Observed attributable latency average=${average(latencies)} ms across ${latencies.length} sample(s).`]
+        : ["Contextual latency remains UNKNOWN; no attributable duration observation was found."]),
     ],
   };
 }
@@ -620,63 +636,6 @@ function directHistoricalRows(db: Database, actorAddress: string): HistoricalTas
   } catch {
     return [];
   }
-}
-
-function historicalTaskById(db: Database, taskId: string): HistoricalTaskRow | null {
-  const hasBindings = tableExists(db, "adaptive_task_bindings");
-  const sql = hasBindings
-    ? `SELECT
-         t.id,
-         t.agent_role AS agentRole,
-         t.status,
-         t.result,
-         t.assigned_to AS assignedTo,
-         b.required_capabilities AS requiredCapabilities
-       FROM task_graph t
-       LEFT JOIN adaptive_task_bindings b ON b.task_id = t.id
-       WHERE t.id = ?
-       LIMIT 1`
-    : `SELECT
-         t.id,
-         t.agent_role AS agentRole,
-         t.status,
-         t.result,
-         t.assigned_to AS assignedTo,
-         NULL AS requiredCapabilities
-       FROM task_graph t
-       WHERE t.id = ?
-       LIMIT 1`;
-  try {
-    return (db.prepare(sql).get(taskId) as HistoricalTaskRow | undefined) ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function receiptAttributedTaskIds(db: Database, actorAddress: string): string[] {
-  if (!tableExists(db, "evidence_events")) return [];
-  let rows: Array<{ taskId: string | null; payloadJson: string }> = [];
-  try {
-    rows = db.prepare(
-      `SELECT task_id AS taskId, payload_json AS payloadJson
-       FROM evidence_events
-       WHERE event_type = 'orchestration.delegation_selected'
-         AND task_id IS NOT NULL
-       ORDER BY sequence DESC
-       LIMIT 250`,
-    ).all() as Array<{ taskId: string | null; payloadJson: string }>;
-  } catch {
-    return [];
-  }
-
-  return uniqueStrings(
-    rows.flatMap((row) => {
-      if (!row.taskId) return [];
-      const payload = parseJson(row.payloadJson) as DelegationReceiptPayload | null;
-      const selected = payload?.selectedActor?.address;
-      return selected && sameActorAddress(selected, actorAddress) ? [row.taskId] : [];
-    }),
-  );
 }
 
 function historicalTaskClass(row: HistoricalTaskRow): string {
