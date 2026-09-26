@@ -34,6 +34,7 @@ import {
   createTestIdentity,
   createTestConfig,
 } from "./mocks.js";
+import { installValidP029Bootstrap } from "./p029-bootstrap-fixture.js";
 
 // Mock fs module for constitution tests
 vi.mock("fs", async (importOriginal) => {
@@ -328,13 +329,23 @@ describe("ChildHealthMonitor", () => {
   });
 
   function makeHealthyChild(id: string) {
-    lifecycle.initChild(id, `child-${id}`, `sandbox-${id}`, "genesis");
+    const childName = `child-${id}`;
+    const sandboxId = `sandbox-${id}`;
+    const childAddress = "0x1111111111111111111111111111111111111111";
+    lifecycle.initChild(id, childName, sandboxId, "genesis");
+    db.prepare("UPDATE children SET address = ? WHERE id = ?").run(childAddress, id);
     lifecycle.transition(id, "sandbox_created");
     lifecycle.transition(id, "runtime_ready");
     lifecycle.transition(id, "wallet_verified");
     lifecycle.transition(id, "funded");
     lifecycle.transition(id, "starting");
     lifecycle.transition(id, "healthy");
+    installValidP029Bootstrap(db, conway, {
+      childId: id,
+      childName,
+      childAddress,
+      sandboxId,
+    });
   }
 
   it("checkHealth returns healthy for running child", async () => {

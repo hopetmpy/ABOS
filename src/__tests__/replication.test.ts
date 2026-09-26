@@ -1,11 +1,9 @@
 /**
- * Tests for Sub-phase 0.6: Replication Safety
+ * Tests for replication safety and lifecycle truth.
  *
- * Validates wallet address checking, spawn cleanup on failure,
- * and prevention of funding to zero-address wallets.
- *
- * Updated for Phase 3.1: spawnChild now uses ConwayClient interface
- * directly instead of raw fetch-based execInSandbox/writeInSandbox.
+ * P-029 adds a causal bootstrap gate. These tests keep transport/process
+ * mechanics isolated with a mocked bootstrap verifier, while dedicated P-029
+ * tests exercise the verifier and Family Knowledge contracts themselves.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -26,22 +24,37 @@ import {
 import type { AbosDatabase, GenesisConfig } from "../types.js";
 import { MIGRATION_V7 } from "../state/schema.js";
 
-// Mock fs for constitution propagation
+const bootstrapGateState = vi.hoisted(() => ({ valid: true }));
+
+vi.mock("../replication/bootstrap-gate.js", () => ({
+  verifyChildBootstrap: vi.fn(async () => ({
+    valid: bootstrapGateState.valid,
+    evidence: bootstrapGateState.valid
+      ? ["bootstrap fixture verified"]
+      : ["bootstrap fixture invalid"],
+    constitutionValid: bootstrapGateState.valid,
+    familyKnowledgeValid: bootstrapGateState.valid,
+    configIdentityValid: bootstrapGateState.valid,
+  })),
+}));
+
+// Constitution propagation itself is no longer best-effort. Provide canonical
+// fixture content while delegating all unrelated filesystem reads to real fs.
 vi.mock("fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("fs")>();
+  const readFileSync = vi.fn((filePath: any, ...args: any[]) => {
+    if (String(filePath).replace(/\\/g, "/").endsWith("/.abos/constitution.md")) {
+      return "# Test Constitution\nI. Preserve continuity.\n";
+    }
+    return (actual.readFileSync as any)(filePath, ...args);
+  });
   return {
     ...actual,
     default: {
       ...actual,
-      readFileSync: vi.fn(() => { throw new Error("file not found"); }),
-      existsSync: actual.existsSync,
-      mkdirSync: actual.mkdirSync,
-      mkdtempSync: actual.mkdtempSync,
+      readFileSync,
     },
-    readFileSync: vi.fn(() => { throw new Error("file not found"); }),
-    existsSync: actual.existsSync,
-    mkdirSync: actual.mkdirSync,
-    mkdtempSync: actual.mkdtempSync,
+    readFileSync,
   };
 });
 
@@ -107,12 +120,14 @@ describe("spawnChild", () => {
   const zeroAddress = "0x" + "0".repeat(40);
 
   beforeEach(() => {
+    bootstrapGateState.valid = true;
     conway = new MockConwayClient();
     db = createTestDb();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    db.close();
   });
 
   it("enforces maxChildren from the runtime config instead of an implicit DB property", async () => {
@@ -192,7 +207,6 @@ describe("spawnChild", () => {
   });
 
   it("validates wallet address before creating child record", async () => {
-    // Mock exec to return valid wallet address on init
     vi.spyOn(conway, "exec").mockImplementation(async (command: string) => {
       if (command.includes("--init")) {
         return { stdout: `Wallet initialized: ${validAddress}`, stderr: "", exitCode: 0 };
@@ -247,16 +261,24 @@ describe("spawnChild", () => {
       .rejects.toThrow("Child wallet address invalid");
   });
 
+  it("fails closed when required constitution propagation cannot read the parent constitution", async () => {
+    const fs = await import("fs");
+    vi.mocked(fs.readFileSync).mockImplementationOnce(() => {
+      throw new Error("constitution unavailable");
+    });
+
+    await expect(spawnChild(conway, identity, db, genesis)).rejects.toThrow(
+      /constitution unavailable/,
+    );
+  });
+
   it("propagates error on exec failure without calling deleteSandbox", async () => {
     const deleteSpy = vi.spyOn(conway, "deleteSandbox");
-
-    // Make the first exec (apt-get install) fail
     vi.spyOn(conway, "exec").mockRejectedValue(new Error("Install failed"));
 
     await expect(spawnChild(conway, identity, db, genesis))
       .rejects.toThrow();
 
-    // Sandbox deletion is disabled — should not attempt cleanup
     expect(deleteSpy).not.toHaveBeenCalled();
   });
 
@@ -273,17 +295,13 @@ describe("spawnChild", () => {
     await expect(spawnChild(conway, identity, db, genesis))
       .rejects.toThrow("Child wallet address invalid");
 
-    // Sandbox deletion is disabled — should not attempt cleanup
     expect(deleteSpy).not.toHaveBeenCalled();
   });
 
   it("does not mask original error if deleteSandbox also throws", async () => {
     vi.spyOn(conway, "deleteSandbox").mockRejectedValue(new Error("delete also failed"));
-
-    // Make exec fail
     vi.spyOn(conway, "exec").mockRejectedValue(new Error("Install failed"));
 
-    // Original error should propagate, not the deleteSandbox error
     await expect(spawnChild(conway, identity, db, genesis))
       .rejects.toThrow(/Install failed/);
   });
@@ -307,6 +325,7 @@ describe("ensureChildRuntimeRunning", () => {
   let lifecycle: ChildLifecycle;
 
   beforeEach(() => {
+    bootstrapGateState.valid = true;
     conway = new MockConwayClient();
     db = createTestDb();
     db.raw.exec(MIGRATION_V7);
@@ -329,7 +348,7 @@ describe("ensureChildRuntimeRunning", () => {
     db.close();
   });
 
-  it("starts a funded child once and marks it healthy only after process observation", async () => {
+  it("starts a funded child once and marks it healthy only after bootstrap plus process observation", async () => {
     const commands: string[] = [];
     vi.spyOn(conway, "exec").mockImplementation(async (command: string) => {
       commands.push(command);
@@ -355,6 +374,7 @@ describe("ensureChildRuntimeRunning", () => {
     expect(result.healthy).toBe(true);
     expect(result.alreadyRunning).toBe(false);
     expect(lifecycle.getCurrentState("child-runtime-1")).toBe("healthy");
+    expect(result.evidence).toContain("bootstrap fixture verified");
     expect(
       commands.filter((command) =>
         command.includes("nohup node dist/index.js --run"),
@@ -362,7 +382,7 @@ describe("ensureChildRuntimeRunning", () => {
     ).toHaveLength(1);
   });
 
-  it("reuses an already-running child without launching a duplicate runtime", async () => {
+  it("reuses an already-running verified child without launching a duplicate runtime", async () => {
     const commands: string[] = [];
     vi.spyOn(conway, "exec").mockImplementation(async (command: string) => {
       commands.push(command);
@@ -391,6 +411,18 @@ describe("ensureChildRuntimeRunning", () => {
       ),
     ).toBe(false);
   });
+
+  it("refuses to start or promote a child when bootstrap verification fails", async () => {
+    bootstrapGateState.valid = false;
+    const exec = vi.spyOn(conway, "exec");
+
+    await expect(
+      ensureChildRuntimeRunning(conway, db, "child-runtime-1", lifecycle),
+    ).rejects.toThrow(/bootstrap verification failed/);
+
+    expect(exec).not.toHaveBeenCalled();
+    expect(lifecycle.getCurrentState("child-runtime-1")).toBe("funded");
+  });
 });
 
 // ─── Child observation truth ─────────────────────────────────
@@ -402,6 +434,7 @@ describe("ChildHealthMonitor", () => {
   let lifecycle: ChildLifecycle;
 
   beforeEach(() => {
+    bootstrapGateState.valid = true;
     parentConway = new MockConwayClient();
     childConway = new MockConwayClient();
     db = createTestDb();
@@ -428,7 +461,7 @@ describe("ChildHealthMonitor", () => {
     db.close();
   });
 
-  it("observes the runtime through the child's scoped sandbox, not the parent executor", async () => {
+  it("observes the runtime through the child's scoped sandbox and requires bootstrap truth", async () => {
     const parentExec = vi.spyOn(parentConway, "exec").mockRejectedValue(
       new Error("parent executor must not be used for child health"),
     );
@@ -458,6 +491,23 @@ describe("ChildHealthMonitor", () => {
     expect(result.lastSeen).not.toBeNull();
     expect(result.creditBalance).toBeNull();
     expect(result.issues).toEqual([]);
+  });
+
+  it("reports a running process as unhealthy when bootstrap evidence is invalid", async () => {
+    bootstrapGateState.valid = false;
+    vi.spyOn(parentConway, "createScopedClient").mockReturnValue(childConway);
+    vi.spyOn(childConway, "exec").mockResolvedValue({
+      stdout: "running\n",
+      stderr: "",
+      exitCode: 0,
+    });
+
+    const monitor = new ChildHealthMonitor(db.raw, parentConway, lifecycle);
+    const result = await monitor.checkHealth("child-health-1");
+
+    expect(result.healthy).toBe(false);
+    expect(result.lastSeen).not.toBeNull();
+    expect(result.issues.join(" ")).toContain("bootstrap gate failed");
   });
 
   it("reports a stopped process without inventing a zero child balance", async () => {
@@ -491,17 +541,16 @@ describe("SandboxCleanup", () => {
   beforeEach(() => {
     conway = new MockConwayClient();
     db = createTestDb();
-    // Apply lifecycle events migration
     db.raw.exec(MIGRATION_V7);
     lifecycle = new ChildLifecycle(db.raw);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    db.close();
   });
 
   it("transitions to cleaned_up even though sandbox deletion is disabled", async () => {
-    // Create a child and transition to stopped
     lifecycle.initChild("child-1", "test-child", "sandbox-1", "test prompt");
     lifecycle.transition("child-1", "sandbox_created", "created");
     lifecycle.transition("child-1", "runtime_ready", "ready");
@@ -514,9 +563,7 @@ describe("SandboxCleanup", () => {
     const cleanup = new SandboxCleanup(conway, lifecycle, db.raw);
     await cleanup.cleanup("child-1");
 
-    // Sandbox deletion is disabled, but cleanup still transitions state
-    const state = lifecycle.getCurrentState("child-1");
-    expect(state).toBe("cleaned_up");
+    expect(lifecycle.getCurrentState("child-1")).toBe("cleaned_up");
   });
 
   it("transitions to cleaned_up when sandbox deletion succeeds", async () => {
@@ -532,8 +579,7 @@ describe("SandboxCleanup", () => {
     const cleanup = new SandboxCleanup(conway, lifecycle, db.raw);
     await cleanup.cleanup("child-2");
 
-    const state = lifecycle.getCurrentState("child-2");
-    expect(state).toBe("cleaned_up");
+    expect(lifecycle.getCurrentState("child-2")).toBe("cleaned_up");
   });
 });
 
@@ -551,6 +597,7 @@ describe("pruneDeadChildren", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    db.close();
   });
 
   function insertChild(id: string, name: string, status: string, createdAt: string): void {
@@ -561,12 +608,10 @@ describe("pruneDeadChildren", () => {
   }
 
   it("attempts sandbox cleanup for children with dead status", async () => {
-    // Insert 7 dead children (exceeds keepLast=5, so 2 should be pruned)
     for (let i = 0; i < 7; i++) {
       insertChild(`dead-${i}`, `child-${i}`, "dead", `2020-01-0${i + 1} 00:00:00`);
     }
 
-    // Create a mock cleanup that tracks calls
     const cleanupCalls: string[] = [];
     const mockCleanup = {
       cleanup: vi.fn(async (childId: string) => {
@@ -576,9 +621,7 @@ describe("pruneDeadChildren", () => {
 
     const removed = await pruneDeadChildren(db, mockCleanup, 5);
 
-    // 2 oldest should be removed (dead-0 and dead-1)
     expect(removed).toBe(2);
-    // cleanup.cleanup should have been called for "dead" children
     expect(cleanupCalls).toContain("dead-0");
     expect(cleanupCalls).toContain("dead-1");
   });

@@ -240,38 +240,75 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
 
     if (nextCursor) taskCtx.db.setKV("social_inbox_cursor", nextCursor);
 
-    if (!messages || messages.length === 0) return { shouldWake: false };
-
-    // Persist to inbox_messages table for deduplication
-    // Sanitize content before DB insertion
+    // Persist newly polled messages to the one durable inbox authority. Family
+    // Knowledge dispatch below consumes from that inbox; it never polls again.
     let newCount = 0;
-    for (const msg of messages) {
-      const existing = taskCtx.db.getKV(`inbox_seen_${msg.id}`);
-      if (!existing) {
-        const sanitizedFrom = sanitizeInput(msg.from, msg.from, "social_address");
-        const sanitizedContent = sanitizeInput(msg.content, msg.from, "social_message");
-        const sanitizedMsg = {
-          ...msg,
-          from: sanitizedFrom.content,
-          content: sanitizedContent.content,
-          rawContent: msg.content,
-        };
-        taskCtx.db.insertInboxMessage(sanitizedMsg);
-        taskCtx.db.setKV(`inbox_seen_${msg.id}`, "1");
-        // Only count non-blocked messages toward wake threshold —
-        // blocked messages are stored for audit but should not wake
-        // the agent (prevents injection spam from draining credits).
-        if (!sanitizedContent.blocked) {
-          newCount++;
+    if (messages && messages.length > 0) {
+      for (const msg of messages) {
+        const existing = taskCtx.db.getKV(`inbox_seen_${msg.id}`);
+        if (!existing) {
+          const sanitizedFrom = sanitizeInput(msg.from, msg.from, "social_address");
+          const sanitizedContent = sanitizeInput(msg.content, msg.from, "social_message");
+          const sanitizedMsg = {
+            ...msg,
+            from: sanitizedFrom.content,
+            content: sanitizedContent.content,
+            rawContent: msg.content,
+          };
+          taskCtx.db.insertInboxMessage(sanitizedMsg);
+          taskCtx.db.setKV(`inbox_seen_${msg.id}`, "1");
+          // Only count non-blocked messages toward wake threshold —
+          // blocked messages are stored for audit but should not wake
+          // the agent (prevents injection spam from draining credits).
+          if (!sanitizedContent.blocked) {
+            newCount++;
+          }
         }
       }
     }
 
-    if (newCount === 0) return { shouldWake: false };
+    // P-029: reuse the existing ColonyMessaging dispatcher over the messages
+    // already persisted above. This also runs when the current poll is empty so
+    // a restart can recover previously durable peer_query/peer_response rows.
+    let familyResponsesApplied = 0;
+    try {
+      const { processFamilyKnowledgePeerInbox } = await import(
+        "../replication/family-knowledge-query.js"
+      );
+      const processed = await processFamilyKnowledgePeerInbox({
+        db: taskCtx.db,
+        social: taskCtx.social,
+        identityAddress: taskCtx.identity.address,
+        parentAddress: taskCtx.config.parentAddress,
+      });
+      familyResponsesApplied = processed.filter(
+        (entry) => entry.success && entry.message.type === "peer_response",
+      ).length;
+      for (const entry of processed) {
+        if (!entry.success) {
+          logger.warn("Family knowledge peer message was not applied", {
+            messageId: entry.message.id,
+            messageType: entry.message.type,
+            error: entry.error,
+          });
+        }
+      }
+    } catch (error) {
+      logger.error(
+        "Family knowledge inbox dispatch failed",
+        error instanceof Error ? error : undefined,
+      );
+    }
+
+    if (newCount === 0 && familyResponsesApplied === 0) {
+      return { shouldWake: false };
+    }
 
     return {
       shouldWake: true,
-      message: `${newCount} new message(s) from: ${messages.map((m) => m.from.slice(0, 10)).join(", ")}`,
+      message: familyResponsesApplied > 0
+        ? `${newCount} new message(s); ${familyResponsesApplied} family knowledge response(s) applied`
+        : `${newCount} new message(s) from: ${messages.map((m) => m.from.slice(0, 10)).join(", ")}`,
     };
   },
 

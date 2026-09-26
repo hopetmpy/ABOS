@@ -1,6 +1,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { createHash } from "crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
@@ -35,6 +36,50 @@ vi.mock("../setup/environment.js", () => ({
 }));
 
 const ORIGINAL_HOME = process.env.HOME;
+const PARENT = "0x2222222222222222222222222222222222222222";
+const CHILD = "0x1111111111111111111111111111111111111111";
+
+function writeGenesis(overrides: Record<string, unknown> = {}): void {
+  fs.writeFileSync(
+    path.join(state.dir, "genesis.json"),
+    JSON.stringify({
+      name: "child-one",
+      genesisPrompt: "Execute the delegated mission.",
+      creatorMessage: "Created by parent.",
+      creatorAddress: PARENT,
+      parentAddress: PARENT,
+      chainType: "evm",
+      ...overrides,
+    }),
+  );
+}
+
+function writeFamilyBundle(
+  overrides: Record<string, unknown> = {},
+  hashOverride?: string,
+): string {
+  const raw = JSON.stringify(
+    {
+      format: "abos-family-knowledge/v1",
+      version: 1,
+      parentAddress: PARENT,
+      generatedAt: "2026-09-25T00:00:00.000Z",
+      knowledge: [],
+      skills: [],
+      capabilities: [],
+      ...overrides,
+    },
+    null,
+    2,
+  );
+  const hash = createHash("sha256").update(raw, "utf-8").digest("hex");
+  fs.writeFileSync(path.join(state.dir, "family-knowledge.json"), raw);
+  fs.writeFileSync(
+    path.join(state.dir, "family-knowledge.sha256"),
+    hashOverride ?? hash,
+  );
+  return hash;
+}
 
 describe("replicated child genesis bootstrap", () => {
   beforeEach(() => {
@@ -45,7 +90,7 @@ describe("replicated child genesis bootstrap", () => {
     state.provision.mockReset();
     state.provision.mockResolvedValue({
       apiKey: "cnwy_k_test_child",
-      walletAddress: "0x1111111111111111111111111111111111111111",
+      walletAddress: CHILD,
       keyPrefix: "cnwy",
     });
     vi.resetModules();
@@ -62,18 +107,22 @@ describe("replicated child genesis bootstrap", () => {
     }
   });
 
-  it("creates complete non-interactive child state from genesis.json", async () => {
-    fs.writeFileSync(
-      path.join(state.dir, "genesis.json"),
-      JSON.stringify({
-        name: "child-one",
-        genesisPrompt: "Execute the delegated mission.",
-        creatorMessage: "Created by parent.",
-        creatorAddress: "0x2222222222222222222222222222222222222222",
-        parentAddress: "0x2222222222222222222222222222222222222222",
-        chainType: "evm",
-      }),
-    );
+  it("creates complete non-interactive child state only with verified family bootstrap", async () => {
+    writeGenesis();
+    const familyHash = writeFamilyBundle({
+      knowledge: [
+        {
+          category: "operational",
+          key: "family:lesson:one",
+          content: "Prefer evidence before claims.",
+          source: PARENT,
+          confidence: 0.9,
+          lastVerified: "2026-09-25T00:00:00.000Z",
+          tokenCount: 5,
+          expiresAt: null,
+        },
+      ],
+    });
 
     const { bootstrapFromGenesisIfPresent } = await import(
       "../setup/genesis-bootstrap.js"
@@ -84,19 +133,27 @@ describe("replicated child genesis bootstrap", () => {
     expect(config?.name).toBe("child-one");
     expect(config?.sandboxId).toBe("sandbox-child-1");
     expect(config?.conwayApiKey).toBe("cnwy_k_test_child");
-    expect(config?.parentAddress).toBe(
-      "0x2222222222222222222222222222222222222222",
-    );
+    expect(config?.parentAddress).toBe(PARENT);
 
     const persisted = JSON.parse(
       fs.readFileSync(path.join(state.dir, "abos.json"), "utf-8"),
     );
     expect(persisted.name).toBe("child-one");
     expect(persisted.conwayApiKey).toBe("cnwy_k_test_child");
-    expect(persisted.walletAddress).toBe(
-      "0x1111111111111111111111111111111111111111",
-    );
+    expect(persisted.walletAddress).toBe(CHILD);
 
+    const receipt = JSON.parse(
+      fs.readFileSync(
+        path.join(state.dir, "family-knowledge.applied.json"),
+        "utf-8",
+      ),
+    );
+    expect(receipt.parentAddress).toBe(PARENT);
+    expect(receipt.childWalletAddress).toBe(CHILD);
+    expect(receipt.bundleHash).toBe(familyHash);
+    expect(receipt.knowledgeImported).toBe(1);
+
+    expect(fs.existsSync(path.join(state.dir, "state.db"))).toBe(true);
     expect(fs.existsSync(path.join(state.dir, "heartbeat.yml"))).toBe(true);
     expect(fs.existsSync(path.join(state.dir, "SOUL.md"))).toBe(true);
     expect(
@@ -111,17 +168,9 @@ describe("replicated child genesis bootstrap", () => {
     expect(state.provision).toHaveBeenCalledTimes(1);
   });
 
-  it("is idempotent once abos.json exists", async () => {
-    fs.writeFileSync(
-      path.join(state.dir, "genesis.json"),
-      JSON.stringify({
-        name: "child-one",
-        genesisPrompt: "Execute the delegated mission.",
-        creatorAddress: "0x2222222222222222222222222222222222222222",
-        parentAddress: "0x2222222222222222222222222222222222222222",
-        chainType: "evm",
-      }),
-    );
+  it("is idempotent once abos.json exists and reapplies the same bundle", async () => {
+    writeGenesis();
+    writeFamilyBundle();
 
     const { bootstrapFromGenesisIfPresent } = await import(
       "../setup/genesis-bootstrap.js"
@@ -133,6 +182,28 @@ describe("replicated child genesis bootstrap", () => {
     expect(first?.conwayApiKey).toBe("cnwy_k_test_child");
     expect(second?.conwayApiKey).toBe("cnwy_k_test_child");
     expect(state.provision).toHaveBeenCalledTimes(1);
+    expect(
+      fs.existsSync(path.join(state.dir, "family-knowledge.applied.json")),
+    ).toBe(true);
+  });
+
+  it("refuses stale existing child identity when genesis lineage changes", async () => {
+    writeGenesis();
+    writeFamilyBundle();
+
+    const { bootstrapFromGenesisIfPresent } = await import(
+      "../setup/genesis-bootstrap.js"
+    );
+    await bootstrapFromGenesisIfPresent();
+
+    writeGenesis({
+      parentAddress: "0x3333333333333333333333333333333333333333",
+      creatorAddress: "0x3333333333333333333333333333333333333333",
+    });
+
+    await expect(bootstrapFromGenesisIfPresent()).rejects.toThrow(
+      /does not match current genesis lineage/,
+    );
   });
 
   it("returns null for a normal human first run without genesis.json", async () => {
@@ -145,14 +216,7 @@ describe("replicated child genesis bootstrap", () => {
   });
 
   it("fails before provisioning when genesis.json is invalid", async () => {
-    fs.writeFileSync(
-      path.join(state.dir, "genesis.json"),
-      JSON.stringify({
-        name: "child-one",
-        genesisPrompt: "",
-        creatorAddress: "0x2222222222222222222222222222222222222222",
-      }),
-    );
+    writeGenesis({ genesisPrompt: "", parentAddress: undefined });
 
     const { bootstrapFromGenesisIfPresent } = await import(
       "../setup/genesis-bootstrap.js"
@@ -166,16 +230,8 @@ describe("replicated child genesis bootstrap", () => {
   });
 
   it("does not persist a runnable config when Conway provisioning fails", async () => {
-    fs.writeFileSync(
-      path.join(state.dir, "genesis.json"),
-      JSON.stringify({
-        name: "child-one",
-        genesisPrompt: "Execute the delegated mission.",
-        creatorAddress: "0x2222222222222222222222222222222222222222",
-        parentAddress: "0x2222222222222222222222222222222222222222",
-        chainType: "evm",
-      }),
-    );
+    writeGenesis();
+    writeFamilyBundle();
     state.provision.mockRejectedValueOnce(new Error("Conway unavailable"));
 
     const { bootstrapFromGenesisIfPresent } = await import(
@@ -184,6 +240,33 @@ describe("replicated child genesis bootstrap", () => {
 
     await expect(bootstrapFromGenesisIfPresent()).rejects.toThrow(
       "Conway unavailable",
+    );
+    expect(fs.existsSync(path.join(state.dir, "abos.json"))).toBe(false);
+  });
+
+  it("fails closed when the required family bundle is missing", async () => {
+    writeGenesis();
+
+    const { bootstrapFromGenesisIfPresent } = await import(
+      "../setup/genesis-bootstrap.js"
+    );
+
+    await expect(bootstrapFromGenesisIfPresent()).rejects.toThrow(
+      /missing family knowledge bundle\/hash/,
+    );
+    expect(fs.existsSync(path.join(state.dir, "abos.json"))).toBe(false);
+  });
+
+  it("fails closed on family bundle hash mismatch", async () => {
+    writeGenesis();
+    writeFamilyBundle({}, "0".repeat(64));
+
+    const { bootstrapFromGenesisIfPresent } = await import(
+      "../setup/genesis-bootstrap.js"
+    );
+
+    await expect(bootstrapFromGenesisIfPresent()).rejects.toThrow(
+      /hash mismatch/,
     );
     expect(fs.existsSync(path.join(state.dir, "abos.json"))).toBe(false);
   });

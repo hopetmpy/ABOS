@@ -37,14 +37,21 @@ function remoteContext(conway: MockConwayClient): ToolContext {
 }
 
 describe("P-012 transactional tool routing", () => {
-  it("preserves the complete core catalog while allowing registered GUI extensions", () => {
+  it("preserves the complete core catalog while allowing registered extensions", () => {
     const coreNames = createCoreBuiltinTools("").map((tool) => tool.name).sort();
     const routedNames = createBuiltinTools("").map((tool) => tool.name).sort();
     const coreNameSet = new Set(coreNames);
     const extensions = routedNames.filter((name) => !coreNameSet.has(name));
 
     expect(routedNames.filter((name) => coreNameSet.has(name))).toEqual(coreNames);
-    expect(extensions).toEqual(["gui_act", "gui_capture", "gui_input", "gui_snapshot"]);
+    expect(extensions).toEqual([
+      "family_knowledge_query_status",
+      "gui_act",
+      "gui_capture",
+      "gui_input",
+      "gui_snapshot",
+      "query_family_knowledge",
+    ]);
   });
 
   it("separates direct-write protection from transactional immutability", () => {

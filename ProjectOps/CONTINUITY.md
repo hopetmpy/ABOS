@@ -4,24 +4,24 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
-Active-Plan: P-028
-Active-Segment: continuity/C0024.md
-Active-Intervention: P028_COMPETENCE_DELEGATION — EN_EJECUCIÓN / SOURCE_COMPLETE / E3_BRANCH_GREEN / INTEGRATION_PENDING
+Active-Plan: P-029
+Active-Segment: continuity/C0025.md
+Active-Intervention: P029_CHILD_BOOTSTRAP_FAMILY_KNOWLEDGE — EN_EJECUCIÓN / SOURCE_COMPLETE / BRANCH_E3_GREEN / PR_READY
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p028-competence-delegation
-Host-Head-At-Audit-Open: fdb7b9d9ab4b05430a40e6a7e6c3982fc4b39572
-Last-Reconciled-Host-Head: a2c116d52e64c59495ce50c049218434fd82e3c4
-Observed-Main-Head: fdb7b9d9ab4b05430a40e6a7e6c3982fc4b39572
-Last-Product-Head: 7cf5587a4aedf1ceb44df22ad816c9f1c7f68821
-Last-Product-CI: 36205530967 — SUCCESS 8/8
-Last-Completed-Plan: P-027
-Last-Completed-Merge: fdb7b9d9ab4b05430a40e6a7e6c3982fc4b39572
-Last-Completed-CI: 36199901975 — SUCCESS 8/8
+Current-Host-Branch: abos/p029-child-bootstrap-family-knowledge
+Host-Head-At-Audit-Open: 803802f68cc3c1b7c1bd8d850768ca924a18aca2
+Last-Reconciled-Host-Head: bc3958bff06595b9a175657bb20514a7ecf8cb9f
+Observed-Main-Head: 7d89966b2dd5b63665ea640527d7fc387f3462e0
+Last-Product-Head: 2fe9fda35d99cde8759bccfc1b836a2e749106bb
+Last-Product-CI: 36220144160 — SUCCESS 8/8
+Last-Completed-Plan: P-028
+Last-Completed-Merge: 803802f68cc3c1b7c1bd8d850768ca924a18aca2
+Last-Completed-CI: 36206237455 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -105,40 +105,62 @@ Límites explícitos:
 
 Historia material y adversarial findings en `continuity/C0023.md`.
 
-## P-028 — estado vivo
+## P-028 — cierre integrado verificado
 
-P-028 se abrió desde exact-main verde `fdb7b9d9ab4b05430a40e6a7e6c3982fc4b39572` en `abos/p028-competence-delegation`.
+P-028 queda `HECHO / SOURCE_COMPLETE / E3_MAIN_GREEN / INTEGRATION_VERIFIED`.
 
-Dependencias del módulo demostradas HECHO: P-014, P-018, P-022, P-023, P-025 y P-026. P-027 también está integrado, aunque no es dependencia formal.
-
-State: `EN_EJECUCIÓN / SOURCE_COMPLETE / E3_BRANCH_GREEN / INTEGRATION_PENDING`.
-Decision-State: `DECISION_READY / IMPLEMENTED / NOT_INTEGRATED`.
-Source-complete product HEAD: `7cf5587a4aedf1ceb44df22ad816c9f1c7f68821`.
-Source-complete CI: `36205530967` — SUCCESS 8/8.
+Decisión: `EXTEND_EXISTING_DELEGATION_SELECTOR + CREATE_NARROW_COMPETENCE_MATCHER_OVER_EXISTING_AUTHORITIES`.
 
 Resultado material:
-- `Orchestrator.matchTaskToAgent()` permanece único owner de actor selection y deja de depender de `getBestForTask()`/primer idle/busy reassign como criterio canónico;
-- matcher estrecho compone Task requirements, Capability Fabric, actor-linked EnvironmentResource, contextual Task outcomes, health/environment callbacks, known cost/latency, weak role hints y authority sin tabla de competence/reputation paralela;
-- parent/local capabilities verificadas no se prestan al child;
-- resource capability labels potencialmente circulares no se promocionan a child competence;
-- UNKNOWN capability/cost/history se conserva como UNKNOWN;
-- selection/unresolved receipts se guardan en Evidence Fabric bajo Task authority;
-- delegation failures se atribuyen al causal selection receipt, sobreviven `assigned_to` cleanup, rechazan stale actor outcome y son idempotentes frente a restart replay;
-- spawn/discovery continúa por Environment Mobility y se reevalúa con el mismo matcher;
-- reauditoría detectó y corrigió un boundary asíncrono: el result-path puede reconstruir Task sin adaptive binding; el outcome ahora deriva exact `taskClass` y requirements del causal selection receipt para evitar contaminación `caps:*`→`role:*`.
+- `Orchestrator.matchTaskToAgent()` permanece único owner de actor selection;
+- matcher compone Task requirements, verified Capability Fabric, actor-linked EnvironmentResource, contextual Task outcomes, health/environment callbacks, known cost/latency, weak role hints y authority sin competence/reputation store paralelo;
+- parent/local capability no se presta al child y requested resource labels no se autopromueven a competence;
+- UNKNOWN capability/cost/history permanece UNKNOWN;
+- selection/unresolved y failure outcome usan Evidence Fabric causalmente, con stale-result rejection e idempotencia de replay;
+- spawn/discovery permanece bajo Environment Mobility;
+- el result-path asíncrono conserva exact causal task class/requirements desde el receipt de selección aun si Task reconstruction no lleva adaptive binding.
 
-Validación exacta del product HEAD `7cf5587a4aedf1ceb44df22ad816c9f1c7f68821`, CI `36205530967` SUCCESS 8/8:
-- ProjectOps integrity PASS;
-- typecheck/build/tests/security tests Node 22/24 PASS;
-- windows-regression Node 22/24 PASS;
-- public-distribution-smoke Node 22/24 PASS;
-- security-audit PASS;
-- rebrand-integrity PASS.
+Evidencia exacta:
+- product head `7cf5587a4aedf1ceb44df22ad816c9f1c7f68821`, CI `36205530967` SUCCESS 8/8;
+- final branch head `78c283d6912e7ea495dd003434fd2a4a31b95b33`, CI `36205849114` SUCCESS 8/8;
+- PR #71 exact-head CI `36206054440` SUCCESS 8/8;
+- merge `803802f68cc3c1b7c1bd8d850768ca924a18aca2`;
+- exact-main CI `36206237455` SUCCESS 8/8.
 
 Límites explícitos:
-- integración en `main` todavía NO HECHA;
 - no hay claim E4/E5/E6 ni LIVE/physical de actores externos reales;
-- clone/test local desde este container está `NO DISPONIBLE` por resolución de red hacia GitHub; la evidencia CI exacta sí está disponible y verde;
-- P-029/P-030 permanecen fuera de alcance.
+- cuentas/permisos/gasto/publicación/contrato reales siguen bajo sus authorities;
+- Family Knowledge/child birth gate permanece P-029 y Treasury P-030.
 
-NEXT_ELIGIBLE_WORK: validar el checkpoint documental actual con ProjectOps/full CI, abrir PR P-028 contra `main`, exigir PR exact-head green/no-drift, integrar si sigue válido y después exigir exact-main CI antes de promover P-028 a HECHO.
+Historia material en `continuity/C0024.md`.
+
+## P-029 — estado vivo
+
+P-029 continúa en `abos/p029-child-bootstrap-family-knowledge` con source completo y PR #74 abierto/mergeable.
+
+State: `EN_EJECUCIÓN / SOURCE_COMPLETE / BRANCH_E3_GREEN / PR_READY`.
+Decision-State: `DECISION_READY`.
+Source-complete product head: `2fe9fda35d99cde8759bccfc1b836a2e749106bb`.
+Exact-head CI: `36220144160` / run #2039 — `SUCCESS 8/8`.
+
+Decisión material confirmada:
+- Constitution: `REUSE + CORRECT WIRING`, fail-closed;
+- birth/start/health: `CORRECT`, process liveness no equivale a bootstrap/healthy;
+- genesis/KnowledgeStore: `EXTEND` con Family Knowledge versionado, provenance e import idempotente;
+- Skills/Capabilities: catálogo heredado como knowledge, nunca execution authority;
+- Family Knowledge: `CREATE_NARROW ADAPTER` sobre authorities existentes;
+- query selectiva: `EXTEND EXISTING COLONY MESSAGING`, Social relay/inbox/KV canónicos; sin segundo poller/store;
+- schema: `NO_CHANGE`.
+
+Validación exact-head verde en Node 22/24, Windows 22/24, public distribution 22/24, security audit y rebrand integrity. La primera ejecución CI del PR descubrió fixtures/expectativas históricas que asumían `process alive = healthy`; la familia causal fue reconciliada aportando bootstrap válido a tests históricos y preservando el gate de producción.
+
+Límites explícitos:
+- no se ha ejecutado un birth físico/LIVE contra Conway real desde este entorno;
+- `spawnChild()` instala el ref canónico público `main`, por lo que el nuevo child bootstrap sólo puede probarse materialmente en un child real después de integrar P-029 a `main`;
+- CI no demuestra cuentas/permisos/credits/disponibilidad Conway externa.
+
+Plan P-029: `SIN CAMBIO`; intención, arquitectura, dependencias y DoD siguen vigentes.
+
+NEXT_ELIGIBLE_WORK: integrar PR #74 desde el checkpoint branch-green, verificar merge SHA y CI exact-main. Sólo después reconciliar P-029 como `HECHO / SOURCE_COMPLETE / E3_MAIN_GREEN / INTEGRATION_VERIFIED` si exact-main queda verde; mantener LIVE/physical externo explícitamente NO VERIFICADO.
+
+Historia viva, implementación, adversarial review y recovery exactos en `continuity/C0025.md`.

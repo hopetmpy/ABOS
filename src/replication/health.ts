@@ -2,14 +2,20 @@
  * Child Health Monitor
  *
  * Checks the health of child ABOS agents by querying their sandboxes.
- * Uses JSON parsing (not string matching) for status results.
- * Never throws from health checks -- returns issues array instead.
+ * Process liveness is necessary but not sufficient: a lifecycle child can only
+ * be reported healthy when the birth/bootstrap authorities still verify.
  */
 
 import type { Database as DatabaseType } from "better-sqlite3";
-import type { ConwayClient, HealthCheckResult, ChildHealthConfig } from "../types.js";
+import type {
+  ChildAbosAgent,
+  ConwayClient,
+  HealthCheckResult,
+  ChildHealthConfig,
+} from "../types.js";
 import { DEFAULT_CHILD_HEALTH_CONFIG } from "../types.js";
 import type { ChildLifecycle } from "./lifecycle.js";
+import { verifyChildBootstrap } from "./bootstrap-gate.js";
 
 export { DEFAULT_CHILD_HEALTH_CONFIG };
 
@@ -45,13 +51,29 @@ export class ChildHealthMonitor {
     let creditBalance: number | null = null;
 
     try {
-      // Look up child sandbox. Health must be observed inside the child's
-      // execution boundary; the parent executor is not evidence of child state.
-      const childRow = this.db
-        .prepare("SELECT sandbox_id FROM children WHERE id = ?")
-        .get(childId) as { sandbox_id: string } | undefined;
+      // Look up the full durable child observation used by the bootstrap gate.
+      // Health must be observed inside the child's execution boundary; the
+      // parent executor is not evidence of child state.
+      const child = this.db
+        .prepare(
+          `SELECT
+             id,
+             name,
+             address,
+             sandbox_id AS sandboxId,
+             genesis_prompt AS genesisPrompt,
+             creator_message AS creatorMessage,
+             funded_amount_cents AS fundedAmountCents,
+             status,
+             created_at AS createdAt,
+             last_checked AS lastChecked,
+             chain_type AS chainType
+           FROM children
+           WHERE id = ?`,
+        )
+        .get(childId) as ChildAbosAgent | undefined;
 
-      if (!childRow) {
+      if (!child) {
         return {
           childId,
           healthy: false,
@@ -62,7 +84,7 @@ export class ChildHealthMonitor {
         };
       }
 
-      const childConway = this.conway.createScopedClient(childRow.sandbox_id);
+      const childConway = this.conway.createScopedClient(child.sandboxId);
       const result = await childConway.exec(
         "pgrep -af 'node .*dist/index\\.js --run' >/dev/null 2>&1 && echo running || echo stopped",
         10_000,
@@ -75,8 +97,21 @@ export class ChildHealthMonitor {
       } else {
         const observed = result.stdout.trim().split(/\s+/);
         if (observed.includes("running")) {
-          healthy = true;
+          // A running process is an observation of liveness, not proof that the
+          // child was born with valid constitution/lineage/knowledge context.
           lastSeen = new Date().toISOString();
+          const bootstrap = await verifyChildBootstrap(
+            childConway,
+            this.db,
+            child,
+          );
+          if (bootstrap.valid) {
+            healthy = true;
+          } else {
+            issues.push(
+              `bootstrap gate failed: ${bootstrap.evidence.join("; ")}`,
+            );
+          }
         } else if (observed.includes("stopped")) {
           issues.push("runtime process not running");
         } else {
@@ -109,7 +144,7 @@ export class ChildHealthMonitor {
    * running/sleeping rows that predate child_lifecycle_events.
    *
    * Legacy labels are candidates only. Adoption requires fresh child-scoped
-   * runtime evidence; UNKNOWN/errors leave the row untouched.
+   * runtime AND bootstrap evidence; UNKNOWN/errors leave the row untouched.
    */
   async checkAllChildren(): Promise<HealthCheckResult[]> {
     const healthyChildren = this.lifecycle.getChildrenInState("healthy");
@@ -158,7 +193,7 @@ export class ChildHealthMonitor {
               this.lifecycle.adoptObservedLegacyState(
                 result.childId,
                 "healthy",
-                "legacy child adopted from health probe observing runtime running",
+                "legacy child adopted from verified bootstrap plus runtime observation",
                 { evidence: result.issues, lastSeen: result.lastSeen },
               );
             } else if (result.issues.includes("runtime process not running")) {
@@ -172,7 +207,11 @@ export class ChildHealthMonitor {
           } else if (!result.healthy && child.status === "healthy") {
             this.lifecycle.transition(result.childId, "unhealthy", result.issues.join("; "));
           } else if (result.healthy && child.status === "unhealthy") {
-            this.lifecycle.transition(result.childId, "healthy", "recovered");
+            this.lifecycle.transition(
+              result.childId,
+              "healthy",
+              "bootstrap gate and runtime liveness recovered",
+            );
           }
         } catch {
           // Transition/adoption may fail if state changed concurrently; non-fatal.

@@ -3,6 +3,7 @@ import type { AbosDatabase, ExecResult } from "../types.js";
 import { ChildLifecycle } from "../replication/lifecycle.js";
 import { ChildHealthMonitor } from "../replication/health.js";
 import { createTestDb, MockConwayClient } from "./mocks.js";
+import { installValidP029Bootstrap } from "./p029-bootstrap-fixture.js";
 
 class LegacyHealthConway extends MockConwayClient {
   observed: "running" | "stopped" | "unknown" = "running";
@@ -21,6 +22,7 @@ class LegacyHealthConway extends MockConwayClient {
 
 function insertLegacyChild(
   db: AbosDatabase,
+  conway: LegacyHealthConway,
   status: "running" | "sleeping",
 ): void {
   db.raw.prepare(
@@ -36,6 +38,12 @@ function insertLegacyChild(
     status,
     "evm",
   );
+  installValidP029Bootstrap(db, conway, {
+    childId: "legacy-child",
+    childName: "legacy",
+    childAddress: "0xlegacy",
+    sandboxId: "sandbox-legacy",
+  });
 }
 
 describe("P-011 legacy child health reconciliation", () => {
@@ -52,7 +60,7 @@ describe("P-011 legacy child health reconciliation", () => {
   afterEach(() => db.close());
 
   it("adopts a legacy running row as healthy only after observed running evidence", async () => {
-    insertLegacyChild(db, "running");
+    insertLegacyChild(db, conway, "running");
     conway.observed = "running";
     const monitor = new ChildHealthMonitor(db.raw, conway, lifecycle);
 
@@ -68,7 +76,7 @@ describe("P-011 legacy child health reconciliation", () => {
   });
 
   it("adopts a legacy sleeping row as unhealthy only after observed process absence", async () => {
-    insertLegacyChild(db, "sleeping");
+    insertLegacyChild(db, conway, "sleeping");
     conway.observed = "stopped";
     const monitor = new ChildHealthMonitor(db.raw, conway, lifecycle);
 
@@ -81,7 +89,7 @@ describe("P-011 legacy child health reconciliation", () => {
   });
 
   it("preserves a legacy row unchanged when child runtime truth is UNKNOWN", async () => {
-    insertLegacyChild(db, "running");
+    insertLegacyChild(db, conway, "running");
     conway.observed = "unknown";
     const monitor = new ChildHealthMonitor(db.raw, conway, lifecycle);
 

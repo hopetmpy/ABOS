@@ -14,6 +14,7 @@ import {
 } from "./tools-core.js";
 import { applyP012ToolRouting } from "./tools-p012-adapter.js";
 import { createGuiTools } from "../gui/tools.js";
+import { createReplicationKnowledgeTools } from "../replication/tools.js";
 import { runWithProtectedToolInvoker } from "./protected-tool-invoker.js";
 
 export * from "./tools-core.js";
@@ -68,6 +69,7 @@ export function canonicalToolSurface(tools: readonly AbosTool[]): AbosTool[] {
 export function createBuiltinTools(sandboxId: string): AbosTool[] {
   return applyP012ToolRouting([
     ...createCoreBuiltinTools(sandboxId),
+    ...createReplicationKnowledgeTools(),
     ...createGuiTools(),
   ], sandboxId);
 }

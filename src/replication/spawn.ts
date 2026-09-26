@@ -17,7 +17,9 @@ import type {
 import { DEFAULT_CONFIG, MAX_CHILDREN } from "../types.js";
 import type { ChildLifecycle } from "./lifecycle.js";
 import { ulid } from "ulid";
-import { propagateConstitution } from "./constitution.js";
+import { propagateConstitution, verifyConstitution } from "./constitution.js";
+import { writeFamilyKnowledgeBundle } from "./family-knowledge.js";
+import { verifyChildBootstrap } from "./bootstrap-gate.js";
 import {
   ABOS_CANONICAL_BRANCH,
   ABOS_CANONICAL_REPOSITORY,
@@ -36,7 +38,6 @@ const SANDBOX_TIERS = [
 function selectSandboxTier(requestedMemoryMb: number) {
   return SANDBOX_TIERS.find((t) => t.memoryMb >= requestedMemoryMb) ?? SANDBOX_TIERS[SANDBOX_TIERS.length - 1];
 }
-
 
 async function installAbosRuntime(childConway: ConwayClient): Promise<void> {
   const command = [
@@ -70,6 +71,26 @@ export function isValidWalletAddress(address: string, chainType?: ChainType): bo
   // Default EVM validation (with non-zero check)
   return (
     /^0x[a-fA-F0-9]{40}$/.test(address) && address !== "0x" + "0".repeat(40)
+  );
+}
+
+async function materializeRequiredBootstrap(
+  childConway: ConwayClient,
+  sandboxId: string,
+  db: AbosDatabase,
+  parentAddress: string,
+): Promise<void> {
+  await propagateConstitution(childConway, sandboxId, db.raw);
+  const constitution = await verifyConstitution(childConway, sandboxId, db.raw);
+  if (!constitution.valid) {
+    throw new Error(`Child constitution bootstrap failed: ${constitution.detail}`);
+  }
+
+  await writeFamilyKnowledgeBundle(
+    childConway,
+    sandboxId,
+    db,
+    parentAddress,
   );
 }
 
@@ -157,8 +178,23 @@ export async function spawnChild(
     await childConway.exec("apt-get update -qq && apt-get install -y -qq nodejs npm git curl", 120_000);
     await installAbosRuntime(childConway);
 
+    // A failed sandbox is a reusable compute envelope, not reusable child identity.
+    // Remove stale child bootstrap state before assigning a new lineage/wallet.
+    if (reusedSandbox) {
+      const reset = await childConway.exec(
+        "rm -rf /root/.abos && mkdir -p /root/.abos",
+        10_000,
+      );
+      if (reset.exitCode !== 0) {
+        throw new Error(
+          `Failed to reset reused child sandbox state: ${reset.stderr || reset.stdout || `exit ${reset.exitCode}`}`,
+        );
+      }
+    } else {
+      await childConway.exec("mkdir -p /root/.abos", 10_000);
+    }
+
     // Write genesis configuration (on the CHILD sandbox)
-    await childConway.exec("mkdir -p /root/.abos", 10_000);
     const genesisJson = JSON.stringify(
       {
         name: genesis.name,
@@ -173,17 +209,24 @@ export async function spawnChild(
     );
     await childConway.writeFile("/root/.abos/genesis.json", genesisJson);
 
-    // Propagate constitution with hash verification
-    try {
-      await propagateConstitution(childConway, sandbox.id, db.raw);
-    } catch {
-      // Constitution file not found locally
-    }
+    // Constitution and Family Knowledge are required bootstrap material. Any
+    // propagation/hash failure is causal and aborts birth; it is not best-effort.
+    await materializeRequiredBootstrap(
+      childConway,
+      sandbox.id,
+      db,
+      identity.address,
+    );
 
-    // State: runtime_ready
-    lifecycle.transition(childId, "runtime_ready", "runtime installed");
+    // State: runtime_ready means the runtime and required pre-init artifacts are
+    // materially present, not merely that package installation finished.
+    lifecycle.transition(
+      childId,
+      "runtime_ready",
+      "runtime installed and required bootstrap artifacts materialized",
+    );
 
-    // Initialize child wallet (on the CHILD sandbox)
+    // Initialize child wallet/config/context (on the CHILD sandbox)
     const initResult = await childConway.exec("cd /root/abos && node dist/index.js --init 2>&1", 60_000);
     if (initResult.exitCode !== 0) {
       throw new Error(
@@ -203,16 +246,38 @@ export async function spawnChild(
       throw new Error(`Child wallet address invalid: ${childWallet}`);
     }
 
-    // Update address in children table
+    // Update address before the gate so verification compares against the same
+    // durable parent observation that later funding/start consumers will use.
     db.raw
       .prepare("UPDATE children SET address = ? WHERE id = ?")
       .run(childWallet, childId);
 
-    // State: wallet_verified
+    const childForGate: ChildAbosAgent = {
+      id: childId,
+      name: genesis.name,
+      address: childWallet,
+      sandboxId: sandbox.id,
+      genesisPrompt: genesis.genesisPrompt,
+      creatorMessage: genesis.creatorMessage,
+      fundedAmountCents: 0,
+      status: "runtime_ready",
+      createdAt: new Date().toISOString(),
+      chainType: parentChainType,
+    };
+    const bootstrap = await verifyChildBootstrap(childConway, db, childForGate);
+    if (!bootstrap.valid) {
+      throw new Error(
+        `Child bootstrap verification failed: ${bootstrap.evidence.join("; ")}`,
+      );
+    }
+
+    // State: wallet_verified now means wallet identity plus mandatory bootstrap
+    // gates were independently observed from the parent boundary.
     lifecycle.transition(
       childId,
       "wallet_verified",
-      `wallet ${childWallet} verified`,
+      `wallet ${childWallet} and bootstrap gate verified`,
+      { evidence: bootstrap.evidence },
     );
 
     // Record spawn modification
@@ -232,19 +297,10 @@ export async function spawnChild(
       ).run(sandbox.id);
     }
 
-    const child: ChildAbosAgent = {
-      id: childId,
-      name: genesis.name,
-      address: childWallet as any,
-      sandboxId: sandbox.id,
-      genesisPrompt: genesis.genesisPrompt,
-      creatorMessage: genesis.creatorMessage,
-      fundedAmountCents: 0,
-      status: "wallet_verified" as any,
-      createdAt: new Date().toISOString(),
+    return {
+      ...childForGate,
+      status: "wallet_verified",
     };
-
-    return child;
   } catch (error) {
     // Note: sandbox deletion is disabled by the Conway API (prepaid, non-refundable).
     // Failed sandboxes are left running and may be reused by findReusableSandbox().
@@ -257,7 +313,7 @@ export async function spawnChild(
         error instanceof Error ? error.message : String(error),
       );
     } catch {
-      // May fail if child doesn't exist yet
+      // May fail if child doesn't exist yet or already reached a non-failable terminal state.
     }
 
     throw error;
@@ -308,6 +364,39 @@ export async function ensureChildRuntimeRunning(
 
   const childConway = conway.createScopedClient(child.sandboxId);
   const evidence: string[] = [];
+
+  // Process liveness cannot promote a child to healthy unless all bootstrap
+  // authorities still validate from the child execution boundary.
+  const bootstrap = await verifyChildBootstrap(childConway, db, child);
+  evidence.push(...bootstrap.evidence);
+  if (!bootstrap.valid) {
+    const reason = `bootstrap gate failed before runtime start: ${bootstrap.evidence.join("; ")}`;
+    const observedState = lifecycle.getCurrentState(child.id);
+    db.setKV(
+      `child_bootstrap_last_failure:${child.id}`,
+      JSON.stringify({
+        observedAt: new Date().toISOString(),
+        state: observedState,
+        evidence: bootstrap.evidence,
+      }),
+    );
+
+    // A failed verification blocks execution, but it is not by itself proof of
+    // permanent child failure. Preserve funded/starting/unhealthy as retryable.
+    // A previously healthy child is degraded to unhealthy until fresh evidence
+    // re-establishes the bootstrap gate.
+    if (observedState === "healthy") {
+      try {
+        lifecycle.transition(child.id, "unhealthy", reason);
+      } catch {
+        // Preserve gate failure as the primary error.
+      }
+    }
+
+    throw new Error(`Child ${child.id} bootstrap verification failed: ${bootstrap.evidence.join("; ")}`);
+  }
+  db.deleteKV(`child_bootstrap_last_failure:${child.id}`);
+
   const probe = async (): Promise<boolean> => {
     const result = await childConway.exec(
       "pgrep -af 'node .*dist/index\\.js --run' >/dev/null 2>&1 && echo running || echo stopped",
@@ -319,7 +408,7 @@ export async function ensureChildRuntimeRunning(
       );
       return false;
     }
-    return result.stdout.trim().split(/\\s+/).includes("running");
+    return result.stdout.trim().split(/\s+/).includes("running");
   };
 
   const markHealthyFromCurrentState = () => {
@@ -329,7 +418,8 @@ export async function ensureChildRuntimeRunning(
       lifecycle.transition(
         child.id,
         "starting",
-        "runtime process already present; reconciling lifecycle before healthy",
+        "bootstrap verified; runtime process already present; reconciling lifecycle before healthy",
+        { bootstrapEvidence: bootstrap.evidence },
       );
       state = "starting";
     }
@@ -337,7 +427,8 @@ export async function ensureChildRuntimeRunning(
       lifecycle.transition(
         child.id,
         "healthy",
-        "runtime process observed running",
+        "bootstrap verified and runtime process observed running",
+        { bootstrapEvidence: bootstrap.evidence },
       );
       state = "healthy";
     }
@@ -368,7 +459,8 @@ export async function ensureChildRuntimeRunning(
     lifecycle.transition(
       child.id,
       "starting",
-      "runtime start requested",
+      "bootstrap verified; runtime start requested",
+      { bootstrapEvidence: bootstrap.evidence },
     );
     state = "starting";
   }
@@ -390,7 +482,7 @@ export async function ensureChildRuntimeRunning(
     );
     const running =
       check.exitCode === 0 &&
-      check.stdout.trim().split(/\\s+/).includes("running");
+      check.stdout.trim().split(/\s+/).includes("running");
 
     if (!running) {
       lifecycle.transition(
@@ -401,6 +493,7 @@ export async function ensureChildRuntimeRunning(
           stdout: check.stdout,
           stderr: check.stderr,
           exitCode: check.exitCode,
+          bootstrapEvidence: bootstrap.evidence,
         },
       );
       return {
@@ -420,7 +513,8 @@ export async function ensureChildRuntimeRunning(
       lifecycle.transition(
         child.id,
         "healthy",
-        "runtime started and process observation succeeded",
+        "bootstrap verified; runtime started and process observation succeeded",
+        { bootstrapEvidence: bootstrap.evidence },
       );
     }
 
@@ -505,11 +599,12 @@ async function spawnChildLegacy(
     );
     await childConway.writeFile("/root/.abos/genesis.json", legacyGenesisJson);
 
-    try {
-      await propagateConstitution(childConway, sandbox.id, db.raw);
-    } catch {
-      // Constitution file not found
-    }
+    await materializeRequiredBootstrap(
+      childConway,
+      sandbox.id,
+      db,
+      identity.address,
+    );
 
     const initResult = await childConway.exec("cd /root/abos && node dist/index.js --init 2>&1", 60_000);
     if (initResult.exitCode !== 0) {
@@ -531,15 +626,22 @@ async function spawnChildLegacy(
     const child: ChildAbosAgent = {
       id: childId,
       name: genesis.name,
-      address: childWallet as any,
+      address: childWallet,
       sandboxId: sandbox.id,
       genesisPrompt: genesis.genesisPrompt,
       creatorMessage: genesis.creatorMessage,
       fundedAmountCents: 0,
       status: "spawning",
       createdAt: new Date().toISOString(),
-      chainType: legacyParentChainType as any,
+      chainType: legacyParentChainType,
     };
+
+    const bootstrap = await verifyChildBootstrap(childConway, db, child);
+    if (!bootstrap.valid) {
+      throw new Error(
+        `Child bootstrap verification failed: ${bootstrap.evidence.join("; ")}`,
+      );
+    }
 
     db.insertChild(child);
 
