@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-030
 Active-Segment: continuity/C0026.md
-Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / AUDIT_OPEN / NOT_DECISION_READY
+Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / DECISION_READY / IMPLEMENTATION_PENDING
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,7 +15,7 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p030-family-economics-treasury
 Host-Head-At-Audit-Open: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
-Last-Reconciled-Host-Head: 2a0b8abc351286c362713845307cd95bcb25c01b
+Last-Reconciled-Host-Head: 9ac10272bcbd6b661de37acefbe5a9ec2bb88c1b
 Observed-Main-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-CI: 36220600132 — SUCCESS 8/8
@@ -92,31 +92,41 @@ Historia material y adversarial review: `continuity/C0025.md`.
 
 P-030 está abierto en `abos/p030-family-economics-treasury`.
 
-State: `EN_EJECUCIÓN / AUDIT_OPEN / NOT_DECISION_READY`.
+State: `EN_EJECUCIÓN / DECISION_READY / IMPLEMENTATION_PENDING`.
 Baseline exacto: `main d14f04b9fdea98eecd9d8e772b223b55d1fcf010`, CI `36220600132` SUCCESS 8/8.
-Product source P-030 al abrir: **UNCHANGED**.
+Product source P-030 hasta el decision gate: **UNCHANGED**.
+Audit checkpoint antes de source: `dac8d555d0d97cd023c4692c8fc1731de26bf3a5`.
+Decision gate registrado en `continuity/C0026.md` por commit `9ac10272bcbd6b661de37acefbe5a9ec2bb88c1b`.
 
-Objetivo actual: auditar authorities y flows económicos existentes antes de crear/modificar Treasury. Deben mapearse funding, balances observados, capital libre/comprometido/reservado, costs, allocations/returns, revenue/P&L externo, payments/refunds, idempotencia, restart/recovery, policy/approval, evidence y prediction→outcome.
+### Hipótesis resueltas
 
-Hipótesis abiertas:
-- H0 `NO_CHANGE`;
-- H1 `EXTEND_EXISTING_CAPITAL_LEDGER`;
-- H2 `UNIFY_DUPLICATED_ECONOMIC_RECORDS`;
-- H3 `CREATE_NARROW_TREASURY_DOMAIN_LAYER`;
-- H4 `CORRECT_SIDE_EFFECT_RECONCILIATION`;
-- H5 `EXTEND_EXISTING_LEARNING`.
+- H0 `NO_CHANGE`: FALSADA.
+- H1 `EXTEND_EXISTING_CAPITAL_LEDGER`: CONFIRMADA PARCIAL; realized/materialized state conserva `transactions`.
+- H2 `UNIFY_DUPLICATED_ECONOMIC_RECORDS`: COMPOSE, no colapsar authorities.
+- H3 `CREATE_NARROW_TREASURY_DOMAIN_LAYER`: CONFIRMADA.
+- H4 `CORRECT_SIDE_EFFECT_RECONCILIATION`: CONFIRMADA HARD.
+- H5 `EXTEND_EXISTING_LEARNING`: REUSE/COMPOSE P-023/P-025/P-027.
 
-Invariantes de control:
-- funding != balance != expense;
-- allocation/return internos != external revenue/P&L;
-- estimate != commitment != realized cost;
-- available balance != free capital;
-- refund pending != available liquidity;
-- parent accounting != child/provider observation;
-- UNKNOWN no se inventa como cero/loss/success;
-- no segunda ledger/treasury/policy/evidence authority por conveniencia;
-- financial side effects requieren authority, idempotency y reconciliation.
+### HARD findings
 
-Plan P-030: blueprint vigente, sin divergencia de intención detectada en apertura.
+- `transfer_credits` y `fund_child` todavía imponen `amount > balance/2` como prohibición universal.
+- survival funding colapsa fallo de balance a `0`.
+- provider status `submitted/processing/pending/unrecognized` puede materializarse como éxito por la semántica binaria actual.
+- `ConwayClient.transferCredits()` genera idempotency key nuevo por llamada; retry lógico posterior puede double-execute.
+- `SimpleFundingProtocol` convierte ambiguous transport en `success:false` y puede inducir replan/retry; external success + local persistence failure, en cambio, se loggea y devuelve success sin owner durable de reconciliation.
+- Policy lifecycle es audit/authorization authority, no idempotency authority cross-decision.
 
-NEXT_ELIGIBLE_WORK: continuar `continuity/C0026.md`; completar Required-Context y expandir a todos los owners/consumers financieros relevantes; discriminar H0–H5 y alcanzar `DECISION_READY` antes de tocar product source.
+### Arquitectura decidida
+
+- REUSE `transactions`, `spend_tracking`, `task_graph`, child bookkeeping, Evidence Fabric y Adaptive Path en sus ownerships actuales.
+- CREATE_NARROW una state machine durable de **financial effect intent/reconciliation**; no será ledger ni P&L authority.
+- Persistir intent antes de dispatch y reutilizar su durable idempotency key en provider calls.
+- Pending/unknown no materializa transaction; reject no materializa; settled materializa exactamente una vez; settled+local failure queda reconciliation-required.
+- Centralizar esa semántica para `transfer_credits`, `fund_child` y `SimpleFundingProtocol`.
+- Crear treasury projection causal: observed balance, commitments, pending effects, explicit reserves/contingency, internal allocation/return, realized known costs y child economics; free capital permanece UNKNOWN cuando falta evidencia material.
+- eliminar el guard universal de 50%; caps configurables restantes son guards/risk signals transicionales, no rationality truth.
+- prediction/outcome/opportunity learning permanece bajo P-023/P-025/P-027; no habrá segunda decision-memory authority.
+
+Plan P-030: blueprint vigente. La auditoría resolvió su arquitectura de implementación sin cambiar objetivo, alcance ni dependencias; no se requiere reescribir el blueprint antes de source.
+
+NEXT_ELIGIBLE_WORK: continuar `continuity/C0026.md` desde `DECISION_READY`; implementar primero narrow financial-effect state + migration mínima, reauditar schema/owners y sólo después conectar side effects.
