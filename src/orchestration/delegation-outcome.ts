@@ -47,21 +47,24 @@ export function recordDelegationAttemptOutcome(
     task.id,
     input.actorAddress,
   );
-  const selectionEventId = selectedReceipt?.id ?? null;
+
+  // Without a currently causal selected receipt, the result is stale,
+  // non-authoritative for the current attempt, or predates P-028. Do not turn
+  // it into actor competence evidence.
+  if (!selectedReceipt) return null;
+  const selectionEventId = selectedReceipt.id;
 
   // A selection receipt is the causal attempt identity. Re-entering failure
   // recovery after restart must not count the same attempt twice.
-  if (selectionEventId) {
-    const existing = db.prepare(
-      `SELECT *
-       FROM evidence_events
-       WHERE event_type = 'orchestration.delegation_attempt_outcome'
-         AND causation_id = ?
-       ORDER BY sequence DESC
-       LIMIT 1`,
-    ).get(selectionEventId) as any | undefined;
-    if (existing) return deserializeEvidence(existing);
-  }
+  const existing = db.prepare(
+    `SELECT *
+     FROM evidence_events
+     WHERE event_type = 'orchestration.delegation_attempt_outcome'
+       AND causation_id = ?
+     ORDER BY sequence DESC
+     LIMIT 1`,
+  ).get(selectionEventId) as any | undefined;
+  if (existing) return deserializeEvidence(existing);
 
   return appendEvidenceEvent(db, {
     correlationId: correlationIdFor("task", task.id),
