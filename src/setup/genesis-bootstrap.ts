@@ -87,6 +87,27 @@ function assertExistingConfigMatchesGenesis(
   }
 }
 
+function writeProtectedReceipt(receiptPath: string, content: string): void {
+  // A previous successful bootstrap may have left the receipt read-only. The
+  // file is owned by this child runtime, so make it writable only for the
+  // duration of the idempotent refresh, then restore defense-in-depth mode.
+  if (fs.existsSync(receiptPath)) {
+    try {
+      fs.chmodSync(receiptPath, 0o600);
+    } catch {
+      // Windows/filesystems without POSIX modes can still overwrite normally.
+    }
+  }
+
+  fs.writeFileSync(receiptPath, content, { mode: 0o600 });
+  try {
+    fs.chmodSync(receiptPath, 0o444);
+  } catch {
+    // Receipt immutability is defense-in-depth; parent-side hash/lineage
+    // verification remains the causal gate.
+  }
+}
+
 function applyFamilyKnowledgeBootstrap(
   config: AbosConfig,
   genesis: GenesisConfig,
@@ -124,15 +145,7 @@ function applyFamilyKnowledgeBootstrap(
       );
     }
 
-    fs.writeFileSync(receiptPath, JSON.stringify(receipt, null, 2), {
-      mode: 0o600,
-    });
-    try {
-      fs.chmodSync(receiptPath, 0o444);
-    } catch {
-      // Receipt immutability is defense-in-depth; parent-side hash/lineage
-      // verification remains the causal gate.
-    }
+    writeProtectedReceipt(receiptPath, JSON.stringify(receipt, null, 2));
   } finally {
     db.close();
   }
