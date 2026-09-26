@@ -14,6 +14,7 @@ import {
   decomposeGoal,
   type Goal,
   type TaskNode,
+  type TaskResult,
   normalizeTaskResult,
 } from "./task-graph.js";
 import {
@@ -57,10 +58,12 @@ import type {
   OrchestratorTickResult,
 } from "./types.js";
 import {
+  delegationTaskClass,
   recordDelegationDecision,
   selectDelegationActor,
   type DelegationActorCandidate,
 } from "./competence-delegation.js";
+import { recordDelegationAttemptOutcome } from "./delegation-outcome.js";
 import {
   Orchestrator as ExecutionCoreOrchestrator,
 } from "./orchestrator-core.js";
@@ -107,12 +110,12 @@ interface StrategicOrchestratorParams {
   dispatchAgentTask?: (
     assignment: AgentAssignment,
     task: TaskNode,
-  ) => Promise<import("./task-graph.js").TaskResult | void>;
+  ) => Promise<TaskResult | void>;
   prepareTaskResultForPersistence?: (
     sourceAddress: string,
     task: TaskNode,
-    result: import("./task-graph.js").TaskResult,
-  ) => Promise<import("./task-graph.js").TaskResult>;
+    result: TaskResult,
+  ) => Promise<TaskResult>;
 }
 
 const DEFAULT_STATE: OrchestratorState = {
@@ -137,7 +140,11 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
   private readonly strategicCognitive: CognitiveCostController;
 
   constructor(private readonly strategicParams: StrategicOrchestratorParams) {
-    super(strategicParams);
+    // Observe actor-caused negative TaskResults at the transport/result
+    // boundary, before failTask clears assigned_to. Do not learn competence
+    // from later persistence/review failures that merely pass through
+    // handleFailure. Successes remain attributable in terminal task_graph rows.
+    super(withDelegationOutcomeObservation(strategicParams));
     this.strategicAdaptive = new AdaptivePathEngine(strategicParams.db);
     this.strategicCognitive = new CognitiveCostController(strategicParams.db);
   }
@@ -988,6 +995,75 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       goalsActive: getActiveGoals(this.strategicParams.db).length,
       agentsActive: this.getStrategicActiveAgentCount(),
     };
+  }
+}
+
+function withDelegationOutcomeObservation(
+  params: StrategicOrchestratorParams,
+): StrategicOrchestratorParams {
+  const dispatch = params.dispatchAgentTask;
+  const prepare = params.prepareTaskResultForPersistence;
+
+  return {
+    ...params,
+    dispatchAgentTask: dispatch
+      ? async (assignment, task) => {
+          const result = await dispatch(assignment, task);
+          if (result && !result.success) {
+            recordObservedDelegationFailure(
+              params.db,
+              assignment.agentAddress,
+              task,
+              result,
+            );
+          }
+          return result;
+        }
+      : undefined,
+    // Install an observer even when no downstream normalization hook exists so
+    // asynchronous Colony/remote results still produce causal attempt evidence.
+    prepareTaskResultForPersistence: async (sourceAddress, task, result) => {
+      if (!result.success) {
+        recordObservedDelegationFailure(
+          params.db,
+          sourceAddress,
+          task,
+          result,
+        );
+      }
+      return prepare
+        ? prepare(sourceAddress, task, result)
+        : result;
+    },
+  };
+}
+
+function recordObservedDelegationFailure(
+  db: Database,
+  actorAddress: string,
+  task: TaskNode,
+  result: TaskResult,
+): void {
+  try {
+    recordDelegationAttemptOutcome(db, task, {
+      actorAddress,
+      success: false,
+      taskClass: delegationTaskClass(task),
+      requiredCapabilities: task.requiredCapabilities ?? [],
+      costCents: result.costCents,
+      durationMs: result.duration,
+      evidence: [
+        `Observed negative TaskResult from selected actor ${actorAddress}.`,
+        ...result.artifacts,
+      ],
+    });
+  } catch (error) {
+    // Evidence capture must never replace the canonical Task result path.
+    logger.warn("Failed to record delegation attempt outcome", {
+      taskId: task.id,
+      actorAddress,
+      error: normalizeError(error).message,
+    });
   }
 }
 
