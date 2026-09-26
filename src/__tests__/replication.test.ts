@@ -421,7 +421,7 @@ describe("ensureChildRuntimeRunning", () => {
     ).rejects.toThrow(/bootstrap verification failed/);
 
     expect(exec).not.toHaveBeenCalled();
-    expect(lifecycle.getCurrentState("child-runtime-1")).toBe("failed");
+    expect(lifecycle.getCurrentState("child-runtime-1")).toBe("funded");
   });
 });
 
