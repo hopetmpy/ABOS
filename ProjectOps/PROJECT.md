@@ -12,7 +12,7 @@ Supported-Node-Majors: `22,24`
 Recommended-Node-Major: `22`
 State-Root: `~/.abos`
 Source-Root: repository checkout
-Schema-Version-Observed-In-Source: `21`
+Schema-Version-Observed-In-Source: `22`
 ProjectOps-Protocol: `ProjectOps/system/ABOS_OPERATING_PROTOCOL.md`
 Adaptive-Reasoning: `ProjectOps/system/ABOS_ADAPTIVE_REASONING_LAYER.md`
 Plan-Authority: `ProjectOps/PLAN.md`
@@ -72,9 +72,9 @@ Checkout source y `~/.abos` son dominios distintos. `~/.abos` contiene estado ru
 
 ### 3.2 Persistencia
 
-`src/state/schema.ts` declara `SCHEMA_VERSION = 21`. v16 extendió `policy_decisions` para lifecycle de policy/authorization; v17 añadió el journal/lease transaccional P-012 (`self_mod_transactions` / `self_mod_leases`); v18 añadió `evidence_events` como fabric transversal de causalidad/correlación P-013; v19 añadió `capability_records` como backing durable del `CapabilityRegistry` canónico P-014; v20 añade history/evaluations durables para Skill Evolution sin retirar `skills` como proyección runtime compatible; v21 añade `adaptive_world_beliefs` como persistencia del World Model P-022, manteniendo `adaptive_world_facts` como snapshot factual compatible y Evidence Fabric como correlación/provenance referencial.
+`src/state/schema.ts` declara `SCHEMA_VERSION = 22`. v16 extendió `policy_decisions` para lifecycle de policy/authorization; v17 añadió el journal/lease transaccional P-012 (`self_mod_transactions` / `self_mod_leases`); v18 añadió `evidence_events` como fabric transversal de causalidad/correlación P-013; v19 añadió `capability_records` como backing durable del `CapabilityRegistry` canónico P-014; v20 añade history/evaluations durables para Skill Evolution sin retirar `skills` como proyección runtime compatible; v21 añade `adaptive_world_beliefs` como persistencia del World Model P-022, manteniendo `adaptive_world_facts` como snapshot factual compatible y Evidence Fabric como correlación/provenance referencial; v22 añade `financial_effects` como authority estrecha de intent/idempotency/reconciliation P-030, sin sustituir `transactions` como ledger de movimientos materializados.
 
-La SQLite canónica conserva identity, turns/tool calls, heartbeat, finanzas, skills, skill lifecycle/history, children, registry, memory/soul, orchestration/adaptive/environment state, policy lifecycle, self-mod recovery y migrations acumuladas. P-009 añadió provenance de inbox/turns de forma aditiva; legacy ambiguity degrada a UNKNOWN en vez de inventar trust.
+La SQLite canónica conserva identity, turns/tool calls, heartbeat, finanzas, financial-effect reconciliation, skills, skill lifecycle/history, children, registry, memory/soul, orchestration/adaptive/environment state, policy lifecycle, self-mod recovery y migrations acumuladas. P-009 añadió provenance de inbox/turns de forma aditiva; legacy ambiguity degrada a UNKNOWN en vez de inventar trust.
 
 ### 3.3 Ciclo principal
 
