@@ -99,7 +99,10 @@ function readKv(db: KvReader, key: string): string | undefined {
   return row?.value;
 }
 
-function knowledgeToProjection(entry: KnowledgeEntry): FamilyKnowledgeItem {
+/** Project one curated KnowledgeStore entry without widening authority. */
+export function knowledgeToFamilyProjection(
+  entry: KnowledgeEntry,
+): FamilyKnowledgeItem {
   return {
     category: entry.category,
     key: entry.key,
@@ -161,7 +164,7 @@ export function buildFamilyKnowledgeBundle(
   const store = new KnowledgeStore(db.raw);
   const knowledge = store
     .search("", undefined, MAX_KNOWLEDGE_ENTRIES)
-    .map(knowledgeToProjection);
+    .map(knowledgeToFamilyProjection);
 
   const skills = db
     .getSkills()
@@ -266,6 +269,26 @@ function upsertKnowledgeProjection(
     tokenCount: entry.tokenCount,
     expiresAt: entry.expiresAt,
   });
+}
+
+/**
+ * Import a selective query result through the same KnowledgeStore authority
+ * used by birth inheritance. This is intentionally knowledge-only: it cannot
+ * install skills, capabilities, credentials, policies, or execution authority.
+ */
+export function importFamilyKnowledgeItems(
+  db: AbosDatabase,
+  parentAddress: string,
+  entries: readonly FamilyKnowledgeItem[],
+): number {
+  const parent = parentAddress.trim();
+  if (!parent) throw new Error("Family knowledge parent address is required");
+
+  const store = new KnowledgeStore(db.raw);
+  for (const entry of entries) {
+    upsertKnowledgeProjection(store, parent, entry);
+  }
+  return entries.length;
 }
 
 function upsertCatalogKnowledge(
