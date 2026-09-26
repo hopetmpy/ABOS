@@ -62,6 +62,7 @@ import {
   recordDelegationDecision,
   selectDelegationActor,
   type DelegationActorCandidate,
+  type DelegationDecision,
 } from "./competence-delegation.js";
 import { recordDelegationAttemptOutcome } from "./delegation-outcome.js";
 import {
@@ -240,32 +241,41 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       });
 
     let decision = evaluate(actors);
-    if (decision.selected) {
-      recordDelegationDecision(this.strategicParams.db, task, decision);
-      logger.info("Competence delegation selected existing actor", {
-        taskId: task.id,
-        actor: decision.selected.actor.address,
-        capabilityState: decision.selected.capabilityState,
-        environment: decision.selected.environmentId,
-        expectedCostCents: decision.selected.expectedCostCents,
-        evidenceSamples: decision.selected.history.samples,
-      });
-      return {
-        agentAddress: decision.selected.actor.address,
-        agentName: decision.selected.actor.name,
-        spawned: decision.selected.actor.spawned ?? false,
-      };
+    const spawn = this.strategicParams.config?.spawnAgent;
+    const canSpawn =
+      this.strategicParams.config?.disableSpawn !== true &&
+      typeof spawn === "function";
+    const shouldDiscoverDelegatedActor =
+      canSpawn && shouldExploreDelegatedActor(task, decision);
+
+    if (decision.selected && !shouldDiscoverDelegatedActor) {
+      return persistAndReturnDelegation(
+        this.strategicParams.db,
+        task,
+        decision,
+        "existing",
+      );
     }
 
-    const spawn = this.strategicParams.config?.spawnAgent;
-    if (
-      this.strategicParams.config?.disableSpawn !== true &&
-      typeof spawn === "function"
-    ) {
+    if (shouldDiscoverDelegatedActor) {
       let spawned: any;
       try {
         spawned = await spawn(task);
       } catch (error) {
+        if (decision.selected) {
+          const fallbackDecision: DelegationDecision = {
+            ...decision,
+            reason:
+              `${decision.reason} Canonical spawn/mobility discovery failed; retained the already-eligible actor instead: ${normalizeError(error).message}`,
+          };
+          return persistAndReturnDelegation(
+            this.strategicParams.db,
+            task,
+            fallbackDecision,
+            "existing_after_spawn_unavailable",
+          );
+        }
+
         recordDelegationDecision(this.strategicParams.db, task, {
           ...decision,
           reason:
@@ -306,21 +316,23 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
 
         decision = evaluate([...actors, spawnedActor]);
         if (decision.selected) {
-          recordDelegationDecision(this.strategicParams.db, task, decision);
-          logger.info("Competence delegation selected actor after canonical spawn", {
-            taskId: task.id,
-            actor: decision.selected.actor.address,
-            spawned: decision.selected.actor.spawned ?? false,
-            capabilityState: decision.selected.capabilityState,
-            environment: decision.selected.environmentId,
-          });
-          return {
-            agentAddress: decision.selected.actor.address,
-            agentName: decision.selected.actor.name,
-            spawned: decision.selected.actor.spawned ?? false,
-          };
+          return persistAndReturnDelegation(
+            this.strategicParams.db,
+            task,
+            decision,
+            "after_spawn",
+          );
         }
       }
+    }
+
+    if (decision.selected) {
+      return persistAndReturnDelegation(
+        this.strategicParams.db,
+        task,
+        decision,
+        "existing_after_spawn_no_improvement",
+      );
     }
 
     recordDelegationDecision(this.strategicParams.db, task, decision);
@@ -996,6 +1008,52 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       agentsActive: this.getStrategicActiveAgentCount(),
     };
   }
+}
+
+function shouldExploreDelegatedActor(
+  task: TaskNode,
+  decision: DelegationDecision,
+): boolean {
+  if (!decision.selected) return true;
+  if (decision.selected.actor.kind !== "parent") return false;
+  if (decision.selected.capabilityState === "verified") return false;
+
+  const requestedRole = task.agentRole?.trim().toLowerCase() ?? "";
+  const explicitDelegationHint = Boolean(
+    requestedRole && requestedRole !== "parent" && requestedRole !== "self",
+  );
+  const unresolvedCapabilityNeed =
+    (task.requiredCapabilities?.length ?? 0) > 0 &&
+    decision.selected.unresolvedCapabilities.length > 0;
+
+  return explicitDelegationHint || unresolvedCapabilityNeed;
+}
+
+function persistAndReturnDelegation(
+  db: Database,
+  task: TaskNode,
+  decision: DelegationDecision,
+  stage: string,
+): AgentAssignment {
+  if (!decision.selected) {
+    throw new Error(`Cannot persist delegation without selected actor for task ${task.id}.`);
+  }
+  recordDelegationDecision(db, task, decision);
+  logger.info("Competence delegation selected actor", {
+    taskId: task.id,
+    actor: decision.selected.actor.address,
+    stage,
+    spawned: decision.selected.actor.spawned ?? false,
+    capabilityState: decision.selected.capabilityState,
+    environment: decision.selected.environmentId,
+    expectedCostCents: decision.selected.expectedCostCents,
+    evidenceSamples: decision.selected.history.samples,
+  });
+  return {
+    agentAddress: decision.selected.actor.address,
+    agentName: decision.selected.actor.name,
+    spawned: decision.selected.actor.spawned ?? false,
+  };
 }
 
 function withDelegationOutcomeObservation(
