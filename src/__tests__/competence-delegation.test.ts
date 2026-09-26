@@ -3,11 +3,16 @@ import { createDatabase } from "../state/database.js";
 import { CapabilityRegistry } from "../capabilities/registry.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import {
+  delegationTaskClass,
   latestDelegationReceipt,
   recordDelegationDecision,
   selectDelegationActor,
   type DelegationActorCandidate,
 } from "../orchestration/competence-delegation.js";
+import {
+  listDelegationAttemptOutcomes,
+  recordDelegationAttemptOutcome,
+} from "../orchestration/delegation-outcome.js";
 import { Orchestrator } from "../orchestration/orchestrator.js";
 import type { TaskNode } from "../orchestration/task-graph.js";
 
@@ -172,6 +177,15 @@ function addHistoricalOutcome(
       delegatedDispatchConfigured: true,
     });
     recordDelegationDecision(db.raw, historicalTask, preFailureDecision);
+    recordDelegationAttemptOutcome(db.raw, historicalTask, {
+      actorAddress: input.address,
+      success: false,
+      taskClass: delegationTaskClass(historicalTask),
+      requiredCapabilities: capabilities,
+      costCents: input.costCents ?? 1,
+      durationMs: input.durationMs ?? 100,
+      evidence: ["test observed negative TaskResult"],
+    });
 
     db.raw.prepare(
       `UPDATE task_graph
@@ -394,7 +408,7 @@ describe("P-028 competence delegation", () => {
     }
   });
 
-  it("attributes terminal failure through the delegation receipt after assigned_to is cleared and re-evaluates another actor", () => {
+  it("attributes a failed attempt after assigned_to is cleared and re-evaluates another actor", () => {
     const db = createDatabase(":memory:");
     try {
       addHistoricalOutcome(db, {
@@ -423,6 +437,72 @@ describe("P-028 competence delegation", () => {
       expect(failed?.history.samples).toBe(1);
       expect(decision.selected?.actor.address).toBe("local://new-unknown");
       expect(decision.selected?.history.successRate).toBeNull();
+    } finally {
+      db.close();
+    }
+  });
+
+  it("refuses stale actor outcomes after a later actor becomes the causal selection and deduplicates restart replay", () => {
+    const db = createDatabase(":memory:");
+    try {
+      const currentTask = task();
+      const decisionA = selectDelegationActor({
+        db: db.raw,
+        task: currentTask,
+        actors: [actor("local://actor-a")],
+        parentAddress: "0xparent",
+        resolveAgentEnvironment: () => "local",
+        isActorAlive: alive,
+        delegatedDispatchConfigured: true,
+      });
+      recordDelegationDecision(db.raw, currentTask, decisionA);
+
+      const decisionB = selectDelegationActor({
+        db: db.raw,
+        task: currentTask,
+        actors: [actor("local://actor-b")],
+        parentAddress: "0xparent",
+        resolveAgentEnvironment: () => "local",
+        isActorAlive: alive,
+        delegatedDispatchConfigured: true,
+      });
+      recordDelegationDecision(db.raw, currentTask, decisionB);
+
+      const stale = recordDelegationAttemptOutcome(db.raw, currentTask, {
+        actorAddress: "local://actor-a",
+        success: false,
+        taskClass: delegationTaskClass(currentTask),
+        requiredCapabilities: currentTask.requiredCapabilities ?? [],
+        evidence: ["late stale result"],
+      });
+      expect(stale).toBeNull();
+
+      const causal = recordDelegationAttemptOutcome(db.raw, currentTask, {
+        actorAddress: "local://actor-b",
+        success: false,
+        taskClass: delegationTaskClass(currentTask),
+        requiredCapabilities: currentTask.requiredCapabilities ?? [],
+        costCents: 9,
+        durationMs: 250,
+        evidence: ["causal result"],
+      });
+      const replay = recordDelegationAttemptOutcome(db.raw, currentTask, {
+        actorAddress: "local://actor-b",
+        success: false,
+        taskClass: delegationTaskClass(currentTask),
+        requiredCapabilities: currentTask.requiredCapabilities ?? [],
+        costCents: 9,
+        durationMs: 250,
+        evidence: ["replayed after restart"],
+      });
+
+      expect(causal?.id).toBeTruthy();
+      expect(replay?.id).toBe(causal?.id);
+      expect(listDelegationAttemptOutcomes(db.raw, "local://actor-a")).toHaveLength(0);
+      const outcomesB = listDelegationAttemptOutcomes(db.raw, "local://actor-b");
+      expect(outcomesB).toHaveLength(1);
+      expect(outcomesB[0]?.costCents).toBe(9);
+      expect(outcomesB[0]?.durationMs).toBe(250);
     } finally {
       db.close();
     }
