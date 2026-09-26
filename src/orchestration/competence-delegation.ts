@@ -270,21 +270,22 @@ function assessActor(
     }
   }
 
-  const capability = assessCapabilities(
-    input.db,
-    actor,
-    isParent,
-    input.requiredCapabilities,
-    input.capabilityRegistry,
-  );
-  evidence.push(...capability.evidence);
-
   const history = deriveHistory(
     input.db,
     actor.address,
     input.taskClass,
   );
   evidence.push(...history.evidence);
+
+  const capability = assessCapabilities(
+    input.db,
+    actor,
+    isParent,
+    input.requiredCapabilities,
+    history,
+    input.capabilityRegistry,
+  );
+  evidence.push(...capability.evidence);
 
   const resourceEvidence = actorResourceEvidence(input.db, actor.address);
   evidence.push(...resourceEvidence.evidence);
@@ -340,6 +341,7 @@ function assessCapabilities(
   actor: DelegationActorCandidate,
   isParent: boolean,
   required: string[],
+  history: DelegationHistory,
   capabilityRegistry?: CapabilityRegistry,
 ): {
   state: DelegationCapabilityState;
@@ -389,31 +391,41 @@ function assessCapabilities(
     };
   }
 
-  const resources = actorResourceRows(db, actor.address)
+  // EnvironmentResource.capabilities is NOT competence authority by itself.
+  // The current execution bridge may populate that field from the Task's
+  // requested capabilities at resource creation time. Promoting it here would
+  // be circular evidence: "requested X" -> "actor verified for X".
+  const readyResources = actorResourceRows(db, actor.address)
     .filter((resource) => READY_RESOURCE_STATUSES.has(resource.status));
-  const observed = normalizeUnique(
-    resources.flatMap((resource) => parseStringArray(resource.capabilities)),
-  );
-  const verified = required.filter((requirement) =>
-    observed.some((capability) => normalize(capability) === normalize(requirement)),
-  );
-  const unresolved = required.filter(
-    (requirement) => !verified.includes(requirement),
+  const advertised = normalizeUnique(
+    readyResources.flatMap((resource) => parseStringArray(resource.capabilities)),
   );
 
+  if (history.successes > 0) {
+    return {
+      state: "verified",
+      verified: [...required],
+      unresolved: [],
+      evidence: [
+        `Actor has ${history.successes} successful terminal Task outcome(s) under exact contextual class ${history.taskClass}; that downstream outcome verifies competence for this requirement set.`,
+        ...(advertised.length > 0
+          ? [
+              `Actor-linked resource advertises [${advertised.join(", ")}], retained only as discovery/context evidence because resource capability labels may originate from requested Task requirements.`,
+            ]
+          : []),
+      ],
+    };
+  }
+
   return {
-    state: unresolved.length === 0 ? "verified" : "unknown",
-    verified,
-    unresolved,
+    state: "unknown",
+    verified: [],
+    unresolved: [...required],
     evidence: [
-      ...(verified.length > 0
+      `Actor-specific capability evidence is UNKNOWN for: ${required.join(", ")}. Parent/global capabilities were not lent to this actor.`,
+      ...(advertised.length > 0
         ? [
-            `Actor-specific ready/running resource evidence verifies: ${verified.join(", ")}.`,
-          ]
-        : []),
-      ...(unresolved.length > 0
-        ? [
-            `Actor-specific capability evidence is UNKNOWN for: ${unresolved.join(", ")}. Parent/global capabilities were not lent to this actor.`,
+            `Actor-linked resource advertises [${advertised.join(", ")}], but no successful contextual outcome currently proves those labels as actor competence; no circular promotion occurred.`,
           ]
         : []),
     ],
