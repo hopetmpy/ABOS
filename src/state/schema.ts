@@ -832,7 +832,7 @@ export const MIGRATION_V12 = `
   CREATE TABLE IF NOT EXISTS adaptive_assumptions (
     id TEXT PRIMARY KEY,
     goal_id TEXT NOT NULL REFERENCES goals(id),
-    path_id TEXT NOT NULL,
+    path_id TEXT NOT NULL REFERENCES adaptive_paths(id),
     statement TEXT NOT NULL,
     normalized_statement TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'active'
@@ -851,7 +851,7 @@ export const MIGRATION_V12 = `
 
   CREATE TABLE IF NOT EXISTS adaptive_world_facts (
     id TEXT PRIMARY KEY,
-    goal_id TEXT NOT NULL,
+    goal_id TEXT NOT NULL REFERENCES goals(id),
     key TEXT NOT NULL,
     value TEXT NOT NULL,
     confidence REAL NOT NULL DEFAULT 1.0,
@@ -869,8 +869,8 @@ export const MIGRATION_V12 = `
 
   CREATE TABLE IF NOT EXISTS adaptive_opportunities (
     id TEXT PRIMARY KEY,
-    goal_id TEXT NOT NULL,
-    source_path_id TEXT,
+    goal_id TEXT NOT NULL REFERENCES goals(id),
+    source_path_id TEXT REFERENCES adaptive_paths(id),
     description TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'open'
       CHECK(status IN ('open','selected','dismissed','resolved')),
