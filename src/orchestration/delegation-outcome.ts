@@ -32,6 +32,10 @@ export interface DelegationAttemptOutcome {
 }
 
 interface SelectedReceiptPayload {
+  taskClass?: string;
+  requirements?: {
+    requiredCapabilities?: unknown;
+  } | null;
   selectedActor?: { address?: string } | null;
 }
 
@@ -53,6 +57,7 @@ export function recordDelegationAttemptOutcome(
   // it into actor competence evidence.
   if (!selectedReceipt) return null;
   const selectionEventId = selectedReceipt.id;
+  const selectionContext = causalSelectionContext(selectedReceipt);
 
   // A selection receipt is the causal attempt identity. Re-entering failure
   // recovery after restart must not count the same attempt twice.
@@ -79,8 +84,14 @@ export function recordDelegationAttemptOutcome(
     payload: {
       actorAddress: input.actorAddress,
       success: input.success,
-      taskClass: input.taskClass,
-      requiredCapabilities: normalizeUnique(input.requiredCapabilities),
+      // The causal selection receipt owns the attempt context. Runtime result
+      // adapters may reconstruct a TaskNode from task_graph without the
+      // adaptive binding, so trusting the caller here would silently reclassify
+      // a caps:* attempt as role:* after an asynchronous result/restart.
+      taskClass: selectionContext.taskClass ?? input.taskClass,
+      requiredCapabilities:
+        selectionContext.requiredCapabilities ??
+        normalizeUnique(input.requiredCapabilities),
       costCents: finiteNonNegative(input.costCents),
       durationMs: finiteNonNegative(input.durationMs),
       evidence: uniqueStrings(input.evidence ?? []),
@@ -89,7 +100,7 @@ export function recordDelegationAttemptOutcome(
     provenance: {
       source: "P-028 delegation attempt outcome",
       derivation:
-        "Observed Task execution result attributed to the actor selected for the causal delegation attempt.",
+        "Observed Task execution result attributed to the actor and Task context captured by the causal delegation selection receipt.",
     },
   });
 }
@@ -177,6 +188,26 @@ function latestSelectionReceiptForActor(
     return null;
   }
   return deserializeEvidence(latest);
+}
+
+function causalSelectionContext(receipt: EvidenceEventRecord): {
+  taskClass: string | null;
+  requiredCapabilities: string[] | null;
+} {
+  const payload = receipt.payload as SelectedReceiptPayload | null;
+  const taskClass =
+    typeof payload?.taskClass === "string" && payload.taskClass.trim()
+      ? payload.taskClass.trim()
+      : null;
+  const rawCapabilities = payload?.requirements?.requiredCapabilities;
+  const requiredCapabilities = Array.isArray(rawCapabilities)
+    ? normalizeUnique(
+        rawCapabilities.filter(
+          (entry: unknown): entry is string => typeof entry === "string",
+        ),
+      )
+    : null;
+  return { taskClass, requiredCapabilities };
 }
 
 function deserializeEvidence(row: any): EvidenceEventRecord {
