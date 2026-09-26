@@ -109,26 +109,51 @@ function resultKey(requestId: string): string {
   return `${RESULT_PREFIX}${requestId}`;
 }
 
-function parseJsonObject(raw: string, label: string): Record<string, unknown> {
+function tryParseJsonObject(raw: string): Record<string, unknown> | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch (error) {
-    throw new Error(
-      `${label} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
-    );
+  } catch {
+    return null;
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error(`${label} must be an object`);
+    return null;
   }
   return parsed as Record<string, unknown>;
+}
+
+function parseJsonObject(raw: string, label: string): Record<string, unknown> {
+  const parsed = tryParseJsonObject(raw);
+  if (!parsed) throw new Error(`${label} must be a valid JSON object`);
+  return parsed;
+}
+
+function isIsoDate(value: unknown): value is string {
+  return typeof value === "string" && !Number.isNaN(Date.parse(value));
+}
+
+function isFamilyKnowledgeItem(value: unknown): value is FamilyKnowledgeItem {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const item = value as Partial<FamilyKnowledgeItem>;
+  return (
+    typeof item.category === "string" && item.category.length > 0 &&
+    typeof item.key === "string" && item.key.length > 0 &&
+    typeof item.content === "string" &&
+    typeof item.source === "string" && item.source.length > 0 &&
+    typeof item.confidence === "number" && Number.isFinite(item.confidence) &&
+    item.confidence >= 0 && item.confidence <= 1 &&
+    isIsoDate(item.lastVerified) &&
+    typeof item.tokenCount === "number" && Number.isInteger(item.tokenCount) &&
+    item.tokenCount >= 0 &&
+    (item.expiresAt === null || isIsoDate(item.expiresAt))
+  );
 }
 
 export function parseFamilyKnowledgeQueryRequest(
   raw: string,
 ): FamilyKnowledgeQueryRequest | null {
-  const value = parseJsonObject(raw, "Family knowledge query");
-  if (value.protocol !== FAMILY_KNOWLEDGE_QUERY_PROTOCOL) return null;
+  const value = tryParseJsonObject(raw);
+  if (!value || value.protocol !== FAMILY_KNOWLEDGE_QUERY_PROTOCOL) return null;
 
   if (
     typeof value.requestId !== "string" ||
@@ -137,8 +162,7 @@ export function parseFamilyKnowledgeQueryRequest(
     (value.category !== null && value.category !== undefined &&
       typeof value.category !== "string") ||
     typeof value.limit !== "number" ||
-    typeof value.requestedAt !== "string" ||
-    Number.isNaN(Date.parse(value.requestedAt))
+    !isIsoDate(value.requestedAt)
   ) {
     throw new Error("Invalid family knowledge query contract");
   }
@@ -162,8 +186,8 @@ export function parseFamilyKnowledgeQueryRequest(
 export function parseFamilyKnowledgeQueryResponse(
   raw: string,
 ): FamilyKnowledgeQueryResponse | null {
-  const value = parseJsonObject(raw, "Family knowledge response");
-  if (value.protocol !== FAMILY_KNOWLEDGE_RESPONSE_PROTOCOL) return null;
+  const value = tryParseJsonObject(raw);
+  if (!value || value.protocol !== FAMILY_KNOWLEDGE_RESPONSE_PROTOCOL) return null;
 
   if (
     typeof value.requestId !== "string" ||
@@ -173,14 +197,29 @@ export function parseFamilyKnowledgeQueryResponse(
     typeof value.query !== "string" ||
     (value.category !== null && value.category !== undefined &&
       typeof value.category !== "string") ||
-    typeof value.generatedAt !== "string" ||
-    Number.isNaN(Date.parse(value.generatedAt)) ||
-    !Array.isArray(value.knowledge)
+    !isIsoDate(value.generatedAt) ||
+    !Array.isArray(value.knowledge) ||
+    value.knowledge.length > MAX_QUERY_LIMIT ||
+    !value.knowledge.every(isFamilyKnowledgeItem)
   ) {
     throw new Error("Invalid family knowledge response contract");
   }
 
-  return value as unknown as FamilyKnowledgeQueryResponse;
+  const normalized = normalizeQueryOptions({
+    query: value.query,
+    category: typeof value.category === "string" ? value.category : null,
+    limit: Math.max(1, value.knowledge.length || 1),
+  });
+
+  return {
+    protocol: FAMILY_KNOWLEDGE_RESPONSE_PROTOCOL,
+    requestId: value.requestId,
+    parentAddress: value.parentAddress,
+    query: normalized.query,
+    category: normalized.category,
+    generatedAt: value.generatedAt,
+    knowledge: value.knowledge,
+  };
 }
 
 export function createFamilyKnowledgeQueryRequest(
@@ -268,6 +307,18 @@ function readPending(
   const raw = db.getKV(pendingKey(requestId));
   if (!raw) return null;
   const parsed = parseJsonObject(raw, "Pending family knowledge query");
+  if (
+    parsed.protocol !== FAMILY_KNOWLEDGE_QUERY_PROTOCOL ||
+    typeof parsed.requestId !== "string" ||
+    typeof parsed.parentAddress !== "string" ||
+    typeof parsed.query !== "string" ||
+    (parsed.category !== null && typeof parsed.category !== "string") ||
+    typeof parsed.limit !== "number" ||
+    !isIsoDate(parsed.requestedAt) ||
+    !isIsoDate(parsed.expiresAt)
+  ) {
+    throw new Error("Invalid persisted family knowledge query state");
+  }
   return parsed as unknown as PendingFamilyKnowledgeQuery;
 }
 
@@ -314,7 +365,7 @@ export function applyFamilyKnowledgeQueryResponse(
   }
   if (Date.parse(pending.expiresAt) < Date.now()) {
     db.deleteKV(pendingKey(response.requestId));
-    throw new Error(`Family knowledge response arrived after request expiry`);
+    throw new Error("Family knowledge response arrived after request expiry");
   }
   if (
     pending.query !== response.query ||
@@ -347,13 +398,20 @@ export function configureFamilyKnowledgePeerHandlers(
   db: AbosDatabase,
   options: FamilyKnowledgePeerHandlerOptions,
 ): void {
+  const localAddress = db.getIdentity("address");
+  if (!localAddress || !sameAddress(localAddress, options.identityAddress)) {
+    throw new Error(
+      "Family knowledge handler identity does not match the canonical local identity",
+    );
+  }
+
   messaging.setHandler("peer_query", async (message: AgentMessage) => {
     const request = parseFamilyKnowledgeQueryRequest(message.content);
     if (!request) return;
 
     const response = buildFamilyKnowledgeQueryResponse(
       db,
-      options.identityAddress,
+      localAddress,
       message.from,
       request,
     );
@@ -415,6 +473,11 @@ export async function sendFamilyKnowledgeQuery(
   parentAddress: string,
   params: { query: string; category?: string | null; limit?: number },
 ): Promise<FamilyKnowledgeQueryRequest> {
+  const localAddress = db.getIdentity("address");
+  if (!localAddress) {
+    throw new Error("Family knowledge query requires canonical local identity");
+  }
+
   const request = createFamilyKnowledgeQueryRequest(db, parentAddress, params);
   const messaging = new ColonyMessaging(
     new SocialRelayTransport(social, db),
