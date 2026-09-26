@@ -8,7 +8,10 @@ import {
   selectDelegationActor,
   type DelegationActorCandidate,
 } from "../orchestration/competence-delegation.js";
+import { Orchestrator } from "../orchestration/orchestrator.js";
 import type { TaskNode } from "../orchestration/task-graph.js";
+
+let historySequence = 0;
 
 function task(overrides: Partial<TaskNode> = {}): TaskNode {
   return {
@@ -81,23 +84,136 @@ function addActorResource(
   });
 }
 
+function addHistoricalOutcome(
+  db: ReturnType<typeof createDatabase>,
+  input: {
+    address: string;
+    success: boolean;
+    capabilities?: string[];
+    role?: string;
+    costCents?: number;
+    durationMs?: number;
+    clearAssignmentAfterFailure?: boolean;
+  },
+): TaskNode {
+  historySequence += 1;
+  const suffix = `${historySequence}-${input.address.replace(/[^a-zA-Z0-9]/g, "-")}`;
+  const goalId = `history-goal-${suffix}`;
+  const taskId = `history-task-${suffix}`;
+  const now = new Date(Date.now() - historySequence * 1_000).toISOString();
+  const capabilities = input.capabilities ?? ["python"];
+  const role = input.role ?? "generalist";
+  const historicalTask = task({
+    id: taskId,
+    goalId,
+    agentRole: role,
+    requiredCapabilities: capabilities,
+    assignedTo: input.address,
+    status: input.success ? "completed" : "running",
+    metadata: {
+      ...task().metadata,
+      createdAt: now,
+      startedAt: now,
+      completedAt: input.success ? now : null,
+    },
+  });
+
+  db.raw.prepare(
+    `INSERT INTO goals (
+       id, title, description, status, created_at
+     ) VALUES (?, ?, ?, 'active', ?)`,
+  ).run(goalId, `History ${suffix}`, "delegation history fixture", now);
+
+  db.raw.prepare(
+    `INSERT INTO task_graph (
+       id, parent_id, goal_id, title, description, status, assigned_to,
+       agent_role, priority, dependencies, result,
+       estimated_cost_cents, actual_cost_cents, max_retries, retry_count,
+       timeout_ms, created_at, started_at, completed_at
+     ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 50, '[]', ?, 0, ?, 1, 0, 60000, ?, ?, ?)`,
+  ).run(
+    taskId,
+    goalId,
+    historicalTask.title,
+    historicalTask.description,
+    historicalTask.status,
+    historicalTask.assignedTo,
+    role,
+    input.success
+      ? JSON.stringify({
+          success: true,
+          output: "ok",
+          artifacts: [],
+          costCents: input.costCents ?? 1,
+          duration: input.durationMs ?? 100,
+        })
+      : null,
+    input.costCents ?? 0,
+    now,
+    now,
+    input.success ? now : null,
+  );
+
+  db.raw.prepare(
+    `INSERT INTO adaptive_task_bindings (
+       task_id, goal_id, path_id, required_capabilities,
+       preferred_environment, created_at, updated_at
+     ) VALUES (?, ?, NULL, ?, NULL, ?, ?)`,
+  ).run(taskId, goalId, JSON.stringify(capabilities), now, now);
+
+  if (!input.success) {
+    const preFailureDecision = selectDelegationActor({
+      db: db.raw,
+      task: historicalTask,
+      actors: [actor(input.address, role)],
+      parentAddress: "0xparent",
+      resolveAgentEnvironment: () => "local",
+      isActorAlive: () => true,
+      delegatedDispatchConfigured: true,
+    });
+    recordDelegationDecision(db.raw, historicalTask, preFailureDecision);
+
+    db.raw.prepare(
+      `UPDATE task_graph
+       SET status = 'failed',
+           assigned_to = ?,
+           result = ?,
+           completed_at = ?
+       WHERE id = ?`,
+    ).run(
+      input.clearAssignmentAfterFailure === false ? input.address : null,
+      JSON.stringify({
+        success: false,
+        output: "failed",
+        artifacts: [],
+        costCents: input.costCents ?? 1,
+        duration: input.durationMs ?? 100,
+      }),
+      now,
+      taskId,
+    );
+  }
+
+  return historicalTask;
+}
+
 function alive(address: string): boolean {
   return !address.includes("dead");
 }
 
 describe("P-028 competence delegation", () => {
-  it("is independent of actor registration order and uses known cost only after equivalent competence", () => {
+  it("is independent of actor registration order and compares known cost after equivalent observed competence", () => {
     const db = createDatabase(":memory:");
     try {
-      addActorResource(db, {
+      addHistoricalOutcome(db, {
         address: "local://expensive",
-        capabilities: ["python"],
-        estimatedCostCents: 40,
+        success: true,
+        costCents: 40,
       });
-      addActorResource(db, {
+      addHistoricalOutcome(db, {
         address: "local://efficient",
-        capabilities: ["python"],
-        estimatedCostCents: 10,
+        success: true,
+        costCents: 10,
       });
 
       const common = {
@@ -126,11 +242,13 @@ describe("P-028 competence delegation", () => {
     }
   });
 
-  it("prefers actor-specific verified capability over a matching role label", () => {
+  it("prefers contextual successful competence evidence over a matching role label", () => {
     const db = createDatabase(":memory:");
     try {
-      addActorResource(db, {
+      addHistoricalOutcome(db, {
         address: "local://verified",
+        success: true,
+        role: "builder",
         capabilities: ["python"],
       });
 
@@ -149,11 +267,39 @@ describe("P-028 competence delegation", () => {
 
       expect(decision.selected?.actor.address).toBe("local://verified");
       expect(decision.selected?.roleHintMatch).toBe(false);
+      expect(decision.selected?.capabilityState).toBe("verified");
       const roleOnly = decision.candidates.find(
         (candidate) => candidate.actor.address === "local://role-only",
       );
       expect(roleOnly?.capabilityState).toBe("unknown");
       expect(roleOnly?.roleHintMatch).toBe(true);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("does not promote requested EnvironmentResource capability labels into competence evidence", () => {
+    const db = createDatabase(":memory:");
+    try {
+      addActorResource(db, {
+        address: "local://unproven",
+        capabilities: ["python"],
+        estimatedCostCents: 3,
+      });
+      const decision = selectDelegationActor({
+        db: db.raw,
+        task: task(),
+        actors: [actor("local://unproven")],
+        parentAddress: "0xparent",
+        resolveAgentEnvironment: () => "local",
+        isActorAlive: alive,
+        delegatedDispatchConfigured: true,
+      });
+
+      expect(decision.selected?.capabilityState).toBe("unknown");
+      expect(decision.selected?.verifiedCapabilities).toEqual([]);
+      expect(decision.selected?.evidence.join(" ")).toContain("no circular promotion");
+      expect(decision.selected?.expectedCostCents).toBe(3);
     } finally {
       db.close();
     }
@@ -187,8 +333,7 @@ describe("P-028 competence delegation", () => {
         actors: [child, parent],
         parentAddress: "0xparent",
         capabilityRegistry: registry,
-        resolveAgentEnvironment: (address) =>
-          address === "0xparent" ? "local" : "local",
+        resolveAgentEnvironment: () => "local",
         isActorAlive: alive,
         delegatedDispatchConfigured: true,
       });
@@ -249,6 +394,40 @@ describe("P-028 competence delegation", () => {
     }
   });
 
+  it("attributes terminal failure through the delegation receipt after assigned_to is cleared and re-evaluates another actor", () => {
+    const db = createDatabase(":memory:");
+    try {
+      addHistoricalOutcome(db, {
+        address: "local://failed-before",
+        success: false,
+        clearAssignmentAfterFailure: true,
+      });
+
+      const decision = selectDelegationActor({
+        db: db.raw,
+        task: task(),
+        actors: [
+          actor("local://failed-before"),
+          actor("local://new-unknown"),
+        ],
+        parentAddress: "0xparent",
+        resolveAgentEnvironment: () => "local",
+        isActorAlive: alive,
+        delegatedDispatchConfigured: true,
+      });
+
+      const failed = decision.candidates.find(
+        (candidate) => candidate.actor.address === "local://failed-before",
+      );
+      expect(failed?.history.failures).toBe(1);
+      expect(failed?.history.samples).toBe(1);
+      expect(decision.selected?.actor.address).toBe("local://new-unknown");
+      expect(decision.selected?.history.successRate).toBeNull();
+    } finally {
+      db.close();
+    }
+  });
+
   it("persists an explainable Evidence Fabric receipt and reconstructs it after component restart", () => {
     const db = createDatabase(":memory:");
     try {
@@ -304,6 +483,56 @@ describe("P-028 competence delegation", () => {
       expect(decision.selected?.capabilityState).toBe("unknown");
       expect(decision.selected?.expectedCostCents).toBeNull();
       expect(decision.selected?.history.successRate).toBeNull();
+    } finally {
+      db.close();
+    }
+  });
+
+  it("wires the canonical Orchestrator to the evidence matcher without consulting getBestForTask", async () => {
+    const db = createDatabase(":memory:");
+    try {
+      addHistoricalOutcome(db, {
+        address: "local://competent",
+        success: true,
+        costCents: 5,
+      });
+      let getBestCalls = 0;
+      const tracker = {
+        getIdle: () => [
+          {
+            address: "local://competent",
+            name: "competent",
+            role: "builder",
+            status: "healthy",
+          },
+        ],
+        getBestForTask: () => {
+          getBestCalls += 1;
+          throw new Error("legacy first-idle selector must not run");
+        },
+        updateStatus: () => undefined,
+        register: () => undefined,
+      };
+      const orchestrator = new Orchestrator({
+        db: db.raw,
+        agentTracker: tracker,
+        funding: {} as any,
+        messaging: {} as any,
+        inference: {} as any,
+        identity: { address: "0xparent", name: "Parent" } as any,
+        config: { disableSpawn: true },
+        resolveAgentEnvironment: () => "local",
+        isWorkerAlive: () => true,
+        dispatchAgentTask: async () => undefined,
+      });
+
+      const assignment = await orchestrator.matchTaskToAgent(task({ agentRole: "analyst" }));
+      expect(assignment.agentAddress).toBe("local://competent");
+      expect(assignment.spawned).toBe(false);
+      expect(getBestCalls).toBe(0);
+      expect(latestDelegationReceipt(db.raw, "task-current")?.eventType).toBe(
+        "orchestration.delegation_selected",
+      );
     } finally {
       db.close();
     }
