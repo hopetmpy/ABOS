@@ -35,9 +35,11 @@ Dentro del mismo bloque macro (`AW-xx`, `Rxx`, `P-xxx` o `RECONCILIATION_BOUNDAR
 - usa **CHECKPOINT LIGERO → CONTINUAR** sólo cuando aporte recuperabilidad;
 - no hagas reconciliación completa ni reporte de cierre después de cada subunidad;
 - `LOCAL_BLOCK_IS_NOT_TOTAL_BLOCK`: si una ruta queda bloqueada y existe otra independiente elegible, registra el bloqueo mínimo y continúa;
-- un update de progreso informa, pero no cambia scope ni detiene la cadena;
-- `NO_TIME_QUOTA_AS_BOUNDARY`: el tiempo transcurrido no es frontera de cierre;
+- `VISIBLE_PROGRESS_IS_NOT_HANDOFF`: durante ejecuciones largas, un update breve por cambio material de estado informa **Ahora / Evidencia o cambio / Siguiente** y después continúa inmediatamente; no pide respuesta ni cambia scope;
+- `NO_TIME_QUOTA_AS_BOUNDARY`: el tiempo transcurrido no es frontera de cierre y no debe convertirse en una cuota fija de minutos, llamadas o subunidades;
 - `NO_GLOBAL_PROCESS_KILL_BY_TIMEOUT`: un timeout/fallo local limita esa ruta, no toda la sesión mientras exista trabajo alternativo elegible.
+
+Los updates visibles cumplen también una función de recuperación: si después ocurre una interrupción externa abrupta que impida emitir respuesta final, el último update material debe dejar suficiente orientación para no aparentar un bloqueo silencioso. No conviertas esto en spam por archivo, tool o test; informa cuando el estado material cambie.
 
 ### Resolución obligatoria del siguiente trabajo
 
@@ -49,9 +51,13 @@ Estas etiquetas son recordatorios de continuidad dentro del mismo flujo; **no fo
 
 `LOCAL_FAILURE_REQUIRES_REROUTE`: un fallo local exige registrar la información útil, revisar si cambia la hipótesis y continuar por una ruta elegible; sólo es bloqueo total cuando no queda una ruta materialmente válida dentro del scope.
 
-`STOP_GATE_REQUIRES_TERMINAL_CONDITION`: antes del handoff final de una solicitud de ejecución debe existir una razón terminal real: `REQUESTED_SCOPE_COMPLETE`, `TOTAL_REAL_BLOCK`, parada explícita del usuario o interrupción externa real. Un test, commit, timeout, checkpoint, finding, `NO_CHANGE` o lista local agotada no son por sí solos cierre. Las solicitudes exclusivamente de estado/diagnóstico responden lo pedido sin inventar ejecución adicional.
+`TURN_HANDOFF_IS_NOT_MACRO_CLOSURE`: el final de una respuesta/turno y el cierre del trabajo solicitado son cosas distintas. Mientras el turno conserve capacidad efectiva para ejecutar trabajo elegible, continúa. Si la ejecución actual debe devolver control porque la plataforma, sesión o herramientas ya no permiten continuar de forma fiable en ese turno, emite —si todavía es posible— un handoff de continuidad recuperable y deja el macro abierto. Ese handoff termina el turno y requiere una nueva intervención del usuario para reanudar, pero **no** convierte P/R/AW/proyecto en `HECHO`, no cambia scope y no autoriza parar antes por conveniencia.
+
+`STOP_GATE_REQUIRES_TERMINAL_CONDITION`: antes del handoff final de una solicitud de ejecución debe existir una razón real de salida del turno: `REQUESTED_SCOPE_COMPLETE`, `TOTAL_REAL_BLOCK`, parada explícita del usuario, interrupción externa real o `TURN_EXECUTION_BOUNDARY` cuando la ejecución actual ya no pueda seguir de forma fiable dentro del turno. `TURN_EXECUTION_BOUNDARY` no se infiere de minutos transcurridos, número de tools, commits, tests ni subunidades terminadas; sólo justifica handoff de continuidad, nunca cierre del macro. Un test, commit, timeout local, checkpoint, finding, `NO_CHANGE` o lista local agotada no son por sí solos cierre. Las solicitudes exclusivamente de estado/diagnóstico responden lo pedido sin inventar ejecución adicional.
 
 La reconciliación completa ocurre al cruzar una **frontera macro real**, al cambiar materialmente plan/estado o antes de declarar el bloque terminado. Contrasta Git/árbol, código/runtime/estado persistente, tests/evidencia, CONTINUITY + segmento activo y PLAN + módulo aplicable.
+
+Antes de cualquier handoff de continuidad por `TURN_EXECUTION_BOUNDARY` o interrupción externa, si todavía puede emitirse salida, deja como mínimo: unidad/macro abierto, branch/HEAD relevante, qué quedó demostrado o modificado, validaciones reales, pendientes/bloqueos y siguiente punto verificable. Eso es recovery, no reconciliación completa ni cierre.
 
 ## AUDITORÍA Y VERIFICACIÓN
 
@@ -131,11 +137,11 @@ Al reanudar:
 
 No repitas auditorías válidas por ceremonia. No conviertas una interrupción en cierre.
 
-Para solicitudes de ejecución, una respuesta final debe pasar `STOP_GATE_REQUIRES_TERMINAL_CONDITION`; en la práctica basta comprobar si queda trabajo elegible dentro del scope y si existe una condición terminal real, sin ejecutar una ceremonia separada.
+Para solicitudes de ejecución, una respuesta final debe pasar `STOP_GATE_REQUIRES_TERMINAL_CONDITION`; si la salida es por `TURN_EXECUTION_BOUNDARY`, entrega recovery suficiente y conserva explícitamente abierto el macro en vez de fingir cierre.
 
-Un bloque sólo puede entregarse como terminado cuando la frontera solicitada realmente terminó y está reconciliada, o cuando existe un bloqueo total real sin otra ruta elegible. Si el usuario pidió únicamente estado/diagnóstico, responde ese estado sin inventar ejecución adicional.
+Un bloque sólo puede entregarse **como terminado** cuando la frontera solicitada realmente terminó y está reconciliada, o cuando existe un bloqueo total real sin otra ruta elegible. Un turno sí puede terminar con handoff de continuidad sin declarar terminado el bloque. Si el usuario pidió únicamente estado/diagnóstico, responde ese estado sin inventar ejecución adicional.
 
-`RECOVERY_IS_NOT_CLOSURE`: una interrupción real puede requerir un checkpoint útil (bloque/estado, branch/HEAD, cambios, evidencia, pendientes y siguiente punto), pero no convierte automáticamente el macro en terminado.
+`RECOVERY_IS_NOT_CLOSURE`: una interrupción real o un `TURN_EXECUTION_BOUNDARY` puede requerir un checkpoint útil (bloque/estado, branch/HEAD, cambios, evidencia, pendientes y siguiente punto), pero no convierte automáticamente el macro en terminado.
 
 Antes de actuar: **«Entiende qué existe, por qué existe, quién depende de ello y qué ocurrirá si lo cambias.»**
 
