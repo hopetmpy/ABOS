@@ -5,22 +5,27 @@ import { MockConwayClient, createTestDb } from "./mocks.js";
 
 const CHILD = "0x1111111111111111111111111111111111111111";
 
-function insertChild(
+function createLifecycleChild(
   db: ReturnType<typeof createTestDb>,
+  lifecycle: ChildLifecycle,
   status: "funded" | "healthy",
   id: string,
-) {
-  db.insertChild({
-    id,
-    name: id,
-    address: CHILD,
-    sandboxId: `sandbox-${id}`,
-    genesisPrompt: "Recover safely.",
-    fundedAmountCents: 100,
-    status,
-    createdAt: "2026-09-25T00:00:00.000Z",
-    chainType: "evm",
-  });
+): void {
+  const sandboxId = `sandbox-${id}`;
+  lifecycle.initChild(id, id, sandboxId, "Recover safely.", "evm");
+  db.raw
+    .prepare(
+      "UPDATE children SET address = ?, funded_amount_cents = ? WHERE id = ?",
+    )
+    .run(CHILD, 100, id);
+  lifecycle.transition(id, "sandbox_created");
+  lifecycle.transition(id, "runtime_ready");
+  lifecycle.transition(id, "wallet_verified");
+  lifecycle.transition(id, "funded");
+  if (status === "healthy") {
+    lifecycle.transition(id, "starting");
+    lifecycle.transition(id, "healthy");
+  }
 }
 
 describe("P-029 bootstrap-gate recovery semantics", () => {
@@ -28,8 +33,8 @@ describe("P-029 bootstrap-gate recovery semantics", () => {
     const db = createTestDb();
     const conway = new MockConwayClient();
     try {
-      insertChild(db, "funded", "child-funded-recovery");
       const lifecycle = new ChildLifecycle(db.raw);
+      createLifecycleChild(db, lifecycle, "funded", "child-funded-recovery");
 
       await expect(
         ensureChildRuntimeRunning(
@@ -56,8 +61,8 @@ describe("P-029 bootstrap-gate recovery semantics", () => {
     const db = createTestDb();
     const conway = new MockConwayClient();
     try {
-      insertChild(db, "healthy", "child-healthy-recovery");
       const lifecycle = new ChildLifecycle(db.raw);
+      createLifecycleChild(db, lifecycle, "healthy", "child-healthy-recovery");
 
       await expect(
         ensureChildRuntimeRunning(
