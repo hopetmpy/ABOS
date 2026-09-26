@@ -1,4 +1,5 @@
 import type { Database } from "better-sqlite3";
+import { ulid } from "ulid";
 import { createLogger } from "../observability/logger.js";
 import type { AbosIdentity } from "../types.js";
 import type { EnvironmentRegistry } from "../environments/registry.js";
@@ -55,6 +56,11 @@ import type {
   FundingProtocol,
   OrchestratorTickResult,
 } from "./types.js";
+import {
+  recordDelegationDecision,
+  selectDelegationActor,
+  type DelegationActorCandidate,
+} from "./competence-delegation.js";
 import {
   Orchestrator as ExecutionCoreOrchestrator,
 } from "./orchestrator-core.js";
@@ -181,6 +187,139 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
     }
     this.persistStrategicTodo();
     return this.strategicTickResult(next);
+  }
+
+  /**
+   * P-028: one canonical actor-selection boundary.
+   *
+   * Roles remain weak hints. Competence/cost/outcome/authority are derived from
+   * existing Task, Capability, Environment and Evidence authorities. Spawning
+   * remains owned by Environment Mobility through config.spawnAgent; this method
+   * never performs provider selection itself.
+   */
+  override async matchTaskToAgent(task: TaskNode): Promise<AgentAssignment> {
+    const actors: DelegationActorCandidate[] =
+      this.strategicParams.agentTracker.getIdle().map((agent) => ({
+        address: agent.address,
+        name: agent.name,
+        role: agent.role,
+        status: agent.status,
+        kind: "worker",
+        spawned: false,
+      }));
+
+    if (this.strategicParams.identity?.address) {
+      actors.push({
+        address: this.strategicParams.identity.address,
+        name: this.strategicParams.identity.name ?? "parent",
+        role: "parent",
+        status: "running",
+        kind: "parent",
+        spawned: false,
+      });
+    }
+
+    const evaluate = (candidates: DelegationActorCandidate[]) =>
+      selectDelegationActor({
+        db: this.strategicParams.db,
+        task,
+        actors: candidates,
+        parentAddress: this.strategicParams.identity.address,
+        capabilityRegistry: this.strategicParams.capabilityRegistry,
+        resolveAgentEnvironment: this.strategicParams.resolveAgentEnvironment,
+        isActorAlive: this.strategicParams.isWorkerAlive,
+        delegatedDispatchConfigured:
+          typeof this.strategicParams.dispatchAgentTask === "function",
+      });
+
+    let decision = evaluate(actors);
+    if (decision.selected) {
+      recordDelegationDecision(this.strategicParams.db, task, decision);
+      logger.info("Competence delegation selected existing actor", {
+        taskId: task.id,
+        actor: decision.selected.actor.address,
+        capabilityState: decision.selected.capabilityState,
+        environment: decision.selected.environmentId,
+        expectedCostCents: decision.selected.expectedCostCents,
+        evidenceSamples: decision.selected.history.samples,
+      });
+      return {
+        agentAddress: decision.selected.actor.address,
+        agentName: decision.selected.actor.name,
+        spawned: decision.selected.actor.spawned ?? false,
+      };
+    }
+
+    const spawn = this.strategicParams.config?.spawnAgent;
+    if (
+      this.strategicParams.config?.disableSpawn !== true &&
+      typeof spawn === "function"
+    ) {
+      let spawned: any;
+      try {
+        spawned = await spawn(task);
+      } catch (error) {
+        recordDelegationDecision(this.strategicParams.db, task, {
+          ...decision,
+          reason:
+            `${decision.reason} Canonical spawn/mobility attempt failed: ${normalizeError(error).message}`,
+        });
+        throw error;
+      }
+
+      if (
+        spawned &&
+        typeof spawned.address === "string" &&
+        spawned.address.trim() &&
+        typeof spawned.name === "string" &&
+        spawned.name.trim()
+      ) {
+        const spawnedActor: DelegationActorCandidate = {
+          address: spawned.address,
+          name: spawned.name,
+          role: task.agentRole?.trim() || "generalist",
+          status: "running",
+          kind: "worker",
+          spawned: true,
+        };
+
+        this.strategicParams.agentTracker.register({
+          address: spawnedActor.address,
+          name: spawnedActor.name,
+          role: spawnedActor.role ?? "generalist",
+          sandboxId:
+            typeof spawned.sandboxId === "string" && spawned.sandboxId.trim()
+              ? spawned.sandboxId
+              : ulid(),
+        });
+        this.strategicParams.agentTracker.updateStatus(
+          spawnedActor.address,
+          "running",
+        );
+
+        decision = evaluate([...actors, spawnedActor]);
+        if (decision.selected) {
+          recordDelegationDecision(this.strategicParams.db, task, decision);
+          logger.info("Competence delegation selected actor after canonical spawn", {
+            taskId: task.id,
+            actor: decision.selected.actor.address,
+            spawned: decision.selected.actor.spawned ?? false,
+            capabilityState: decision.selected.capabilityState,
+            environment: decision.selected.environmentId,
+          });
+          return {
+            agentAddress: decision.selected.actor.address,
+            agentName: decision.selected.actor.name,
+            spawned: decision.selected.actor.spawned ?? false,
+          };
+        }
+      }
+    }
+
+    recordDelegationDecision(this.strategicParams.db, task, decision);
+    throw new Error(
+      `No available agent for task ${task.id}: ${decision.reason}`,
+    );
   }
 
   private handleStrategicClassification(
