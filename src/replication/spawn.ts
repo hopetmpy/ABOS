@@ -371,20 +371,31 @@ export async function ensureChildRuntimeRunning(
   evidence.push(...bootstrap.evidence);
   if (!bootstrap.valid) {
     const reason = `bootstrap gate failed before runtime start: ${bootstrap.evidence.join("; ")}`;
-    try {
-      state = lifecycle.getCurrentState(child.id);
-      if (state === "healthy") {
+    const observedState = lifecycle.getCurrentState(child.id);
+    db.setKV(
+      `child_bootstrap_last_failure:${child.id}`,
+      JSON.stringify({
+        observedAt: new Date().toISOString(),
+        state: observedState,
+        evidence: bootstrap.evidence,
+      }),
+    );
+
+    // A failed verification blocks execution, but it is not by itself proof of
+    // permanent child failure. Preserve funded/starting/unhealthy as retryable.
+    // A previously healthy child is degraded to unhealthy until fresh evidence
+    // re-establishes the bootstrap gate.
+    if (observedState === "healthy") {
+      try {
         lifecycle.transition(child.id, "unhealthy", reason);
-        state = "unhealthy";
+      } catch {
+        // Preserve gate failure as the primary error.
       }
-      if (state === "funded" || state === "starting" || state === "unhealthy") {
-        lifecycle.transition(child.id, "failed", reason);
-      }
-    } catch {
-      // Preserve gate failure as the primary error.
     }
+
     throw new Error(`Child ${child.id} bootstrap verification failed: ${bootstrap.evidence.join("; ")}`);
   }
+  db.deleteKV(`child_bootstrap_last_failure:${child.id}`);
 
   const probe = async (): Promise<boolean> => {
     const result = await childConway.exec(
