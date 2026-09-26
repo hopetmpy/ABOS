@@ -1,3 +1,4 @@
+import type { Database as DatabaseType } from "better-sqlite3";
 import type { AbosDatabase, ChildAbosAgent, ConwayClient } from "../types.js";
 import { verifyConstitution } from "./constitution.js";
 import { verifyFamilyKnowledgeBootstrap } from "./family-knowledge.js";
@@ -10,11 +11,29 @@ export interface ChildBootstrapVerification {
   configIdentityValid: boolean;
 }
 
+type BootstrapDb = AbosDatabase | DatabaseType;
+
 interface ChildConfigProjection {
   name?: unknown;
   walletAddress?: unknown;
   parentAddress?: unknown;
   sandboxId?: unknown;
+}
+
+function rawDb(db: BootstrapDb): DatabaseType {
+  return "raw" in db ? db.raw : db;
+}
+
+function writeAttestation(db: BootstrapDb, key: string, value: string): void {
+  if ("setKV" in db && typeof db.setKV === "function") {
+    db.setKV(key, value);
+    return;
+  }
+  rawDb(db)
+    .prepare(
+      "INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))",
+    )
+    .run(key, value);
 }
 
 /**
@@ -24,15 +43,16 @@ interface ChildConfigProjection {
  */
 export async function verifyChildBootstrap(
   childConway: ConwayClient,
-  db: AbosDatabase,
+  db: BootstrapDb,
   child: ChildAbosAgent,
 ): Promise<ChildBootstrapVerification> {
   const evidence: string[] = [];
+  const sqlite = rawDb(db);
 
   const constitution = await verifyConstitution(
     childConway,
     child.sandboxId,
-    db.raw,
+    sqlite,
   );
   evidence.push(`constitution: ${constitution.detail}`);
 
@@ -74,7 +94,8 @@ export async function verifyChildBootstrap(
 
   const valid = constitution.valid && family.valid && configIdentityValid;
   if (valid) {
-    db.setKV(
+    writeAttestation(
+      db,
       `child_bootstrap_attestation:${child.id}`,
       JSON.stringify({
         childId: child.id,
