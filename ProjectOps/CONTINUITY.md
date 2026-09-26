@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-028
 Active-Segment: continuity/C0024.md
-Active-Intervention: P028_COMPETENCE_DELEGATION — EN_EJECUCIÓN / AUDIT_OPEN / NOT_DECISION_READY
+Active-Intervention: P028_COMPETENCE_DELEGATION — EN_EJECUCIÓN / SOURCE_COMPLETE / E3_BRANCH_GREEN / INTEGRATION_PENDING
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,10 +15,10 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p028-competence-delegation
 Host-Head-At-Audit-Open: fdb7b9d9ab4b05430a40e6a7e6c3982fc4b39572
-Last-Reconciled-Host-Head: fdb7b9d9ab4b05430a40e6a7e6c3982fc4b39572
+Last-Reconciled-Host-Head: a2c116d52e64c59495ce50c049218434fd82e3c4
 Observed-Main-Head: fdb7b9d9ab4b05430a40e6a7e6c3982fc4b39572
-Last-Product-Head: fdb7b9d9ab4b05430a40e6a7e6c3982fc4b39572
-Last-Product-CI: 36199901975 — SUCCESS 8/8
+Last-Product-Head: 7cf5587a4aedf1ceb44df22ad816c9f1c7f68821
+Last-Product-CI: 36205530967 — SUCCESS 8/8
 Last-Completed-Plan: P-027
 Last-Completed-Merge: fdb7b9d9ab4b05430a40e6a7e6c3982fc4b39572
 Last-Completed-CI: 36199901975 — SUCCESS 8/8
@@ -107,18 +107,38 @@ Historia material y adversarial findings en `continuity/C0023.md`.
 
 ## P-028 — estado vivo
 
-P-028 se abre desde exact-main verde `fdb7b9d9ab4b05430a40e6a7e6c3982fc4b39572` en `abos/p028-competence-delegation`.
+P-028 se abrió desde exact-main verde `fdb7b9d9ab4b05430a40e6a7e6c3982fc4b39572` en `abos/p028-competence-delegation`.
 
 Dependencias del módulo demostradas HECHO: P-014, P-018, P-022, P-023, P-025 y P-026. P-027 también está integrado, aunque no es dependencia formal.
 
-State: `EN_EJECUCIÓN / AUDIT_OPEN / NOT_DECISION_READY`.
-Product source: UNCHANGED desde el baseline de apertura.
+State: `EN_EJECUCIÓN / SOURCE_COMPLETE / E3_BRANCH_GREEN / INTEGRATION_PENDING`.
+Decision-State: `DECISION_READY / IMPLEMENTED / NOT_INTEGRATED`.
+Source-complete product HEAD: `7cf5587a4aedf1ceb44df22ad816c9f1c7f68821`.
+Source-complete CI: `36205530967` — SUCCESS 8/8.
 
-Objetivo operativo inmediato:
-- reconstruir todos los owners/callers/state/tests de delegation, dispatch y actor selection;
-- mapear task requirements, worker/child/agent profiles, verified capabilities, skills/outcome evidence, availability/health, environment access, inference/environment/coordination cost, latency, trust/authority y local execution;
-- auditar first-idle/first-match/role/department/registration-order heuristics y rutas paralelas;
-- discriminar H0 NO_CHANGE, H1 EXTEND_EXISTING_DELEGATION_SELECTOR, H2 CREATE_NARROW_COMPETENCE_MATCHER, H3 UNIFY_PARALLEL_DELEGATION_PATHS y H4 REFACTOR_REQUIREMENTS/PROFILE_CONTRACT;
-- no modificar product source hasta alcanzar DECISION_READY o equivalente.
+Resultado material:
+- `Orchestrator.matchTaskToAgent()` permanece único owner de actor selection y deja de depender de `getBestForTask()`/primer idle/busy reassign como criterio canónico;
+- matcher estrecho compone Task requirements, Capability Fabric, actor-linked EnvironmentResource, contextual Task outcomes, health/environment callbacks, known cost/latency, weak role hints y authority sin tabla de competence/reputation paralela;
+- parent/local capabilities verificadas no se prestan al child;
+- resource capability labels potencialmente circulares no se promocionan a child competence;
+- UNKNOWN capability/cost/history se conserva como UNKNOWN;
+- selection/unresolved receipts se guardan en Evidence Fabric bajo Task authority;
+- delegation failures se atribuyen al causal selection receipt, sobreviven `assigned_to` cleanup, rechazan stale actor outcome y son idempotentes frente a restart replay;
+- spawn/discovery continúa por Environment Mobility y se reevalúa con el mismo matcher;
+- reauditoría detectó y corrigió un boundary asíncrono: el result-path puede reconstruir Task sin adaptive binding; el outcome ahora deriva exact `taskClass` y requirements del causal selection receipt para evitar contaminación `caps:*`→`role:*`.
 
-NEXT_ELIGIBLE_WORK: continuar `continuity/C0024.md`; auditar Required-Context y todo producer/consumer/test/history que pueda cambiar la decisión. No abrir trabajo paralelo para escapar de P-028.
+Validación exacta del product HEAD `7cf5587a4aedf1ceb44df22ad816c9f1c7f68821`, CI `36205530967` SUCCESS 8/8:
+- ProjectOps integrity PASS;
+- typecheck/build/tests/security tests Node 22/24 PASS;
+- windows-regression Node 22/24 PASS;
+- public-distribution-smoke Node 22/24 PASS;
+- security-audit PASS;
+- rebrand-integrity PASS.
+
+Límites explícitos:
+- integración en `main` todavía NO HECHA;
+- no hay claim E4/E5/E6 ni LIVE/physical de actores externos reales;
+- clone/test local desde este container está `NO DISPONIBLE` por resolución de red hacia GitHub; la evidencia CI exacta sí está disponible y verde;
+- P-029/P-030 permanecen fuera de alcance.
+
+NEXT_ELIGIBLE_WORK: validar el checkpoint documental actual con ProjectOps/full CI, abrir PR P-028 contra `main`, exigir PR exact-head green/no-drift, integrar si sigue válido y después exigir exact-main CI antes de promover P-028 a HECHO.
