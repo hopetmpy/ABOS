@@ -36,10 +36,18 @@ function writeAttestation(db: BootstrapDb, key: string, value: string): void {
     .run(key, value);
 }
 
+function clearAttestation(db: BootstrapDb, key: string): void {
+  rawDb(db).prepare("DELETE FROM kv WHERE key = ?").run(key);
+}
+
 /**
  * Verify the material child bootstrap from the parent's child-scoped execution
  * boundary. This is a gate over existing authorities, not a lifecycle or
  * identity authority of its own.
+ *
+ * Positive attestations are current observations, not permanent truth. Any
+ * failed re-verification deletes the previous positive attestation so stale
+ * evidence cannot be mistaken for current bootstrap validity.
  */
 export async function verifyChildBootstrap(
   childConway: ConwayClient,
@@ -48,6 +56,7 @@ export async function verifyChildBootstrap(
 ): Promise<ChildBootstrapVerification> {
   const evidence: string[] = [];
   const sqlite = rawDb(db);
+  const attestationKey = `child_bootstrap_attestation:${child.id}`;
 
   const constitution = await verifyConstitution(
     childConway,
@@ -96,7 +105,7 @@ export async function verifyChildBootstrap(
   if (valid) {
     writeAttestation(
       db,
-      `child_bootstrap_attestation:${child.id}`,
+      attestationKey,
       JSON.stringify({
         childId: child.id,
         sandboxId: child.sandboxId,
@@ -107,6 +116,8 @@ export async function verifyChildBootstrap(
         verifiedAt: new Date().toISOString(),
       }),
     );
+  } else {
+    clearAttestation(db, attestationKey);
   }
 
   return {
