@@ -8,6 +8,9 @@ import {
   restartChildRuntime,
 } from "../replication/runtime-control.js";
 import { createTestDb, MockConwayClient } from "./mocks.js";
+import { installValidP029Bootstrap } from "./p029-bootstrap-fixture.js";
+
+const CHILD_ADDRESS = "0x1111111111111111111111111111111111111111";
 
 class StatefulRuntimeConway extends MockConwayClient {
   processRunning = true;
@@ -46,21 +49,38 @@ class StatefulRuntimeConway extends MockConwayClient {
   }
 }
 
-function advanceToHealthy(lifecycle: ChildLifecycle, childId = "child-1"): void {
+function advanceToHealthy(
+  db: AbosDatabase,
+  lifecycle: ChildLifecycle,
+  conway: StatefulRuntimeConway,
+  childId = "child-1",
+): void {
   lifecycle.initChild(childId, "child", "sandbox-1", "genesis");
+  db.raw
+    .prepare("UPDATE children SET address = ? WHERE id = ?")
+    .run(CHILD_ADDRESS, childId);
   lifecycle.transition(childId, "sandbox_created");
   lifecycle.transition(childId, "runtime_ready");
   lifecycle.transition(childId, "wallet_verified");
   lifecycle.transition(childId, "funded");
   lifecycle.transition(childId, "starting");
   lifecycle.transition(childId, "healthy");
+  installValidP029Bootstrap(db, conway, {
+    childId,
+    childName: "child",
+    childAddress: CHILD_ADDRESS,
+    sandboxId: "sandbox-1",
+  });
 }
 
 function insertLegacyChild(
   db: AbosDatabase,
+  conway: StatefulRuntimeConway,
   status: "running" | "sleeping" | "unknown" | "dead" | "spawning" | "healthy",
   childId = "legacy-child",
 ): void {
+  const childAddress = `0x${childId}`;
+  const sandboxId = `sandbox-${childId}`;
   db.raw.prepare(
     `INSERT INTO children (
       id, name, address, sandbox_id, genesis_prompt, status, created_at, chain_type
@@ -68,12 +88,18 @@ function insertLegacyChild(
   ).run(
     childId,
     "legacy",
-    `0x${childId}`,
-    `sandbox-${childId}`,
+    childAddress,
+    sandboxId,
     "genesis",
     status,
     "evm",
   );
+  installValidP029Bootstrap(db, conway, {
+    childId,
+    childName: "legacy",
+    childAddress,
+    sandboxId,
+  });
 }
 
 describe("P-011 observed child runtime control", () => {
@@ -92,7 +118,7 @@ describe("P-011 observed child runtime control", () => {
   });
 
   it("observes running only from the child-scoped process probe", async () => {
-    advanceToHealthy(lifecycle);
+    advanceToHealthy(db, lifecycle, conway);
     conway.processRunning = true;
 
     const observed = await observeChildRuntime(conway, db, "child-1");
@@ -103,7 +129,7 @@ describe("P-011 observed child runtime control", () => {
   });
 
   it("preserves UNKNOWN when the process probe is unavailable", async () => {
-    advanceToHealthy(lifecycle);
+    advanceToHealthy(db, lifecycle, conway);
     conway.probeUnknown = true;
 
     const observed = await observeChildRuntime(conway, db, "child-1");
@@ -114,7 +140,7 @@ describe("P-011 observed child runtime control", () => {
   });
 
   it("persists stopped only after process absence is observed", async () => {
-    advanceToHealthy(lifecycle);
+    advanceToHealthy(db, lifecycle, conway);
     conway.processRunning = true;
 
     const result = await ensureChildRuntimeStopped(conway, db, "child-1", lifecycle);
@@ -127,7 +153,7 @@ describe("P-011 observed child runtime control", () => {
   });
 
   it("does not persist stopped when TERM is acknowledged but the process remains alive", async () => {
-    advanceToHealthy(lifecycle);
+    advanceToHealthy(db, lifecycle, conway);
     conway.processRunning = true;
     conway.ignoreTerminate = true;
 
@@ -140,7 +166,7 @@ describe("P-011 observed child runtime control", () => {
   });
 
   it("recovers a late-success running process after supervisor crash without stop or relaunch", async () => {
-    advanceToHealthy(lifecycle);
+    advanceToHealthy(db, lifecycle, conway);
     lifecycle.transition(
       "child-1",
       "unhealthy",
@@ -158,7 +184,7 @@ describe("P-011 observed child runtime control", () => {
   });
 
   it("keeps repeated recovery idempotent after the first recovery launched the process", async () => {
-    advanceToHealthy(lifecycle);
+    advanceToHealthy(db, lifecycle, conway);
     conway.processRunning = false;
 
     const first = await recoverChildRuntime(conway, db, "child-1", lifecycle);
@@ -172,7 +198,7 @@ describe("P-011 observed child runtime control", () => {
   });
 
   it("restarts through unhealthy without using terminal stopped as a midpoint", async () => {
-    advanceToHealthy(lifecycle);
+    advanceToHealthy(db, lifecycle, conway);
     conway.processRunning = true;
 
     const result = await restartChildRuntime(conway, db, "child-1", lifecycle);
@@ -188,7 +214,7 @@ describe("P-011 observed child runtime control", () => {
   });
 
   it("reconciles an already-absent process before restart and launches exactly once", async () => {
-    advanceToHealthy(lifecycle);
+    advanceToHealthy(db, lifecycle, conway);
     conway.processRunning = false;
 
     const result = await restartChildRuntime(conway, db, "child-1", lifecycle);
@@ -200,7 +226,7 @@ describe("P-011 observed child runtime control", () => {
   });
 
   it("does not stop or relaunch when the initial process state is UNKNOWN", async () => {
-    advanceToHealthy(lifecycle);
+    advanceToHealthy(db, lifecycle, conway);
     conway.probeUnknown = true;
 
     const result = await restartChildRuntime(conway, db, "child-1", lifecycle);
@@ -213,7 +239,7 @@ describe("P-011 observed child runtime control", () => {
   });
 
   it("adopts a legacy running child from observed running evidence before restart", async () => {
-    insertLegacyChild(db, "running");
+    insertLegacyChild(db, conway, "running");
     conway.processRunning = true;
 
     const result = await restartChildRuntime(conway, db, "legacy-child", lifecycle);
@@ -231,7 +257,7 @@ describe("P-011 observed child runtime control", () => {
   });
 
   it("adopts a legacy sleeping child as unhealthy when absence is observed, then restarts once", async () => {
-    insertLegacyChild(db, "sleeping");
+    insertLegacyChild(db, conway, "sleeping");
     conway.processRunning = false;
 
     const result = await restartChildRuntime(conway, db, "legacy-child", lifecycle);
@@ -246,7 +272,7 @@ describe("P-011 observed child runtime control", () => {
   });
 
   it("does not adopt or mutate a legacy child when process truth is UNKNOWN", async () => {
-    insertLegacyChild(db, "running");
+    insertLegacyChild(db, conway, "running");
     conway.probeUnknown = true;
 
     const result = await restartChildRuntime(conway, db, "legacy-child", lifecycle);
@@ -260,7 +286,7 @@ describe("P-011 observed child runtime control", () => {
   });
 
   it("adopts observed legacy absence as unhealthy before a permanent stopped transition", async () => {
-    insertLegacyChild(db, "running");
+    insertLegacyChild(db, conway, "running");
     conway.processRunning = false;
 
     const result = await ensureChildRuntimeStopped(
@@ -281,7 +307,7 @@ describe("P-011 observed child runtime control", () => {
   });
 
   it("legacy adoption is idempotent once lifecycle history exists", () => {
-    insertLegacyChild(db, "running");
+    insertLegacyChild(db, conway, "running");
 
     const first = lifecycle.adoptObservedLegacyState(
       "legacy-child",
@@ -302,7 +328,7 @@ describe("P-011 observed child runtime control", () => {
   });
 
   it("refuses permanent stop before any process effect when lifecycle authority is unavailable", async () => {
-    insertLegacyChild(db, "healthy");
+    insertLegacyChild(db, conway, "healthy");
 
     const result = await ensureChildRuntimeStopped(conway, db, "legacy-child", lifecycle);
 
