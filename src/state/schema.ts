@@ -7,7 +7,7 @@ import { WORLD_MODEL_SCHEMA } from "./world-model-schema.js";
  * The database IS the abos's memory.
  */
 
-export const SCHEMA_VERSION = 21;
+export const SCHEMA_VERSION = 22;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -75,6 +75,45 @@ export const CREATE_TABLES = `
     description TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  -- P-030 financial-effect intent/reconciliation authority.
+  -- This is NOT a second accounting ledger: settled money remains owned by
+  -- transactions. This table owns only pre-effect intent, provider observation,
+  -- durable idempotency and reconciliation state across restart/retry.
+  CREATE TABLE IF NOT EXISTS financial_effects (
+    id TEXT PRIMARY KEY,
+    operation_key TEXT NOT NULL UNIQUE,
+    effect_kind TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL CHECK(amount_cents >= 0),
+    unit TEXT NOT NULL DEFAULT 'credit_cent',
+    recipient TEXT,
+    child_id TEXT,
+    provider TEXT NOT NULL,
+    provider_effect_id TEXT,
+    provider_status TEXT,
+    state TEXT NOT NULL,
+    transaction_id TEXT REFERENCES transactions(id),
+    policy_decision_id TEXT,
+    request_json TEXT NOT NULL DEFAULT '{}',
+    evidence_json TEXT NOT NULL DEFAULT '[]',
+    last_error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    dispatched_at TEXT,
+    settled_at TEXT,
+    completed_at TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_financial_effects_state
+    ON financial_effects(state, updated_at);
+  CREATE INDEX IF NOT EXISTS idx_financial_effects_fingerprint
+    ON financial_effects(fingerprint, state, updated_at);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_financial_effects_provider_effect
+    ON financial_effects(provider, provider_effect_id)
+    WHERE provider_effect_id IS NOT NULL AND provider_effect_id != '';
+  CREATE INDEX IF NOT EXISTS idx_financial_effects_child
+    ON financial_effects(child_id, state, updated_at);
 
   -- Installed tools and MCP servers
   CREATE TABLE IF NOT EXISTS installed_tools (
@@ -793,7 +832,7 @@ export const MIGRATION_V12 = `
   CREATE TABLE IF NOT EXISTS adaptive_assumptions (
     id TEXT PRIMARY KEY,
     goal_id TEXT NOT NULL REFERENCES goals(id),
-    path_id TEXT NOT NULL REFERENCES adaptive_paths(id),
+    path_id TEXT NOT NULL,
     statement TEXT NOT NULL,
     normalized_statement TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'active'
@@ -812,7 +851,7 @@ export const MIGRATION_V12 = `
 
   CREATE TABLE IF NOT EXISTS adaptive_world_facts (
     id TEXT PRIMARY KEY,
-    goal_id TEXT NOT NULL REFERENCES goals(id),
+    goal_id TEXT NOT NULL,
     key TEXT NOT NULL,
     value TEXT NOT NULL,
     confidence REAL NOT NULL DEFAULT 1.0,
@@ -830,8 +869,8 @@ export const MIGRATION_V12 = `
 
   CREATE TABLE IF NOT EXISTS adaptive_opportunities (
     id TEXT PRIMARY KEY,
-    goal_id TEXT NOT NULL REFERENCES goals(id),
-    source_path_id TEXT REFERENCES adaptive_paths(id),
+    goal_id TEXT NOT NULL,
+    source_path_id TEXT,
     description TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'open'
       CHECK(status IN ('open','selected','dismissed','resolved')),
