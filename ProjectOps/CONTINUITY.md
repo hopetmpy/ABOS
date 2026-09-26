@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-029
 Active-Segment: continuity/C0025.md
-Active-Intervention: P029_CHILD_BOOTSTRAP_FAMILY_KNOWLEDGE — EN_EJECUCIÓN / AUDIT_OPEN / NOT_DECISION_READY
+Active-Intervention: P029_CHILD_BOOTSTRAP_FAMILY_KNOWLEDGE — EN_EJECUCIÓN / SOURCE_COMPLETE / BRANCH_E3_GREEN / PR_READY
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,10 +15,10 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p029-child-bootstrap-family-knowledge
 Host-Head-At-Audit-Open: 803802f68cc3c1b7c1bd8d850768ca924a18aca2
-Last-Reconciled-Host-Head: aea15c9a95b52d1b5c704a6391891bccb516346a
-Observed-Main-Head: 803802f68cc3c1b7c1bd8d850768ca924a18aca2
-Last-Product-Head: 7cf5587a4aedf1ceb44df22ad816c9f1c7f68821
-Last-Product-CI: 36205530967 — SUCCESS 8/8
+Last-Reconciled-Host-Head: bc3958bff06595b9a175657bb20514a7ecf8cb9f
+Observed-Main-Head: 7d89966b2dd5b63665ea640527d7fc387f3462e0
+Last-Product-Head: 2fe9fda35d99cde8759bccfc1b836a2e749106bb
+Last-Product-CI: 36220144160 — SUCCESS 8/8
 Last-Completed-Plan: P-028
 Last-Completed-Merge: 803802f68cc3c1b7c1bd8d850768ca924a18aca2
 Last-Completed-CI: 36206237455 — SUCCESS 8/8
@@ -136,21 +136,31 @@ Historia material en `continuity/C0024.md`.
 
 ## P-029 — estado vivo
 
-P-029 se abrió desde exact-main verde `803802f68cc3c1b7c1bd8d850768ca924a18aca2` en `abos/p029-child-bootstrap-family-knowledge`.
+P-029 continúa en `abos/p029-child-bootstrap-family-knowledge` con source completo y PR #74 abierto/mergeable.
 
-P-029 es `Priority: CRÍTICA`. Sus dependencias P-009, P-010, P-011, P-014, P-020, P-021 y P-028 están demostradas HECHO/integradas. P-028 era la última dependencia pendiente y cerró por PR #71 + exact-main CI `36206237455` SUCCESS 8/8.
+State: `EN_EJECUCIÓN / SOURCE_COMPLETE / BRANCH_E3_GREEN / PR_READY`.
+Decision-State: `DECISION_READY`.
+Source-complete product head: `2fe9fda35d99cde8759bccfc1b836a2e749106bb`.
+Exact-head CI: `36220144160` / run #2039 — `SUCCESS 8/8`.
 
-State: `EN_EJECUCIÓN / AUDIT_OPEN / NOT_DECISION_READY`.
-Decision-State: `NOT_DECISION_READY`.
-Product source P-029: `UNCHANGED` desde baseline main.
+Decisión material confirmada:
+- Constitution: `REUSE + CORRECT WIRING`, fail-closed;
+- birth/start/health: `CORRECT`, process liveness no equivale a bootstrap/healthy;
+- genesis/KnowledgeStore: `EXTEND` con Family Knowledge versionado, provenance e import idempotente;
+- Skills/Capabilities: catálogo heredado como knowledge, nunca execution authority;
+- Family Knowledge: `CREATE_NARROW ADAPTER` sobre authorities existentes;
+- query selectiva: `EXTEND EXISTING COLONY MESSAGING`, Social relay/inbox/KV canónicos; sin segundo poller/store;
+- schema: `NO_CHANGE`.
 
-Hipótesis activas:
-- H0 `NO_CHANGE` — abierta;
-- H1 `CORRECT_EXISTING_CHILD_BOOTSTRAP` — abierta;
-- H2 `EXTEND_EXISTING_MEMORY_KNOWLEDGE` — abierta;
-- H3 `UNIFY_EXISTING_PROPAGATION_PATHS` — abierta;
-- H4 `CREATE_NARROW_FAMILY_KNOWLEDGE_PROJECTION` — abierta sólo si authorities existentes no bastan.
+Validación exact-head verde en Node 22/24, Windows 22/24, public distribution 22/24, security audit y rebrand integrity. La primera ejecución CI del PR descubrió fixtures/expectativas históricas que asumían `process alive = healthy`; la familia causal fue reconciliada aportando bootstrap válido a tests históricos y preservando el gate de producción.
 
-NEXT_ELIGIBLE_WORK: completar la auditoría causal end-to-end de child spawn/birth, constitution verification, identity/wallet/genesis/lineage, lifecycle/restart y family/shared knowledge; buscar equivalentes/history; discriminar H0–H4 y alcanzar DECISION_READY antes de modificar product source.
+Límites explícitos:
+- no se ha ejecutado un birth físico/LIVE contra Conway real desde este entorno;
+- `spawnChild()` instala el ref canónico público `main`, por lo que el nuevo child bootstrap sólo puede probarse materialmente en un child real después de integrar P-029 a `main`;
+- CI no demuestra cuentas/permisos/credits/disponibilidad Conway externa.
 
-Historia viva y recovery exactos en `continuity/C0025.md`.
+Plan P-029: `SIN CAMBIO`; intención, arquitectura, dependencias y DoD siguen vigentes.
+
+NEXT_ELIGIBLE_WORK: integrar PR #74 desde el checkpoint branch-green, verificar merge SHA y CI exact-main. Sólo después reconciliar P-029 como `HECHO / SOURCE_COMPLETE / E3_MAIN_GREEN / INTEGRATION_VERIFIED` si exact-main queda verde; mantener LIVE/physical externo explícitamente NO VERIFICADO.
+
+Historia viva, implementación, adversarial review y recovery exactos en `continuity/C0025.md`.
