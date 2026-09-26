@@ -1,12 +1,20 @@
 import fs from "fs";
 import path from "path";
+import { createHash } from "crypto";
 import type { AbosConfig, GenesisConfig } from "../types.js";
-import { createConfig, loadConfig, saveConfig } from "../config.js";
+import { createConfig, loadConfig, resolvePath, saveConfig } from "../config.js";
 import { getAbosDir, getWallet } from "../identity/wallet.js";
 import { provision } from "../identity/provision.js";
 import { writeDefaultHeartbeatConfig } from "../heartbeat/config.js";
 import { detectEnvironment } from "./environment.js";
 import { generateSoulMd, installDefaultSkills } from "./defaults.js";
+import { createDatabase } from "../state/database.js";
+import {
+  FAMILY_KNOWLEDGE_HASH_PATH,
+  FAMILY_KNOWLEDGE_PATH,
+  FAMILY_KNOWLEDGE_RECEIPT_PATH,
+  importFamilyKnowledgeBundle,
+} from "../replication/family-knowledge.js";
 
 function readGenesis(): GenesisConfig | null {
   const genesisPath = path.join(getAbosDir(), "genesis.json");
@@ -54,28 +62,111 @@ function readGenesis(): GenesisConfig | null {
   return genesis as GenesisConfig;
 }
 
+function localAbosPath(remotePath: string): string {
+  const prefix = "/root/.abos/";
+  if (!remotePath.startsWith(prefix)) {
+    throw new Error(`Unsupported child bootstrap path: ${remotePath}`);
+  }
+  return path.join(getAbosDir(), remotePath.slice(prefix.length));
+}
+
+function assertExistingConfigMatchesGenesis(
+  existing: AbosConfig,
+  genesis: GenesisConfig,
+): void {
+  const chainType = genesis.chainType || "evm";
+  if (
+    existing.name !== genesis.name ||
+    existing.creatorAddress !== genesis.creatorAddress ||
+    existing.parentAddress !== genesis.parentAddress ||
+    (existing.chainType || "evm") !== chainType
+  ) {
+    throw new Error(
+      "Existing child config does not match current genesis lineage; refusing stale sandbox bootstrap reuse",
+    );
+  }
+}
+
+function applyFamilyKnowledgeBootstrap(
+  config: AbosConfig,
+  genesis: GenesisConfig,
+): void {
+  const bundlePath = localAbosPath(FAMILY_KNOWLEDGE_PATH);
+  const hashPath = localAbosPath(FAMILY_KNOWLEDGE_HASH_PATH);
+  const receiptPath = localAbosPath(FAMILY_KNOWLEDGE_RECEIPT_PATH);
+
+  if (!fs.existsSync(bundlePath) || !fs.existsSync(hashPath)) {
+    throw new Error(
+      "Replicated child bootstrap is missing family knowledge bundle/hash",
+    );
+  }
+
+  const raw = fs.readFileSync(bundlePath, "utf-8");
+  const expectedHash = fs.readFileSync(hashPath, "utf-8").trim();
+  const actualHash = createHash("sha256").update(raw, "utf-8").digest("hex");
+  if (!expectedHash || actualHash !== expectedHash) {
+    throw new Error(
+      `Family knowledge bootstrap hash mismatch: expected ${expectedHash || "<missing>"}, got ${actualHash}`,
+    );
+  }
+
+  const db = createDatabase(resolvePath(config.dbPath));
+  try {
+    const receipt = importFamilyKnowledgeBundle(
+      db,
+      raw,
+      genesis.parentAddress,
+      config.walletAddress,
+    );
+    if (receipt.bundleHash !== expectedHash) {
+      throw new Error(
+        `Family knowledge imported hash ${receipt.bundleHash} does not match materialized hash ${expectedHash}`,
+      );
+    }
+
+    fs.writeFileSync(receiptPath, JSON.stringify(receipt, null, 2), {
+      mode: 0o600,
+    });
+    try {
+      fs.chmodSync(receiptPath, 0o444);
+    } catch {
+      // Receipt immutability is defense-in-depth; parent-side hash/lineage
+      // verification remains the causal gate.
+    }
+  } finally {
+    db.close();
+  }
+}
+
 /**
  * Complete non-interactive setup for a replicated child.
  *
  * A child receives genesis.json from its parent. It must never fall through to
  * the interactive first-run wizard because start_child launches it under nohup
  * without a TTY. This bootstrap intentionally reuses the same canonical config,
- * wallet, heartbeat, soul, and skill helpers as the interactive wizard.
+ * wallet, heartbeat, soul, skill, and KnowledgeStore helpers as the interactive
+ * runtime rather than creating parallel authorities.
  *
  * Returns:
- * - the existing config if setup already completed;
+ * - the existing config if setup already completed and matches current genesis;
  * - null when this is not a parent-provisioned child;
  * - a newly persisted config after successful non-interactive bootstrap.
  *
- * Provisioning failure is fatal here. Persisting a config without a usable
- * Conway API key would only defer the failure until --run and leave a child
- * recorded as initialized when it cannot actually operate.
+ * Provisioning or Family Knowledge import failure is fatal. Persisting a config
+ * without a usable Conway API key or required family bootstrap would only defer
+ * failure until --run and create a false initialized state.
  */
 export async function bootstrapFromGenesisIfPresent(): Promise<AbosConfig | null> {
-  const existing = loadConfig();
-  if (existing) return existing;
-
   const genesis = readGenesis();
+  const existing = loadConfig();
+
+  if (existing) {
+    if (!genesis) return existing;
+    assertExistingConfigMatchesGenesis(existing, genesis);
+    applyFamilyKnowledgeBootstrap(existing, genesis);
+    return existing;
+  }
+
   if (!genesis) return null;
 
   const requestedChain = genesis.chainType || "evm";
@@ -127,6 +218,7 @@ export async function bootstrapFromGenesisIfPresent(): Promise<AbosConfig | null
   }
 
   installDefaultSkills(config.skillsDir || "~/.abos/skills");
+  applyFamilyKnowledgeBootstrap(config, genesis);
 
   return config;
 }
