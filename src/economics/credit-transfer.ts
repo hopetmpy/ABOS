@@ -5,6 +5,7 @@ import type { AbosDatabase, ConwayClient, SpendTrackerInterface } from "../types
 import { classifyCreditTransferStatus } from "../conway/credits.js";
 import {
   prepareFinancialEffect, claimFinancialEffectDispatch,
+  getFinancialEffectByOperationKey,
   recordFinancialEffectObservation, settleFinancialEffect,
   type FinancialEffectRecord,
 } from "./financial-effects.js";
@@ -72,31 +73,83 @@ export async function executeCreditEffect(input: CreditEffectRequest): Promise<F
     });
   }
 
-  return settleFinancialEffect(input.db.raw, claim.effect.operationKey, common, () => {
+  return reconcileCreditEffect(input.db, {
+    operationKey: claim.effect.operationKey,
+    resolution: "settled",
+    providerEffectId: transfer.transferId,
+    providerStatus: transfer.status,
+    balanceAfterCents: transfer.balanceAfterCents,
+    evidence: ["Conway final settlement response"],
+  }, input.spendTracker);
+}
+
+/**
+ * Apply a separately obtained provider observation without another payment.
+ * The caller must have independently verified the external settlement and its
+ * provenance; this function never upgrades a pending status to paid.
+ */
+export function reconcileCreditEffect(
+  db: AbosDatabase,
+  observation: {
+    operationKey: string;
+    resolution: "settled" | "pending" | "rejected" | "unknown";
+    providerEffectId?: string | null;
+    providerStatus?: string | null;
+    balanceAfterCents?: number | null;
+    evidence: string[];
+  },
+  spendTracker?: SpendTrackerInterface,
+): FinancialEffectRecord {
+  if (!observation.evidence.length || observation.evidence.some(item => !item.trim())) {
+    throw new Error("External reconciliation requires explicit supporting evidence");
+  }
+  const effect = getFinancialEffectByOperationKey(db.raw, observation.operationKey);
+  if (!effect) throw new Error("Financial effect to reconcile was not found");
+  const detail = {
+    providerEffectId: observation.providerEffectId,
+    providerStatus: observation.providerStatus,
+    evidence: observation.evidence,
+  };
+  if (observation.resolution !== "settled") {
+    return recordFinancialEffectObservation(db.raw, effect.operationKey, {
+      ...detail, resolution: observation.resolution,
+    });
+  }
+  if (classifyCreditTransferStatus(observation.providerStatus) !== "settled") {
+    throw new Error("A final provider settlement status is required before materialization");
+  }
+  if (effect.effectKind !== "child_funding" && effect.effectKind !== "credit_transfer") {
+    throw new Error("Reconciliation effect kind is not a Conway credit transfer");
+  }
+  const balance = observation.balanceAfterCents == null ? undefined : observation.balanceAfterCents;
+  if (balance !== undefined && (!Number.isSafeInteger(balance) || balance < 0)) {
+    throw new Error("Observed provider balance is invalid");
+  }
+  return settleFinancialEffect(db.raw, effect.operationKey, detail, () => {
     const id = ulid();
-    input.db.insertTransaction({
+    db.insertTransaction({
       id,
-      type: input.kind === "child_funding" ? "capital_allocation" : "transfer_out",
-      amountCents: input.amountCents,
-      balanceAfterCents: transfer.balanceAfterCents,
-      description: input.kind === "child_funding"
-        ? `Allocate working capital to child ${input.childId ?? toAddress}`
-        : `Transfer credits to ${toAddress}: ${input.note}`,
+      type: effect.effectKind === "child_funding" ? "capital_allocation" : "transfer_out",
+      amountCents: effect.amountCents,
+      balanceAfterCents: balance,
+      description: effect.effectKind === "child_funding"
+        ? `Allocate working capital to child ${effect.childId ?? effect.recipient}`
+        : `Transfer credits to ${effect.recipient}: ${String(effect.request.note ?? "")}`,
       timestamp: new Date().toISOString(),
     });
-    if (input.kind === "child_funding") {
-      const field = input.childId ? "id" : "address";
-      const value = input.childId ?? toAddress;
-      const result = input.db.raw.prepare(
+    if (effect.effectKind === "child_funding") {
+      const field = effect.childId ? "id" : "address";
+      const value = effect.childId ?? effect.recipient;
+      const updated = db.raw.prepare(
         `UPDATE children SET funded_amount_cents = funded_amount_cents + ? WHERE ${field} = ?`,
-      ).run(input.amountCents, value);
-      if (result.changes !== 1) throw new Error("Child funding ledger target missing or ambiguous");
+      ).run(effect.amountCents, value);
+      if (updated.changes !== 1) throw new Error("Child funding ledger target missing or ambiguous");
     } else {
-      input.spendTracker?.recordSpend({
+      spendTracker?.recordSpend({
         toolName: "transfer_credits",
         category: "transfer",
-        recipient: toAddress,
-        amountCents: input.amountCents,
+        recipient: effect.recipient ?? undefined,
+        amountCents: effect.amountCents,
       });
     }
     return id;
