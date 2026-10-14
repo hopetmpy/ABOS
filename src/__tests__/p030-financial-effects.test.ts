@@ -7,6 +7,7 @@ import { createDatabase } from "../state/database.js";
 import { createTestDb } from "./mocks.js";
 import {
   FinancialEffectIdempotencyConflictError,
+  FinancialEffectIntentPendingError,
   FinancialEffectReconciliationRequiredError,
   claimFinancialEffectDispatch,
   getCommittedFinancialEffectCents,
@@ -48,6 +49,59 @@ afterEach(() => {
 });
 
 describe("P-030 financial effect authority", () => {
+  it("does not dispatch a second equivalent unresolved effect using another key", () => {
+    const database = db();
+    const input = {
+      effectKind: "credit_transfer",
+      amountCents: 375,
+      recipient: "0xdestination",
+      provider: "conway",
+      request: { note: "same-purpose" },
+    };
+    prepareFinancialEffect(database.raw, { ...input, operationKey: "economic:first" });
+    claimFinancialEffectDispatch(database.raw, "economic:first");
+    recordFinancialEffectObservation(database.raw, "economic:first", {
+      resolution: "unknown",
+      error: "transport reply lost",
+    });
+    expect(() => prepareFinancialEffect(database.raw, {
+      ...input,
+      operationKey: "economic:second",
+    })).toThrow(FinancialEffectIntentPendingError);
+    expect(getFinancialEffectByOperationKey(database.raw, "economic:second")).toBeUndefined();
+    expect(getCommittedFinancialEffectCents(database.raw)).toBe(375);
+
+    // A completed prior transaction must not preclude an independently
+    // requested identical later transfer.
+    settleFinancialEffect(database.raw, "economic:first",
+      { providerStatus: "completed", evidence: ["provider verified finality"] },
+      () => "existing-record",
+    );
+    const second = prepareFinancialEffect(database.raw, {
+      ...input,
+      operationKey: "economic:second",
+    });
+    expect(second.created).toBe(true);
+    expect(second.effect.operationKey).toBe("economic:second");
+  });
+
+  it("does not classify different economic purposes as the same intent", () => {
+    const database = db();
+    const base = {
+      effectKind: "credit_transfer",
+      amountCents: 375,
+      recipient: "0xdestination",
+      provider: "conway",
+    };
+    prepareFinancialEffect(database.raw, {
+      ...base, operationKey: "one", request: { note: "invoice-1" },
+    });
+    const second = prepareFinancialEffect(database.raw, {
+      ...base, operationKey: "two", request: { note: "invoice-2" },
+    });
+    expect(second.created).toBe(true);
+  });
+
   it("materializes schema version 22 and the financial_effects authority", () => {
     const database = db();
     const version = database.raw
