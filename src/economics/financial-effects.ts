@@ -94,6 +94,25 @@ export class FinancialEffectIdempotencyConflictError extends Error {
   }
 }
 
+/**
+ * Different keys for the same still-unresolved economic terms are ambiguous.
+ * Do not silently claim the old effect was paid, and do not dispatch a second
+ * charge until the earlier provider observation is reconciled.
+ */
+export class FinancialEffectIntentPendingError extends Error {
+  readonly externalEffectOutcomeUnknown = true;
+  readonly existingOperationKey: string;
+
+  constructor(operationKey: string, existingOperationKey: string) {
+    super(
+      `Financial effect ${operationKey} overlaps unresolved intent ${existingOperationKey}; ` +
+      "reconcile the existing intent before dispatching an equivalent transfer.",
+    );
+    this.name = "FinancialEffectIntentPendingError";
+    this.existingOperationKey = existingOperationKey;
+  }
+}
+
 export class FinancialEffectReconciliationRequiredError extends Error {
   readonly operationKey: string;
   readonly externalEffectOutcomeUnknown = true;
@@ -313,6 +332,17 @@ export function prepareFinancialEffect(
   const id = ulid();
   const now = new Date().toISOString();
   db.transaction(() => {
+    // Atomic check with insertion: two distinct calls cannot both prepare an
+    // indistinguishable outstanding economic effect on the same SQLite owner.
+    const overlapping = db.prepare(
+      `SELECT operation_key FROM financial_effects
+       WHERE fingerprint = ? AND state IN ('prepared', 'dispatching',
+         'pending', 'unknown', 'reconciliation_required')
+       ORDER BY created_at ASC LIMIT 1`,
+    ).get(fingerprint) as { operation_key: string } | undefined;
+    if (overlapping) {
+      throw new FinancialEffectIntentPendingError(operationKey, overlapping.operation_key);
+    }
     db.prepare(
       `INSERT INTO financial_effects (
         id, operation_key, effect_kind, fingerprint, amount_cents, unit,
