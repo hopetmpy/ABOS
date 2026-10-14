@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-030
 Active-Segment: continuity/C0026.md
-Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / DECISION_READY / IMPLEMENTATION_PENDING
+Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / SOURCE_PARTIAL / E3_BRANCH_7_OF_8 / SECURITY_AUDIT_FAILED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,7 +15,7 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p030-family-economics-treasury
 Host-Head-At-Audit-Open: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
-Last-Reconciled-Host-Head: 9ac10272bcbd6b661de37acefbe5a9ec2bb88c1b
+Last-Reconciled-Host-Head: d737eb2df9852b1aded5f8aa1dfb4da9dc553354
 Observed-Main-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-CI: 36220600132 — SUCCESS 8/8
@@ -129,4 +129,18 @@ Decision gate registrado en `continuity/C0026.md` por commit `9ac10272bcbd6b661d
 
 Plan P-030: blueprint vigente. La auditoría resolvió su arquitectura de implementación sin cambiar objetivo, alcance ni dependencias; no se requiere reescribir el blueprint antes de source.
 
-NEXT_ELIGIBLE_WORK: continuar `continuity/C0026.md` desde `DECISION_READY`; implementar primero narrow financial-effect state + migration mínima, reauditar schema/owners y sólo después conectar side effects.
+NEXT_ELIGIBLE_WORK: continuar P-030 desde el checkpoint source d737eb2df9852b1aded5f8aa1dfb4da9dc553354; comprobar CI exact-head, reconciliar findings de test/adversarial, cerrar deduplicación de intents equivalentes con operation keys nuevas, remediar los seis avisos de dependencias, y terminar la integración del juicio treasury/recovery. No fusionar mientras CI no sea 8/8 y la auditoría de autoridad financiera conserve riesgos HARD.
+
+## P-030 — checkpoint de implementación 2026-10-14
+
+La auditoría hasta DECISION_READY se conserva como historia en C0026; ya no describe el código actual de la rama.
+
+- Branch source HEAD verificado: `d737eb2df9852b1aded5f8aa1dfb4da9dc553354` (aún sin PR/merge).
+- Ejecución CI exacta `38655906993` para `596fdc1a25c480e1a35b7c676c87dcd8441becf0`: siete jobs SUCCESS (build-and-test Node 22/24, Windows 22/24, public distribution 22/24, rebrand), security-audit FAILURE.
+- Nuevo code path: `src/economics/credit-transfer.ts` compone la authority `financial_effects` v22 existente, `transactions` y `spend_tracking`; transfer_credits/fund_child/SimpleFundingProtocol pasan por intent durable antes de dispatch, con idempotency key persistente al proveedor, status UNKNOWN/PENDING/REJECTED/SETTLED separado y materialización local atómica cuando existe settlement explícito.
+- `reconcileCreditEffect` permite reconciliar observaciones externas finales en estado durable sin volver a despachar. Los escenarios de prueba de esa ruta se añadieron en `src/__tests__/p030-credit-transfer-adapter.test.ts` en `d737eb2`; CI exact-head todavía debe consultarse antes de reclamar ese test como PASS.
+- `src/survival/funding.ts` ya no convierte un fallo de `getCreditsBalance()` en saldo cero.
+- `src/economics/treasury-projection.ts` distingue capital libre y comprometido y conserva UNKNOWN sin observaciones completas; incorpora valoraciones opcionales de inversión no monetaria segregadas de ingresos, cash ledger y unit conversion. Se proyecta en `colony_financial_report`, pero no mide automáticamente electricidad/internet/suscripciones: eso sigue requiriendo evidencia.
+- HARD pendiente: fresh logical operation key puede reproducir un intent económico equivalente no terminal; no declarar idempotencia entre claves distintas. Intento de corrección no incorporado.
+- Bloqueo de CI: `pnpm audit` encontró 6 avisos (4 HIGH, 2 CRITICAL), entre ellos `simple-git`, `@modelcontextprotocol/client`, `source-map-js`, y `@simple-git/argv-parser`. Remediación de dependencias y lockfile aún pendiente.
+- LIVE Conway transfer/settlement, costos físicos, entradas de negocio e ingresos realizados permanecen NO VERIFICADOS. P-030 sigue EN_EJECUCIÓN; P-031/P-039/P-033 no se adelantan.
