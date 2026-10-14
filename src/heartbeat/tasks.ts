@@ -24,6 +24,7 @@ import { AlertEngine, createDefaultAlertRules } from "../observability/alerts.js
 import { metricsInsertSnapshot, metricsPruneOld } from "../state/database.js";
 import { ulid } from "ulid";
 import { getChildEconomicSnapshot } from "../economics/child-economics.js";
+import { getTreasuryProjection } from "../economics/treasury-projection.js";
 
 const logger = createLogger("heartbeat.tasks");
 
@@ -626,6 +627,7 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
           capitalReturnedCents - capitalAllocatedCents,
         fundedToChildrenCents: childFunding.total,
         taskExecutionCostCents: taskCosts.total,
+        treasury: getTreasuryProjection(taskCtx.db),
         childEconomics,
         limitations: [
           "Revenue/expense remain unknown because generic transfer types do not prove causal business P&L.",
