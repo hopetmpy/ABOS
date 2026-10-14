@@ -1,0 +1,36 @@
+name: P030 dependency lockfile refresh
+on:
+  push:
+    branches:
+      - abos/p030-family-economics-treasury
+    paths:
+      - .github/workflows/p030-dependency-refresh.yml
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+      - name: Regenerate exact dependency lockfile
+        run: pnpm install --lockfile-only --no-frozen-lockfile
+      - name: Verify frozen installation
+        run: pnpm install --frozen-lockfile
+      - name: Record generated lockfile on the existing P-030 branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(p030): refresh vulnerable dependency lockfile"
+            git push origin HEAD:abos/p030-family-economics-treasury
+          fi
