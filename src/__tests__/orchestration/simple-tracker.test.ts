@@ -274,7 +274,7 @@ describe("orchestration/SimpleFundingProtocol", () => {
 
   it("fundChild calls transferCredits with the correct amount", async () => {
     const mockConway = {
-      transferCredits: vi.fn().mockResolvedValue({ status: "ok", amountCents: 100 }),
+      transferCredits: vi.fn().mockResolvedValue({ status: "completed", amountCents: 100 }),
       getCreditsBalance: vi.fn().mockResolvedValue(500),
     } as any;
 
@@ -293,7 +293,7 @@ describe("orchestration/SimpleFundingProtocol", () => {
 
   it("fundChild updates funded_amount_cents in the children table on success", async () => {
     const mockConway = {
-      transferCredits: vi.fn().mockResolvedValue({ status: "ok" }),
+      transferCredits: vi.fn().mockResolvedValue({ status: "completed" }),
     } as any;
 
     const identity = { address: "0xparent" } as any;
@@ -303,6 +303,19 @@ describe("orchestration/SimpleFundingProtocol", () => {
 
     const row = fundingDb.prepare("SELECT funded_amount_cents FROM children WHERE address = ?").get("0xchild") as any;
     expect(row.funded_amount_cents).toBe(200);
+  });
+
+  it("does not treat unrecognized provider status as transferred funds", async () => {
+    const mockConway = {
+      transferCredits: vi.fn().mockResolvedValue({ status: "ok" }),
+    } as any;
+    const identity = { address: "0xparent" } as any;
+    const funding = new SimpleFundingProtocol(mockConway, identity, makeMockDb(fundingDb));
+    expect((await funding.fundChild("0xchild", 150)).success).toBe(false);
+    const row = fundingDb.prepare("SELECT funded_amount_cents FROM children WHERE address = ?").get("0xchild") as any;
+    expect(row.funded_amount_cents).toBe(0);
+    const transactions = fundingDb.prepare("SELECT COUNT(*) AS count FROM transactions").get() as any;
+    expect(transactions.count).toBe(0);
   });
 
   it("fundChild returns success:true for zero amount without calling transferCredits", async () => {
