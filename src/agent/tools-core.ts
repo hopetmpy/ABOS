@@ -23,7 +23,7 @@ import type { PolicyEngine } from "./policy-engine.js";
 import { sanitizeToolResult, sanitizeInput } from "./injection-defense.js";
 import { createLogger } from "../observability/logger.js";
 import { appendEvidenceEvent, correlationIdFor, currentEvidenceContext, latestEvidenceByAuthority, runWithEvidenceContext } from "../observability/evidence.js";
-import { isCreditTransferAccepted } from "../conway/credits.js";
+import { executeCreditEffect } from "../economics/credit-transfer.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
 import { toPosixShellPath } from "../platform/home.js";
 import { confinePathToSandbox } from "../platform/path-confinement.js";
@@ -1267,57 +1267,30 @@ Model: ${ctx.inference.getDefaultModel()}
           to_address: { type: "string", description: "Recipient address" },
           amount_cents: { type: "number", description: "Amount in cents" },
           reason: { type: "string", description: "Reason for transfer" },
+          operation_key: { type: "string", description: "Durable operation key for replay/reconciliation" },
         },
         required: ["to_address", "amount_cents"],
       },
       execute: async (args, ctx) => {
         const amount = args.amount_cents as number;
-        if (!Number.isFinite(amount) || amount <= 0) {
+        if (!Number.isSafeInteger(amount) || amount <= 0) {
           return `Blocked: amount_cents must be a positive number, got ${amount}.`;
         }
 
-        // Guard: don't transfer more than half your balance
-        const balance = await ctx.conway.getCreditsBalance();
-        if (amount > balance / 2) {
-          return `Blocked: Cannot transfer more than half your balance ($${(balance / 100).toFixed(2)}). Self-preservation.`;
-        }
-
-        const transfer = await ctx.conway.transferCredits(
-          args.to_address as string,
-          amount,
-          args.reason as string | undefined,
-        );
-
-        if (!isCreditTransferAccepted(transfer.status)) {
-          return `Credit transfer was not accepted (status: ${transfer.status || "unknown"}). No local transfer was recorded.`;
-        }
-
-        // The provider accepted the external effect. Persist the canonical
-        // transaction first, then policy spend accounting. If either local
-        // authority cannot commit, never invite a duplicate transfer.
-        try {
-          const { ulid } = await import("ulid");
-          ctx.db.insertTransaction({
-            id: ulid(),
-            type: "transfer_out",
-            amountCents: amount,
-            balanceAfterCents: transfer.balanceAfterCents,
-            description: `Transfer to ${args.to_address}: ${args.reason || ""}`,
-            timestamp: new Date().toISOString(),
-          });
-          ctx.spendTracker?.recordSpend({
-            toolName: "transfer_credits",
-            amountCents: amount,
-            recipient: args.to_address as string,
-            category: "transfer",
-          });
-        } catch (error) {
-          throw new ExternalEffectOutcomeUnknownError(
-            `Credit transfer was accepted externally but local accounting failed: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-
-        return `Credit transfer submitted: $${(amount / 100).toFixed(2)} to ${transfer.toAddress} (status: ${transfer.status}, id: ${transfer.transferId || "n/a"})`;
+        const operationKey = (args.operation_key as string | undefined) ??
+          (currentEvidenceContext()?.toolCallId
+            ? `tool:transfer:${currentEvidenceContext()!.toolCallId}` : undefined);
+        if (!operationKey) return "Blocked: financial effect requires durable tool-call identity.";
+        const effect = await executeCreditEffect({
+          db: ctx.db, conway: ctx.conway, operationKey, kind: "credit_transfer",
+          toAddress: args.to_address as string, amountCents: amount,
+          note: (args.reason as string | undefined) ?? "", spendTracker: ctx.spendTracker,
+        });
+        if (effect.state === "rejected") throw new Error(
+          `Credit transfer ${effect.operationKey} rejected by provider.`);
+        if (effect.state !== "completed") throw new ExternalEffectOutcomeUnknownError(
+          `Credit transfer ${effect.operationKey} is ${effect.state}; reconcile before retrying.`);
+        return `Credit transfer settled: $${(amount / 100).toFixed(2)} to ${effect.recipient} (id: ${effect.providerEffectId || "n/a"}).`;
       },
     },
 
@@ -2000,6 +1973,7 @@ Model: ${ctx.inference.getDefaultModel()}
         type: "object",
         properties: {
           child_id: { type: "string", description: "Child abos ID" },
+          operation_key: { type: "string", description: "Durable child-funding operation key" },
           amount_cents: {
             type: "number",
             description: "Amount in cents to transfer",
@@ -2032,65 +2006,23 @@ Model: ${ctx.inference.getDefaultModel()}
         }
 
         const amount = args.amount_cents as number;
-        if (!Number.isFinite(amount) || amount <= 0) {
+        if (!Number.isSafeInteger(amount) || amount <= 0) {
           return `Blocked: amount_cents must be a positive number, got ${amount}.`;
         }
 
-        const balance = await ctx.conway.getCreditsBalance();
-        if (amount > balance / 2) {
-          return `Blocked: Cannot transfer more than half your balance. Self-preservation.`;
-        }
-
-        const transfer = await ctx.conway.transferCredits(
-          child.address,
-          amount,
-          `fund child ${child.id}`,
-        );
-
-        if (!isCreditTransferAccepted(transfer.status)) {
-          return `Funding transfer was not accepted for child ${child.name} (status: ${transfer.status || "unknown"}). No local capital allocation was recorded.`;
-        }
-
-        // The external transfer is the irreversible authority boundary. Persist
-        // parent bookkeeping atomically afterwards; a local write failure must
-        // not make the caller blindly repeat a transfer that already happened.
-        let localPersistenceOk = true;
-        try {
-          ctx.db.runTransaction(() => {
-            ctx.db.insertTransaction({
-              id: ulid(),
-              type: "capital_allocation",
-              amountCents: amount,
-              balanceAfterCents: transfer.balanceAfterCents,
-              description: `Allocate working capital to child ${child.name} (${child.id})`,
-              timestamp: new Date().toISOString(),
-            });
-
-            ctx.db.raw
-              .prepare(
-                "UPDATE children SET funded_amount_cents = funded_amount_cents + ? WHERE id = ?",
-              )
-              .run(amount, child.id);
-          });
-        } catch (error) {
-          localPersistenceOk = false;
-          logger.error(
-            "Child funding transferred but local capital bookkeeping failed",
-            error instanceof Error ? error : undefined,
-            {
-              childId: child.id,
-              childAddress: child.address,
-              amountCents: amount,
-              transferId: transfer.transferId,
-            },
-          );
-        }
-
-        if (!localPersistenceOk) {
-          throw new ExternalEffectOutcomeUnknownError(
-            `Child funding transfer ${transfer.transferId || "unknown"} completed externally but local capital bookkeeping failed.`,
-          );
-        }
+        const operationKey = (args.operation_key as string | undefined) ??
+          (currentEvidenceContext()?.toolCallId
+            ? `tool:fund:${currentEvidenceContext()!.toolCallId}` : undefined);
+        if (!operationKey) return "Blocked: child funding requires durable tool-call identity.";
+        const effect = await executeCreditEffect({
+          db: ctx.db, conway: ctx.conway, operationKey, kind: "child_funding",
+          toAddress: child.address, childId: child.id, amountCents: amount,
+          note: `fund child ${child.id}`,
+        });
+        if (effect.state === "rejected") throw new Error(
+          `Child funding ${effect.operationKey} rejected by provider.`);
+        if (effect.state !== "completed") throw new ExternalEffectOutcomeUnknownError(
+          `Child funding ${effect.operationKey} is ${effect.state}; reconcile before retrying.`);
 
         // Transition to funded if wallet_verified
         if (child.status === "wallet_verified") {
@@ -2108,7 +2040,7 @@ Model: ${ctx.inference.getDefaultModel()}
           }
         }
 
-        return `Funded child ${child.name} with $${(amount / 100).toFixed(2)} (status: ${transfer.status}, id: ${transfer.transferId || "n/a"})`;
+        return `Funded child ${child.name} with ${(amount / 100).toFixed(2)} (settled: ${effect.providerStatus}, id: ${effect.providerEffectId || "n/a"})`;
       },
     },
     {

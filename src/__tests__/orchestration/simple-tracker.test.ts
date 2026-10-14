@@ -312,7 +312,7 @@ describe("orchestration/SimpleFundingProtocol", () => {
     } as any;
     const identity = { address: "0xparent" } as any;
     const funding = new SimpleFundingProtocol(mockConway, identity, makeMockDb(fundingDb));
-    expect((await funding.fundChild("0xchild", 150)).success).toBe(false);
+    await expect(funding.fundChild("0xchild", 150, "task:fund:unrecognized")).rejects.toThrow(/reconcile/);
     const row = fundingDb.prepare("SELECT funded_amount_cents FROM children WHERE address = ?").get("0xchild") as any;
     expect(row.funded_amount_cents).toBe(0);
     const transactions = fundingDb.prepare("SELECT COUNT(*) AS count FROM transactions").get() as any;

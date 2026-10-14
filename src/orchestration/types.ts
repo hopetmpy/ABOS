@@ -6,7 +6,7 @@ export interface AgentTracker {
 }
 
 export interface FundingProtocol {
-  fundChild(childAddress: string, amountCents: number): Promise<{ success: boolean }>;
+  fundChild(childAddress: string, amountCents: number, operationKey?: string): Promise<{ success: boolean }>;
   recallCredits(childAddress: string): Promise<{
     success: boolean;
     amountCents: number;
