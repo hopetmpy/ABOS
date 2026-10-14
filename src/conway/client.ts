@@ -352,7 +352,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     toAddress: string,
     amountCents: number,
     note?: string,
-    durableIdempotencyKey?: string,
+    options?: { idempotencyKey?: string },
   ): Promise<CreditTransferResult> => {
     const payload = {
       to_address: toAddress,
@@ -362,10 +362,10 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
 
     // Reconciled effects supply a stable key across restart; legacy callers
     // still receive an ephemeral key until migrated to the financial adapter.
-    if (durableIdempotencyKey !== undefined && !durableIdempotencyKey.trim()) {
+    if (options?.idempotencyKey !== undefined && !options.idempotencyKey.trim()) {
       throw new Error("Transfer idempotency key cannot be empty");
     }
-    const idempotencyKey = durableIdempotencyKey ?? ulid();
+    const idempotencyKey = options?.idempotencyKey ?? ulid();
     const paths = ["/v1/credits/transfer", "/v1/credits/transfers"];
 
     let lastError = "Unknown transfer error";

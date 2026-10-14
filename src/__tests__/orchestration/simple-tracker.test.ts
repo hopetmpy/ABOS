@@ -288,7 +288,7 @@ describe("orchestration/SimpleFundingProtocol", () => {
       "0xchild",
       100,
       "Task funding from orchestrator",
-      expect.any(String),
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
     );
   });
 

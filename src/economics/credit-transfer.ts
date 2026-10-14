@@ -45,7 +45,7 @@ export async function executeCreditEffect(input: CreditEffectRequest): Promise<F
   let transfer: Awaited<ReturnType<ConwayClient["transferCredits"]>>;
   try {
     transfer = await input.conway.transferCredits(
-      toAddress, input.amountCents, input.note, claim.effect.operationKey,
+      toAddress, input.amountCents, input.note, { idempotencyKey: claim.effect.operationKey },
     );
   } catch (error) {
     return recordFinancialEffectObservation(input.db.raw, claim.effect.operationKey, {

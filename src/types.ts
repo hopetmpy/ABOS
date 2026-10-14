@@ -476,7 +476,7 @@ export interface ConwayClient {
     toAddress: string,
     amountCents: number,
     note?: string,
-    idempotencyKey?: string,
+    options?: { idempotencyKey?: string },
   ): Promise<CreditTransferResult>;
   registerAbos(params: {
     abosId: string;
