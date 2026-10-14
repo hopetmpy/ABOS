@@ -288,6 +288,7 @@ describe("orchestration/SimpleFundingProtocol", () => {
       "0xchild",
       100,
       "Task funding from orchestrator",
+      expect.any(String),
     );
   });
 
@@ -333,7 +334,7 @@ describe("orchestration/SimpleFundingProtocol", () => {
     expect(mockConway.transferCredits).not.toHaveBeenCalled();
   });
 
-  it("fundChild returns success:false when transferCredits throws", async () => {
+  it("preserves uncertain provider outcomes without inviting a retry", async () => {
     const mockConway = {
       transferCredits: vi.fn().mockRejectedValue(new Error("network failure")),
       getCreditsBalance: vi.fn().mockResolvedValue(200),
@@ -342,9 +343,11 @@ describe("orchestration/SimpleFundingProtocol", () => {
     const identity = { address: "0xparent" } as any;
     const funding = new SimpleFundingProtocol(mockConway, identity, makeMockDb(fundingDb));
 
-    const result = await funding.fundChild("0xchild", 50);
-
-    expect(result.success).toBe(false);
+    await expect(funding.fundChild("0xchild", 50, "task:fund:unknown")).rejects.toThrow(/reconcile/);
+    const effect = fundingDb.prepare(
+      "SELECT state FROM financial_effects WHERE operation_key = ?",
+    ).get("task:fund:unknown") as { state: string };
+    expect(effect.state).toBe("unknown");
   });
 
   it("keeps child balance unknown even when parent funding history exists", async () => {

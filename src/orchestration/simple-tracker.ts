@@ -5,7 +5,8 @@ import type {
   ChildStatus,
   ConwayClient,
 } from "../types.js";
-import { isCreditTransferAccepted } from "../conway/credits.js";
+import { executeCreditEffect } from "../economics/credit-transfer.js";
+import { currentEvidenceContext } from "../observability/evidence.js";
 import { createLogger } from "../observability/logger.js";
 import type { AgentTracker, FundingProtocol } from "./types.js";
 
@@ -128,61 +129,23 @@ export class SimpleFundingProtocol implements FundingProtocol {
     private readonly db: AbosDatabase,
   ) {}
 
-  async fundChild(childAddress: string, amountCents: number): Promise<{ success: boolean }> {
-    const transferAmount = Math.max(0, Math.floor(amountCents));
-    if (transferAmount === 0) {
-      return { success: true };
+  async fundChild(childAddress: string, amountCents: number, operationKey?: string): Promise<{ success: boolean }> {
+    if (!Number.isSafeInteger(amountCents) || amountCents < 0) {
+      throw new Error("Invalid child funding amount");
     }
-
-    let result;
-    try {
-      result = await this.conway.transferCredits(
-        childAddress,
-        transferAmount,
-        "Task funding from orchestrator",
-      );
-    } catch {
-      return { success: false };
-    }
-
-    if (!isCreditTransferAccepted(result.status)) {
-      return { success: false };
-    }
-
-    try {
-      const persistAllocation = this.db.raw.transaction(() => {
-        this.db.raw.prepare(
-          "UPDATE children SET funded_amount_cents = funded_amount_cents + ? WHERE address = ?",
-        ).run(transferAmount, childAddress);
-
-        this.db.raw.prepare(
-          `INSERT INTO transactions
-           (id, type, amount_cents, balance_after_cents, description)
-           VALUES (?, 'capital_allocation', ?, ?, ?)`,
-        ).run(
-          ulid(),
-          transferAmount,
-          result.balanceAfterCents ?? null,
-          `Allocate task working capital to child ${childAddress}`,
-        );
-      });
-      persistAllocation();
-    } catch (error) {
-      // The external transfer has already succeeded. Returning false here could
-      // make an orchestrator retry the irreversible transfer and double-fund the
-      // child. Preserve the external success and surface the local evidence gap.
-      logger.error(
-        "Child funding transferred but local capital ledger persistence failed",
-        error instanceof Error ? error : undefined,
-        {
-          childAddress,
-          transferAmount,
-          transferId: result.transferId,
-        },
-      );
-    }
-
-    return { success: true };
+    if (amountCents === 0) return { success: true };
+    const taskId = currentEvidenceContext()?.taskId;
+    const key = operationKey ??
+      (taskId ? `task:fund:${taskId}:${childAddress.toLowerCase()}` : `funding:legacy:${ulid()}`);
+    const effect = await executeCreditEffect({
+      db: this.db, conway: this.conway, operationKey: key, kind: "child_funding",
+      toAddress: childAddress, amountCents, note: "Task funding from orchestrator",
+    });
+    if (effect.state === "completed") return { success: true };
+    if (effect.state === "rejected") return { success: false };
+    throw new Error(
+      `Child funding ${effect.operationKey} is ${effect.state}; reconcile the external effect before retrying.`,
+    );
   }
 
   async recallCredits(childAddress: string): Promise<{

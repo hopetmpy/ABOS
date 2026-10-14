@@ -315,7 +315,7 @@ export class Orchestrator {
       return;
     }
 
-    const result = await this.params.funding.fundChild(addr, amountCents);
+    const result = await this.params.funding.fundChild(addr, amountCents, `task:fund:${task.id}:${addr.toLowerCase()}`);
     if (!result.success) {
       throw new Error(`Funding transfer failed for ${addr}`);
     }
