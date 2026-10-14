@@ -74,7 +74,7 @@ describe("P-003 child capital integration", () => {
     expect(tool).toBeTruthy();
 
     const output = await tool!.execute(
-      { child_id: "child-tool", amount_cents: 200 },
+      { child_id: "child-tool", amount_cents: 200, operation_key: "p003:child-tool:fund" },
       {
         identity,
         config,
@@ -108,12 +108,10 @@ describe("P-003 child capital integration", () => {
     );
     expect(tool).toBeTruthy();
 
-    const output = await tool!.execute(
-      { child_id: "child-rejected", amount_cents: 200 },
+    await expect(tool!.execute(
+      { child_id: "child-rejected", amount_cents: 200, operation_key: "p003:child-rejected:fund" },
       { identity, config, db, conway, inference: new MockInferenceClient() },
-    );
-
-    expect(output).toContain("was not accepted");
+    )).rejects.toThrow(/rejected/);
     const count = db.raw.prepare(
       "SELECT COUNT(*) AS count FROM transactions WHERE type = 'capital_allocation'",
     ).get() as { count: number };

@@ -1279,7 +1279,9 @@ Model: ${ctx.inference.getDefaultModel()}
 
         const operationKey = (args.operation_key as string | undefined) ??
           (currentEvidenceContext()?.toolCallId
-            ? `tool:transfer:${currentEvidenceContext()!.toolCallId}` : undefined);
+            ? `tool:transfer:${currentEvidenceContext()!.toolCallId}`
+            : currentEvidenceContext()?.policyDecisionId
+              ? `policy:transfer:${currentEvidenceContext()!.policyDecisionId}` : undefined);
         if (!operationKey) return "Blocked: financial effect requires durable tool-call identity.";
         const effect = await executeCreditEffect({
           db: ctx.db, conway: ctx.conway, operationKey, kind: "credit_transfer",
@@ -2012,7 +2014,9 @@ Model: ${ctx.inference.getDefaultModel()}
 
         const operationKey = (args.operation_key as string | undefined) ??
           (currentEvidenceContext()?.toolCallId
-            ? `tool:fund:${currentEvidenceContext()!.toolCallId}` : undefined);
+            ? `tool:fund:${currentEvidenceContext()!.toolCallId}`
+            : currentEvidenceContext()?.policyDecisionId
+              ? `policy:fund:${currentEvidenceContext()!.policyDecisionId}` : undefined);
         if (!operationKey) return "Blocked: child funding requires durable tool-call identity.";
         const effect = await executeCreditEffect({
           db: ctx.db, conway: ctx.conway, operationKey, kind: "child_funding",
@@ -3754,7 +3758,10 @@ async function executeToolProtected(
       ? { ...context, spendTracker: turnContext.sessionSpend }
       : context;
     try {
-      result = await tool.execute(args, executionContext);
+      result = await runWithEvidenceContext(
+        { ...currentEvidenceContext()!, policyDecisionId: decision.id },
+        () => tool.execute(args, executionContext),
+      );
     } catch (err: any) {
       if (isExternalEffectOutcomeUnknown(err)) {
         try {

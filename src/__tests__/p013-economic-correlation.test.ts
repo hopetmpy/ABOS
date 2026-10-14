@@ -181,8 +181,10 @@ describe("P-013 economic evidence correlation", () => {
     expect(result.error).toMatch(/do not retry blindly/i);
     const txnCount = db.raw.prepare("SELECT COUNT(*) AS count FROM transactions WHERE type = 'transfer_out'").get() as { count: number };
     const spendCount = db.raw.prepare("SELECT COUNT(*) AS count FROM spend_tracking").get() as { count: number };
-    expect(txnCount.count).toBe(1);
+    expect(txnCount.count).toBe(0);
     expect(spendCount.count).toBe(0);
+    const effect = db.raw.prepare("SELECT state FROM financial_effects LIMIT 1").get() as { state: string };
+    expect(effect.state).toBe("reconciliation_required");
     const policyRow = db.raw.prepare("SELECT execution_state FROM policy_decisions ORDER BY created_at DESC LIMIT 1").get() as { execution_state: string };
     expect(policyRow.execution_state).toBe("unknown");
   });
@@ -217,8 +219,7 @@ describe("P-013 economic evidence correlation", () => {
       turnToolCallCount: 0,
       sessionSpend: spend,
     });
-    expect(result.error).toBeUndefined();
-    expect(result.result).toMatch(/not accepted/i);
+    expect(result.error).toMatch(/rejected/i);
     expect((db.raw.prepare("SELECT COUNT(*) AS count FROM transactions").get() as { count: number }).count).toBe(0);
     expect((db.raw.prepare("SELECT COUNT(*) AS count FROM spend_tracking").get() as { count: number }).count).toBe(0);
   });

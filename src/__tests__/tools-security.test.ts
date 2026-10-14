@@ -569,23 +569,22 @@ describe("transfer_credits self-preservation", () => {
     db.close();
   });
 
-  it("blocks transfer of more than half balance", async () => {
+  it("does not treat 50 percent as a universal transfer prohibition", async () => {
     const transferTool = tools.find((t) => t.name === "transfer_credits")!;
     const result = await transferTool.execute(
-      { to_address: "0xrecipient", amount_cents: 6000 },
+      { to_address: "0xrecipient", amount_cents: 6000, operation_key: "test:over-half" },
       ctx,
     );
-    expect(result).toContain("Blocked");
-    expect(result).toContain("Self-preservation");
+    expect(result).toContain("transfer settled");
   });
 
   it("allows transfer of less than half balance", async () => {
     const transferTool = tools.find((t) => t.name === "transfer_credits")!;
     const result = await transferTool.execute(
-      { to_address: "0xrecipient", amount_cents: 4000 },
+      { to_address: "0xrecipient", amount_cents: 4000, operation_key: "test:under-half" },
       ctx,
     );
-    expect(result).toContain("transfer submitted");
+    expect(result).toContain("transfer settled");
   });
 
   it("blocks negative amount", async () => {

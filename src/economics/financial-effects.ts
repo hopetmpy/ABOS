@@ -96,6 +96,7 @@ export class FinancialEffectIdempotencyConflictError extends Error {
 
 export class FinancialEffectReconciliationRequiredError extends Error {
   readonly operationKey: string;
+  readonly externalEffectOutcomeUnknown = true;
 
   constructor(operationKey: string, cause: unknown) {
     const reason = cause instanceof Error ? cause.message : String(cause);

@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { SimpleAgentTracker, SimpleFundingProtocol } from "../../orchestration/simple-tracker.js";
 import { createInMemoryDb } from "./test-db.js";
+import { createTestDb } from "../mocks.js";
+import type { AbosDatabase } from "../../types.js";
 import type BetterSqlite3 from "better-sqlite3";
 
 function createMockAbosDb(db: BetterSqlite3.Database) {
@@ -255,9 +257,11 @@ describe("orchestration/simple-tracker", () => {
 
 describe("orchestration/SimpleFundingProtocol", () => {
   let fundingDb: BetterSqlite3.Database;
+  let fullFundingDb: AbosDatabase;
 
   beforeEach(() => {
-    fundingDb = createInMemoryDb();
+    fullFundingDb = createTestDb();
+    fundingDb = fullFundingDb.raw;
     // Insert a child for funding tests
     fundingDb.prepare(
       "INSERT INTO children (id, name, address, sandbox_id, genesis_prompt, funded_amount_cents, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -265,11 +269,11 @@ describe("orchestration/SimpleFundingProtocol", () => {
   });
 
   afterEach(() => {
-    fundingDb.close();
+    fullFundingDb.close();
   });
 
-  function makeMockDb(raw: BetterSqlite3.Database) {
-    return { raw } as any;
+  function makeMockDb(_raw: BetterSqlite3.Database) {
+    return fullFundingDb;
   }
 
   it("fundChild calls transferCredits with the correct amount", async () => {

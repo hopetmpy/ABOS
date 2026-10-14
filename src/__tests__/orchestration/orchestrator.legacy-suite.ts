@@ -691,7 +691,7 @@ describe("orchestration/Orchestrator", () => {
       const funding = makeFunding();
       const orc = makeOrchestrator(db, { funding, config: { defaultTaskFundingCents: 25 } });
       await orc.fundAgentForTask("0xagent", makeTaskWithCost(goalId, 0));
-      expect(funding.fundChild).toHaveBeenCalledWith("0xagent", 25);
+      expect(funding.fundChild).toHaveBeenCalledWith("0xagent", 25, expect.stringMatching(/^task:fund:/));
     });
 
     it("skips funding when estimated amount and default are both 0", async () => {
