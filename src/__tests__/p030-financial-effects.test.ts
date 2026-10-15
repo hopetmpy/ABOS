@@ -465,6 +465,26 @@ describe("P-030 financial effect authority", () => {
       .toThrow(/settlement identity conflicts/);
   });
 
+  it("does not silently round combined pending obligations beyond exact integer range", () => {
+    const database = db();
+    prepareFinancialEffect(database.raw, {
+      operationKey: "large:one",
+      effectKind: "credit_transfer",
+      amountCents: Number.MAX_SAFE_INTEGER,
+      recipient: "0xfirst",
+      provider: "conway",
+    });
+    prepareFinancialEffect(database.raw, {
+      operationKey: "large:two",
+      effectKind: "credit_transfer",
+      amountCents: Number.MAX_SAFE_INTEGER,
+      recipient: "0xsecond",
+      provider: "conway",
+    });
+    expect(() => getCommittedFinancialEffectCents(database.raw))
+      .toThrow(/exact nonnegative safe integer credit-unit accounting/);
+  });
+
   it("does not count rejected or completed effects as immobilized capital", () => {
     const database = db();
     prepareFinancialEffect(database.raw, {
