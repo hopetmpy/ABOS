@@ -94,6 +94,27 @@ export class EnvironmentRetentionCoordinator {
         }
       }
 
+      // An uncertain provision may already have created a billable resource.
+      // Observe its external identity before issuing destructive cleanup.
+      if (resource.metadata.provisionNeedsReconciliation === true) {
+        if (!this.registry.supportsOperation(resource.provider, "reconcile")) {
+          result.pendingObservation += 1;
+          result.evidence.push(
+            `Resource ${resource.id} has UNKNOWN provision outcome and no provider reconciliation capability; cleanup must not guess.`,
+          );
+          continue;
+        }
+        resource = await this.lifecycle.reconcile(resource.id);
+        if (resource.metadata.actualExists !== true || !resource.externalId ||
+            resource.metadata.provisionNeedsReconciliation === true) {
+          result.pendingObservation += 1;
+          result.evidence.push(
+            `Resource ${resource.id} provision outcome lacks verified external identity; no blind destroy was dispatched.`,
+          );
+          continue;
+        }
+      }
+
       if (!this.registry.supportsOperation(resource.provider, "destroy")) {
         result.unavailable += 1;
         if (resource.metadata.retentionReleaseState !== "destroy_unavailable") {
