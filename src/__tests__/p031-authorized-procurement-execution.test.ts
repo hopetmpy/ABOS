@@ -127,7 +127,7 @@ function adapters(quote: ProviderProcurementScenarioInput, calls: string[],
       if (outcome === "throw") throw new Error("synthetic transport lost: secret not persisted");
       return {
         status: outcome,
-        providerEffectId: "mock-ec2-id",
+        providerEffectId: `mock-ec2-id-${scope.operationKey}`,
         providerStatus: "synthetic",
         evidence: ["Provider mock observed, no AWS command executed."],
       };
