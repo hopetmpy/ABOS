@@ -240,3 +240,219 @@ export function assessTreasuryScenario(
     ],
   };
 }
+
+/**
+ * P-031 provider procurement economics, owned by the existing P-030 treasury
+ * scenario authority. Read-only review: not a liquidity attestation, purchase
+ * authorization, Policy decision, provider invoice or financial-effect journal.
+ *
+ * All money quantities use the single explicit account-specific unit supplied
+ * by the caller. Conway credit cents and USD cents are never interchanged.
+ */
+export interface ProviderProcurementScenarioInput {
+  provider: string;
+  accountId: string;
+  unit: string;
+  resourceNeedEvidence?: string[];
+  alternatives?: Array<{
+    id: string;
+    projectedCostCents: number | null;
+    unit: string;
+    evidence: string;
+  }>;
+  /** Evidence that no materially viable alternative exists, if applicable. */
+  noAlternativeEvidence?: string[];
+  cost: {
+    oneTimeCents: number | null;
+    recurringCentsPerPeriod: number | null;
+    periods: number | null;
+    otherChargesCents: number | null;
+    /** Explicit unknown non-compute components make a total estimate unknown. */
+    unpricedComponents?: string[];
+    billingTermsEvidence?: string[];
+  };
+  financing: {
+    accountId: string | null;
+    unit: string | null;
+    /** Caller-reported available funds, NOT budget limit or projected revenue. */
+    observedAvailableCents: number | null;
+    /** Only independently authenticated account funding is eligible for review. */
+    basis: "externally_observed" | "budget_threshold" | "caller_estimate" | "unknown";
+    evidence?: string[];
+    validUntil?: string | null;
+  };
+  existingCommitmentsCents: number | null;
+  reservedCents: number | null;
+  /** Additional reserve needed for the proposed downside beyond held reserves. */
+  additionalContingencyCents: number | null;
+  contingencyEvidence?: string[];
+}
+
+export interface ProviderProcurementScenarioReview {
+  status: "review_ready" | "needs_evidence";
+  provider: string;
+  accountId: string;
+  unit: string;
+  totalProposedCommitmentCents: number | null;
+  freeBeforeProposalCents: number | null;
+  freeAfterProposalAndContingencyCents: number | null;
+  conditions: string[];
+  evidence: string[];
+  limitations: string[];
+}
+
+function validProviderCents(value: number | null, label: string): number | null {
+  if (value === null) return null;
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(label + " must be nonnegative safe integer cents or null");
+  }
+  return value;
+}
+function validProviderCount(value: number | null, label: string): number | null {
+  if (value === null) return null;
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(label + " must be a nonnegative safe integer or null");
+  }
+  return value;
+}
+function safeProviderTotal(...values: number[]): number {
+  const sum = values.reduce((acc, x) => acc + BigInt(x), 0n);
+  if (sum > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error("Provider monetary sum exceeds exact integer arithmetic");
+  }
+  return Number(sum);
+}
+
+/**
+ * Evaluate a proposed acquisition without creating a spending authority.
+ * "review_ready" means the supplied scenario is internally checkable; source
+ * provenance must still be verified by P-010/P-025 and the provider.
+ */
+export function assessProviderProcurementScenario(
+  input: ProviderProcurementScenarioInput,
+  now = new Date(),
+): ProviderProcurementScenarioReview {
+  const provider = input.provider.trim();
+  const accountId = input.accountId.trim();
+  const unit = input.unit.trim();
+  if (!provider || !accountId || !unit) {
+    throw new Error("Provider procurement requires provider, account and explicit unit");
+  }
+  const oneTime = validProviderCents(input.cost.oneTimeCents, "one-time cost");
+  const recurring = validProviderCents(input.cost.recurringCentsPerPeriod, "recurring cost");
+  const periods = validProviderCount(input.cost.periods, "contract periods");
+  const other = validProviderCents(input.cost.otherChargesCents, "other charges");
+  const available = validProviderCents(input.financing.observedAvailableCents, "observed available funds");
+  const committed = validProviderCents(input.existingCommitmentsCents, "existing commitments");
+  const reserved = validProviderCents(input.reservedCents, "held reserves");
+  const contingency = validProviderCents(input.additionalContingencyCents, "additional contingency");
+  const conditions: string[] = [];
+  const evidence = uniqueEvidence(input.resourceNeedEvidence);
+  const terms = uniqueEvidence(input.cost.billingTermsEvidence);
+  const unpriced = uniqueEvidence(input.cost.unpricedComponents);
+  const financingEvidence = uniqueEvidence(input.financing.evidence);
+  const downsideEvidence = uniqueEvidence(input.contingencyEvidence);
+  const noAlternativeEvidence = uniqueEvidence(input.noAlternativeEvidence);
+
+  if (evidence.length === 0) {
+    conditions.push("Resource need and strategic value evidence are UNKNOWN.");
+  }
+  if (terms.length === 0) {
+    conditions.push("Provider billing terms and cost coverage are not evidenced.");
+  } else {
+    evidence.push(...terms.map(x => "Provider terms: " + x));
+  }
+  if (unpriced.length > 0) {
+    conditions.push("Unpriced provider costs remain: " + unpriced.join(", "));
+  }
+  if (oneTime === null || recurring === null || periods === null || other === null) {
+    conditions.push("Total one-time, recurring, duration or ancillary cost is UNKNOWN.");
+  }
+  const total = oneTime === null || recurring === null || periods === null ||
+    other === null || unpriced.length > 0
+    ? null : safeProviderTotal(oneTime, other, safeProviderTotal(...[recurring * BigInt(periods)].map(v => {
+        if (v > BigInt(Number.MAX_SAFE_INTEGER)) {
+          throw new Error("Provider recurring monetary exposure exceeds exact integer arithmetic");
+        }
+        return Number(v);
+      })));
+  if (total !== null) {
+    evidence.push("Proposed total=" + total + " " + unit +
+      " across " + periods + " recurring periods; proposed, NOT incurred.");
+  }
+
+  if (input.financing.unit !== unit || input.financing.accountId !== accountId) {
+    conditions.push("Account or monetary unit of financing does not match proposed provider obligation.");
+  }
+  const fundingValidUntil = input.financing.validUntil == null
+    ? null : Date.parse(input.financing.validUntil);
+  if (input.financing.basis !== "externally_observed" ||
+      financingEvidence.length === 0 || available === null ||
+      fundingValidUntil === null || !Number.isFinite(fundingValidUntil) ||
+      fundingValidUntil <= now.getTime()) {
+    conditions.push("Fresh authenticated funding of this account in the SAME unit is UNKNOWN; a budget threshold or assertion is not cash.");
+  } else {
+    evidence.push(...financingEvidence.map(x => "Account funding source: " + x));
+  }
+  if (committed === null || reserved === null) {
+    conditions.push("Existing commitments or held reserves are UNKNOWN.");
+  }
+  if (contingency === null || downsideEvidence.length === 0) {
+    conditions.push("Evidence-based additional contingency is UNKNOWN; no fixed reserve percentage assumed.");
+  } else {
+    evidence.push(...downsideEvidence.map(x => "Downside source: " + x));
+  }
+  const alternatives = input.alternatives ?? [];
+  if (alternatives.length === 0 && noAlternativeEvidence.length === 0) {
+    conditions.push("Reuse, acquire, build, delay or other material alternatives have not been discriminated.");
+  }
+  if (noAlternativeEvidence.length > 0) evidence.push(...noAlternativeEvidence);
+  const seen = new Set<string>();
+  for (const alt of alternatives) {
+    if (!alt.id.trim() || seen.has(alt.id)) {
+      conditions.push("Alternative identifiers must be distinct and nonempty.");
+    }
+    seen.add(alt.id);
+    const cost = validProviderCents(alt.projectedCostCents, "alternative cost");
+    if (alt.unit !== unit || cost === null || !alt.evidence.trim()) {
+      conditions.push("Alternative " + alt.id + " has unverified same-unit costs or comparison evidence.");
+    } else {
+      evidence.push("Alternative " + alt.id + ": " + cost + " " + unit + "; " + alt.evidence);
+    }
+  }
+
+  // UNKNOWN funding cannot be treated as zero, even for a free-tier offer.
+  const trustedFunding = input.financing.basis === "externally_observed" &&
+    financingEvidence.length > 0 && input.financing.accountId === accountId &&
+    input.financing.unit === unit && available !== null &&
+    fundingValidUntil !== null && Number.isFinite(fundingValidUntil) &&
+    fundingValidUntil > now.getTime();
+  const freeBefore = trustedFunding && committed !== null && reserved !== null
+    ? available! - safeProviderTotal(committed, reserved) : null;
+  const freeAfter = freeBefore !== null && total !== null && contingency !== null &&
+    downsideEvidence.length > 0
+    ? freeBefore - safeProviderTotal(total, contingency) : null;
+  if (freeBefore !== null && freeBefore < 0) {
+    conditions.push("Observed funding is already overcommitted in this account and unit.");
+  }
+  if (freeAfter !== null && freeAfter < 0) {
+    conditions.push("Proposed commitment plus contingency exceeds demonstrated free account liquidity; inspect alternatives/financing.");
+  }
+  if (freeBefore !== null && !Number.isSafeInteger(freeBefore) ||
+      freeAfter !== null && !Number.isSafeInteger(freeAfter)) {
+    throw new Error("Provider free-liquidity arithmetic exceeded integer precision");
+  }
+  return {
+    status: conditions.length === 0 ? "review_ready" : "needs_evidence",
+    provider, accountId, unit,
+    totalProposedCommitmentCents: total,
+    freeBeforeProposalCents: freeBefore,
+    freeAfterProposalAndContingencyCents: freeAfter,
+    conditions, evidence,
+    limitations: [
+      "Read-only P-030 scenario, NOT P-010 authorization, P-025 strategic approval, a payment, or AWS spendable balance verification.",
+      "Caller-supplied attestations must be validated against independent external sources and correct provider account ownership before any paid dispatch.",
+      "Non-cash inputs (tokens, subscriptions, power, network) count as investment but cannot silently fund a bill in another unit.",
+    ],
+  };
+}
