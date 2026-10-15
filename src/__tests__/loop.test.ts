@@ -22,8 +22,51 @@ import {
 } from "./mocks.js";
 import type { AbosDatabase, AgentTurn, AgentState } from "../types.js";
 
-// Agent-loop tests must stay deterministic and offline. The discover_agents
-// behavior under test here is loop classification, not the live ERC-8004 RPC.
+// Agent-loop tests must stay deterministic and offline. The agent refreshes
+// on-chain USDC while waking and on each turn; an unmocked RPC can hang long
+// enough to trip the 30s test timeout even though the exec/persistence path
+// itself has completed correctly. Preserve every other x402 implementation.
+vi.mock("../conway/x402.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../conway/x402.js")>()),
+  getUsdcBalance: vi.fn(async () => 0),
+}));
+
+// Every agent-loop wake-up probes environment providers. The AWS adapter
+// normally shells out to AWS CLI and STS (each with separate external wait
+// limits), which is unrelated to these loop/tool/persistence assertions.
+// Keep the real environment registry and provider implementation, but inject
+// an immediate deterministic unavailable AWS command runner in this test file.
+vi.mock("../environments/aws.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../environments/aws.js")>();
+  return {
+    ...actual,
+    AwsEnvironmentProvider: class OfflineAwsEnvironmentProvider extends actual.AwsEnvironmentProvider {
+      constructor() {
+        super(async () => ({
+          exitCode: 1,
+          stdout: "",
+          stderr: "AWS CLI unavailable in deterministic agent-loop test",
+        }));
+      }
+    },
+  };
+});
+
+// Runtime startup also probes installed browsers and may launch Playwright.
+// This suite verifies the agent loop, not host browser availability; ensure
+// no real browser process starts on CI. The browser-runtime-specific tests
+// exercise that provider separately.
+vi.mock("../browser/local-runtime.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../browser/local-runtime.js")>();
+  const offlineRuntime = new actual.LocalBrowserRuntime({ candidates: () => [] });
+  return {
+    ...actual,
+    getLocalBrowserRuntime: () => offlineRuntime,
+  };
+});
+
+// The discover_agents behavior under test here is loop classification,
+// not the live ERC-8004 RPC.
 vi.mock("../registry/discovery.js", () => ({
   discoverAgents: vi.fn(async () => [
     {
@@ -64,7 +107,6 @@ describe("Agent Loop", () => {
       toolCallResponse([
         { name: "exec", arguments: { command: "echo hello" } },
       ]),
-      noToolResponse("Done."),
     ]);
 
     const turns: AgentTurn[] = [];
@@ -73,7 +115,7 @@ describe("Agent Loop", () => {
       policyEngine,
       spendTracker,
       identity,
-      config,
+      config: { ...config, maxTurnsPerCycle: 1 },
       db,
       conway,
       inference,
@@ -92,6 +134,15 @@ describe("Agent Loop", () => {
     // Verify conway.exec was called
     expect(conway.execCalls.length).toBeGreaterThanOrEqual(1);
     expect(conway.execCalls[0].command).toBe("echo hello");
+
+    // Verify the same tool effect is durable in SQLite after the sole cycle.
+    const stored = db.getRecentTurns(5);
+    const persistedExec = stored.find((turn) =>
+      turn.toolCalls.some((call) => call.name === "exec"),
+    );
+    expect(persistedExec).toBeDefined();
+    expect(persistedExec!.toolCalls[0].error).toBeUndefined();
+    expect(db.getAgentState()).toBe("sleeping");
   });
 
   it("forbidden patterns blocked", async () => {

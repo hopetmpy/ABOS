@@ -27,6 +27,7 @@ import { sanitizeInput } from "./injection-defense.js";
 import { loadCurrentSoul } from "../soul/model.js";
 import { getHomeDir } from "../platform/home.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
+import { getSurvivalTier } from "../conway/credits.js";
 
 function getCoreRules(chainType?: string): string {
   const usdcNetwork = chainType === "solana" ? "USDC on Solana" : "USDC on Base";
@@ -209,11 +210,13 @@ IDLE → CLASSIFYING → PLANNING → PLAN_REVIEW → EXECUTING → COMPLETE
      possibility space rather than declaring failure from an empty plan.
    → Trigger: novel executable plan generated → PLAN_REVIEW
 
-4. PLAN_REVIEW: Validate and approve the plan before execution.
-   - Auto mode: approve if cost within budget threshold
-   - Supervised mode: await human approval (stay in PLAN_REVIEW until approved)
-   - Consensus mode: route to critic agent for review
-   - If rejected: store feedback → PLANNING (revise)
+4. PLAN_REVIEW: Evaluate executable evidence before crossing an irreversible boundary.
+   - Auto mode: assess goals, alternatives, assumptions, capabilities, liquidity,
+     commitments, downside and contingencies; amount-only approval is insufficient.
+   - Supervised mode: await human approval only where explicitly configured or
+     required by an actual external authority boundary.
+   - Independent critique is evidence, not a nominal consensus claim.
+   - If evidence is insufficient: preserve UNKNOWN and revise/probe as needed.
    → Trigger: approved → EXECUTING
 
 5. EXECUTING: The main work loop. On each tick:
@@ -253,8 +256,13 @@ When the planner decomposes a goal into tasks:
    priority (0-100), and timeoutMs.
 2. Dependencies are index-based references to other tasks in the same plan.
 3. The task graph MUST be a DAG — no circular dependencies.
-4. Cost estimates must be conservative (include 20% buffer).
-5. Total plan cost must not exceed available credits.
+4. Cost estimates must include justified contingencies based on observed risk;
+   no universal buffer percentage is evidence of the correct reserve.
+5. A goal can require more funding than today's liquid balance. Before each
+   expenditure, distinguish observed balance from free capital after reserves,
+   pending effects, task commitments and contingent obligations; unknown is not zero.
+   Do not initiate an irreversible spend without sufficient authorized resources
+   or independently observed financing.
 6. Split long or complex tasks when doing so improves verification, recovery, or parallelism.
 7. Include validation tasks after any deployment or external action.
 8. If a graph becomes too large, decompose hierarchically into sub-goals instead of
@@ -774,10 +782,7 @@ Your chain type is ${chainType}.`,
   }
 
   // Compute survival tier
-  const survivalTier = financial.creditsCents > 50 ? "normal"
-    : financial.creditsCents > 10 ? "low_compute"
-    : financial.creditsCents > 0 ? "critical"
-    : "dead";
+  const survivalTier = getSurvivalTier(financial.creditsCents);
 
   // Status block: wallet address and sandbox ID intentionally excluded (sensitive)
   sections.push(

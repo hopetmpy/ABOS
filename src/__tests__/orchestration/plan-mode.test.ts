@@ -362,6 +362,199 @@ describe("orchestration/plan-mode", () => {
       expect(noFalsifier.feedback).toContain("falsification conditions");
     });
 
+    it("exposes unsettled financial commitments as evidence, without making them executed costs", async () => {
+      const result = await reviewPlan(makePlan(), {
+        ...autoConfig,
+        reviewContext: {
+          outstandingFinancialEffects: { count: 2, pendingCreditCommitments: 950 },
+        },
+      });
+      expect(result.approved).toBe(true);
+      expect(result.feedback).toContain("2 unresolved intents");
+      expect(result.feedback).toContain("950 credit cents of exposure");
+      expect(result.feedback).toContain("not free liquidity or realized spending");
+    });
+
+    it("does not conflate pending USDC purchases with Conway credit commitments", async () => {
+      const result = await reviewPlan(makePlan(), {
+        ...autoConfig,
+        reviewContext: {
+          outstandingFinancialEffects: {
+            count: 1, pendingCreditCommitments: 300,
+            pendingUsdcTopups: 2, pendingUsdcCommitments: 3000,
+          },
+        },
+      });
+      expect(result.approved).toBe(true);
+      expect(result.feedback).toContain("1 unresolved intents");
+      expect(result.feedback).toContain("300 credit cents of exposure");
+      expect(result.feedback).toContain("2 pending USDC topups");
+      expect(result.feedback).toContain("3000 USDC cents committed");
+      expect(result.feedback).toContain("not Conway credit units or proof of credits received");
+    });
+
+    it("surfaces unresolved generic USDC paid services without inventing financial settlement or human approval", async () => {
+      const result = await reviewPlan(makePlan(), {
+        ...autoConfig,
+        reviewContext: {
+          outstandingFinancialEffects: {
+            count: 0, pendingCreditCommitments: 0,
+            pendingUsdcTopups: 0, pendingUsdcOtherEffects: 1,
+            pendingUsdcCommitments: 75, unclassifiedPendingEffects: 0,
+          },
+        },
+      });
+      expect(result.approved).toBe(true);
+      expect(result.feedback).toContain("1 non-topup USDC payments remain unresolved");
+      expect(result.feedback).toContain("75 USDC cents (all categories)");
+      expect(result.feedback).toContain("not verified USDC settlement");
+      expect(result.feedback).not.toContain("awaiting human approval");
+
+      const unclear = await reviewPlan(makePlan(), {
+        ...autoConfig,
+        reviewContext: {
+          outstandingFinancialEffects: {
+            count: 0, pendingCreditCommitments: 0, pendingUsdcOtherEffects: 0,
+            pendingUsdcCommitments: 0, unclassifiedPendingEffects: 1,
+          },
+        },
+      });
+      expect(unclear.approved).toBe(false);
+      expect(unclear.feedback).toContain("disposition=unknown");
+      expect(unclear.feedback).toContain("unknown financial units");
+    });
+
+    it("preserves UNKNOWN when a financially inconsistent exposure is injected", async () => {
+      const result = await reviewPlan(makePlan(), {
+        ...autoConfig,
+        reviewContext: {
+          outstandingFinancialEffects: { count: 1, pendingCreditCommitments: -1 },
+        },
+      });
+      expect(result.approved).toBe(false);
+      expect(result.feedback).toContain("disposition=unknown");
+      expect(result.feedback).toContain("financial-effect exposure is invalid");
+    });
+
+    it("uses canonical task-cost calibration as strategy evidence, not financial authorization", async () => {
+      const calibration = {
+        comparableSamples: 2,
+        estimatesAwaitingObservedCost: 1,
+        estimatedTaskCostCents: 300,
+        actualTaskCostCents: 350,
+        netDeviationTaskCostCents: 50,
+        actualToEstimateRatio: 350 / 300,
+        observedOverrunTaskCostCents: 100,
+        largestObservedOverrunTaskCostCents: 100,
+        observedOverrunSamples: 1,
+        observedActualsWithoutEstimate: 1,
+        invalidCostSamples: 1,
+        authority: "local_task_graph" as const,
+        unit: "task_cost_cent" as const,
+      };
+      const observed = await reviewPlan(makePlan(), {
+        ...autoConfig,
+        reviewContext: { taskCostCalibration: calibration },
+      });
+      expect(observed.approved).toBe(true);
+      expect(observed.feedback).toContain("Local task estimate→outcome: 2 comparable tasks");
+      expect(observed.feedback).toContain("Observed task overruns=100 task-cost cents");
+      expect(observed.feedback).toContain("Do not net away downside overruns");
+      expect(observed.feedback).toContain("observed actual cost without an estimated baseline");
+      expect(observed.feedback).toContain("invalid negative task-cost values");
+      expect(observed.feedback).toContain("actual/estimate=1.167");
+      expect(observed.feedback).toContain("do not treat zero-defaults as measured savings");
+      expect(observed.feedback).toContain("do not treat it as Conway credits, settled provider spend or business P&L");
+
+      const invalid = await reviewPlan(makePlan({ alternatives: [] }), {
+        ...autoConfig,
+        reviewContext: { taskCostCalibration: calibration },
+      });
+      expect(invalid.approved).toBe(false);
+      expect(invalid.feedback).toContain("disposition=revise");
+    });
+
+    it("keeps treasury uncertainty inside the canonical P-025 strategic review", async () => {
+      const finance = {
+        status: "needs_evidence" as const,
+        proposedCreditsCents: 250,
+        freeCreditsBeforeCents: null,
+        freeCreditsAfterCents: null,
+        contingencyExposureCents: null,
+        reserveRecommendation: {
+          targetCreditsCents: null, additionalCreditsCents: null,
+          freeAfterProposalAndReserveCents: null, disposition: "unknown" as const,
+        },
+        evidence: [],
+        conditions: ["Credit liquidity remains UNKNOWN pending fresh provider observation."],
+        limitations: ["Treasury scenario does not authorize payments."],
+      };
+      const result = await reviewPlan(makePlan(), {
+        ...autoConfig,
+        reviewContext: { treasuryReview: finance },
+      });
+      expect(result.approved).toBe(false);
+      expect(result.feedback).toContain("disposition=unknown");
+      expect(result.feedback).toContain("Treasury requires evidence:");
+      expect(result.feedback).toContain("Credit liquidity remains UNKNOWN");
+    });
+
+    it("treats a treasury review-ready signal as evidence, never a standalone authorization", async () => {
+      const finance = {
+        status: "review_ready" as const,
+        proposedCreditsCents: 50,
+        freeCreditsBeforeCents: 100,
+        freeCreditsAfterCents: 50,
+        contingencyExposureCents: 0,
+        reserveRecommendation: {
+          targetCreditsCents: 0, additionalCreditsCents: 0,
+          freeAfterProposalAndReserveCents: 50, disposition: "covered" as const,
+        },
+        evidence: ["Previously observed credit unit and contingency evidence"],
+        conditions: [],
+        limitations: ["Provider still controls final settlement."],
+      };
+      const independent = await reviewPlan(makePlan(), {
+        ...autoConfig,
+        reviewContext: { treasuryReview: finance },
+      });
+      expect(independent.approved).toBe(true);
+      expect(independent.feedback).toContain("Treasury projection: cost=50");
+      expect(independent.feedback).toContain("Treasury reserve scenario: target=0 credit cents");
+      expect(independent.feedback).toContain("disposition=covered");
+      expect(independent.feedback).toContain("Provider still controls final settlement");
+
+      const invalidPlan = await reviewPlan(makePlan({ alternatives: [] }), {
+        ...autoConfig,
+        reviewContext: { treasuryReview: finance },
+      });
+      expect(invalidPlan.approved).toBe(false);
+      expect(invalidPlan.feedback).toContain("disposition=revise");
+    });
+
+    it("passes evidenced reserve earmarking through strategic review without imposing manual approval", async () => {
+      const finance = {
+        status: "review_ready" as const,
+        proposedCreditsCents: 200,
+        freeCreditsBeforeCents: 900,
+        freeCreditsAfterCents: 300,
+        contingencyExposureCents: 500,
+        reserveRecommendation: {
+          targetCreditsCents: 500, additionalCreditsCents: 400,
+          freeAfterProposalAndReserveCents: 300, disposition: "can_earmark" as const,
+        },
+        evidence: ["Provider replacement quote"], conditions: [],
+        limitations: ["Scenario only; actual reserve allocation still requires treasury execution authority."],
+      };
+      const output = await reviewPlan(makePlan(), {
+        ...autoConfig, reviewContext: { treasuryReview: finance },
+      });
+      expect(output.approved).toBe(true);
+      expect(output.feedback).toContain("additional earmark=400 credit cents");
+      expect(output.feedback).toContain("free after purchase and reserve=300");
+      expect(output.feedback).not.toContain("awaiting human approval");
+    });
+
     it("auto mode preserves unresolved capability state as UNKNOWN", async () => {
       const result = await reviewPlan(makePlan({ path: { hypothesis: "Use a CLI capability.", assumptions: ["The capability may exist."], requiredCapabilities: ["cli:example"], preferredEnvironment: null, expectedOutcome: "CLI work completes." } }), autoConfig);
       expect(result.approved).toBe(false);

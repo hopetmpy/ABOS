@@ -6,6 +6,8 @@ import type { PlannerContext, PlannerOutput } from "./planner.js";
 import type { FundingProtocol } from "./types.js";
 import type { AgentWorkspace } from "./workspace.js";
 import { getActiveGoals } from "../state/database.js";
+import { describeTaskCostLearning, describeRecordedInferenceResources, getRecordedInferenceResources, getTaskCostCalibration } from "../economics/treasury-projection.js";
+import { describeTreasuryReserveLearning, getTreasuryReserveLearning } from "../economics/treasury-reserves.js";
 
 export interface PlannerContextOptions {
   db: Database;
@@ -43,6 +45,14 @@ export async function buildPlannerContext(options: PlannerContextOptions): Promi
   const cachedBalance = readCachedBalance(options.db);
   const creditsCents = await resolveCreditsCents(options, cachedBalance?.creditsCents);
   const usdcBalance = resolveUsdcBalance(options, cachedBalance?.usdcBalance);
+  const economicLearning = describeTaskCostLearning(getTaskCostCalibration(options.db));
+  const computeInvestment = describeRecordedInferenceResources(getRecordedInferenceResources(options.db));
+  const reserveLearning = describeTreasuryReserveLearning(getTreasuryReserveLearning(options.db));
+  // Join authoritative observed learning to existing adaptive context rather
+  // than creating another planner/memory or decision authority.
+  const adaptiveContext = [options.adaptiveContext?.trim(), economicLearning, reserveLearning, computeInvestment]
+    .filter((item): item is string => Boolean(item))
+    .join("\n\n") || undefined;
 
   return {
     creditsCents,
@@ -62,7 +72,7 @@ export async function buildPlannerContext(options: PlannerContextOptions): Promi
     busyAgents: clampCount(options.busyAgents),
     maxAgents: Math.max(1, clampCount(options.maxAgents, 1)),
     workspaceFiles: listWorkspaceFiles(options.workspace),
-    adaptiveContext: options.adaptiveContext,
+    adaptiveContext,
     environmentSnapshots: options.environmentSnapshots ?? [],
     capabilities: options.capabilities ?? [],
   };
@@ -187,14 +197,16 @@ async function resolveCreditsCents(
   return null;
 }
 
-function resolveUsdcBalance(options: PlannerContextOptions, cachedUsdcBalance?: number): number {
-  if (typeof options.usdcBalance === "number" && Number.isFinite(options.usdcBalance)) {
+function resolveUsdcBalance(options: PlannerContextOptions, cachedUsdcBalance?: number): number | null {
+  if (typeof options.usdcBalance === "number" &&
+      Number.isFinite(options.usdcBalance) && options.usdcBalance >= 0) {
     return options.usdcBalance;
   }
 
-  return typeof cachedUsdcBalance === "number" && Number.isFinite(cachedUsdcBalance)
+  return typeof cachedUsdcBalance === "number" &&
+    Number.isFinite(cachedUsdcBalance) && cachedUsdcBalance >= 0
     ? cachedUsdcBalance
-    : 0;
+    : null;
 }
 
 function toSurvivalTier(creditsCents: number | null): string {

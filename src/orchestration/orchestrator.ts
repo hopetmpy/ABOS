@@ -29,6 +29,9 @@ import {
 } from "./planner.js";
 import { reviewPlan } from "./plan-mode.js";
 import type { StrategicReviewContext } from "./strategic-review.js";
+import { getStrategicFinancialExposure } from "../economics/financial-effects.js";
+import { getTaskCostCalibration } from "../economics/treasury-projection.js";
+import { getTreasuryReserveLearning } from "../economics/treasury-reserves.js";
 import {
   loadPlanningSimulationEvidence,
   referencedSimulationEvidence,
@@ -823,11 +826,18 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       lesson: experiment.lesson,
     }));
 
+    // Existing financial-effect state is canonical evidence of credit exposure,
+    // not proof of balance, settlement or free capital. Read it before review
+    // without introducing a second treasury or authorization authority.
+    const outstandingFinancialEffects = getStrategicFinancialExposure(this.strategicParams.db);
     return {
       capabilityResolutions,
       environmentSnapshots,
       simulationEvidence,
       adaptiveContext: plannerContext.adaptiveContext,
+      taskCostCalibration: getTaskCostCalibration(this.strategicParams.db),
+      treasuryReserveLearning: getTreasuryReserveLearning(this.strategicParams.db),
+      outstandingFinancialEffects,
     };
   }
 
@@ -859,7 +869,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       workspace: new AgentWorkspace(goalId),
       funding: this.strategicParams.funding,
       identityAddress: this.strategicParams.identity.address,
-      usdcBalance: Number(this.strategicParams.config?.usdcBalance ?? 0),
+      usdcBalance: this.strategicParams.config?.usdcBalance,
       idleAgents: this.strategicParams.agentTracker.getIdle().length,
       busyAgents: Math.max(
         0,

@@ -834,7 +834,7 @@ export async function runAgentLoop(
 
           const amountCents = calculateTaskFundingCents(task, config);
           if (amountCents > 0) {
-            const funded = await funding.fundChild(target.address, amountCents);
+            const funded = await funding.fundChild(target.address, amountCents, `task:fund:${task.id}:${target.address.toLowerCase()}`);
             if (!funded.success) {
               throw new Error(
                 `Conway task funding failed for ${target.address}.`,

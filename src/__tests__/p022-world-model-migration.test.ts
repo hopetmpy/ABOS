@@ -4,6 +4,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { createDatabase } from "../state/database.js";
+import { SCHEMA_VERSION } from "../state/schema.js";
 
 function tempDbPath(prefix: string): { dir: string; dbPath: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -23,13 +24,13 @@ function hasWorldBeliefTable(db: Database.Database): boolean {
 }
 
 describe("P-022 world-model schema activation", () => {
-  it("creates the world-belief table and records schema v21 on a fresh database", () => {
+  it("creates the world-belief table and records the current schema version on a fresh database", () => {
     const { dir, dbPath } = tempDbPath("abos-p022-fresh-");
     try {
       const database = createDatabase(dbPath);
       try {
         expect(hasWorldBeliefTable(database.raw)).toBe(true);
-        expect(schemaVersion(database.raw)).toBe(21);
+        expect(schemaVersion(database.raw)).toBe(SCHEMA_VERSION);
       } finally {
         database.close();
       }
@@ -38,7 +39,7 @@ describe("P-022 world-model schema activation", () => {
     }
   });
 
-  it("creates the world-belief table before advancing an existing v20 database to v21", () => {
+  it("preserves the P-022 world-belief table while upgrading an existing v20 database to the current schema", () => {
     const { dir, dbPath } = tempDbPath("abos-p022-v20-");
     try {
       const legacy = new Database(dbPath);
@@ -73,7 +74,7 @@ describe("P-022 world-model schema activation", () => {
       const upgraded = createDatabase(dbPath);
       try {
         expect(hasWorldBeliefTable(upgraded.raw)).toBe(true);
-        expect(schemaVersion(upgraded.raw)).toBe(21);
+        expect(schemaVersion(upgraded.raw)).toBe(SCHEMA_VERSION);
       } finally {
         upgraded.close();
       }

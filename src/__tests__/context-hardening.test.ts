@@ -432,7 +432,7 @@ describe("buildSystemPrompt status block", () => {
     const statusEnd = prompt.indexOf("--- END STATUS ---");
     const statusBlock = prompt.slice(statusStart, statusEnd);
 
-    expect(statusBlock).toContain("Survival tier: normal");
+    expect(statusBlock).toContain("Survival tier: high");
   });
 
   it("computes correct survival tiers", () => {
@@ -463,11 +463,23 @@ describe("buildSystemPrompt status block", () => {
     });
     expect(prompt).toContain("Survival tier: critical");
 
-    // Dead tier (credits = 0)
+    // Zero balance is critical, not dead.
     prompt = buildSystemPrompt({
       identity,
       config,
       financial: { creditsCents: 0, usdcBalance: 0, lastChecked: new Date().toISOString() },
+      state: "running",
+      db,
+      tools: [],
+      isFirstRun: false,
+    });
+    expect(prompt).toContain("Survival tier: critical");
+
+    // Negative, provider-confirmed debt is distinct from zero credits.
+    prompt = buildSystemPrompt({
+      identity,
+      config,
+      financial: { creditsCents: -1, usdcBalance: 0, lastChecked: new Date().toISOString() },
       state: "running",
       db,
       tools: [],

@@ -53,7 +53,7 @@
     "test:diagnose": "vitest run --reporter=default --reporter=hanging-process"
   },
   "dependencies": {
-    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/client": "2.2.0",
     "@solana/web3.js": "^1.98.0",
     "@types/better-sqlite3": "^7.6.0",
     "better-sqlite3": "^12.11.1",
@@ -65,7 +65,7 @@
     "openai": "^6.24.0",
     "ora": "^8.0.0",
     "playwright-core": "1.63.0",
-    "simple-git": "^3.36.0",
+    "simple-git": "4.0.2",
     "siwe": "^2.3.0",
     "tweetnacl": "^1.0.3",
     "ulid": "^2.3.0",
@@ -73,7 +73,7 @@
     "yaml": "^2.4.0"
   },
   "devDependencies": {
-    "@modelcontextprotocol/server": "2.0.0",
+    "@modelcontextprotocol/server": "2.2.0",
     "@types/node": "^20.10.0",
     "tsx": "^4.7.0",
     "typescript": "^5.9.3",
@@ -109,7 +109,9 @@
       "nanoid@<3.3.18": "3.3.18",
       "postcss@<=8.5.17": ">=8.5.18",
       "jayson>ws": "8.21.0",
-      "stream-json@<=3.4.0": "3.6.0"
+      "stream-json@<=3.4.0": "3.6.0",
+      "source-map-js@<1.2.2": "1.2.2",
+      "@simple-git/argv-parser@<2.0.1": "2.0.1"
     }
   }
 }

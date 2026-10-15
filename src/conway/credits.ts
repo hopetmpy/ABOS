@@ -29,26 +29,79 @@ export async function checkFinancialState(
 }
 
 /**
- * Determine whether a successful HTTP transfer response represents an accepted
- * transfer rather than an explicit provider-side rejection.
+ * Provider observation classification for a credit transfer.
  *
- * Conway may return forward-compatible positive/intermediate statuses such as
- * submitted or processing, so this deliberately rejects explicit negative
- * semantics instead of imposing a closed allowlist of success states.
+ * HTTP success is transport evidence, not settlement evidence. Intermediate or
+ * future provider states remain pending/unknown until a final observation is
+ * available. This prevents "not explicitly negative" from becoming money.
+ */
+export type CreditTransferDisposition =
+  | "settled"
+  | "rejected"
+  | "pending"
+  | "unknown";
+
+const SETTLED_TRANSFER_STATUSES = new Set([
+  "settled",
+  "completed",
+  "complete",
+  "succeeded",
+  "success",
+  "confirmed",
+]);
+
+const PENDING_TRANSFER_STATUSES = new Set([
+  "submitted",
+  "processing",
+  "pending",
+  "queued",
+  "accepted",
+  "received",
+]);
+
+const REJECTED_TRANSFER_MARKERS = [
+  "fail",
+  "error",
+  "reject",
+  "declin",
+  "cancel",
+  "denied",
+  "invalid",
+] as const;
+
+/**
+ * Classify a provider transfer status without inventing settlement.
+ *
+ * Final success values must be explicit. Known intermediate states remain
+ * pending. Explicit negative semantics are rejected. Empty or forward-compatible
+ * states that ABOS does not understand remain unknown.
+ */
+export function classifyCreditTransferStatus(
+  status: string | null | undefined,
+): CreditTransferDisposition {
+  const normalized = status?.trim().toLowerCase() ?? "";
+  if (!normalized) return "unknown";
+
+  if (
+    REJECTED_TRANSFER_MARKERS.some((marker) => normalized.includes(marker))
+  ) {
+    return "rejected";
+  }
+
+  if (SETTLED_TRANSFER_STATUSES.has(normalized)) return "settled";
+  if (PENDING_TRANSFER_STATUSES.has(normalized)) return "pending";
+  return "unknown";
+}
+
+/**
+ * Backward-compatible helper for existing callers.
+ *
+ * "Accepted" now means final settlement, not merely a non-negative or
+ * intermediate provider response. P-030 callers should prefer the richer
+ * classifier and preserve pending/unknown explicitly.
  */
 export function isCreditTransferAccepted(status: string): boolean {
-  const normalized = status.trim().toLowerCase();
-  if (!normalized) return false;
-
-  return ![
-    "fail",
-    "error",
-    "reject",
-    "declin",
-    "cancel",
-    "denied",
-    "invalid",
-  ].some((marker) => normalized.includes(marker));
+  return classifyCreditTransferStatus(status) === "settled";
 }
 
 /**

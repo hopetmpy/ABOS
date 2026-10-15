@@ -4,6 +4,9 @@ import { pathSignature } from "../intelligence/path-signature.js";
 import type { PathCandidate } from "../intelligence/types.js";
 import type { PlannerAlternative, PlannerOutput } from "./planner.js";
 import { validatePlannerOutput } from "./planner.js";
+import type { TreasuryScenarioReview } from "../economics/treasury-scenario.js";
+import type { TaskCostCalibration } from "../economics/treasury-projection.js";
+import type { TreasuryReserveLearning } from "../economics/treasury-reserves.js";
 
 export type StrategicReviewDisposition = "approve" | "revise" | "unknown";
 
@@ -28,6 +31,25 @@ export interface StrategicReviewContext {
   simulationEvidence?: StrategicSimulationEvidence[];
   adaptiveContext?: string;
   independentReviews?: IndependentStrategicReview[];
+  /** Optional treasury evidence for this exact plan, never an independent execution authority. */
+  treasuryReview?: TreasuryScenarioReview;
+  /** Read-only P-030 local task-cost history; not Conway credit or external P&L. */
+  taskCostCalibration?: TaskCostCalibration;
+  /** Source-owned P-025 reviewed-path → P-023 outcome signal, never cash P&L. */
+  treasuryReserveLearning?: TreasuryReserveLearning;
+  /** Source-owned unresolved credits; not provider settlement or free balance. */
+  outstandingFinancialEffects?: {
+    /** Number of outstanding Conway credit-unit effects only. */
+    count: number;
+    pendingCreditCommitments: number;
+    /** Separate on-chain USD-cent commitments; never summed with credits. */
+    pendingUsdcTopups?: number;
+    pendingUsdcCommitments?: number;
+    /** Outstanding USDC obligations that are NOT credit topups (e.g. paid APIs). */
+    pendingUsdcOtherEffects?: number;
+    /** Unrecognized financial units stay UNKNOWN, never silently ignored. */
+    unclassifiedPendingEffects?: number;
+  };
 }
 
 export interface StrategicReviewAssessment {
@@ -387,6 +409,140 @@ export function assessStrategicPlan(
 
   if (context.adaptiveContext?.trim()) {
     evidence.push("Adaptive Path/world-state context was supplied to review.");
+  }
+
+  if (context.outstandingFinancialEffects) {
+    const pending = context.outstandingFinancialEffects;
+    const validUsdc = pending.pendingUsdcTopups === undefined ||
+      (Number.isSafeInteger(pending.pendingUsdcTopups) && pending.pendingUsdcTopups >= 0);
+    const validUsdcAmount = pending.pendingUsdcCommitments === undefined ||
+      (Number.isSafeInteger(pending.pendingUsdcCommitments) && pending.pendingUsdcCommitments >= 0);
+    const validOther = pending.pendingUsdcOtherEffects === undefined ||
+      (Number.isSafeInteger(pending.pendingUsdcOtherEffects) && pending.pendingUsdcOtherEffects >= 0);
+    const validUnclassified = pending.unclassifiedPendingEffects === undefined ||
+      (Number.isSafeInteger(pending.unclassifiedPendingEffects) && pending.unclassifiedPendingEffects >= 0);
+    if (!Number.isSafeInteger(pending.count) || pending.count < 0 ||
+        !Number.isSafeInteger(pending.pendingCreditCommitments) ||
+        pending.pendingCreditCommitments < 0 || !validUsdc || !validUsdcAmount ||
+        !validOther || !validUnclassified) {
+      hasUnknown = true;
+      conditions.push("Canonical financial-effect exposure is invalid; re-observe treasury.");
+    } else if (pending.count > 0) {
+      evidence.push(
+        `Canonical financial-effect ledger has ${pending.count} unresolved intents ` +
+        `representing ${pending.pendingCreditCommitments} credit cents of exposure.`,
+      );
+      conditions.push(
+        "Existing pending credit effects are committed capital, not free liquidity or realized spending.",
+      );
+    }
+    if (pending.pendingUsdcTopups && pending.pendingUsdcTopups > 0) {
+      evidence.push(
+        `Canonical x402 purchasing ledger: ${pending.pendingUsdcTopups} pending USDC topups ` +
+        (pending.pendingUsdcOtherEffects
+          ? "(alongside separately listed USDC service obligations)."
+          : `with ${pending.pendingUsdcCommitments ?? "UNKNOWN"} USDC cents committed.`),
+      );
+      conditions.push(
+        "USDC purchase commitments are not Conway credit units or proof of credits received.",
+      );
+    }
+    if (pending.pendingUsdcOtherEffects && pending.pendingUsdcOtherEffects > 0) {
+      evidence.push(
+        `Canonical financial effects: ${pending.pendingUsdcOtherEffects} non-topup USDC payments remain unresolved; ` +
+        `total pending USDC obligations=${pending.pendingUsdcCommitments ?? "UNKNOWN"} USDC cents (all categories).`,
+      );
+      conditions.push("Paid service HTTP responses are not verified USDC settlement or Conway credit balances.");
+    }
+    if (pending.unclassifiedPendingEffects && pending.unclassifiedPendingEffects > 0) {
+      hasUnknown = true;
+      conditions.push(
+        `${pending.unclassifiedPendingEffects} unresolved effects have unknown financial units; obtain unit evidence before cross-currency liquidity analysis.`,
+      );
+    }
+  }
+
+  if (context.taskCostCalibration) {
+    const history = context.taskCostCalibration;
+    if (history.comparableSamples > 0 && history.actualToEstimateRatio !== null) {
+      evidence.push(
+        `Local task estimate→outcome: ${history.comparableSamples} comparable tasks, ` +
+        `actual/estimate=${history.actualToEstimateRatio.toFixed(3)}, ` +
+        `net deviation=${history.netDeviationTaskCostCents} task-cost cents.`,
+      );
+      conditions.push(
+        "Calibration belongs to task_graph local task-cost authority; do not treat it as Conway credits, settled provider spend or business P&L.",
+      );
+      if (history.observedOverrunTaskCostCents !== null &&
+          history.observedOverrunTaskCostCents !== undefined) {
+        evidence.push(
+          `Observed task overruns=${history.observedOverrunTaskCostCents} task-cost cents; ` +
+          `largest=${history.largestObservedOverrunTaskCostCents ?? "UNKNOWN"}; ` +
+          `sample count=${history.observedOverrunSamples ?? "UNKNOWN"}.`,
+        );
+        conditions.push(
+          "Do not net away downside overruns against underruns when reviewing reserves; " +
+          "a task-cost signal needs independently supported unit conversion before allocating Conway credits.",
+        );
+      }
+    }
+    if (history.estimatesAwaitingObservedCost > 0) {
+      conditions.push(
+        `${history.estimatesAwaitingObservedCost} terminal task cost estimates lack observed actuals; ` +
+        "do not treat zero-defaults as measured savings.",
+      );
+    }
+    if (history.observedActualsWithoutEstimate) {
+      conditions.push(
+        `${history.observedActualsWithoutEstimate} terminal tasks have an observed actual cost ` +
+        "without an estimated baseline; no prediction→outcome comparison is valid for them.",
+      );
+    }
+    if (history.invalidCostSamples) {
+      conditions.push(
+        `${history.invalidCostSamples} terminal tasks have invalid negative task-cost values ` +
+        "and are excluded from reserve calibration pending source correction.",
+      );
+    }
+  }
+
+  if (context.treasuryReserveLearning) {
+    const learning = context.treasuryReserveLearning;
+    evidence.push(
+      `Treasury P-025/P-023 causal learning: reviewed paths=${learning.reviewedPathLinked}; ` +
+      `confirmed strategic outcomes=${learning.confirmedStrategicOutcomes}; ` +
+      `contradicted strategic outcomes=${learning.contradictedStrategicOutcomes}; ` +
+      `nonterminal/inconclusive=${learning.inconclusive}; awaiting=${learning.awaitingOutcome}; ` +
+      `review provenance UNKNOWN=${learning.reviewProvenanceUnknown}; ` +
+      `locally reconciled reserve transfers=${learning.locallyReconciledReserveTransfersCreditsCents ?? "UNKNOWN"} Conway credit cents (local ledger only); ` +
+      "external provider finality and realized economic return=UNKNOWN.",
+    );
+    conditions.push(...learning.limitations.map(text => `Treasury learning scope: ${text}`));
+  }
+
+  if (context.treasuryReview) {
+    const treasury = context.treasuryReview;
+    evidence.push(...treasury.evidence.map((item) => `Treasury evidence: ${item}`));
+    evidence.push(
+      `Treasury projection: cost=${treasury.proposedCreditsCents} credit cents; ` +
+      `free before=${treasury.freeCreditsBeforeCents ?? "UNKNOWN"}; ` +
+      `free after=${treasury.freeCreditsAfterCents ?? "UNKNOWN"}; ` +
+      `scenario=${treasury.status}.`,
+    );
+    const reserve = treasury.reserveRecommendation;
+    evidence.push(
+      `Treasury reserve scenario: target=${reserve.targetCreditsCents ?? "UNKNOWN"} credit cents; ` +
+      `additional earmark=${reserve.additionalCreditsCents ?? "UNKNOWN"} credit cents; ` +
+      `free after purchase and reserve=${reserve.freeAfterProposalAndReserveCents ?? "UNKNOWN"}; ` +
+      `disposition=${reserve.disposition}.`,
+    );
+    conditions.push(...treasury.limitations.map((item) => `Treasury scope: ${item}`));
+    if (treasury.status === "needs_evidence") {
+      hasUnknown = true;
+      conditions.push(...treasury.conditions.map((item) => `Treasury requires evidence: ${item}`));
+    }
+    // "review_ready" only satisfies the supplied economic evidence screen;
+    // P-025 plan review, Policy and provider authority remain mandatory.
   }
 
   if (critique.length > 0) {

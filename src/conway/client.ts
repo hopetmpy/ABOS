@@ -51,7 +51,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     method: string,
     path: string,
     body?: unknown,
-    requestOptions?: { idempotencyKey?: string; retries404?: number },
+    requestOptions?: { idempotencyKey?: string; retries404?: number; noStore?: boolean },
   ): Promise<any> {
     // Conway LB has an intermittent routing bug that returns 404 for valid
     // sandbox endpoints. Retry 404s here (outside ResilientHttpClient) to
@@ -63,7 +63,11 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
         headers: {
           "Content-Type": "application/json",
           Authorization: apiKey,
+          ...(requestOptions?.noStore
+            ? { "Cache-Control": "no-store, max-age=0", Pragma: "no-cache" }
+            : {}),
         },
+        cache: requestOptions?.noStore ? "no-store" : undefined,
         body: body ? JSON.stringify(body) : undefined,
         idempotencyKey: requestOptions?.idempotencyKey,
       });
@@ -332,8 +336,17 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
   // ─── Credits ─────────────────────────────────────────────────
 
   const getCreditsBalance = async (): Promise<number> => {
-    const result = await request("GET", "/v1/credits/balance");
-    return result.balance_cents ?? result.credits_cents ?? 0;
+    // Prefer an uncached HTTP observation for treasury decisions. This is only
+    // a cache directive: it cannot authenticate wallet scope, provider event
+    // time or finality, and an upstream provider could still serve stale data.
+    const result = await request("GET", "/v1/credits/balance", undefined, { noStore: true });
+    const observed = result?.balance_cents ?? result?.credits_cents;
+    if (!Number.isSafeInteger(observed)) {
+      throw new Error(
+        "Conway credit balance was not a valid observed integer; UNKNOWN must not become zero.",
+      );
+    }
+    return observed;
   };
 
   const getCreditsPricing = async (): Promise<PricingTier[]> => {
@@ -352,6 +365,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     toAddress: string,
     amountCents: number,
     note?: string,
+    options?: { idempotencyKey?: string },
   ): Promise<CreditTransferResult> => {
     const payload = {
       to_address: toAddress,
@@ -359,7 +373,12 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
       note,
     };
 
-    const idempotencyKey = ulid();
+    // Reconciled effects supply a stable key across restart; legacy callers
+    // still receive an ephemeral key until migrated to the financial adapter.
+    if (options?.idempotencyKey !== undefined && !options.idempotencyKey.trim()) {
+      throw new Error("Transfer idempotency key cannot be empty");
+    }
+    const idempotencyKey = options?.idempotencyKey ?? ulid();
     const paths = ["/v1/credits/transfer", "/v1/credits/transfers"];
 
     let lastError = "Unknown transfer error";
@@ -403,8 +422,10 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
       return {
         transferId: data.transfer_id || data.id || "",
         status: data.status || "submitted",
-        toAddress: data.to_address || toAddress,
-        amountCents: data.amount_cents ?? amountCents,
+        // Never fill missing provider observations from the submitted request.
+        // Missing terms may be reconciled later, but cannot prove settlement.
+        toAddress: typeof data.to_address === "string" ? data.to_address : undefined,
+        amountCents: Number.isSafeInteger(data.amount_cents) ? data.amount_cents : undefined,
         balanceAfterCents:
           data.balance_after_cents ?? data.new_balance_cents ?? undefined,
       };

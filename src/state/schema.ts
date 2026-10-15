@@ -7,7 +7,25 @@ import { WORLD_MODEL_SCHEMA } from "./world-model-schema.js";
  * The database IS the abos's memory.
  */
 
-export const SCHEMA_VERSION = 21;
+export const SCHEMA_VERSION = 23;
+
+// P-030: internal reserve allocations are earmarks, not settled cash movements.
+// Append-only decisions retain idempotency/recovery without a second payment ledger.
+export const MIGRATION_V23_TREASURY_RESERVES = `
+  CREATE TABLE IF NOT EXISTS treasury_reserve_allocations (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    operation_key TEXT NOT NULL UNIQUE,
+    reserve_key TEXT NOT NULL,
+    target_credit_cents INTEGER NOT NULL CHECK(target_credit_cents >= 0),
+    decision_id TEXT NOT NULL,
+    decision_evidence TEXT NOT NULL,
+    observed_credit_cents INTEGER CHECK(observed_credit_cents >= 0),
+    balance_evidence TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_treasury_reserve_allocations_key
+    ON treasury_reserve_allocations(reserve_key, sequence DESC);
+`;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -75,6 +93,47 @@ export const CREATE_TABLES = `
     description TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  -- P-030 financial-effect intent/reconciliation authority.
+  -- This is NOT a second accounting ledger: settled money remains owned by
+  -- transactions. This table owns only pre-effect intent, provider observation,
+  -- durable idempotency and reconciliation state across restart/retry.
+  CREATE TABLE IF NOT EXISTS financial_effects (
+    id TEXT PRIMARY KEY,
+    operation_key TEXT NOT NULL UNIQUE,
+    effect_kind TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL CHECK(amount_cents >= 0),
+    unit TEXT NOT NULL DEFAULT 'credit_cent',
+    recipient TEXT,
+    child_id TEXT,
+    provider TEXT NOT NULL,
+    provider_effect_id TEXT,
+    provider_status TEXT,
+    state TEXT NOT NULL,
+    transaction_id TEXT REFERENCES transactions(id),
+    policy_decision_id TEXT,
+    request_json TEXT NOT NULL DEFAULT '{}',
+    evidence_json TEXT NOT NULL DEFAULT '[]',
+    last_error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    dispatched_at TEXT,
+    settled_at TEXT,
+    completed_at TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_financial_effects_state
+    ON financial_effects(state, updated_at);
+  CREATE INDEX IF NOT EXISTS idx_financial_effects_fingerprint
+    ON financial_effects(fingerprint, state, updated_at);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_financial_effects_provider_effect
+    ON financial_effects(provider, provider_effect_id)
+    WHERE provider_effect_id IS NOT NULL AND provider_effect_id != '';
+  CREATE INDEX IF NOT EXISTS idx_financial_effects_child
+    ON financial_effects(child_id, state, updated_at);
+
+  ${MIGRATION_V23_TREASURY_RESERVES}
 
   -- Installed tools and MCP servers
   CREATE TABLE IF NOT EXISTS installed_tools (

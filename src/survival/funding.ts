@@ -33,7 +33,21 @@ export async function executeFundingStrategies(
   conway: ConwayClient,
 ): Promise<FundingAttempt[]> {
   const attempts: FundingAttempt[] = [];
-  const creditsCents = await conway.getCreditsBalance().catch(() => 0);
+  // A failed observation is not a zero balance and must not drive a fabricated
+  // survival or funding escalation.
+  let creditsCents: number;
+  try {
+    creditsCents = await conway.getCreditsBalance();
+    if (!Number.isSafeInteger(creditsCents)) {
+      throw new Error("Provider balance observation is invalid");
+    }
+  } catch {
+    db.setKV("funding_balance_observation", JSON.stringify({
+      status: "unknown",
+      observedAt: new Date().toISOString(),
+    }));
+    return attempts;
+  }
 
   // Check how recently we last begged for this specific tier (don't spam).
   // Each tier has its own cooldown key so that e.g. dead-tier begs (2h)

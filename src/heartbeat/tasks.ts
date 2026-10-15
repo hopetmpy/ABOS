@@ -24,6 +24,7 @@ import { AlertEngine, createDefaultAlertRules } from "../observability/alerts.js
 import { metricsInsertSnapshot, metricsPruneOld } from "../state/database.js";
 import { ulid } from "ulid";
 import { getChildEconomicSnapshot } from "../economics/child-economics.js";
+import { getTreasuryProjection } from "../economics/treasury-projection.js";
 
 const logger = createLogger("heartbeat.tasks");
 
@@ -626,11 +627,15 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
           capitalReturnedCents - capitalAllocatedCents,
         fundedToChildrenCents: childFunding.total,
         taskExecutionCostCents: taskCosts.total,
+        taskExecutionCostUnit: "task_cost_cent",
+        taskExecutionCostAuthority: "local_task_graph_unverified",
+        treasury: getTreasuryProjection(taskCtx.db),
         childEconomics,
         limitations: [
           "Revenue/expense remain unknown because generic transfer types do not prove causal business P&L.",
           "Legacy transfer_in/transfer_out rows are unclassified; historical child funding may exist among transfer_out rows created before capital_allocation was introduced.",
           "Credit purchases are resource acquisition and are not classified as revenue.",
+          "taskExecutionCostCents is local task_cost_cent, possibly incomplete; it is not a monetary expense or interchangeable with Conway credit liquidity.",
         ],
         activeAgents: taskCtx.db.getChildren().filter(
           (child) => child.status !== "dead" && child.status !== "cleaned_up",

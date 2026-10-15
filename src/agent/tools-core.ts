@@ -6,6 +6,7 @@
  */
 
 import { ulid } from "ulid";
+import { createHash } from "node:crypto";
 import type {
   AbosTool,
   ToolContext,
@@ -23,7 +24,12 @@ import type { PolicyEngine } from "./policy-engine.js";
 import { sanitizeToolResult, sanitizeInput } from "./injection-defense.js";
 import { createLogger } from "../observability/logger.js";
 import { appendEvidenceEvent, correlationIdFor, currentEvidenceContext, latestEvidenceByAuthority, runWithEvidenceContext } from "../observability/evidence.js";
-import { isCreditTransferAccepted } from "../conway/credits.js";
+import { executeCreditEffect } from "../economics/credit-transfer.js";
+import { executeCreditTopupEffect, listUnresolvedCreditTopups } from "../economics/credit-topup.js";
+import { getTreasuryProjection } from "../economics/treasury-projection.js";
+import { getTreasuryFinancialEffectSequence, getTreasuryReserveSnapshot, setTreasuryReserve } from "../economics/treasury-reserves.js";
+import { claimFinancialEffectDispatch, getCommittedFinancialEffectCents, listUnresolvedFinancialEffects, prepareFinancialEffect, recordFinancialEffectObservation } from "../economics/financial-effects.js";
+import { assessTreasuryScenario } from "../economics/treasury-scenario.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
 import { toPosixShellPath } from "../platform/home.js";
 import { confinePathToSandbox } from "../platform/path-confinement.js";
@@ -379,8 +385,37 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
       riskLevel: "safe",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
-        const balance = await ctx.conway.getCreditsBalance();
-        return `Credit balance: $${(balance / 100).toFixed(2)} (${balance} cents)`;
+        let balance: number | null = null;
+        try {
+          const observation = await ctx.conway.getCreditsBalance();
+          if (Number.isSafeInteger(observation)) balance = observation;
+        } catch {
+          // Provider lookup failed. Persisted pending effects remain inspectable
+          // but the spendable balance is UNKNOWN, not fabricated as zero.
+        }
+        const treasury = getTreasuryProjection(ctx.db, {
+          observedCreditsCents: balance !== null && balance >= 0 ? balance : null,
+        });
+        const pending = listUnresolvedFinancialEffects(ctx.db.raw);
+        const pendingTopups = listUnresolvedCreditTopups(ctx.db, ctx.identity.address);
+        const committedUsdcCents = getCommittedFinancialEffectCents(ctx.db.raw, "usdc_cent");
+        const sample = pending.slice(0, 10).map((effect) =>
+          `${effect.operationKey} [${effect.state}; provider-id=${effect.providerEffectId ?? "UNKNOWN"}]` +
+          ` (commitment=${effect.amountCents} ${effect.unit})`,
+        );
+        const display = balance === null
+          ? "UNKNOWN (provider observation unavailable)"
+          : `$${(balance / 100).toFixed(2)} (${balance} cents)`;
+        return `Credit balance: ${display}
+Treasury: free credits=${treasury.freeCreditsCents ?? "UNKNOWN"};
+pending financial effects=${treasury.unresolvedFinancialEffects};
+immobilized pending credits=${treasury.pendingTransferCreditsCents};
+unresolved x402 USDC topups=${pendingTopups.length}; committed USDC cents (NOT Conway credits)=${committedUsdcCents};
+unresolved effect keys=${sample.join("; ") || "none"}${pending.length > sample.length ? ` (+${pending.length - sample.length} more)` : ""};
+active task estimated cost=${treasury.activeTaskEstimatedCostCents} cents (unit reconciliation may be required);
+reserved credits=${treasury.reservedCreditsCents ?? "UNKNOWN"} (${treasury.reserveSource}); other obligations=${treasury.otherCommittedCreditsCents ?? "UNKNOWN"}.
+Credit balance is not automatically free or distributable capital.
+Reconciliation requires independently verified provider finality; this view is not proof of settlement.`;
       },
     },
     {
@@ -430,78 +465,57 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
           return `Invalid tier. Valid amounts (USD): ${TOPUP_TIERS.join(", ")}`;
         }
 
-        // Check USDC balance first (EVM-only path after Solana guard above)
-        const { getUsdcBalance } = await import("../conway/x402.js");
-        const usdcBalance = await getUsdcBalance(ctx.identity.address, "eip155:8453");
-        if (usdcBalance < amountUsd) {
-          return `Insufficient USDC. Balance: $${usdcBalance.toFixed(2)}, requested: $${amountUsd}. Choose a smaller tier or wait for funding.`;
-        }
-
-        const result = await topupCredits(
-          ctx.config.conwayApiUrl,
-          ctx.identity.account,
-          amountUsd,
-        );
-
-        if (!result.success) {
-          return `Credit topup failed: ${result.error}`;
-        }
-
-        // The external purchase has succeeded. Preserve the exact x402
-        // observation separately from any cent-denominated local projection.
-        try {
-          const { ulid } = await import("ulid");
-          const transactionId = ulid();
-          const paymentAtomic = result.payment
-            ? BigInt(result.payment.amountMicroUsdc)
-            : null;
-          const exactWholeCents = paymentAtomic !== null && paymentAtomic % 10_000n === 0n
-            ? Number(paymentAtomic / 10_000n)
-            : undefined;
-          ctx.db.insertTransaction({
-            id: transactionId,
-            type: "credit_purchase",
-            amountCents: exactWholeCents,
-            balanceAfterCents: undefined,
-            description: `x402 credit topup requested tier: $${amountUsd} USD`,
-            timestamp: new Date().toISOString(),
-          });
-          const evidence = currentEvidenceContext();
-          if (evidence && result.payment) {
-            const transactionEvent = latestEvidenceByAuthority(
-              ctx.db.raw,
-              "financial_transaction",
-              transactionId,
-            );
-            appendEvidenceEvent(ctx.db.raw, {
-              correlationId: evidence.correlationId,
-              causationId: transactionEvent?.id ?? evidence.causationId ?? null,
-              eventType: "economic.x402_payment_observed",
-              domain: "economic",
-              authorityType: "financial_transaction",
-              authorityId: transactionId,
-              goalId: evidence.goalId ?? null,
-              taskId: evidence.taskId ?? null,
-              turnId: evidence.turnId ?? null,
-              toolCallId: evidence.toolCallId ?? null,
-              epistemicStatus: "observation",
-              payload: {
-                amountMicroUsdc: result.payment.amountMicroUsdc,
-                amountUnit: "micro-USDC",
-                policyAmountCents: result.payment.policyAmountCents,
-                policyUnit: "cent",
-                policyRounding: "ceil",
-              },
-              provenance: { source: "x402" },
-            });
-          }
-        } catch (error) {
-          throw new ExternalEffectOutcomeUnknownError(
-            `Credit topup completed externally but local accounting failed: ${error instanceof Error ? error.message : String(error)}`,
+        const signerAddress = ctx.identity.account?.address;
+        if (typeof signerAddress !== "string" ||
+            signerAddress.toLowerCase() !== ctx.identity.address.toLowerCase()) {
+          throw new Error(
+            "x402 signing wallet conflicts with the recorded credit recipient identity; purchase not dispatched",
           );
         }
 
-        return `Credit topup successful: +$${amountUsd} (${amountUsd * 100} cents) credits purchased via x402. Check your new balance with check_credits.`;
+        const existing = listUnresolvedCreditTopups(ctx.db, ctx.identity.address);
+        if (existing.length > 0) {
+          throw new ExternalEffectOutcomeUnknownError(
+            `Prior x402 topup ${existing[0].operationKey} is ${existing[0].state}; ` +
+            "reconcile its payment and credited balance before purchasing again.",
+          );
+        }
+
+        // USDC balance is on-chain observed input, not Conway credit liquidity.
+        const { getUsdcBalance } = await import("../conway/x402.js");
+        const usdcBalance = await getUsdcBalance(ctx.identity.address, "eip155:8453");
+        if (!Number.isFinite(usdcBalance) || usdcBalance < amountUsd) {
+          return "Insufficient or UNKNOWN USDC; no x402 purchase dispatched.";
+        }
+
+        const effect = await executeCreditTopupEffect({
+          db: ctx.db,
+          walletAddress: ctx.identity.address,
+          amountUsd,
+          policyDecisionId: currentEvidenceContext()?.policyDecisionId ?? null,
+          operationKey: currentEvidenceContext()?.policyDecisionId
+            ? `topup:${currentEvidenceContext()!.policyDecisionId}`
+            : undefined,
+          executePayment: (onPaymentPrepared) => topupCredits(
+            ctx.config.conwayApiUrl,
+            ctx.identity.account,
+            amountUsd,
+            undefined,
+            onPaymentPrepared,
+          ),
+        });
+        if (effect.state === "rejected") {
+          throw new Error(
+            `x402 topup was rejected before signed payment: ${effect.lastError ?? "unknown cause"}`,
+          );
+        }
+        // Accepted HTTP responses are not final provider credit observations.
+        // Policy persists UNKNOWN and autonomous recovery will never redispatch
+        // an unresolved paid intent. No credit_purchase ledger is fabricated.
+        throw new ExternalEffectOutcomeUnknownError(
+          `x402 topup ${effect.operationKey} is ${effect.state}; ` +
+          "payment finality and Conway credits are not yet independently verified.",
+        );
       },
     },
     {
@@ -1255,6 +1269,156 @@ Model: ${ctx.inference.getDefaultModel()}
   },
 },
 
+    // Read-only economic review; P-025/Policy own any execution decision.
+    {
+      name: "assess_treasury_scenario",
+      description: "Analyze an economic proposal using observed credit liquidity, explicit reserve/commitment assumptions, evidence, alternatives and contingencies. Does NOT authorize a payment.",
+      category: "financial",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          proposal_credits_cents: { type: "integer" },
+          expected_revenue_credits_cents: { type: "integer" },
+          realized_advance_credits_cents: { type: "integer" },
+          previous_spend_credits_cents: { type: "integer" },
+          immediate_need_credits_cents: { type: "integer" },
+          future_need_credits_cents: { type: "integer" },
+          reserve_credits_cents: { type: "integer" },
+          pending_refund_credits_cents: { type: "integer", description: "Pending refund claim; NOT spendable until provider balance confirms receipt" },
+          other_commitments_cents: { type: "integer" },
+          task_commitments_credits_cents: { type: "integer" },
+          opportunity_evidence: { type: "array", items: { type: "string" } },
+          future_need_evidence: { type: "array", items: { type: "string" } },
+          bundle_economics_evidence: { type: "array", items: { type: "string" } },
+          alternatives: { type: "array", items: {
+            type: "object", properties: {
+              id: { type: "string" }, costCreditsCents: { type: "integer" },
+              evidence: { type: "string" },
+            }, required: ["id", "costCreditsCents", "evidence"],
+          } },
+          joint_risk_exposure_credits_cents: { type: "integer" },
+          joint_risk_evidence: { type: "array", items: { type: "string" } },
+          risks: { type: "array", items: {
+            type: "object", properties: {
+              id: { type: "string" }, exposureCreditsCents: { type: "integer" },
+              evidence: { type: "string" },
+            }, required: ["id", "exposureCreditsCents", "evidence"],
+          } },
+        },
+        required: ["proposal_credits_cents"],
+      },
+      execute: async (args, ctx) => {
+        let observedBalance: number | null = null;
+        try {
+          const balance = await ctx.conway.getCreditsBalance();
+          if (Number.isSafeInteger(balance) && balance >= 0) observedBalance = balance;
+        } catch {
+          // Provider unavailability means UNKNOWN, never 0.
+        }
+        const projection = getTreasuryProjection(ctx.db, {
+          observedCreditsCents: observedBalance,
+          reservedCreditsCents: args.reserve_credits_cents as number | undefined,
+          pendingRefundCreditsCents: args.pending_refund_credits_cents as number | undefined,
+          otherCommittedCreditsCents: args.other_commitments_cents as number | undefined,
+          taskCommitmentCreditsCents: args.task_commitments_credits_cents as number | undefined,
+        });
+        const scenario = assessTreasuryScenario(projection, {
+          proposalCreditsCents: args.proposal_credits_cents as number,
+          expectedRevenueCreditsCents: args.expected_revenue_credits_cents as number | undefined,
+          realizedAdvanceCreditsCents: args.realized_advance_credits_cents as number | undefined,
+          previousSpendCreditsCents: args.previous_spend_credits_cents as number | undefined,
+          immediateNeedCreditsCents: args.immediate_need_credits_cents as number | undefined,
+          futureNeedCreditsCents: args.future_need_credits_cents as number | undefined,
+          opportunityEvidence: args.opportunity_evidence as string[] | undefined,
+          futureNeedEvidence: args.future_need_evidence as string[] | undefined,
+          bundleEconomicsEvidence: args.bundle_economics_evidence as string[] | undefined,
+          alternatives: args.alternatives as Array<{ id: string; costCreditsCents: number; evidence: string }> | undefined,
+          risks: args.risks as Array<{ id: string; exposureCreditsCents: number; evidence: string }> | undefined,
+          jointRiskExposureCreditsCents: args.joint_risk_exposure_credits_cents as number | undefined,
+          jointRiskEvidence: args.joint_risk_evidence as string[] | undefined,
+        });
+        return JSON.stringify({ projection, scenario, executionAuthorized: false });
+      },
+    },
+
+    // Internal credit earmark only. No Conway transfer, no provider payment,
+    // no inferred P-025 approval. Existing Policy owns this tool's invocation.
+    {
+      name: "set_treasury_reserve",
+      description: "Persist, revise or release an INTERNAL Conway credit contingency reserve (target=0 releases). Requires causal decision evidence. Never transfers, buys, settles or spends money.",
+      category: "financial",
+      riskLevel: "caution",
+      parameters: {
+        type: "object",
+        properties: {
+          reserve_key: { type: "string", description: "Stable identity of the reserve being changed" },
+          target_credits_cents: { type: "integer", description: "Absolute reserve target in Conway credit cents; zero releases" },
+          decision_evidence: { type: "string", description: "Relevant P-025 rationale and reviewed risk/alternatives evidence; caller assertion until verified" },
+          other_commitments_cents: { type: "integer", description: "Independently established Conway credit obligations, excluding external financial_effects and these reserves" },
+          task_commitments_credits_cents: { type: "integer", description: "Optional compatible Conway credit valuation of active tasks, not raw task_cost_cent" },
+        },
+        required: ["reserve_key", "target_credits_cents", "decision_evidence"],
+      },
+      execute: async (args, ctx) => {
+        const evidence = currentEvidenceContext();
+        const causalId = evidence?.toolCallId ?? evidence?.policyDecisionId;
+        if (!causalId) return "Blocked: reserve adjustment needs a durable policy/tool-call identity.";
+        const reserveKey = args.reserve_key as string;
+        const target = args.target_credits_cents as number;
+        if (!Number.isSafeInteger(target) || target < 0) {
+          return "Blocked: reserve target must be exact nonnegative Conway credit cents.";
+        }
+        const existing = getTreasuryReserveSnapshot(ctx.db.raw).allocations
+          .find(item => item.reserveKey === reserveKey?.trim());
+        const increasing = target > (existing?.targetCreditsCents ?? 0);
+        let observedCreditsCents: number | null = null;
+        const financialEffectsSequenceBeforeBalance = increasing
+          ? getTreasuryFinancialEffectSequence(ctx.db.raw) : undefined;
+        let balanceObservedAt: string | null = null;
+        if (increasing) {
+          try {
+            const observed = await ctx.conway.getCreditsBalance();
+            if (Number.isSafeInteger(observed) && observed >= 0) {
+              observedCreditsCents = observed;
+              balanceObservedAt = new Date().toISOString();
+            }
+          } catch {
+            // Provider outage never becomes a fictitious balance.
+          }
+        }
+        const change = setTreasuryReserve(ctx.db, {
+          operationKey: `tool:treasury-reserve:${causalId}`,
+          reserveKey,
+          targetCreditsCents: target,
+          decisionId: evidence?.policyDecisionId ?? causalId,
+          decisionEvidence: args.decision_evidence as string,
+          observedCreditsCents,
+          financialEffectsSequenceBeforeBalance,
+          balanceEvidence: observedCreditsCents === null ? null : JSON.stringify({
+            source: "ConwayClient.getCreditsBalance",
+            observedAt: balanceObservedAt,
+            runtimeAgentAddress: ctx.identity.address,
+            kind: "local_client_balance_observation",
+            providerWalletOwnershipVerified: false,
+            providerFinalityVerified: false,
+          }),
+          otherCommittedCreditsCents: args.other_commitments_cents as number | undefined,
+          taskCommitmentCreditsCents: args.task_commitments_credits_cents as number | undefined,
+        });
+        return JSON.stringify({
+          status: "internal_reserve_recorded",
+          operationKey: change.allocation.operationKey,
+          applied: change.applied,
+          reserveKey: change.allocation.reserveKey,
+          reservedCreditsCents: change.currentTotalCreditsCents,
+          unit: "credit_cent",
+          financialTransferExecuted: false,
+          providerSettlementVerified: false,
+        });
+      },
+    },
+
     // ── Financial: Transfer Credits ──
     {
       name: "transfer_credits",
@@ -1267,57 +1431,34 @@ Model: ${ctx.inference.getDefaultModel()}
           to_address: { type: "string", description: "Recipient address" },
           amount_cents: { type: "number", description: "Amount in cents" },
           reason: { type: "string", description: "Reason for transfer" },
+          operation_key: { type: "string", description: "Durable operation key for replay/reconciliation" },
+          reserve_key: { type: "string", description: "Optional durable internal Conway credit reserve funding this transfer; does not authorize payment" },
         },
         required: ["to_address", "amount_cents"],
       },
       execute: async (args, ctx) => {
         const amount = args.amount_cents as number;
-        if (!Number.isFinite(amount) || amount <= 0) {
+        if (!Number.isSafeInteger(amount) || amount <= 0) {
           return `Blocked: amount_cents must be a positive number, got ${amount}.`;
         }
 
-        // Guard: don't transfer more than half your balance
-        const balance = await ctx.conway.getCreditsBalance();
-        if (amount > balance / 2) {
-          return `Blocked: Cannot transfer more than half your balance ($${(balance / 100).toFixed(2)}). Self-preservation.`;
-        }
-
-        const transfer = await ctx.conway.transferCredits(
-          args.to_address as string,
-          amount,
-          args.reason as string | undefined,
-        );
-
-        if (!isCreditTransferAccepted(transfer.status)) {
-          return `Credit transfer was not accepted (status: ${transfer.status || "unknown"}). No local transfer was recorded.`;
-        }
-
-        // The provider accepted the external effect. Persist the canonical
-        // transaction first, then policy spend accounting. If either local
-        // authority cannot commit, never invite a duplicate transfer.
-        try {
-          const { ulid } = await import("ulid");
-          ctx.db.insertTransaction({
-            id: ulid(),
-            type: "transfer_out",
-            amountCents: amount,
-            balanceAfterCents: transfer.balanceAfterCents,
-            description: `Transfer to ${args.to_address}: ${args.reason || ""}`,
-            timestamp: new Date().toISOString(),
-          });
-          ctx.spendTracker?.recordSpend({
-            toolName: "transfer_credits",
-            amountCents: amount,
-            recipient: args.to_address as string,
-            category: "transfer",
-          });
-        } catch (error) {
-          throw new ExternalEffectOutcomeUnknownError(
-            `Credit transfer was accepted externally but local accounting failed: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-
-        return `Credit transfer submitted: $${(amount / 100).toFixed(2)} to ${transfer.toAddress} (status: ${transfer.status}, id: ${transfer.transferId || "n/a"})`;
+        const operationKey = (args.operation_key as string | undefined) ??
+          (currentEvidenceContext()?.toolCallId
+            ? `tool:transfer:${currentEvidenceContext()!.toolCallId}`
+            : currentEvidenceContext()?.policyDecisionId
+              ? `policy:transfer:${currentEvidenceContext()!.policyDecisionId}` : undefined);
+        if (!operationKey) return "Blocked: financial effect requires durable tool-call identity.";
+        const effect = await executeCreditEffect({
+          db: ctx.db, conway: ctx.conway, operationKey, kind: "credit_transfer",
+          toAddress: args.to_address as string, amountCents: amount,
+          note: (args.reason as string | undefined) ?? "", spendTracker: ctx.spendTracker,
+          reserveKey: args.reserve_key as string | undefined,
+        });
+        if (effect.state === "rejected") throw new Error(
+          `Credit transfer ${effect.operationKey} rejected by provider.`);
+        if (effect.state !== "completed") throw new ExternalEffectOutcomeUnknownError(
+          `Credit transfer ${effect.operationKey} is ${effect.state}; reconcile before retrying.`);
+        return `Credit transfer settled: $${(amount / 100).toFixed(2)} to ${effect.recipient} (id: ${effect.providerEffectId || "n/a"}).`;
       },
     },
 
@@ -2000,6 +2141,7 @@ Model: ${ctx.inference.getDefaultModel()}
         type: "object",
         properties: {
           child_id: { type: "string", description: "Child abos ID" },
+          operation_key: { type: "string", description: "Durable child-funding operation key" },
           amount_cents: {
             type: "number",
             description: "Amount in cents to transfer",
@@ -2032,65 +2174,25 @@ Model: ${ctx.inference.getDefaultModel()}
         }
 
         const amount = args.amount_cents as number;
-        if (!Number.isFinite(amount) || amount <= 0) {
+        if (!Number.isSafeInteger(amount) || amount <= 0) {
           return `Blocked: amount_cents must be a positive number, got ${amount}.`;
         }
 
-        const balance = await ctx.conway.getCreditsBalance();
-        if (amount > balance / 2) {
-          return `Blocked: Cannot transfer more than half your balance. Self-preservation.`;
-        }
-
-        const transfer = await ctx.conway.transferCredits(
-          child.address,
-          amount,
-          `fund child ${child.id}`,
-        );
-
-        if (!isCreditTransferAccepted(transfer.status)) {
-          return `Funding transfer was not accepted for child ${child.name} (status: ${transfer.status || "unknown"}). No local capital allocation was recorded.`;
-        }
-
-        // The external transfer is the irreversible authority boundary. Persist
-        // parent bookkeeping atomically afterwards; a local write failure must
-        // not make the caller blindly repeat a transfer that already happened.
-        let localPersistenceOk = true;
-        try {
-          ctx.db.runTransaction(() => {
-            ctx.db.insertTransaction({
-              id: ulid(),
-              type: "capital_allocation",
-              amountCents: amount,
-              balanceAfterCents: transfer.balanceAfterCents,
-              description: `Allocate working capital to child ${child.name} (${child.id})`,
-              timestamp: new Date().toISOString(),
-            });
-
-            ctx.db.raw
-              .prepare(
-                "UPDATE children SET funded_amount_cents = funded_amount_cents + ? WHERE id = ?",
-              )
-              .run(amount, child.id);
-          });
-        } catch (error) {
-          localPersistenceOk = false;
-          logger.error(
-            "Child funding transferred but local capital bookkeeping failed",
-            error instanceof Error ? error : undefined,
-            {
-              childId: child.id,
-              childAddress: child.address,
-              amountCents: amount,
-              transferId: transfer.transferId,
-            },
-          );
-        }
-
-        if (!localPersistenceOk) {
-          throw new ExternalEffectOutcomeUnknownError(
-            `Child funding transfer ${transfer.transferId || "unknown"} completed externally but local capital bookkeeping failed.`,
-          );
-        }
+        const operationKey = (args.operation_key as string | undefined) ??
+          (currentEvidenceContext()?.toolCallId
+            ? `tool:fund:${currentEvidenceContext()!.toolCallId}`
+            : currentEvidenceContext()?.policyDecisionId
+              ? `policy:fund:${currentEvidenceContext()!.policyDecisionId}` : undefined);
+        if (!operationKey) return "Blocked: child funding requires durable tool-call identity.";
+        const effect = await executeCreditEffect({
+          db: ctx.db, conway: ctx.conway, operationKey, kind: "child_funding",
+          toAddress: child.address, childId: child.id, amountCents: amount,
+          note: `fund child ${child.id}`,
+        });
+        if (effect.state === "rejected") throw new Error(
+          `Child funding ${effect.operationKey} rejected by provider.`);
+        if (effect.state !== "completed") throw new ExternalEffectOutcomeUnknownError(
+          `Child funding ${effect.operationKey} is ${effect.state}; reconcile before retrying.`);
 
         // Transition to funded if wallet_verified
         if (child.status === "wallet_verified") {
@@ -2108,7 +2210,7 @@ Model: ${ctx.inference.getDefaultModel()}
           }
         }
 
-        return `Funded child ${child.name} with $${(amount / 100).toFixed(2)} (status: ${transfer.status}, id: ${transfer.transferId || "n/a"})`;
+        return `Funded child ${child.name} with ${(amount / 100).toFixed(2)} (settled: ${effect.providerStatus}, id: ${effect.providerEffectId || "n/a"})`;
       },
     },
     {
@@ -3066,6 +3168,13 @@ Model: ${ctx.inference.getDefaultModel()}
         const maxPayment =
           ctx.config.treasuryPolicy?.maxX402PaymentCents ??
           DEFAULT_TREASURY_POLICY.maxX402PaymentCents;
+        // Persist financial intent and signed authorization before *any* paid
+        // request is dispatched. x402 HTTP success is not on-chain finality.
+        const operationKey = `x402-service:${currentEvidenceContext()?.toolCallId ?? ulid()}`;
+        const requestFingerprint = createHash("sha256")
+          .update(JSON.stringify({ url, method, body: body ?? null }))
+          .digest("hex");
+        let prepared = false;
         const result = await x402Fetch(
           url,
           ctx.identity.account,
@@ -3073,73 +3182,78 @@ Model: ${ctx.inference.getDefaultModel()}
           body,
           extraHeaders,
           maxPayment,
+          chainType,
+          async (payment) => {
+            const wallet = ctx.identity.address.trim().toLowerCase();
+            const signer = ctx.identity.account?.address?.toLowerCase();
+            if (!signer || signer !== wallet) {
+              throw new Error("x402 signing wallet must match the registered economic identity");
+            }
+            const { effect } = prepareFinancialEffect(ctx.db.raw, {
+              operationKey,
+              effectKind: "x402_service_purchase",
+              amountCents: payment.policyAmountCents,
+              unit: "usdc_cent",
+              recipient: wallet,
+              provider: "x402_service",
+              request: {
+                requestFingerprint,
+                network: payment.network,
+                payTo: payment.payToAddress,
+              },
+              evidence: ["Signed authorization is a payment attempt, not verified settlement."],
+            });
+            if (effect.state !== "prepared" ||
+                !claimFinancialEffectDispatch(ctx.db.raw, operationKey).dispatchAllowed) {
+              throw new Error("Existing x402 payment intent needs reconciliation, not another paid dispatch");
+            }
+            prepared = true;
+            recordFinancialEffectObservation(ctx.db.raw, operationKey, {
+              resolution: "pending",
+              providerStatus: "signed_payment_prepared",
+              evidence: [
+                `nonce=${payment.authorizationNonce ?? "UNKNOWN"}; ` +
+                `amount=${payment.amountMicroUsdc} micro-USDC; ` +
+                `network=${payment.network}; payTo=${payment.payToAddress}; no verified finality.`,
+              ],
+            });
+            // This is a policy ceiling reservation, NOT booked external spend.
+            ctx.spendTracker?.recordSpend({
+              toolName: "x402_fetch",
+              amountCents: payment.policyAmountCents,
+              domain: new URL(url).hostname,
+              category: "x402",
+            });
+          },
         );
 
+        if (prepared) {
+          recordFinancialEffectObservation(ctx.db.raw, operationKey, {
+            resolution: result.success && result.payment?.settlement === "accepted_response"
+              ? "pending" : "unknown",
+            providerStatus: result.success && result.payment?.settlement === "accepted_response"
+              ? "paid_http_accepted_finality_unverified" : "paid_dispatch_outcome_unknown",
+            evidence: result.payment ? [
+              `HTTP status=${result.status ?? "UNKNOWN"}; signed amount=${result.payment.amountMicroUsdc} micro-USDC; provider finality UNKNOWN.`,
+            ] : [],
+            error: result.success ? null : result.error ?? "Paid x402 response unverified",
+          });
+        }
+
         if (!result.success) {
-          if (result.payment?.settlement === "unknown") {
+          if (prepared || result.payment?.settlement === "unknown") {
             throw new ExternalEffectOutcomeUnknownError(
-              "x402 paid request was dispatched but settlement is unknown.",
+              "x402 paid request may have been dispatched; financial effect awaits provider reconciliation.",
             );
           }
           return `x402 fetch failed: ${result.error || "Unknown error"}`;
         }
 
-        if (result.payment?.settlement === "accepted_response") {
-          try {
-            const { ulid } = await import("ulid");
-            const transactionId = ulid();
-            const paymentAtomic = BigInt(result.payment.amountMicroUsdc);
-            const exactWholeCents = paymentAtomic % 10_000n === 0n
-              ? Number(paymentAtomic / 10_000n)
-              : undefined;
-            ctx.db.insertTransaction({
-              id: transactionId,
-              type: "tool_use",
-              amountCents: exactWholeCents,
-              description: `x402 paid request to ${new URL(url).hostname}`,
-              timestamp: new Date().toISOString(),
-            });
-            const evidence = currentEvidenceContext();
-            if (evidence) {
-              const transactionEvent = latestEvidenceByAuthority(
-                ctx.db.raw,
-                "financial_transaction",
-                transactionId,
-              );
-              appendEvidenceEvent(ctx.db.raw, {
-                correlationId: evidence.correlationId,
-                causationId: transactionEvent?.id ?? evidence.causationId ?? null,
-                eventType: "economic.x402_payment_observed",
-                domain: "economic",
-                authorityType: "financial_transaction",
-                authorityId: transactionId,
-                goalId: evidence.goalId ?? null,
-                taskId: evidence.taskId ?? null,
-                turnId: evidence.turnId ?? null,
-                toolCallId: evidence.toolCallId ?? null,
-                epistemicStatus: "observation",
-                payload: {
-                  amountMicroUsdc: result.payment.amountMicroUsdc,
-                  amountUnit: "micro-USDC",
-                  policyAmountCents: result.payment.policyAmountCents,
-                  policyUnit: "cent",
-                  policyRounding: "ceil",
-                },
-                provenance: { source: "x402" },
-              });
-            }
-            ctx.spendTracker?.recordSpend({
-              toolName: "x402_fetch",
-              amountCents: result.payment.policyAmountCents,
-              domain: new URL(url).hostname,
-              category: "x402",
-            });
-          } catch (error) {
-            throw new ExternalEffectOutcomeUnknownError(
-              `x402 payment was accepted but local accounting failed: ${error instanceof Error ? error.message : String(error)}`,
-            );
-          }
-        }
+        // A successful HTTP response delivers content, not verified financial
+        // settlement. Keep the USDC effect pending until provider/chain proof.
+        const paymentStatus = prepared
+          ? "\nFinancial status: PENDING independent provider/chain settlement verification."
+          : "";
 
         const responseStr =
           typeof result.response === "string"
@@ -3148,9 +3262,9 @@ Model: ${ctx.inference.getDefaultModel()}
 
         // Truncate very large responses
         if (responseStr.length > 10000) {
-          return `x402 fetch succeeded (truncated):\n${responseStr.slice(0, 10000)}...`;
+          return `x402 fetch succeeded (truncated):\n${responseStr.slice(0, 10000)}...${paymentStatus}`;
         }
-        return `x402 fetch succeeded:\n${responseStr}`;
+        return `x402 fetch succeeded:\n${responseStr}${paymentStatus}`;
       },
     },
 
@@ -3822,7 +3936,10 @@ async function executeToolProtected(
       ? { ...context, spendTracker: turnContext.sessionSpend }
       : context;
     try {
-      result = await tool.execute(args, executionContext);
+      result = await runWithEvidenceContext(
+        { ...currentEvidenceContext()!, policyDecisionId: decision.id },
+        () => tool.execute(args, executionContext),
+      );
     } catch (err: any) {
       if (isExternalEffectOutcomeUnknown(err)) {
         try {

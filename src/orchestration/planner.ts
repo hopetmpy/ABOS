@@ -82,7 +82,7 @@ export interface PlannedTask {
 
 export interface PlannerContext {
   creditsCents: number | null;
-  usdcBalance: number;
+  usdcBalance: number | null;
   survivalTier: string;
   availableRoles: string[];
   customRoles: string[];
@@ -272,7 +272,9 @@ export function buildPlannerPrompt(context: PlannerContext): string {
   const creditsDisplay = context.creditsCents === null
     ? "UNKNOWN (no current parent credit observation)"
     : `${context.creditsCents} cents`;
-  const usdcDisplay = Number.isFinite(context.usdcBalance) ? String(context.usdcBalance) : "0";
+  const usdcDisplay = context.usdcBalance !== null && Number.isFinite(context.usdcBalance) && context.usdcBalance >= 0
+    ? String(context.usdcBalance)
+    : "UNKNOWN (no observed USDC balance)";
 
   return `# Planner Agent
 
@@ -378,6 +380,7 @@ RECEIVE -> ANALYZE -> EXPLORE -> DECOMPOSE -> VALIDATE -> OUTPUT
 <context>
 You have access to (injected at runtime):
 - Current financial state: ${creditsDisplay} credits, ${usdcDisplay} USDC
+- Credit balance may be stale, cached or incomplete; it is not proof of free capital. Pending financial effects, reserves, commitments, provider settlement and compatible accounting units must be distinguished before irreversible spending. If evidence is missing, preserve UNKNOWN and plan a verification step.
 - Survival tier: ${context.survivalTier} (critical/low/stable/comfortable/unknown)
 - Predefined roles injected for this planning turn (${availableRoleCount}): ${roleList}
 - Previously created custom roles: ${customRoleList}

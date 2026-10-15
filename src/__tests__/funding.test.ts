@@ -83,6 +83,16 @@ describe("executeFundingStrategies", () => {
     expect(lowAttempts[0].strategy).toBe("polite_creator_notification");
   });
 
+  it("does not fabricate zero balance or funding notices when the provider cannot observe credits", async () => {
+    const identity = createTestIdentity();
+    const config = createTestConfig();
+    conway.getCreditsBalance = async () => { throw new Error("provider offline"); };
+    const attempts = await executeFundingStrategies("critical", identity, config, db, conway);
+    expect(attempts).toEqual([]);
+    expect(db.getKV("funding_notice_critical")).toBeUndefined();
+    expect(JSON.parse(db.getKV("funding_balance_observation")!).status).toBe("unknown");
+  });
+
   it("respects per-tier cooldown on repeated calls", async () => {
     const identity = createTestIdentity();
     const config = createTestConfig();

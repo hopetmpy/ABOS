@@ -28,6 +28,9 @@ import { generateTodoMd } from "./attention.js";
 import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import { reviewPlan } from "./plan-mode.js";
 import { buildPlannerContext, getNextPlannerVersion, persistPlannerArtifacts } from "./planner-context.js";
+import { getTaskCostCalibration } from "../economics/treasury-projection.js";
+import { getTreasuryReserveLearning } from "../economics/treasury-reserves.js";
+import { getStrategicFinancialExposure } from "../economics/financial-effects.js";
 import { AgentWorkspace } from "./workspace.js";
 import {
   getActiveGoals,
@@ -315,7 +318,7 @@ export class Orchestrator {
       return;
     }
 
-    const result = await this.params.funding.fundChild(addr, amountCents);
+    const result = await this.params.funding.fundChild(addr, amountCents, `task:fund:${task.id}:${addr.toLowerCase()}`);
     if (!result.success) {
       throw new Error(`Funding transfer failed for ${addr}`);
     }
@@ -680,6 +683,13 @@ export class Orchestrator {
         autoBudgetThreshold: 5000,
         consensusCriticRole: "reviewer",
         reviewTimeoutMs: 1800000,
+        // This is canonical task-cost evidence, not a spending authorization.
+        // P-025 owns the substantive strategic review; no manual gate is added.
+        reviewContext: {
+          taskCostCalibration: getTaskCostCalibration(this.params.db),
+          treasuryReserveLearning: getTreasuryReserveLearning(this.params.db),
+          outstandingFinancialEffects: getStrategicFinancialExposure(this.params.db),
+        },
       });
 
       if (result.approved) {
@@ -1355,7 +1365,7 @@ export class Orchestrator {
       workspace: new AgentWorkspace(goalId),
       funding: this.params.funding,
       identityAddress: this.params.identity.address,
-      usdcBalance: Number(this.params.config?.usdcBalance ?? 0),
+      usdcBalance: this.params.config?.usdcBalance,
       idleAgents: this.params.agentTracker.getIdle().length,
       busyAgents: Math.max(
         0,

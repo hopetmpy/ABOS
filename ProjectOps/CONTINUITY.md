@@ -4,24 +4,24 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
-Active-Plan: P-029
-Active-Segment: continuity/C0025.md
-Active-Intervention: P029_CHILD_BOOTSTRAP_FAMILY_KNOWLEDGE — EN_EJECUCIÓN / SOURCE_COMPLETE / BRANCH_E3_GREEN / PR_READY
+Active-Plan: P-030
+Active-Segment: continuity/C0026.md
+Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / SOURCE_DOD_REVIEWED_46b1c77_E3_PUSH_ATTEMPT2_8_OF_8_PR_8_OF_8 / LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p029-child-bootstrap-family-knowledge
-Host-Head-At-Audit-Open: 803802f68cc3c1b7c1bd8d850768ca924a18aca2
-Last-Reconciled-Host-Head: bc3958bff06595b9a175657bb20514a7ecf8cb9f
-Observed-Main-Head: 7d89966b2dd5b63665ea640527d7fc387f3462e0
-Last-Product-Head: 2fe9fda35d99cde8759bccfc1b836a2e749106bb
-Last-Product-CI: 36220144160 — SUCCESS 8/8
-Last-Completed-Plan: P-028
-Last-Completed-Merge: 803802f68cc3c1b7c1bd8d850768ca924a18aca2
-Last-Completed-CI: 36206237455 — SUCCESS 8/8
+Current-Host-Branch: abos/p030-family-economics-treasury
+Host-Head-At-Audit-Open: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
+Last-Reconciled-Host-Head: 46b1c77ac1900e63c34720eab829552745a69b09
+Observed-Main-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
+Last-Product-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
+Last-Product-CI: 36220600132 — SUCCESS 8/8
+Last-Completed-Plan: P-029
+Last-Completed-Merge: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
+Last-Completed-CI: 36220600132 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -42,125 +42,308 @@ Si PLAN/módulo conserva un snapshot histórico que contradice Git/evidencia act
 
 ## P-025 — cierre integrado verificado
 
-P-025 queda `HECHO / SOURCE_COMPLETE / E3_MAIN_GREEN / INTEGRATION_VERIFIED`.
-
-Evidencia exacta:
-- source-ready product head `a5581a156aa82d0028c549cb35ea5ca74284c844`, CI `36095740595` attempt 2 SUCCESS 8/8;
-- final PR head `c40eac6ca4ff9e744d31d0331911b1a3d08fee4f`, CI `36100819999` SUCCESS 8/8;
-- PR #68 merged como `8f57ae64971bbf369d5bcfc387a3352e97b91426`;
-- exact-main CI `36101081385` SUCCESS 8/8.
-
-Historia material en `continuity/C0021.md`.
+P-025: `HECHO / SOURCE_COMPLETE / E3_MAIN_GREEN / INTEGRATION_VERIFIED`.
+PR #68 → merge `8f57ae64971bbf369d5bcfc387a3352e97b91426`; exact-main CI `36101081385` SUCCESS 8/8.
+Historia material: `continuity/C0021.md`.
 
 ## P-026 — cierre integrado verificado
 
-P-026 queda `HECHO / SOURCE_COMPLETE / E3_MAIN_GREEN / INTEGRATION_VERIFIED`.
-
-Decisión: `CREATE_NARROW_CONTROLLER + REUSE_EXISTING_EVIDENCE/AUTHORITIES`.
-
-Resultado material:
-- `CognitiveCostController` sobre Evidence Fabric/inference costs, sin schema/ledger/router paralelo;
-- candidates `memory | deterministic | skill | simulation | inference` con UNKNOWN preservado;
-- causal decision/execution/outcome receipts y restart-safe learning;
-- adaptive orchestration tiers sin apropiarse de provider/model/model-lock/fallback/budget authority;
-- strategic model/no-model receipts y review como quality-validation boundary;
-- main ReAct cognitive preflight antes de inference sin fabricar direct-answer routes.
-
-Evidencia exacta:
-- source-complete product head `a1b5975dafc1976039b0b1b9daab55e2df5bcc4e`, CI `36189024714` SUCCESS 8/8;
-- final branch checkpoint `a92e0698d124892bf2e32a0055694e1722d16cac`, CI `36189495285` SUCCESS 8/8;
-- PR #69 exact-head CI `36189820808` SUCCESS 8/8;
-- PR #69 merged como `b024bb2246541f2867c91ac824380b2b4525a670`;
-- exact-main CI `36190206972` SUCCESS 8/8.
-
-Historia material en `continuity/C0022.md`.
+P-026: `HECHO / SOURCE_COMPLETE / E3_MAIN_GREEN / INTEGRATION_VERIFIED`.
+PR #69 → merge `b024bb2246541f2867c91ac824380b2b4525a670`; exact-main CI `36190206972` SUCCESS 8/8.
+Historia material: `continuity/C0022.md`.
 
 ## P-027 — cierre integrado verificado
 
-P-027 queda `HECHO / SOURCE_COMPLETE / E3_MAIN_GREEN / INTEGRATION_VERIFIED`.
-
-Decisión: `EXTEND_CANONICAL_ADAPTIVE_OPPORTUNITY + CREATE_NARROW_DISCOVERY_ORCHESTRATOR + REUSE_WORLD_MODEL/SIMULATION/EVIDENCE/CAPABILITY/POLICY`.
-
-Resultado material:
-- `adaptive_opportunity` permanece identity canónica y gana lifecycle/read model suficiente;
-- Opportunity Discovery enlaza observed need/value hypothesis a World Belief sin segundo hypothesis owner;
-- cheapest discriminating experiment conserva UNKNOWN, authority/readiness y ties INCONCLUSIVE;
-- Simulation Workspace conserva experiment/replay ownership y simulation no se promueve a external demand;
-- external outcome exige observation no-simulation, mismo Goal y atribución explícita a la misma opportunity;
-- restart/idempotency, stale selection, key/spec collisions y duplicate outcome fueron atacados y endurecidos;
-- expected upside no se convierte en realized revenue;
-- LIVE sigue fuera de autoejecución P-027.
-
-Evidencia exacta:
-- source-complete product head `cabf61d75beabd0c56342ee553aa3b36b1d285d4`, CI `36199162260` SUCCESS 8/8;
-- final branch checkpoint `a23c131077096186355980177b90579c49c3f666`, CI `36199461582` SUCCESS 8/8;
-- PR #70 exact-head CI `36199691008` SUCCESS 8/8;
-- PR #70 merged como `fdb7b9d9ab4b05430a40e6a7e6c3982fc4b39572`;
-- exact-main CI `36199901975` SUCCESS 8/8.
-
-Límites explícitos:
-- LIVE market execution/demand bajo cuentas, permisos, gasto, publicación o contrato reales sigue NO VERIFICADO y sujeto a P-005/authority externa;
-- Treasury permanece P-030;
-- Business Strategy lifecycle permanece P-039.
-
-Historia material y adversarial findings en `continuity/C0023.md`.
+P-027: `HECHO / SOURCE_COMPLETE / E3_MAIN_GREEN / INTEGRATION_VERIFIED`.
+PR #70 → merge `fdb7b9d9ab4b05430a40e6a7e6c3982fc4b39572`; exact-main CI `36199901975` SUCCESS 8/8.
+LIVE market execution/demand con cuentas/permisos/gasto reales permanece NO VERIFICADO y sujeto a P-005.
+Historia material: `continuity/C0023.md`.
 
 ## P-028 — cierre integrado verificado
 
-P-028 queda `HECHO / SOURCE_COMPLETE / E3_MAIN_GREEN / INTEGRATION_VERIFIED`.
+P-028: `HECHO / SOURCE_COMPLETE / E3_MAIN_GREEN / INTEGRATION_VERIFIED`.
+PR #71 → merge `803802f68cc3c1b7c1bd8d850768ca924a18aca2`; exact-main CI `36206237455` SUCCESS 8/8.
+Delegation permanece bajo actor selection canónica, capability/environment/evidence authorities existentes y UNKNOWN preservado.
+Historia material: `continuity/C0024.md`.
 
-Decisión: `EXTEND_EXISTING_DELEGATION_SELECTOR + CREATE_NARROW_COMPETENCE_MATCHER_OVER_EXISTING_AUTHORITIES`.
+## P-029 — cierre integrado verificado
 
-Resultado material:
-- `Orchestrator.matchTaskToAgent()` permanece único owner de actor selection;
-- matcher compone Task requirements, verified Capability Fabric, actor-linked EnvironmentResource, contextual Task outcomes, health/environment callbacks, known cost/latency, weak role hints y authority sin competence/reputation store paralelo;
-- parent/local capability no se presta al child y requested resource labels no se autopromueven a competence;
-- UNKNOWN capability/cost/history permanece UNKNOWN;
-- selection/unresolved y failure outcome usan Evidence Fabric causalmente, con stale-result rejection e idempotencia de replay;
-- spawn/discovery permanece bajo Environment Mobility;
-- el result-path asíncrono conserva exact causal task class/requirements desde el receipt de selección aun si Task reconstruction no lleva adaptive binding.
+P-029: `HECHO / SOURCE_COMPLETE / E3_MAIN_GREEN / INTEGRATION_VERIFIED`.
+
+Decisión material integrada:
+- Constitution `REUSE + CORRECT WIRING`, fail-closed;
+- birth/start/health `CORRECT`: process liveness no equivale a bootstrap/healthy;
+- genesis/KnowledgeStore `EXTEND` con Family Knowledge versionado, provenance e import idempotente;
+- Skills/Capabilities heredados sólo como catálogo/conocimiento, nunca execution authority;
+- Family Knowledge `CREATE_NARROW ADAPTER` sobre authorities existentes;
+- query selectiva `EXTEND EXISTING COLONY MESSAGING`, sin segundo poller/store/transport;
+- schema `NO_CHANGE`.
 
 Evidencia exacta:
-- product head `7cf5587a4aedf1ceb44df22ad816c9f1c7f68821`, CI `36205530967` SUCCESS 8/8;
-- final branch head `78c283d6912e7ea495dd003434fd2a4a31b95b33`, CI `36205849114` SUCCESS 8/8;
-- PR #71 exact-head CI `36206054440` SUCCESS 8/8;
-- merge `803802f68cc3c1b7c1bd8d850768ca924a18aca2`;
-- exact-main CI `36206237455` SUCCESS 8/8.
+- source-complete `2fe9fda35d99cde8759bccfc1b836a2e749106bb`, CI `36220144160` SUCCESS 8/8;
+- final PR head `24924c4bc04f7b77571d0c10f53c3de7a631f06a`, CI `36220441096` SUCCESS 8/8;
+- PR #74 merge `d14f04b9fdea98eecd9d8e772b223b55d1fcf010`;
+- exact-main CI `36220600132` / #2044 SUCCESS 8/8.
 
-Límites explícitos:
-- no hay claim E4/E5/E6 ni LIVE/physical de actores externos reales;
-- cuentas/permisos/gasto/publicación/contrato reales siguen bajo sus authorities;
-- Family Knowledge/child birth gate permanece P-029 y Treasury P-030.
+NO demostrado: birth físico/LIVE Conway, cuentas/permisos/credits reales ni E4/E5/E6. Esas fronteras permanecen bajo P-005/autoridades externas.
+Historia material y adversarial review: `continuity/C0025.md`.
 
-Historia material en `continuity/C0024.md`.
+## P-030 — estado vivo
 
-## P-029 — estado vivo
+P-030 está abierto en `abos/p030-family-economics-treasury`.
 
-P-029 continúa en `abos/p029-child-bootstrap-family-knowledge` con source completo y PR #74 abierto/mergeable.
+State: `EN_EJECUCIÓN / DECISION_READY / IMPLEMENTATION_PENDING`.
+Baseline exacto: `main d14f04b9fdea98eecd9d8e772b223b55d1fcf010`, CI `36220600132` SUCCESS 8/8.
+Product source P-030 hasta el decision gate: **UNCHANGED**.
+Audit checkpoint antes de source: `dac8d555d0d97cd023c4692c8fc1731de26bf3a5`.
+Decision gate registrado en `continuity/C0026.md` por commit `9ac10272bcbd6b661de37acefbe5a9ec2bb88c1b`.
 
-State: `EN_EJECUCIÓN / SOURCE_COMPLETE / BRANCH_E3_GREEN / PR_READY`.
-Decision-State: `DECISION_READY`.
-Source-complete product head: `2fe9fda35d99cde8759bccfc1b836a2e749106bb`.
-Exact-head CI: `36220144160` / run #2039 — `SUCCESS 8/8`.
+### Hipótesis resueltas
 
-Decisión material confirmada:
-- Constitution: `REUSE + CORRECT WIRING`, fail-closed;
-- birth/start/health: `CORRECT`, process liveness no equivale a bootstrap/healthy;
-- genesis/KnowledgeStore: `EXTEND` con Family Knowledge versionado, provenance e import idempotente;
-- Skills/Capabilities: catálogo heredado como knowledge, nunca execution authority;
-- Family Knowledge: `CREATE_NARROW ADAPTER` sobre authorities existentes;
-- query selectiva: `EXTEND EXISTING COLONY MESSAGING`, Social relay/inbox/KV canónicos; sin segundo poller/store;
-- schema: `NO_CHANGE`.
+- H0 `NO_CHANGE`: FALSADA.
+- H1 `EXTEND_EXISTING_CAPITAL_LEDGER`: CONFIRMADA PARCIAL; realized/materialized state conserva `transactions`.
+- H2 `UNIFY_DUPLICATED_ECONOMIC_RECORDS`: COMPOSE, no colapsar authorities.
+- H3 `CREATE_NARROW_TREASURY_DOMAIN_LAYER`: CONFIRMADA.
+- H4 `CORRECT_SIDE_EFFECT_RECONCILIATION`: CONFIRMADA HARD.
+- H5 `EXTEND_EXISTING_LEARNING`: REUSE/COMPOSE P-023/P-025/P-027.
 
-Validación exact-head verde en Node 22/24, Windows 22/24, public distribution 22/24, security audit y rebrand integrity. La primera ejecución CI del PR descubrió fixtures/expectativas históricas que asumían `process alive = healthy`; la familia causal fue reconciliada aportando bootstrap válido a tests históricos y preservando el gate de producción.
+### HARD findings
 
-Límites explícitos:
-- no se ha ejecutado un birth físico/LIVE contra Conway real desde este entorno;
-- `spawnChild()` instala el ref canónico público `main`, por lo que el nuevo child bootstrap sólo puede probarse materialmente en un child real después de integrar P-029 a `main`;
-- CI no demuestra cuentas/permisos/credits/disponibilidad Conway externa.
+- `transfer_credits` y `fund_child` todavía imponen `amount > balance/2` como prohibición universal.
+- survival funding colapsa fallo de balance a `0`.
+- provider status `submitted/processing/pending/unrecognized` puede materializarse como éxito por la semántica binaria actual.
+- `ConwayClient.transferCredits()` genera idempotency key nuevo por llamada; retry lógico posterior puede double-execute.
+- `SimpleFundingProtocol` convierte ambiguous transport en `success:false` y puede inducir replan/retry; external success + local persistence failure, en cambio, se loggea y devuelve success sin owner durable de reconciliation.
+- Policy lifecycle es audit/authorization authority, no idempotency authority cross-decision.
 
-Plan P-029: `SIN CAMBIO`; intención, arquitectura, dependencias y DoD siguen vigentes.
+### Arquitectura decidida
 
-NEXT_ELIGIBLE_WORK: integrar PR #74 desde el checkpoint branch-green, verificar merge SHA y CI exact-main. Sólo después reconciliar P-029 como `HECHO / SOURCE_COMPLETE / E3_MAIN_GREEN / INTEGRATION_VERIFIED` si exact-main queda verde; mantener LIVE/physical externo explícitamente NO VERIFICADO.
+- REUSE `transactions`, `spend_tracking`, `task_graph`, child bookkeeping, Evidence Fabric y Adaptive Path en sus ownerships actuales.
+- CREATE_NARROW una state machine durable de **financial effect intent/reconciliation**; no será ledger ni P&L authority.
+- Persistir intent antes de dispatch y reutilizar su durable idempotency key en provider calls.
+- Pending/unknown no materializa transaction; reject no materializa; settled materializa exactamente una vez; settled+local failure queda reconciliation-required.
+- Centralizar esa semántica para `transfer_credits`, `fund_child` y `SimpleFundingProtocol`.
+- Crear treasury projection causal: observed balance, commitments, pending effects, explicit reserves/contingency, internal allocation/return, realized known costs y child economics; free capital permanece UNKNOWN cuando falta evidencia material.
+- eliminar el guard universal de 50%; caps configurables restantes son guards/risk signals transicionales, no rationality truth.
+- prediction/outcome/opportunity learning permanece bajo P-023/P-025/P-027; no habrá segunda decision-memory authority.
 
-Historia viva, implementación, adversarial review y recovery exactos en `continuity/C0025.md`.
+Plan P-030: blueprint vigente. La auditoría resolvió su arquitectura de implementación sin cambiar objetivo, alcance ni dependencias; no se requiere reescribir el blueprint antes de source.
+
+NEXT_ELIGIBLE_WORK: P-030 PR75 DRAFT; reserve decision source 309f70c4 CI push 38689187817 SUCCESS 8/8 + PR 38689182837 SUCCESS 8/8. Next: audit/implement durable actual reserve allocation and revisit learning from observed reserve decisions in existing P-023/P-025 without second ledger or manual approval. P-005 external LIVE financial proof remains unverified; P-031 not opened.
+
+## P-030 — checkpoint de implementación 2026-10-14
+
+La auditoría hasta DECISION_READY se conserva como historia en C0026; ya no describe el código actual de la rama.
+
+- Branch source HEAD verificado: `d737eb2df9852b1aded5f8aa1dfb4da9dc553354` (aún sin PR/merge).
+- Ejecución CI exacta `38655906993` para `596fdc1a25c480e1a35b7c676c87dcd8441becf0`: siete jobs SUCCESS (build-and-test Node 22/24, Windows 22/24, public distribution 22/24, rebrand), security-audit FAILURE.
+- Nuevo code path: `src/economics/credit-transfer.ts` compone la authority `financial_effects` v22 existente, `transactions` y `spend_tracking`; transfer_credits/fund_child/SimpleFundingProtocol pasan por intent durable antes de dispatch, con idempotency key persistente al proveedor, status UNKNOWN/PENDING/REJECTED/SETTLED separado y materialización local atómica cuando existe settlement explícito.
+- `reconcileCreditEffect` permite reconciliar observaciones externas finales en estado durable sin volver a despachar. Los escenarios de prueba de esa ruta se añadieron en `src/__tests__/p030-credit-transfer-adapter.test.ts` en `d737eb2`; CI exact-head todavía debe consultarse antes de reclamar ese test como PASS.
+- `src/survival/funding.ts` ya no convierte un fallo de `getCreditsBalance()` en saldo cero.
+- `src/economics/treasury-projection.ts` distingue capital libre y comprometido y conserva UNKNOWN sin observaciones completas; incorpora valoraciones opcionales de inversión no monetaria segregadas de ingresos, cash ledger y unit conversion. Se proyecta en `colony_financial_report`, pero no mide automáticamente electricidad/internet/suscripciones: eso sigue requiriendo evidencia.
+- HARD pendiente: fresh logical operation key puede reproducir un intent económico equivalente no terminal; no declarar idempotencia entre claves distintas. Intento de corrección no incorporado.
+- Bloqueo de CI: `pnpm audit` encontró 6 avisos (4 HIGH, 2 CRITICAL), entre ellos `simple-git`, `@modelcontextprotocol/client`, `source-map-js`, y `@simple-git/argv-parser`. Remediación de dependencias y lockfile aún pendiente.
+- LIVE Conway transfer/settlement, costos físicos, entradas de negocio e ingresos realizados permanecen NO VERIFICADOS. P-030 sigue EN_EJECUCIÓN; P-031/P-039/P-033 no se adelantan.
+
+## P-030 — checkpoint de reanudación 2026-10-14 (posterior al anterior)
+
+- Branch `abos/p030-family-economics-treasury`; latest source head antes de este checkpoint: `c364fa7cea52db4d7e14a91ead2125f3d7ffda30`.
+- PR #75: `https://github.com/hopetmpy/ABOS/pull/75` — DRAFT, no fusionada. `main` observado `d14f04b9fdea98eecd9d8e772b223b55d1fcf010`.
+- Idempotencia: `FinancialEffectIntentPendingError` impide nuevo intent equivalente no terminal bajo otra operation key; tests de restart, distinto propósito, settlement posterior y provider ID consistente. El effect está protegido por su DB/Policy; no se inventa confirmación económica.
+- Security: `package.json` y frozen `pnpm-lock.yaml` actualizados con `@modelcontextprotocol/client/server@2.2.0`, `simple-git@4.0.2`, `source-map-js@1.2.2`, `@simple-git/argv-parser@2.0.1`. Lock regenerado vía GitHub Actions y workflow puntual de escritura eliminado. Auditoría ya verde en CI.
+- CI exacto `dd27cfaf9948d68926a44188dffb9bb2625073fd` run `38657441443`: 8/8 SUCCESS, incluidos security audit, build/test Node22/24, Windows, public distribution e integridad. Run exacto `f3596d7de51d986a43e9ffc2e59bee09c2498c94` `38657723164`: 8/8 SUCCESS. No extrapolar CI antiguo al último HEAD.
+- Visibilidad: `check_credits` ahora expone observación de saldo, efectos pendientes y capital libre UNKNOWN en ausencia de reservas/commitments; `system-prompt` dejó de afirmar criterios obsoletos de 20% de buffer, auto-aprobación por umbral y saldo 0==dead. Tests de status y moneda actualizados.
+- Juicio: `src/economics/treasury-scenario.ts` y `assess_treasury_scenario` son read-only, Evidence/Policy/P-025 owner de autorización; expresan reserva dependiente de escenarios, alternativas, necesidad inmediata/futura, projected vs realized y anomalía de gasto sin bloquear porcentajes excepcionales por defecto. No trasladar status `review_ready` a autorización automática.
+- Aún NO demostrado: settlement LIVE, autenticación de eventos de proveedor más allá del recibo suministrado por el caller, medición física de recursos aportados, USDC/onchain cross-unit liquidity, política adaptativa E2E que gobierne todos los side effects. No declarar el P-030 HECHO.
+- Último HEAD source `c364fa7cea52db4d7e14a91ead2125f3d7ffda30` pendiente de CI exacto al registrar este checkpoint. Próximo paso: verificar CI del commit de checkpoint; después cerrar gaps demostrados sin crear treasury paralela y preparar review PR. **No merge** ni transferencias reales ahora.
+
+## Checkpoint de reanudación — 2026-10-14, última intervención
+
+- Fuente verificada antes de este checkpoint: rama `abos/p030-family-economics-treasury`, HEAD `a5577465d7306a150bd6a18dd2f769c6fe82a84c`; PR #75 DRAFT https://github.com/hopetmpy/ABOS/pull/75. `main` sigue `d14f04b9fdea98eecd9d8e772b223b55d1fcf010`, no merge ni LIVE.
+- Fallo flakey demostrado en `326bafb` push CI `38659091795`: `src/__tests__/loop.test.ts > exec tool runs and is persisted` superó 30s en Node22, PR exacto CI `38659098007` 8/8 PASS. Diagnóstico: el caso no necesita dos iteraciones completas; `a9289fc` restringió el ciclo a 1, añade lectura de DB como evidencia. CI exacto `a9289fc` push `38661774731` SUCCESS 8/8, PR `38661781465` SUCCESS 8/8.
+- `d01666d` + `944123a` compusieron TreasuryScenarioReview opcional con la authority ya existente P-025; `needs_evidence` preserva UNKNOWN; `review_ready` no constituye autorización de pago.
+- `fbc0196`, `fc58a5b`, `650596b`: review estratégico recibe conteo e importe pendientes desde `financial_effects` canónica como exposición, no como balance, gasto realizado o otra tabla de tesorería. Commits intermedios podían fallar typecheck antes de completar el tipo consumidor.
+- `9b51868`, `6f11512`: proyección distingue reembolso pendiente sin sumarlo a crédito líquido observado; prueba de regresión.
+- GitHub Actions originalmente ejecutaba push y PR por commit, duplicando runners y presionando timing. `4817d0f` agregó concurrencia separada por evento/branch con cancelación de ejecuciones superadas. Se observó CI `944123a` public-distribution de una rama móvil compilando código de un commit posterior; `a557746` corrigió la prueba pública para fijar `ABOS_SHA` al commit del evento y verificar `git rev-parse HEAD`.
+- Bloque material: último HEAD `a5577465d7306a150bd6a18dd2f769c6fe82a84c` no tenía CI exacto terminado al registrar checkpoint; ejecutar lectura CI y resolver solo fallos reales actuales. Deben verificarse decisiones económicas contra P-030 DoD, incluido provenance confiable de settlement y contingencias; provider LIVE, fondos, medición de recursos físicos y P&L realizado siguen no verificados.
+
+## P-030 — checkpoint de conciliación 2026-10-14
+
+- Branch `abos/p030-family-economics-treasury`, HEAD source antes de este checkpoint `149f364b5d935098262ad021dd6b3679558db12c`; PR #75 DRAFT. `main` observado `d14f04b9fdea98eecd9d8e772b223b55d1fcf010` sin merge.
+- Baseline inmediatamente anterior `7bbf34551d9f77edb7985a13d078cd830787c43e`: CI push `38662652549` y PR `38662659035`, ambos SUCCESS **8/8** (Node22/24, Windows22/24, distribution22/24, security-audit, rebrand-integrity).
+- `4ca9aac`: adapter de `credit-transfer` trata éxito sin transfer ID como UNKNOWN/no materialized; receipt externo opcionalmente correlaciona proveedor/destinatario/importe, con regresiones de contradicción.
+- `9f977ec`: finality externa requiere intento de dispatch reclamado, transfer ID no vacío, destinatario e importe explícitos que coincidan con intención persistente; receipt repetido con ID contradictorio se rechaza. No infiere autenticidad de un string de evidencia.
+- `edb49e1`: recuperación del adaptador a través de cierre/reapertura física de SQLite, sin redispatch, ledger exactly-once; test agregado.
+- `506c4a7`: `ConwayClient.getCreditsBalance` deja de convertir payload faltante o inválido en saldo cero; falla explícitamente y pruebas de HTTP mock separan 0 real, saldo negativo y UNKNOWN.
+- `149f364`: `check_credits` mantiene vista read-only de intents pendientes y capital comprometido cuando balance provider es unavailable; reporta UNKNOWN y no inventa recepción o gasto.
+- LIMITACIÓN MATERIAL: documentación pública Conway muestra `credits_balance` y `credits_history` pero no demuestra aquí una API `GET transferId` específica con contrato, autenticación y finality verificable. El método de reconciliación manual de receipt aún depende de una observación que el caller dice haber verificado. No afirmar E4/LIVE autenticado ni cerrar esta frontera sin evidencia/material provider P-005.
+- `HEAD 149f364b5d935098262ad021dd6b3679558db12c` al registrar checkpoint estaba pendiente de CI exact-head. **No elevar a HECHO**, no merge, no transferencias LIVE ni ingresos inventados. Validar primero latest exact source+document commit; si faltan condiciones DoD seguir P-030.
+
+### Complemento P-030 — seguridad de identidad de capital familiar
+
+- Source `333d00db1ea71ddc3cabc5e992549e3c44ec1c13` (branch `abos/p030-family-economics-treasury`), PR #75 sigue DRAFT y `main` no fusionado.
+- `333d00d`: pre-dispatch child funding ahora exige que el child registrado coincida con la wallet destinataria; settlement verifica otra vez el child registrado antes de materializar capital en el ledger. Cambio de address intermedio genera `reconciliation_required`, sin segunda transferencia ni `capital_allocation` incorrecta.
+- Fixtures del `SimpleFundingProtocol` adaptadas a provider response final con transferId y datos de destinatario/importe explícitos, en vez de aceptar `status: completed` sin correlación.
+- Escenarios adversariales añadidos: child ID/recipient contradictorios antes de dispatch y child address cambiado antes del settlement. Tests/CI exactos pendientes en el momento de esta nota.
+- Próximo gate: obtener CI 8/8 final de branch+PR para HEAD exacto posterior a este checkpoint, revisar P-030 DoD; autenticación real de provider settlement y LIVE todavía NO VERIFICADOS / P-005.
+
+## P-030 — checkpoint exact-CI 2026-10-14 (receipt/financial identity)
+
+- Verified baseline HEAD `5d64fead2a50500023fd95692f450fed8306d770` in `abos/p030-family-economics-treasury`, PR #75 DRAFT. **Exact HEAD GitHub Actions push `38666450671` SUCCESS 8/8 and PR `38666455791` SUCCESS 8/8** (Node22/24 tests, Windows22/24, distribution22/24, security audit, rebrand). Main not merged; no LIVE dispatch.
+- Failed previous HEAD `0c44759` push `38664323122` / PR `38664329464` at one outdated assertion (`recipient conflicts`) while 6/8 jobs passed. `f7828c9` restored expected mismatch wording; both Node and Windows finished green at the later HEAD.
+- `3b5d832`: `ConwayClient.transferCredits` preserves missing provider-echo recipient/amount as unavailable; `CreditTransferResult` fields optional; `executeCreditEffect` treats incomplete terminal response as UNKNOWN, preserving no-redispach/zero-ledger invariants. New HTTP wire tests + adversarial adapter tests.
+- `cff5015`: corrected two valid negative-path assertions on incomplete vs contradictory provider responses (no change to settlement authorization semantics).
+- `5d64fea`: canonical `financial_effects` refuses reused provider transfer ID across two different economic intents, within SQLite transaction before either observation save or accounting materialization. A conflict does not assert external settlement; conflicting provider ID replay against completed intent is rejected. Regression added.
+- Public Conway terminal docs confirm `credits_balance` and `credits_history`; no provider-authenticated transferId-specific finality/replay contract was established for the legacy credits transfer path. **Post-dispatch LIVE authoritative verification remains UNPROVEN, owned by P-005 / provider**, not a reason to fabricate paid status. No provider credentials/funds were used.
+- Source P-030 still **EN_EJECUCIÓN / PR75_DRAFT**: scenario reviews are evidence-oriented and optional in strategic review; end-to-end economic prediction-to-outcome calibration, dynamic reserve policy and source-backed financial decision authority still require explicit DoD examination. No automatic approval or P-031 start.
+- NEXT_ELIGIBLE_WORK: investigate remaining P-030 decision/outcome integration and scenario evidence, verify receipts/funding bypass surfaces and live authority only when externally available; avoid CI churn, preserve existing 8/8 exact-head evidence, do not merge before full DoD.
+
+## P-030 — actualización de continuidad tras integridad económica (2026-10-14)
+
+- Último source confirmado por Git y registrado en `continuity/C0026.md`: `ae3cd7e5dbc44d0e1685b815bb85d39a7e126bcc` en `abos/p030-family-economics-treasury`, PR #75 DRAFT. Es posterior al último head reconciliado con CI `67e39c9`.
+- Cambios: revisión de surplus sobre demanda futura y evidencia de bundle, protección de sumas enteras de compromisos/reservas y rechazo de estimaciones activas negativas. Tests escritos; ejecución CI exacta pendiente de lectura. El checkpoint C0026 tiene el detalle causal y recovery.
+- Estado tras exact CI de `00b926b6`: `EN_EJECUCIÓN / SOURCE_DELTA_CI_GREEN_8_OF_8 / LIVE_UNVERIFIED`. Runs push `38676148422` y PR `38676142963`: SUCCESS 8/8. Este checkpoint documental posterior requiere su propia verificación exact-HEAD. P-030 no se declara HECHO, P-031 no iniciado, fondos/pagos LIVE no ejecutados.
+
+## P-030 — autonomía delegada y x402 service intents (2026-10-14)
+
+- Current source `ac423a7c14d203a6f5bf78307e0937e346ef7f11`, PR #75 DRAFT; CI push `38680325974` **8/8 SUCCESS**, PR `38680323592` attempt 2 **8/8 SUCCESS**. PR initial attempt had Windows 22 hook timeouts unrelated to the changed tests; rerunning that job on same SHA succeeded, without source/test changes.
+- Source `7065fc6` + `1d078b0`: treasury rejects negative active task costs masked by positive aggregate sums.
+- Source `b91640e`, `deac222`, `74832e1`, `ac423a7`: generic `x402_fetch` now persists a canonical USDC financial effect before paid dispatch, stores signed-payment terms and nonce, does not turn HTTP 200 into settled `transactions`, exposes pending finality to agent feedback, and has duplicate-unknown/signer regressions.
+- P-010 already supports auto versus explicitly supervised planning; P-016 computer/browser/GUI and P-017 capability acquisition exist. No new human approval or duplicate permission authority was created. The default x402 domain allowlist remains scoped; broader service-provider delegation was NOT implemented in this block.
+- P-030 remains `EN_EJECUCIÓN`; provider authenticated LIVE and external P&L are unverified (P-005). The active segment has detailed evidence and next work.
+
+## P-030 — cost learning and financial exposure operationally wired (2026-10-14)
+
+- Source `3b390b69d1552d46a4ed8993b0a729dc2425ffb2` on `abos/p030-family-economics-treasury` (PR #75 DRAFT). Exact source CI push `38684898226` **SUCCESS 8/8**, PR `38684893362` **SUCCESS 8/8**; no merge, no real funds used.
+- `task_graph` measured estimate→actual deviations now feed the canonical planner adaptive context, preserving UNKNOWN defaults and separating `task_cost_cent` from credit/USDC/P&L. Both core and strategic reviewers use the same task cost owner and its recorded history; no mandatory cost percentage or approval introduced.
+- `financial_effects` pending USDC topups and generic service payments, credit obligations, and unclassified units are projected for canonical strategic review, not treated as liquid credit or paid expense. Both `orchestrator-core.ts` and the actual primary `orchestrator.ts` wiring were reconciled. Test-fixture evidence DDL and primary-path regression failure corrected on source prior to 8/8.
+- Remaining within P-030: evidence-backed dynamic reserve/contingency execution policy (not just reports), economic decision→outcome with authentic source and causal alternative review, and P-030 DoD integration. LIVE settlement/real revenues/cost metering remain unverified and P-005-owned.
+
+### P-030 — USDC UNKNOWN vs zero reconciled (2026-10-14)
+
+- Source `15d45e243c85735b329cf5c9fce23dd3f7b4dde0`, following economic learning checkpoint, exact CI push `38685293689` SUCCESS 8/8, PR `38685289941` SUCCESS 8/8.
+- `src/orchestration/planner-context.ts`, `planner.ts` and primary+legacy orchestrators no longer turn absent USDC observation into zero; null/UNKNOWN remains separate from explicit observed 0 or valid cached USDC observation. Negative or invalid USDC values no longer fabricate a balance. New `planner-runtime-truth` tests verify the distinction.
+- No new manual payment authorization, no wallet use, no movement of external cash, no transfer settlement or verified income. PR #75 remains DRAFT; P-030 remains EN_EJECUCIÓN, not merged; next dynamic economic reserve/contingency policy and E5/E6 evidence remain pending.
+
+## P-030 — reserve funding recommendation from scenario evidence (2026-10-15)
+
+- `309f70c4f3ea85df3f1c758530aa76e4fba59f69` source; PR #75 DRAFT, `main` unchanged. Exact source CI push `38689187817` SUCCESS **8/8** and PR `38689182837` SUCCESS **8/8**. No money moved and no provider LIVE validation.
+- Existing read-only `assessTreasuryScenario` now returns a same-unit `reserveRecommendation`: observed downside target, incremental earmark, free credit remainder after procurement AND the proposed reserve, and `covered|can_earmark|requires_alternative|unknown`. Joint overlapping risk without independent exposure evidence remains UNKNOWN; no fixed reserve percentage, automatic creator approval or standalone execution policy. P-025 strategic-review incorporates the structured recommendation.
+- Adversarial coverage: full-capital spend if justified downside is zero; risk coverage/replenishment from genuinely free credits; insufficient concurrent procurement+reserve; no release of prior larger reserves from one narrow downside; delayed refund still NOT liquid in protected tool; existing projected credit shortfall cannot be called fully financed; null loss/quote is not zero. Protected tool remains read-only and never sends credit transfers.
+- Important limitation: projection `reservedCreditsCents` is an EXPLICIT INPUT, not durable source-backed treasury earmark. Recommendation is NOT an actual committed/reserved balance and cannot be treated as realized allocation on restart. Durable internal reserve ownership/reconciliation and outcome adaptation remain P-030 work, without violating external financial-effect/transactions ownership. Real provider settlement/income/revenue is P-005 boundary.
+
+## P-030 — internal durable reserve authority, exact source CI (2026-10-15)
+
+- Branch `abos/p030-family-economics-treasury`, PR #75 **DRAFT**, main unchanged `d14f04b9`. Product source through `a0fe3fa14ef6e81cea7e89270e6ba49dd55b4a34` validated by push run `38693190077` **SUCCESS 8/8** and PR run `38693195502` **SUCCESS 8/8**. Source E3, **NOT LIVE**.
+- Source `57fa21b`: SQLite v23 `treasury_reserve_allocations` append-only internal earmark authority, independent of `transactions` and `financial_effects`; `setTreasuryReserve` creates/adjusts/releases by stable operation key and exact Conway credit-unit target; durable restart/replay history, causal Evidence Fabric, conservative increase gate requiring observed balance, evidence and same-unit obligations. Overcommitted/UNKNOWN increases rollback atomically; decreases under provider outage cannot invent free liquidity.
+- `getTreasuryProjection` now resolves reserve amount from persisted owner when initialized; a contradictory caller-supplied reserve is rejected, not used to override ownership. Legacy explicit scenario-only input remains available when no reserve is initialized.
+- `290a9c2` updates PROJECT canonical schema baseline v23; `0cf5810` wires a Policy-catalog `set_treasury_reserve` action plus `check_credits` visibility, preserving read-only `assess_treasury_scenario` and no provider transfer/transaction side effect. `a0fe3fa` removes dynamically resampled balance from replay identity, preserving original observation while preventing semantic drift. Linux CI exposed and corrected old v22 assertion and replay mismatch before exact-head 8/8.
+- Coverage includes reserve inflation/overflow guard, separate active commitments, missing provider evidence, conflicting operation keys, replay after intervening changes, release and SQLite physical restart; 8/8 run covers Node 22/24, Windows 22/24, public distribution 22/24, security audit, ProjectOps integrity.
+- Scope boundary: the tool records internal allocations only. `decisionEvidence` and balance provenance currently carry caller/provider-adapter assertions; the journal is **not proof** of authenticated provider settlement, verified economic return or a P-025 strategic review. P-025/Policy must own execution decisions; no automatic human gate was added. No funds, wallet operation, payment or business revenue observed here.
+- **HARD still open:** ensure P-025's actual decision and P-023's prediction→observed economic outcome (including reserve use/release and recovery) are causally wired E2E, validate compatible/liquid reserve coverage against changing external obligations and test v22→v23 migration on persisted legacy state. External payment/provider finality and economic LIVE remain P-005, not a source PASS.
+
+NEXT_ELIGIBLE_WORK: re-audit the real P-025 decision→reserve allocation linkage and observed reserve outcome under P-023; attach meaningful evidence/decision ownership without another planner, policy, ledger or journal. P-030 remains `EN_EJECUCIÓN`; PR #75 remains DRAFT; no merge and no P-031.
+
+## P-030 — exact legacy-schema migration regression, 2026-10-15
+
+- Source commit `c94b1ee48f957870792eebef749b6aa1c1e9e43b` extends P-030 adversarial tests to reconstruct durable v22 state lacking the new reserve table, preserve an existing settled transaction, reopen through `createDatabase()`, migrate to schema v23 and allocate a reserve without losing accounting history.
+- EXACT SOURCE CI: push `38693684266` **SUCCESS 8/8**, PR `38693688137` **SUCCESS 8/8**, including Node22/24, Windows22/24, public distribution22/24, security and ProjectOps integrity. This is E3 of migration/source; it does **not** establish E5 external credit liquidity, provider authenticated finality or E6 actual profit/costs.
+- Internal reserve authority remains `treasury_reserve_allocations`, Evidence Fabric is causal correlation, `financial_effects` controls external intents and `transactions` owns realized accounting. No duplicate financial transfer, arbitrary approval gate, provider spend or merge.
+- NEXT_ELIGIBLE_WORK: P-030 P-025 real strategic decision provenance and P-023 economic decision→outcome loop, including reserve usage/release after observed economic outcomes, and actual reserve-capacity re-evaluation when provider status/obligations change. Keep P-005 E5/E6 independent; P-031 not opened; PR #75 still DRAFT.
+
+## P-030 — P-025 reviewed decision → P-023 strategic prediction/outcome and persistent learning (2026-10-15)
+
+- Verified P-030 product HEAD `23ac5cadaeeed7781b9543bdb3610533b73c994d`; push CI `38696786471` **SUCCESS 8/8**, PR CI `38696794711` **SUCCESS 8/8** (Linux Node 22/24, Windows 22/24, public distro 22/24, security/integrity). Prior intermediate source `3da474d` failed due to target TypeScript lib not supporting `findLast`; fixed in `79ed9ad`, which also passed both exact-run matrices 8/8 before the final history follow-up.
+- Product `29939bb` reuses the existing P-025 reviewed Adaptive Path and P-013 Evidence Fabric, not a new planning or economic prediction journal. A reserve change can reference a path only if `adaptive_task_bindings` matches current goal/task and the exact `orchestrator.review_feedback.<goal>` names the materialized path. Mere caller assertion or Policy allow is NOT review evidence. No P-025 human approval gate added.
+- Reuses P-023 `adaptive.prediction_resolved` and `adaptive.prediction_compared` downstream. Outcome must be causally **later** than the reserve change; success/contradiction refer to the **strategic path** only, never to economic return, actual contingency use, authenticated settlement, task-cost units or Conway credit spend. Unresolved/previously completed paths do not become new terminal outcomes.
+- Source `23ac5ca`: projections scan immutable `treasury_reserve_allocations` decision history rather than only current live reserves, so subsequent release cannot erase past learning; one P-023 terminal resolution is deduped rather than inflated by several reserve updates. Existing `buildPlannerContext` includes the strictly scoped learning evidence, and BOTH P-025 review consumers (`orchestrator.ts`, `orchestrator-core.ts`) already read it. Raw lean-DB embeddings lacking P-030 schema return an explicit unmaterialized-authority limitation, never pretend full economic coverage.
+- Negative regression tested: no P-025 materialized-path checkpoint → review provenance UNKNOWN despite selected-looking path; previous P-023 success cannot validate a later reserve; restart/release history remains visible; observed actual reserve usage remains `null`; no provider credit transfers or transaction ledger mutations in these tests.
+- Classification: E3 source/CI achieved for **strategic outcome linkage**, NOT provider-authenticated financial outcome, actual USDC/Conway spend, business revenue or profit. P-030 remains `EN_EJECUCIÓN`, PR #75 DRAFT, no merge and no P-031.
+
+NEXT_ELIGIBLE_WORK: audit the real `financial_effects`↔`transactions` reconciliation and existing reserve-key causal contracts to determine whether independently observed **same-unit economic** contingency utilization can be attributed without caller-fiction or double counting; implement only evidence-backed source delta with regression. Keep P-005 LIVE validation independently pending; do not label strategic-path success as economic reserve savings.
+
+## P-030 — physical P-025/P-023 cross-authority recovery + financial attribution audit (2026-10-15)
+
+- Exact product+recovery-test HEAD `f189fa7cff0a65dd8e5d46fe15a7c2a1caf2c65a`: push CI `38697473776` **SUCCESS 8/8** and PR CI `38697479851` **SUCCESS 8/8**. The test physically closes/reopens SQLite and verifies P-025 reviewed-path→reserve decision→P-023 subsequent terminal outcome survives; idem operation replay never allocates twice; planner recovers the same learning; no `transactions` fabricated.
+- `financial_effects` audit: canonical `prepareFinancialEffect` stores external intent/provenance and `settleFinancialEffect` atomically updates state+ledger `transactions`; `reconcileCreditEffect` independently checks provider transfer ID, recipient, amount and terminal status before materialization. **However, `executeCreditEffect` currently persists only `request: {note}` and `transfer_credits` provides no reserve identity.** There is therefore no demonstrated causal reserve-to-transfer linkage; a completed path, transfer or release is **not** evidence that that reserve paid a contingency.
+- Result is deliberate `NO_CHANGE` for speculative derived monetary utilization: `observedReserveUseCreditsCents=null` remains UNKNOWN, regardless of source-green strategy feedback. Risk of double counting earmarks, unresolved transfer credits and already reduced external provider balance requires a same-unit atomic contract before any reserve-use accounting claim.
+- P-030 remains `EN_EJECUCIÓN`; PR #75 remains DRAFT; `main` not merged and P-031 not started. E3 verified, E5/E6 external economics still unverified under P-005.
+
+NEXT_ELIGIBLE_WORK: define/implement the minimal optional stable reserve-key binding at financial intent creation (using existing `financial_effects`, reserve owner, Policy and Evidence Fabric), with idempotent replay/overlap accounting and a verifiable local settlement-derived outcome; do not claim external LIVE until P-005. Then attack pending→completed→refunded/failed/unknown/restart cases and reconcile P-030 DoD.
+
+## P-030 — credit reserve↔financial-effect causal source, exact CI 8/8 (2026-10-15)
+
+- Exact PRODUCT HEAD `161fe188b646528a2add6568d1d794ae7ec1fbcb`; source push CI `38699172413` **SUCCESS 8/8**, PR CI `38699179413` **SUCCESS 8/8** (Node 22/24 Linux, Windows 22/24, public-distribution 22/24, audit and ProjectOps integrity). Intermediate `0a04b5d` failed one legacy exact-text assertion ("not measured reserve usage") while 2392 tests passed; `39d096f` restored correct UNKNOWN caveat. `161fe18` corrected replay-after-release and protected it with an adversarial test. No unverified PASS was carried forward.
+- Source `26c71e0`: `treasury-reserves.ts` exports `assertReserveCreditEffectCapacity`, `getPendingReserveCreditOverlap`, and `getTreasuryReserveLocalSettlement`. These are projections/validators over the canonical `treasury_reserve_allocations`, `financial_effects` and `transactions` owners, not new tables or payment ledger. The read-only `treasury-projection.ts` now subtracts a **pending Conway credit transfer linked to a durable earmark only once**: pending gross credits remain visible; source-backed overlap is not added to obligations twice. Pending USDC, unlinked credit effects, returns/refunds remain distinct.
+- Source `0a04b5d`: optional `reserve_key` exposed through existing protected `transfer_credits` tool; `executeCreditEffect` stores stable `request.treasuryReserveKey` in the canonical external effect, atomically validating earmark capacity and preparing the financial intent BEFORE any provider dispatch. The existing fingerprint/idempotency, Policy and provider reconciliation gates retain ownership. A reserve is NOT itself transfer authorization. Existing callers without reserve identity retain old contract.
+- Source `161fe18`: replay uses the existing financial-effect identity before checking whether the earmark is still active, so a settled/pending transfer is not redispatched merely because its original reserve was released. Fresh requests against released reserves remain prohibited. Same operation key with changed terms still fails canonical financial-effect fingerprint.
+- Economic result projection: matched `completed` external effect with provider effect ID, settled canonical `transactions` ID, compatible credit unit/type and exact amount can be reported as `locallyReconciledReserveTransfersCreditsCents` (local E3 accounting only). Missing/inconsistent linkage remains UNKNOWN. `observedReserveUseCreditsCents=null` remains deliberately UNKNOWN until independently authenticated actual reserve utilization/provider finality; no claimed real transfer/revenue/savings, no automatic use-as-business-profit.
+- Adversarial source coverage: reserve can fund a mock locally reconciled 200-credit transfer, reject a second 150-credit operation against the same 300-credit earmark, replay original without second journal/ledger mutation, retain idempotency after release, reject fresh release-backed attempt, count linked pending 200 within reserve 300 with separate unrelated pending 100 and USDC topup 400. Mock source PASS ≠ provider LIVE E5/E6.
+- **OPEN HARD:** P-030 still must decide and evidence same-unit reserve replenishment/releases after REAL observed economic conditions and attribution of genuine expenses/benefits, rather than upgrading a local recorded transfer or P-023 strategic path outcome into real contingency utilization; preserve UNKNOWN and P-025/P-023 causal feedback. A filled `request.treasuryReserveKey` is a producer-validated *local* earmark binding, not independently authenticated provider finality. E5 external finality/E6 business economics remain P-005-gated. P-030 remains `EN_EJECUCIÓN`, PR #75 DRAFT, no merge, P-031 unopened.
+
+NEXT_ELIGIBLE_WORK: audit source-backed reserve replenishment/release decision from observed credit balance and canonical committed effects, including stale balance, pending→unknown→settled/rejected/refund, crash/replay and false double-count cases; implement only minimal P-030 source delta, run adversarial CI and reconcile. Do not assume a settled transfer proves business return or that a released earmark was a refund.
+
+## P-030 — source-backed reserve epochs, UNKNOWN reconciliation and recovery (2026-10-15)
+
+- **Latest product/test HEAD** `8b53525201c2925fe300997bdc2f256e971ad0eb`. Exact push CI `38702410780` **SUCCESS 8/8** and PR CI `38702414644` **SUCCESS 8/8**; previous implementation+restart HEAD `263a748228ce248fcbfe2e1c61b1235ceec2d67c` push `38702016542`/PR `38702023094` also **8/8 each**.
+- `5b01526` derives reserve allocation **epoch** from existing `treasury_reserve_allocations.sequence`: first positive after latest zero release, retained across increases/reductions, restarted at explicit release/re-funding. `executeCreditEffect` persists `request.treasuryReserveEpoch` together with `treasuryReserveKey` in existing canonical `financial_effects` intent. No schema/table/ledger/planner duplication. Replays preserve original epoch even after release/reallocation; canonical semantic fingerprint still rejects changed terms. Old completed effects no longer permanently consume a legitimately replenished allocation's capacity.
+- Overlap `getPendingReserveCreditOverlap` is now **only** for pending Conway credit intents whose recorded positive epoch equals the current allocation cycle; older pending commitments remain **independent** obligations. Legacy epochless/malformed intents never become overlap, and malformed epoch does not silently free earmark capacity at creation.
+- `263a748` adversarial recovery reopens physical SQLite across old-cycle UNKNOWN → release → new allocation → new UNKNOWN, verifies old pending 200 and new pending 150 remain 350 gross, only 150 qualifies as current reserve overlap, original intent never dispatched twice. Also verifies within-epoch increase keeps same identity and no overspend.
+- `8b53525` exercises delayed old-cycle UNKNOWN→settled local provider observation and UNKNOWN→pending→rejected→valid new use via canonical `reconcileCreditEffect`/`recordFinancialEffectObservation`. Historical rejected intents do not consume new capacity. Local settled transactions are counted once. **All provider observations were injected MOCKS**; P-005 external E5 finality, real reserve consumption and profitability E6 remain NOT demonstrated.
+- No transfers executed against a real wallet; no `main` modification/merge. P-030 `EN_EJECUCIÓN`; PR #75 remains DRAFT and P-031 unopened.
+
+NEXT_ELIGIBLE_WORK: audit same-wallet freshness/provenance of observed Conway credit balance at internal reserve increase, and whether its input can be stale, replayed, invalid or unrelated to canonical provider effects. Reuse existing Conway balance and Policy/Evidence owner; do not introduce a second wallet observer or arbitrary approval. Prove source invariants with negative tests; leave external LIVE P-005 independent.
+
+## P-030 — protected credit-balance observation versus concurrent financial effects (2026-10-15)
+
+- Exact source HEAD `0aa30f926a1041b489fffbc904b9d70c32419fb0`: push CI `38703252742` **SUCCESS 8/8**; PR CI `38703261596` **SUCCESS 8/8** (Linux/Windows Node 22/24, public distribution 22/24, security and ProjectOps integrity).
+- `getTreasuryFinancialEffectSequence(db)` projects the existing P-013 `evidence_events` latest `financial_effect` lifecycle position. The current `set_treasury_reserve` Policy-routed tool records that local position BEFORE `ConwayClient.getCreditsBalance()` and passes it to the existing `setTreasuryReserve` owner. A positive reserve increase atomically rejects if financial intents were prepared/updated after the read began; idempotent replay remains able to recover its prior decision. No second wallet observer, new ledger or arbitrary manual approval.
+- Balance evidence now preserves locally observed timestamp, runtime agent identity, and explicit `providerWalletOwnershipVerified:false`/`providerFinalityVerified:false`. It is **not** independently attested ownership, a provider-supplied balance timestamp, or proof of fresh external money. The raw internal function keeps optional sequence input for existing trusted tests/callers; new protected tool always supplies it on increases.
+- Tests attack changed financial intent during awaited GET and direct stale sequence, assert rollback (no created reserve) and presence of actual concurrent intent; unaffected valid tool call persists structured observation and correctly labels unverified provider ownership.
+- **HARD remaining**: foreign/external Conway wallet movements and stale/incorrect provider balance responses cannot be established from the current numeric `getCreditsBalance` response alone; real resource investment, provider finality, revenue/profit and economic reserve utilization still require external E5/E6 evidence under P-005. Do not classify this E3 guard as live wallet truth.
+- P-030 stays `EN_EJECUCIÓN`, PR #75 DRAFT, no merge/P-031. No live funds moved during this work.
+
+NEXT_ELIGIBLE_WORK: audit the existing provider balance GET for source-scoped identity, HTTP response cache/observation timestamps and any externally supplied balance snapshot metadata. If provider doesn't expose it, preserve UNKNOWN/NO_CHANGE and continue other independent P-030 source economics without inventing fresh-balance or LIVE assertions. Then assess P-030 DoD against exact sources and known E5/E6 boundaries.
+
+## P-030 — HTTP balance cache boundary + investment evidence, verified 2026-10-15
+
+- Product/test source HEAD `a5fb4a7564719990073e5f5102d4c9367f732dfc` CI push run `38756449621` **SUCCESS 8/8** and PR run `38756458427` **SUCCESS 8/8**. Draft PR #75 open, `main d14f04b9...` unchanged; no LIVE funds, purchases or payment reconciliation.
+- Provider audit: `ConwayClient.getCreditsBalance()` reads `GET /v1/credits/balance` into an exact integer only; client has no provider-attested wallet mapping, snapshot time/version or authenticated settlement identity from that GET. Conway's published `credits_balance` describes current credits of the *authenticated account* without a supplied wallet identity or snapshot timestamp contract (`https://docs.conway.tech/terminal/tools`). NO_CHANGE to payment identity authority or extra wallet observer; P-005 owns external E5 verification.
+- `a5fb4a7` requests credit balance GET with fetch `cache: no-store`, `Cache-Control: no-store, max-age=0` and `Pragma: no-cache`, scoped to that read. Regression checks exact URL/cache headers and ignores extra unverified response wallet/timestamp claims. This is best-effort cache avoidance; it does NOT establish server freshness, right wallet, no external wallet movement or true free liquidity. Existing local in-flight financial effect race guard remains intact.
+- Earlier source `47cead6` adds read-only `inference_costs` token-count, inference-latency and registry-priced-estimate lower bounds as noncash resource investment (not paid invoices, electricity, subscriptions or realized P&L); `4a24100` keeps absent raw SQLite inference authority as UNKNOWN instead of zero. Both commits already had exact push/PR 8/8 CI at previous HEAD. Actual invested subscription, internet, energy, human work and paid inference costs need independent measurement.
+- P-030 is still `EN_EJECUCIÓN / SOURCE_PARTIAL`; no P-031, no merger. E3 green for exact tested source, E5 authenticated provider settlement and E6 realized business economics NOT VERIFIED.
+
+NEXT_ELIGIBLE_WORK: compare current P-030 DoD against `financial_effects`, `transactions`, `treasury-projection`, `treasury-scenario`, P-025 and P-023 with source evidence; identify the smallest independent source gap in same-unit costs/commitments/economic outcomes if demonstrated, without a second ledger or strategy authority. Keep monetary E5/E6 limitations with P-005 and report a source NO_CHANGE where only external provider truth is missing.
+
+## P-030 — Child economy UNKNOWN and exact source CI (2026-10-15)
+
+- Source `01fbbf770c74fe2e416a77f687c92d2bc5a74b56`: push CI `38757529940` and PR CI `38757543303`, both SUCCESS 8/8. `child-economics.ts` now rejects invalid externally asserted money (negative, fractional, nonfinite and unsafe amounts) as UNKNOWN instead of flooring or clamping to zero. Regressions preserve an actually observed zero and prevent false child P&L or ROI.
+- Source `570609ed7e43073f5adeaeeef4878d54dbaba163`: push CI `38758067510` and PR CI `38758078108`, both SUCCESS 8/8 (Linux/Windows Node 22/24, public distro, security, integrity). SQLite `task_graph.actual_cost_cents` has schema DEFAULT 0, which is NOT proof of free completed work. Existing P-030 task calibration already preserves unobserved cost. The child economic projection now detects terminal default-zero, negative or malformed cost rows, retains the measured positive subtotal but makes net contribution, profitability and ROI UNKNOWN until all terminal costs are observed. Adversarial tests cover zero defaults and negative rows.
+- Prior documentary HEAD `ab23eaafbbd9073834fba66feaf7d978be5faf7b`: push CI `38757072269` and PR CI `38757085291` both SUCCESS 8/8. The source cache-boundary commit `a5fb4a7` also passed its own exact green CI as recorded above. No external LIVE provider data or payment was tested.
+- Branch `abos/p030-family-economics-treasury`, PR #75 still DRAFT, `main d14f04b9...` unchanged. P-030 stays EN_EJECUCIÓN; no P-031 or merge. E3 success cannot establish E5 authenticated financial outcome or E6 realized economic profitability. Exact CI of this documentary HEAD is a distinct check, not inferred from prior successful runs.
+
+NEXT_ELIGIBLE_WORK: audit if `child-economics.ts` treats local `task_cost_cent` and externally attributed revenue/exposure in demonstrably compatible monetary units; cross-check P-030 DoD with `transactions`, `financial_effects`, treasury reserve/scenario, and P-023/P-025. Implement only source-backed gaps and otherwise preserve UNKNOWN / NO_CHANGE. Real authenticated provider balances, settlements, realized revenue and profitability remain P-005 LIVE evidence boundaries.
+
+## P-030 — same-unit child accounting source, no duplicated authority (2026-10-15)
+
+- Scope audit before edits: active PR #75 remains the sole open PR on `abos/p030-family-economics-treasury`; historical `abos/worker-cost-units-v1`, child-financial-observation and old treasury branches are September source, not a newer current P-030 integration. Reused `child-economics`, `heartbeat`, `transactions`, `financial_effects`, `treasury-projection`, and P-003 financial distinctions. No schema, second ledger, second planner or new financial authority.
+- Source 83e89d248082a539b7b337725413b7b0f53c6c9a: `child-economics.ts` no longer subtracts `task_graph.actual_cost_cents` / local `task_cost_cent` from unspecified attributed revenue cents. Existing reported local task cost/commitment remains available but separately labeled. Monetary net and profitability require separately supplied revenue and expense with matching explicit units and source evidence; contribution is still a caller-supplied projection until external provider/ledger validation. `colony_financial_report` now labels `taskExecutionCostUnit=task_cost_cent` and its local unverified authority. Regression tests added.
+- Source 33cdd811e4f54512838718e464751c79eddd92a9: retained independently sourced same-unit monetary expense when local task cost measurements are incomplete; repaired contradictory limitation wording with regression. Source 7aec35c82a704df95193316dcb755be66267111d additionally requires source evidence for an explicit same-unit capital-exposure denominator before any ROI; mismatched currencies, local task cost units, absent expense sources or missing capital evidence stay UNKNOWN.
+- Source 013ec7305507bf3eab289d2f256338eb7e665815 fixed three commas in the newly authored fixtures after exact predecessor CI exposed a Vitest parse failure; no economic logic changed. Exact source push CI 38761924259 SUCCESS 8/8 and PR CI 38761935935 SUCCESS 8/8 (Linux/Windows Node 22/24, distro, security and integrity). Intermediate canceled/failed runs do NOT count as PASS and are superseded by this exact successful HEAD.
+- P-030 remains EN_EJECUCIÓN / PR75_DRAFT / E3_SOURCE. E5 independently authenticated financial settlement, real revenue/profit and physical allocation still UNVERIFIED (P-005). No external transfer/credit purchase, no merge/main change, P-031 not opened. This documentary checkpoint's own CI must be checked independently.
+
+NEXT_ELIGIBLE_WORK: source-audit legacy `transactions`/`spend_tracking` `amount_cents` unqualified unit (including `inference`, `tool_use`, child funding, and credit purchase) versus `knownOperatingCostCents` report semantics. Do not invent FX conversion or duplicate accounting authority. Decide minimum compatible provenance/UNKNOWN change or NO_CHANGE after auditing producers and consumers. Reassess P-030 DoD and external E5/E6 limits before merge; do not open P-031.
+
+## P-030 — legacy monetary-unit evidence audit, NO_CHANGE (2026-10-15)
+
+- Exact previous documentary HEAD `fecd1c886d384787284a29b3e46f9f6f1b2d79ca`: push CI `38762565812` and PR CI `38762578162`, both SUCCESS 8/8. Source `013ec73` CI push `38761924259` and PR `38761935935` likewise SUCCESS 8/8. No branch changes outside PR #75 were found to supersede this work.
+- Audited owner/consumer: `Transaction` in `src/types.ts` has no monetary unit; `src/state/database.ts` writes `transactions.amount_cents` and evidence payload `costUnit: cent` with no currency/provider mapping. `src/heartbeat/tasks.ts` groups `inference`/`tool_use` as `knownOperatingCostCents` and internally allocated/funded flows separately; `src/economics/credit-transfer.ts` has an explicit `financial_effects.unit=credit_cent` and provider/idempotency authority distinct from legacy transactions. `task_graph` remains `task_cost_cent`, explicitly separate from monetary expenses after source correction.
+- Decision: NO_CHANGE to legacy transaction schema, currency conversion, or new financial observer/ledger: no source proves that these legacy cent rows are compatible money and the report already keeps external revenue/expense/net `null` rather than combining them into business P&L. An unqualified historic operating-cost tally is not independently paid expense; do not promote it to profit, cash or available credits. Adding a second ledger or guessed conversion would duplicate existing authority and fabricate semantics.
+- P-030 remains EN_EJECUCIÓN / PR #75 DRAFT / E3_SOURCE. E5/E6 LIVE evidence under P-005 unverified, no `main` merge or P-031 and no real transfers. This documentary commit has distinct exact-head CI, pending independent verification.
+
+NEXT_ELIGIBLE_WORK: conduct focused P-030 Definition of Done matrix against existing `treasury-projection`, `treasury-scenario`, `treasury-reserves`, `financial-effects`, P-025/P-023 and policy tool boundaries, distinguishing source-complete claims from externally unverifiable E5/E6. If another source gap is proven implement minimal source correction with tests; otherwise document E3 source conclusion without pretending live profit, and preserve P-005 as the actual external witness. Do not duplicate money authorities.
+## P-030 — source DoD review handoff (2026-10-15)
+
+Source `46b1c77` push CI run `38763158493` attempt 2 SUCCESS 8/8 and PR run `38763169611` SUCCESS 8/8. Windows Node 22 first attempt failed transient local provider readiness; selective exact-SHA rerun passed without product changes, so P-016 NO_CHANGE. Source DoD coverage and E5/E6 separations are enumerated only in active `continuity/C0026.md` (single detailed matrix). PR #75 remains DRAFT and P-030 EN_EJECUCIÓN until an exact-head CI, integration and exact-main verification; no money or LIVE claims.
+
+NEXT_ELIGIBLE_WORK: follow C0026 source DoD integration boundary after exact documentary CI; keep P-005 LIVE unverified.

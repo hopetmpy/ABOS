@@ -58,6 +58,7 @@ import {
   MIGRATION_V18_EVIDENCE_FABRIC,
   MIGRATION_V19_CAPABILITY_LIFECYCLE,
   MIGRATION_V20_SKILL_EVOLUTION,
+  MIGRATION_V23_TREASURY_RESERVES,
 } from "./schema.js";
 import type {
   RiskLevel,
@@ -759,6 +760,10 @@ function applyMigrations(db: DatabaseType): void {
     {
       version: 20,
       apply: () => db.exec(MIGRATION_V20_SKILL_EVOLUTION),
+    },
+    {
+      version: 23,
+      apply: () => db.exec(MIGRATION_V23_TREASURY_RESERVES),
     },
   ];
 

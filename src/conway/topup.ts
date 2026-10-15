@@ -199,6 +199,7 @@ export async function topupCredits(
   account: PrivateKeyAccount,
   amountUsd: number,
   recipientAddress?: Address,
+  onPaymentPrepared?: (payment: X402PaymentMetadata) => Promise<void> | void,
 ): Promise<TopupResult> {
   if (!TOPUP_TIERS.includes(amountUsd)) {
     return {
@@ -214,32 +215,39 @@ export async function topupCredits(
 
   logger.info(`Attempting credit topup: $${amountUsd} USD for ${address}`);
 
-  const result = await x402Fetch(
-    url,
-    account,
-    "GET",
-    undefined,
-    undefined,
-    maxPaymentCents,
-  );
+  // Preserve the historical six-argument x402 contract for existing clients.
+  // Only the P-030 durable-payment route supplies a pre-dispatch observer.
+  const result = onPaymentPrepared
+    ? await x402Fetch(
+        url, account, "GET", undefined, undefined,
+        maxPaymentCents, undefined, onPaymentPrepared,
+      )
+    : await x402Fetch(url, account, "GET", undefined, undefined, maxPaymentCents);
 
   if (!result.success) {
     const detail = result.error || `HTTP ${result.status}`;
     logger.error(`Credit topup failed: ${detail}`);
     const error = new Error(`Credit topup failed: ${detail}`) as Error & {
       externalEffectOutcomeUnknown?: boolean;
+      externalPaymentNotDispatched?: boolean;
+      payment?: X402PaymentMetadata;
     };
-    if (result.payment?.settlement === "unknown") {
-      error.externalEffectOutcomeUnknown = true;
-    }
+    error.payment = result.payment;
+    if (result.payment) error.externalEffectOutcomeUnknown = true;
+    else error.externalPaymentNotDispatched = true;
     throw error;
   }
 
-  const creditsCentsAdded = typeof result.response === "object"
-    ? result.response?.credits_cents ?? result.response?.amount_cents ?? amountUsd * 100
-    : amountUsd * 100;
+  const reportedCredits = typeof result.response === "object"
+    ? result.response?.credits_cents
+    : undefined;
+  const creditsCentsAdded = Number.isSafeInteger(reportedCredits) && reportedCredits >= 0
+    ? reportedCredits as number : undefined;
 
-  logger.info(`Credit topup successful: $${amountUsd} USD → ${creditsCentsAdded} credits cents`);
+  logger.info(
+    `Credit topup HTTP accepted: ${amountUsd} USD tier; ` +
+    `credits reported=${creditsCentsAdded ?? "UNKNOWN"} (not verified settlement)`,
+  );
 
   return {
     success: true,
