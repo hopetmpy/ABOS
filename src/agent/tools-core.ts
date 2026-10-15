@@ -6,6 +6,7 @@
  */
 
 import { ulid } from "ulid";
+import { createHash } from "node:crypto";
 import type {
   AbosTool,
   ToolContext,
@@ -26,7 +27,7 @@ import { appendEvidenceEvent, correlationIdFor, currentEvidenceContext, latestEv
 import { executeCreditEffect } from "../economics/credit-transfer.js";
 import { executeCreditTopupEffect, listUnresolvedCreditTopups } from "../economics/credit-topup.js";
 import { getTreasuryProjection } from "../economics/treasury-projection.js";
-import { getCommittedFinancialEffectCents, listUnresolvedFinancialEffects } from "../economics/financial-effects.js";
+import { claimFinancialEffectDispatch, getCommittedFinancialEffectCents, listUnresolvedFinancialEffects, prepareFinancialEffect, recordFinancialEffectObservation } from "../economics/financial-effects.js";
 import { assessTreasuryScenario } from "../economics/treasury-scenario.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
 import { toPosixShellPath } from "../platform/home.js";
@@ -3085,6 +3086,13 @@ Model: ${ctx.inference.getDefaultModel()}
         const maxPayment =
           ctx.config.treasuryPolicy?.maxX402PaymentCents ??
           DEFAULT_TREASURY_POLICY.maxX402PaymentCents;
+        // Persist financial intent and signed authorization before *any* paid
+        // request is dispatched. x402 HTTP success is not on-chain finality.
+        const operationKey = `x402-service:${currentEvidenceContext()?.toolCallId ?? ulid()}`;
+        const requestFingerprint = createHash("sha256")
+          .update(JSON.stringify({ url, method, body: body ?? null }))
+          .digest("hex");
+        let prepared = false;
         const result = await x402Fetch(
           url,
           ctx.identity.account,
@@ -3092,73 +3100,76 @@ Model: ${ctx.inference.getDefaultModel()}
           body,
           extraHeaders,
           maxPayment,
+          chainType,
+          async (payment) => {
+            const wallet = ctx.identity.address.trim().toLowerCase();
+            const signer = ctx.identity.account?.address?.toLowerCase();
+            if (!signer || signer !== wallet) {
+              throw new Error("x402 signing wallet must match the registered economic identity");
+            }
+            const { effect } = prepareFinancialEffect(ctx.db.raw, {
+              operationKey,
+              effectKind: "x402_service_purchase",
+              amountCents: payment.policyAmountCents,
+              unit: "usdc_cent",
+              recipient: wallet,
+              provider: "x402_service",
+              request: {
+                requestFingerprint,
+                network: payment.network,
+                payTo: payment.payToAddress,
+              },
+              evidence: ["Signed authorization is a payment attempt, not verified settlement."],
+            });
+            if (effect.state !== "prepared" ||
+                !claimFinancialEffectDispatch(ctx.db.raw, operationKey).dispatchAllowed) {
+              throw new Error("Existing x402 payment intent needs reconciliation, not another paid dispatch");
+            }
+            prepared = true;
+            recordFinancialEffectObservation(ctx.db.raw, operationKey, {
+              resolution: "pending",
+              providerStatus: "signed_payment_prepared",
+              evidence: [
+                `nonce=${payment.authorizationNonce ?? "UNKNOWN"}; ` +
+                `amount=${payment.amountMicroUsdc} micro-USDC; ` +
+                `network=${payment.network}; payTo=${payment.payToAddress}; no verified finality.`,
+              ],
+            });
+            // This is a policy ceiling reservation, NOT booked external spend.
+            ctx.spendTracker?.recordSpend({
+              toolName: "x402_fetch",
+              amountCents: payment.policyAmountCents,
+              domain: new URL(url).hostname,
+              category: "x402",
+            });
+          },
         );
 
+        if (prepared) {
+          recordFinancialEffectObservation(ctx.db.raw, operationKey, {
+            resolution: result.success && result.payment?.settlement === "accepted_response"
+              ? "pending" : "unknown",
+            providerStatus: result.success && result.payment?.settlement === "accepted_response"
+              ? "paid_http_accepted_finality_unverified" : "paid_dispatch_outcome_unknown",
+            evidence: result.payment ? [
+              `HTTP status=${result.status ?? "UNKNOWN"}; signed amount=${result.payment.amountMicroUsdc} micro-USDC; provider finality UNKNOWN.`,
+            ] : [],
+            error: result.success ? null : result.error ?? "Paid x402 response unverified",
+          });
+        }
+
         if (!result.success) {
-          if (result.payment?.settlement === "unknown") {
+          if (prepared || result.payment?.settlement === "unknown") {
             throw new ExternalEffectOutcomeUnknownError(
-              "x402 paid request was dispatched but settlement is unknown.",
+              "x402 paid request may have been dispatched; financial effect awaits provider reconciliation.",
             );
           }
           return `x402 fetch failed: ${result.error || "Unknown error"}`;
         }
 
-        if (result.payment?.settlement === "accepted_response") {
-          try {
-            const { ulid } = await import("ulid");
-            const transactionId = ulid();
-            const paymentAtomic = BigInt(result.payment.amountMicroUsdc);
-            const exactWholeCents = paymentAtomic % 10_000n === 0n
-              ? Number(paymentAtomic / 10_000n)
-              : undefined;
-            ctx.db.insertTransaction({
-              id: transactionId,
-              type: "tool_use",
-              amountCents: exactWholeCents,
-              description: `x402 paid request to ${new URL(url).hostname}`,
-              timestamp: new Date().toISOString(),
-            });
-            const evidence = currentEvidenceContext();
-            if (evidence) {
-              const transactionEvent = latestEvidenceByAuthority(
-                ctx.db.raw,
-                "financial_transaction",
-                transactionId,
-              );
-              appendEvidenceEvent(ctx.db.raw, {
-                correlationId: evidence.correlationId,
-                causationId: transactionEvent?.id ?? evidence.causationId ?? null,
-                eventType: "economic.x402_payment_observed",
-                domain: "economic",
-                authorityType: "financial_transaction",
-                authorityId: transactionId,
-                goalId: evidence.goalId ?? null,
-                taskId: evidence.taskId ?? null,
-                turnId: evidence.turnId ?? null,
-                toolCallId: evidence.toolCallId ?? null,
-                epistemicStatus: "observation",
-                payload: {
-                  amountMicroUsdc: result.payment.amountMicroUsdc,
-                  amountUnit: "micro-USDC",
-                  policyAmountCents: result.payment.policyAmountCents,
-                  policyUnit: "cent",
-                  policyRounding: "ceil",
-                },
-                provenance: { source: "x402" },
-              });
-            }
-            ctx.spendTracker?.recordSpend({
-              toolName: "x402_fetch",
-              amountCents: result.payment.policyAmountCents,
-              domain: new URL(url).hostname,
-              category: "x402",
-            });
-          } catch (error) {
-            throw new ExternalEffectOutcomeUnknownError(
-              `x402 payment was accepted but local accounting failed: ${error instanceof Error ? error.message : String(error)}`,
-            );
-          }
-        }
+        // A successful HTTP response delivers content, not verified financial
+        // settlement. Keep the USDC effect pending until provider/chain proof.
+
 
         const responseStr =
           typeof result.response === "string"
