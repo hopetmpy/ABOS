@@ -6,21 +6,21 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / ATOMIC_ACCOUNT_FINANCING_RECHECK_SOURCE_CI_PENDING / LIVE_AWS_ISSUER_UNWIRED / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / ACCOUNT_FINANCING_RECHECK_PR100_MERGED / LIVE_AWS_ISSUER_UNWIRED / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-atomic-account-funding-recheck
+Current-Host-Branch: abos/p031-funding-snapshot-verified-checkpoint
 Host-Head-At-Audit-Open: 088de39896dcef837c7047c4c560e9cd0b7a29e8
 Last-Reconciled-Host-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
-Observed-Main-Head: d817c6ee5b509703f2d3259c44d268918b28f8e7
-Last-Product-Head: d817c6ee5b509703f2d3259c44d268918b28f8e7
-Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #99 38822618925 — SUCCESS 8/8
+Observed-Main-Head: 24432e3d0474969333ef2d149bd0ff2b5c83c135
+Last-Product-Head: 24432e3d0474969333ef2d149bd0ff2b5c83c135
+Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #100 38824143779 — SUCCESS 8/8
 Last-Completed-Plan: P-030
-Last-Completed-Merge: d817c6ee5b509703f2d3259c44d268918b28f8e7
+Last-Completed-Merge: 24432e3d0474969333ef2d149bd0ff2b5c83c135
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
@@ -515,3 +515,13 @@ NEXT_ELIGIBLE_WORK: run exact source CI then integrate if green; audit/adapt pro
 - Branch `abos/p031-atomic-account-funding-recheck`: in existing P-030 scenario require explicit source-backed `financing.observedAt`, fresh relative to evaluation time and preceding expiration; absent/future/malformed observation cannot be counted as free liquidity. Add read-only account/unit/provider snapshot exposure owner on the **existing P-030 financial_effects journal**; it conservatively holds all local unresolved intents, PLUS completed effects created since the last externally authenticated funding observation, while excluding different provider/account/unit. Unknown-account obligations pending OR created after the snapshot prevent confirming account-free funds; no false zero. Monetary summation uses exact BigInt cents. These are local accounting holds, not external provider invoices, and may conservatively overlap with supplier-observed liabilities.
 - P-031 authorized procurement source composes this owner into one local SQLite transaction: re-evaluate original P-030 reviewed funding with local account holds, fail before any provider action if combined commitment/contingency exceeds observed capital; atomically create/claim the canonical financial effect and mark the P-010 decision running. Revalidation stays local and cannot manufacture AWS account funds. Source tests: multiple distinct authorized resources competing against one funding observation, later settlement with no refreshed cash observation, separate accounts/currency isolation, unscoped effects, absent/future time, no provider side effect on blocked second/third attempt. Source CI PENDING. No new ledger, money cap or user approval. LIVE AWS and P-005 E5/E6 UNKNOWN.
 - NEXT: exact source CI 8/8 and merge if valid; then independently authenticated external provider funding and recurring contracts required for actual AWS economic issuer. P-031 remains EN_EJECUCIÓN; P-032 not started.
+
+## P-031 — PR #100 source CI VERIFIED; second-account-commitment defense integrated (2026-10-15)
+
+- PR #100 first source head `1b57e78148f74ca10ab965dcba2e24e0ce47e318`, run `38823943721`, failed build-and-test Node22/24 solely in a new multi-resource fixture: the mocked provider reused identical `providerEffectId="mock-ec2-id"` for distinct real intent rows; P-030 correctly rejected provider-effect identity collision. Updated **only the test mock** to derive distinct provider operation IDs (no relaxation of identity checking).
+- PR #100 exact final head `16bc4322b3cda9bba3c092eef7b0530d2f20ee08`, run `38824143779` COMPLETE/SUCCESS **8/8** (Node 22/24, Windows 22/24, distribution 22/24, security and ProjectOps integrity). Squash integrated and independently confirmed GitHub `main 24432e3d0474969333ef2d149bd0ff2b5c83c135`. Independent exact-squash-main push CI remains **NOT VERIFIED**; do not promote PR CI into main CI.
+- P-030 now uses time-anchored `financing.observedAt` and account-scoped local financial-effects snapshots to conservatively account for all unsettled same-account commitments and previously completed charges created since the financial snapshot. P-031 P-025/P-030/P-010 simulated acquisition now rechecks these holds and exact remaining account commitments in one SQLite transaction with financial-effect prepare/claim and P-010 execution transition, before external dispatch. Distinct authorized resources can no longer each consume all funds from the same old snapshot. Unknown-account local obligations remain unassignable, not free cash. No fixed creator approval/monetary threshold.
+- R2 follow-up owner audit: P-018 `EnvironmentRetentionCoordinator.sweep` already handles ephemeral/task and goal lifecycle, artifact holds, reconciles uncertain destroy outcomes and confirms provider absence; **NO_CHANGE** to retention to avoid duplicating a valid existing owner. Resource termination by itself does not prove all ancillary AWS supplier bill/contract obligations or refund settlement; do not mark P-030 paid or released without independent invoice/billing evidence.
+- The new source composition and credit inspection are still MOCK/READ-ONLY for real AWS funding; default runtime **does NOT wire a trusted AWS `observeAuthenticatedEconomics` producer, P-010 account USD monetary issuer, or AWS billable procurement callback**. These remain NO DISPONIBLE/NO AUTORIZADO under current evidence, not globally impossible. P-005 E5/E6 remain LIVE UNKNOWN. P-031 stays EN_EJECUCIÓN; no P-032.
+
+NEXT_ELIGIBLE_WORK: independent verification of provider account economics, *true* USD and/or eligible service-specific credit terms/expiry, persistent account authority + P-010 issuance, supplier realized billing and obligation retirement; otherwise stay within authorized nonbillable P-031 resource work and preserve open-world provider alternatives. No invented balance or real charge claim.
