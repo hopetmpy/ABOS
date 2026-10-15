@@ -13,8 +13,8 @@ import { AdaptivePathEngine } from "../intelligence/adaptive-engine.js";
 import { getEvidenceByAuthority } from "../observability/evidence.js";
 import { getTreasuryProjection } from "../economics/treasury-projection.js";
 import { getTreasuryReserveSnapshot, getTreasuryReserveLearning, describeTreasuryReserveLearning, setTreasuryReserve, getPendingReserveCreditOverlap, getTreasuryReserveLocalSettlement } from "../economics/treasury-reserves.js";
-import { prepareFinancialEffect } from "../economics/financial-effects.js";
-import { executeCreditEffect } from "../economics/credit-transfer.js";
+import { prepareFinancialEffect, recordFinancialEffectObservation } from "../economics/financial-effects.js";
+import { executeCreditEffect, reconcileCreditEffect } from "../economics/credit-transfer.js";
 
 const open: AbosDatabase[] = [];
 const dirs: string[] = [];
@@ -746,5 +746,98 @@ describe("P-030 release/reallocation cycle crash recovery and corrupted legacy e
       toAddress:"0xnew",amountCents:30,note:"attempt",reserveKey:"epoch-guard",
     })).rejects.toThrow(/exceeds active earmark/);
     expect((d.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects").get() as {n:number}).n).toBe(1);
+  });
+});
+
+describe("P-030 delayed Conway financial reconciliation versus changing reserve epochs", () => {
+  it("reconciles a formerly UNKNOWN old-cycle transfer once, without turning it into new-cycle free credits", async () => {
+    const d=db(), conway=new MockConwayClient();
+    conway.creditsCents=1000;
+    let dispatchCount=0;
+    conway.transferCredits=async()=>{
+      dispatchCount++;
+      throw new Error("provider disconnected after dispatch");
+    };
+    setTreasuryReserve(d,alloc("late-initial","late-reserve",300));
+    const unknown=await executeCreditEffect({
+      db:d,conway,operationKey:"late-old",kind:"credit_transfer",
+      toAddress:"0xrecipient",amountCents:200,note:"await finality",
+      reserveKey:"late-reserve",
+    });
+    expect(unknown.state).toBe("unknown");
+    setTreasuryReserve(d,{...alloc("late-release","late-reserve",0),
+      observedCreditsCents:null,balanceEvidence:null,otherCommittedCreditsCents:null});
+    setTreasuryReserve(d,alloc("late-reallocate","late-reserve",300));
+    expect(getPendingReserveCreditOverlap(d.raw)).toBe(0);
+    expect(getTreasuryProjection(d,{observedCreditsCents:1000,otherCommittedCreditsCents:0})
+      .freeCreditsCents).toBe(500);
+
+    const settled=reconcileCreditEffect(d,{
+      operationKey:"late-old",resolution:"settled",
+      providerEffectId:"mock-provider-final-1",providerStatus:"completed",
+      toAddress:"0xrecipient",amountCents:200,
+      balanceAfterCents:800,
+      evidence:["injected mock provider terminal observation, NOT external LIVE"],
+    });
+    expect(settled.state).toBe("completed");
+    expect(getPendingReserveCreditOverlap(d.raw)).toBe(0);
+    expect(getTreasuryReserveLocalSettlement(d.raw).locallyReconciledCreditsCents).toBe(200);
+    expect(getTreasuryProjection(d,{observedCreditsCents:800,otherCommittedCreditsCents:0})
+      .freeCreditsCents).toBe(500);
+    expect(getTreasuryReserveLearning(d.raw).observedReserveUseCreditsCents).toBeNull();
+
+    const replay=await executeCreditEffect({
+      db:d,conway,operationKey:"late-old",kind:"credit_transfer",
+      toAddress:"0xrecipient",amountCents:200,note:"await finality",
+      reserveKey:"late-reserve",
+    });
+    expect(replay.id).toBe(unknown.id);
+    expect(replay.state).toBe("completed");
+    expect(dispatchCount).toBe(1);
+    expect((d.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as {n:number}).n).toBe(1);
+  });
+
+  it("releases an explicitly rejected credit intent without erasing history or requiring manual approval", async () => {
+    const d=db(), conway=new MockConwayClient();
+    conway.creditsCents=1000;
+    let calls=0;
+    conway.transferCredits=async(toAddress,amountCents)=>{
+      calls++;
+      if(calls===1)throw new Error("provider outcome unknown");
+      conway.creditsCents-=amountCents;
+      return {transferId:"mock-confirmed-after-rejection",status:"completed",
+        toAddress,amountCents,balanceAfterCents:conway.creditsCents};
+    };
+    setTreasuryReserve(d,alloc("reject-cap","rejected-cycle",300));
+    const pending=await executeCreditEffect({
+      db:d,conway,operationKey:"maybe-failed",kind:"credit_transfer",
+      toAddress:"0xattempt-1",amountCents:200,note:"attempt",
+      reserveKey:"rejected-cycle",
+    });
+    expect(pending.state).toBe("unknown");
+    expect(getPendingReserveCreditOverlap(d.raw)).toBe(200);
+    const providerPending=recordFinancialEffectObservation(d.raw,"maybe-failed",{
+      resolution:"pending",providerStatus:"pending",evidence:["mock provider transient status"],
+    });
+    expect(providerPending.state).toBe("pending");
+    expect(getPendingReserveCreditOverlap(d.raw)).toBe(200);
+    const providerRejected=recordFinancialEffectObservation(d.raw,"maybe-failed",{
+      resolution:"rejected",providerStatus:"rejected",evidence:["mock provider explicit final rejection"],
+    });
+    expect(providerRejected.state).toBe("rejected");
+    expect(getPendingReserveCreditOverlap(d.raw)).toBe(0);
+    expect(getTreasuryProjection(d,{observedCreditsCents:1000,otherCommittedCreditsCents:0})
+      .freeCreditsCents).toBe(700);
+    const permitted=await executeCreditEffect({
+      db:d,conway,operationKey:"rejection-recovery",kind:"credit_transfer",
+      toAddress:"0xattempt-2",amountCents:300,note:"new valid use",
+      reserveKey:"rejected-cycle",
+    });
+    expect(permitted.state).toBe("completed");
+    expect(calls).toBe(2);
+    expect((d.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects").get() as {n:number}).n).toBe(2);
+    expect((d.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as {n:number}).n).toBe(1);
+    expect(getTreasuryReserveLocalSettlement(d.raw).locallyReconciledCreditsCents).toBe(300);
+    expect(getTreasuryReserveLearning(d.raw).observedReserveUseCreditsCents).toBeNull();
   });
 });
