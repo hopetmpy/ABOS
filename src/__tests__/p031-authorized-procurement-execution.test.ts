@@ -153,6 +153,12 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
         policyDecisionId: decisionId, dependencies: deps,
       })).rejects.toThrow("idempotency conflict");
       expect(calls).toHaveLength(1);
+      const equivalentWithNewKey = { ...scope, operationKey: "provider-ec2-test-operation-2" };
+      const secondPolicy = policy(db, equivalentWithNewKey, quote);
+      await expect(executeReviewedProviderProcurement(db.raw, {
+        scope: equivalentWithNewKey, policyDecisionId: secondPolicy, dependencies: deps,
+      })).rejects.toThrow("different operation key");
+      expect(calls).toHaveLength(1);
       expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n)
         .toBe(0);
     } finally { db.close(); }
