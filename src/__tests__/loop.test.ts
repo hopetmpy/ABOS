@@ -52,6 +52,19 @@ vi.mock("../environments/aws.js", async (importOriginal) => {
   };
 });
 
+// Runtime startup also probes installed browsers and may launch Playwright.
+// This suite verifies the agent loop, not host browser availability; ensure
+// no real browser process starts on CI. The browser-runtime-specific tests
+// exercise that provider separately.
+vi.mock("../browser/local-runtime.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../browser/local-runtime.js")>();
+  const offlineRuntime = new actual.LocalBrowserRuntime({ candidates: () => [] });
+  return {
+    ...actual,
+    getLocalBrowserRuntime: () => offlineRuntime,
+  };
+});
+
 // The discover_agents behavior under test here is loop classification,
 // not the live ERC-8004 RPC.
 vi.mock("../registry/discovery.js", () => ({
