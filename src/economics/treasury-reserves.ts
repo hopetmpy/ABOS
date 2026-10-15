@@ -158,7 +158,9 @@ export function assertReserveCreditEffectCapacity(
     // Pre-epoch intents are conservatively charged until independently
     // reconciled; clearly older epochs never consume a fresh allocation.
     const recordedEpoch = effect.request.treasuryReserveEpoch;
-    if (recordedEpoch !== undefined && recordedEpoch !== epoch) continue;
+    if (typeof recordedEpoch === "number" &&
+        Number.isSafeInteger(recordedEpoch) && recordedEpoch > 0 &&
+        recordedEpoch !== epoch) continue;
     committed = creditSum(committed, effect.amountCents, "Reserve-funded effects");
   }
   if (creditSum(committed, requested, "Reserve-funded effects") > reserve.targetCreditsCents) {

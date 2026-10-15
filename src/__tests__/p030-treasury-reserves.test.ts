@@ -675,3 +675,76 @@ describe("P-030 independent reserve epochs across explicit release/reallocation"
     })).rejects.toThrow(/exceeds active earmark/);
   });
 });
+
+describe("P-030 release/reallocation cycle crash recovery and corrupted legacy epoch", () => {
+  it("preserves old UNKNOWN as independent from a new reserve across SQLite close/reopen", async () => {
+    const dir=fs.mkdtempSync(path.join(os.tmpdir(),"abos-p030-reserve-epochs-"));
+    dirs.push(dir);
+    const file=path.join(dir,"wallet.db");
+    const first=createDatabase(file);
+    open.push(first);
+    const conway=new MockConwayClient();
+    conway.creditsCents=1000;
+    let dispatches=0;
+    conway.transferCredits=async()=>{dispatches++;throw new Error("provider reply lost");};
+    setTreasuryReserve(first,alloc("old-open","reused",300));
+    const oldEffect=await executeCreditEffect({
+      db:first,conway,operationKey:"epoch-unknown-old",kind:"credit_transfer",
+      toAddress:"0xold",amountCents:200,note:"old cycle",reserveKey:"reused",
+    });
+    expect(oldEffect.state).toBe("unknown");
+    setTreasuryReserve(first,{...alloc("old-release","reused",0),
+      observedCreditsCents:null,balanceEvidence:null,otherCommittedCreditsCents:null});
+    setTreasuryReserve(first,alloc("new-open","reused",300));
+    first.close();
+
+    const second=createDatabase(file);
+    open.push(second);
+    const prior=getTreasuryProjection(second,{
+      observedCreditsCents:1000,otherCommittedCreditsCents:0,
+    });
+    expect(prior.reservedCreditsCents).toBe(300);
+    expect(prior.pendingTransferCreditsCents).toBe(200);
+    expect(prior.pendingTransferWithinReservesCreditsCents).toBe(0);
+    expect(prior.freeCreditsCents).toBe(500);
+    const fresh=await executeCreditEffect({
+      db:second,conway,operationKey:"epoch-unknown-new",kind:"credit_transfer",
+      toAddress:"0xnew",amountCents:150,note:"new cycle",reserveKey:"reused",
+    });
+    expect(fresh.state).toBe("unknown");
+    expect(fresh.request.treasuryReserveEpoch).not.toBe(oldEffect.request.treasuryReserveEpoch);
+    const next=getTreasuryProjection(second,{
+      observedCreditsCents:1000,otherCommittedCreditsCents:0,
+    });
+    expect(next.pendingTransferCreditsCents).toBe(350);
+    expect(next.pendingTransferWithinReservesCreditsCents).toBe(150);
+    expect(next.freeCreditsCents).toBe(500);
+    const replay=await executeCreditEffect({
+      db:second,conway,operationKey:"epoch-unknown-old",kind:"credit_transfer",
+      toAddress:"0xold",amountCents:200,note:"old cycle",reserveKey:"reused",
+    });
+    expect(replay.id).toBe(oldEffect.id);
+    expect(dispatches).toBe(2);
+    expect((second.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects").get() as {n:number}).n).toBe(2);
+  });
+
+  it("treats malformed legacy epoch as an unresolved capacity commitment, never as a free new cycle", async () => {
+    const d=db(),conway=new MockConwayClient();
+    setTreasuryReserve(d,alloc("guard-old","epoch-guard",100));
+    prepareFinancialEffect(d.raw,{
+      operationKey:"malformed-epoch",effectKind:"credit_transfer",recipient:"0xold",
+      provider:"conway",amountCents:80,
+      request:{note:"legacy bad metadata",treasuryReserveKey:"epoch-guard",
+        treasuryReserveEpoch:"not-an-integer"},
+    });
+    expect(getPendingReserveCreditOverlap(d.raw)).toBe(0);
+    const before=getTreasuryProjection(d,{observedCreditsCents:1000,otherCommittedCreditsCents:0});
+    expect(before.pendingTransferCreditsCents).toBe(80);
+    expect(before.freeCreditsCents).toBe(820);
+    await expect(executeCreditEffect({
+      db:d,conway,operationKey:"new-with-invalid-epoch",kind:"credit_transfer",
+      toAddress:"0xnew",amountCents:30,note:"attempt",reserveKey:"epoch-guard",
+    })).rejects.toThrow(/exceeds active earmark/);
+    expect((d.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects").get() as {n:number}).n).toBe(1);
+  });
+});
