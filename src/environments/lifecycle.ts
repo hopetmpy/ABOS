@@ -332,6 +332,10 @@ export class EnvironmentLifecycleManager {
         },
       });
 
+      const verifiedMutationState =
+        result.actualExists === false ||
+        (result.actualExists === true && Boolean(reconciled.externalId) &&
+          ["running", "ready", "suspended", "terminated"].includes(reconciled.status));
       return this.resources.applyMutation(
         resourceId,
         {
@@ -340,6 +344,13 @@ export class EnvironmentLifecycleManager {
           metadata: {
             lastReconcileAction: result.action,
             actualExists: result.actualExists,
+            ...(verifiedMutationState
+              ? {
+                  mutationNeedsReconciliation: false,
+                  mutationUncertainOperation: null,
+                  mutationLastReconciledAt: new Date().toISOString(),
+                }
+              : {}),
             ...(result.actualExists === true && reconciled.externalId
               ? { provisionNeedsReconciliation: false }
               : {}),
@@ -391,6 +402,15 @@ export class EnvironmentLifecycleManager {
     defaultSuccessStatus?: EnvironmentResourceStatus,
   ): Promise<EnvironmentResource> {
     let resource = this.requireResource(resourceId);
+    const prior = resource;
+    // A timeout after a possible provider-side change makes a subsequent
+    // charge-changing action unsafe to retry without observing what happened.
+    if (["resume", "resize", "recover"].includes(operation) &&
+        resource.metadata.mutationNeedsReconciliation === true) {
+      throw new Error(
+        `Resource ${resourceId} has an uncertain previous ${String(resource.metadata.mutationUncertainOperation ?? "capacity")} mutation. Reconcile provider state before attempting ${operation} again.`,
+      );
+    }
     const provider = this.requireOperation(resource.provider, operation);
 
     if (enteringStatus) {
@@ -424,7 +444,8 @@ export class EnvironmentLifecycleManager {
         this.resources.applyMutation(
           resourceId,
           {
-            status: resource.status,
+            status: prior.status,
+            providerState: prior.providerState,
             evidence: [
               `${operation} not dispatched: ${error instanceof Error ? error.message : String(error)}`,
             ],
@@ -433,6 +454,23 @@ export class EnvironmentLifecycleManager {
           `${operation} rejected before external dispatch; resource status preserved.`,
         );
         throw error;
+      }
+      if (["resize", "resume", "recover"].includes(operation)) {
+        return this.resources.applyMutation(
+          resourceId,
+          {
+            status: "unknown",
+            evidence: [
+              `${operation} outcome UNKNOWN: ${error instanceof Error ? error.message : String(error)}. The provider may have changed or restarted billable capacity; reconcile before retry.`,
+            ],
+            metadata: {
+              mutationNeedsReconciliation: true,
+              mutationUncertainOperation: operation,
+            },
+          },
+          operation,
+          `${operation} had uncertain external outcome; no blind retry until provider reconciliation.`,
+        );
       }
       return this.resources.applyMutation(
         resourceId,
