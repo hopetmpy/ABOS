@@ -93,7 +93,7 @@ describe("P-031 optional provider-credit tool observation", () => {
           observedAt: new Date().toISOString(), budgets: [],
           providerCredits: options?.includeProviderCredits ? [{
             creditId: "test-1", creditType: "Promotion", status: "ENABLED",
-            expiresAt: null, remainingUsdCents: 400,
+            startsAt: null, expiresAt: null, remainingUsdCents: 400,
             remainingRaw: "4.00", estimatedRemainingUsdCents: 250,
             applicableProductNames: ["EC2"], purchaseTypeApplications: ["OnDemand"],
             evidence: ["Restricted supplier credit; not general-purpose cash."],
@@ -158,6 +158,61 @@ describe("P-031 reviewed path origin in environment procurement", () => {
     expect(stale).toContain('"reviewedStrategicPath": null');
     expect(stale).toContain("unverified or stale");
     expect(stale).toContain('"purchaseAuthorized": false');
+  });
+});
+
+describe("P-031 conditional supplier-credit review", () => {
+  it("shows source-account credit fit only on explicit request without reducing treasury liability", async () => {
+    const registry = new EnvironmentRegistry();
+    const observed: Array<boolean | undefined> = [];
+    registry.register({
+      ...provider(), id: "aws",
+      async observeEconomics(options) {
+        observed.push(options?.includeProviderCredits);
+        return {
+          provider: "aws", status: "observed" as const,
+          accountId: "123456789012", observedAt: new Date().toISOString(),
+          budgets: [],
+          providerCredits: options?.includeProviderCredits ? [{
+            creditId: "aws-credit-1", creditType: "Promotion", status: "ENABLED",
+            startsAt: "2026-01-01T00:00:00Z", expiresAt: "2027-12-31T00:00:00Z",
+            remainingUsdCents: 1500, estimatedRemainingUsdCents: 1200,
+            remainingRaw: "15.00",
+            applicableProductNames: ["Amazon Elastic Compute Cloud"],
+            purchaseTypeApplications: ["OnDemand"],
+            evidence: ["Provider restricted credit."],
+          }] : [],
+          spendableLiquidityUsdCents: null,
+          recurringCommitmentUsdCents: null,
+          procurementAuthority: "not_established" as const,
+          evidence: ["Source account observed"],
+        };
+      },
+    });
+    const tool = createEnvironmentTools(registry).find(
+      x => x.name === "environment_procurement_review",
+    )!;
+    const args = {
+      environment: "aws", unit: "usd_cent",
+      one_time_cents: 1000, recurring_cents_per_period: 800,
+      periods: 2, other_charges_cents: 600,
+      include_provider_credits: true,
+      service_name: "Amazon Elastic Compute Cloud",
+      purchase_type: "OnDemand",
+      service_start_at: "2026-11-01T00:00:00Z",
+      service_end_at: "2026-12-01T00:00:00Z",
+    };
+    const response = await tool.execute(args, {} as any);
+    expect(response).toContain('"creditId": "aws-credit-1"');
+    expect(response).toContain('"potentialCashOffsetUsdCents": null');
+    expect(response).toContain('"totalProposedCommitmentCents": 3200');
+    expect(response).toContain('"freeBeforeProposalCents": null');
+    expect(response).toContain('"purchaseAuthorized": false');
+    const basic = await tool.execute({
+      environment: "aws", unit: "usd_cent",
+    }, {} as any);
+    expect(basic).toContain('"conditionalCreditFits": null');
+    expect(observed).toEqual([true, false]);
   });
 });
 

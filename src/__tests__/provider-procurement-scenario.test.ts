@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assessProviderProcurementScenario,
+  assessConditionalProviderCreditFit,
   type ProviderProcurementScenarioInput,
 } from "../economics/treasury-scenario.js";
 
@@ -145,5 +146,79 @@ describe("P-031 provider procurement scenario in P-030 treasury", () => {
     wrongUnitAlternative.alternatives![0]!.unit = "credit_cent";
     const outcome = assessProviderProcurementScenario(wrongUnitAlternative);
     expect(outcome.status).toBe("needs_evidence");
+  });
+});
+
+describe("P-031 restricted billing-credit fit in the P-030 treasury", () => {
+  const base = () => ({
+    creditId: "test-credit-1", creditType: "Promotion",
+    status: "ENABLED", startsAt: "2026-01-01T00:00:00Z",
+    expiresAt: "2027-12-31T00:00:00Z",
+    remainingUsdCents: 5000, remainingRaw: "50.00",
+    estimatedRemainingUsdCents: 4600,
+    applicableProductNames: ["Amazon Elastic Compute Cloud"],
+    purchaseTypeApplications: ["OnDemand"],
+    evidence: ["Provider mock credit; never actual AWS money."],
+  });
+  const request = () => ({
+    serviceName: "Amazon Elastic Compute Cloud",
+    purchaseType: "OnDemand",
+    serviceStartAt: "2026-11-01T00:00:00Z",
+    serviceEndAt: "2026-12-01T00:00:00Z",
+  });
+  const now = new Date("2026-10-15T00:00:00Z");
+
+  it("finds a source-only potential match but cannot reduce the bill or authorize purchase", () => {
+    const result = assessConditionalProviderCreditFit(base(), request(), now);
+    expect(result.status).toBe("potentially_applicable");
+    expect(result.observedCreditRemainingUsdCents).toBe(5000);
+    expect(result.potentialCashOffsetUsdCents).toBeNull();
+    expect(result.evidence.join(" ")).toContain("not a verified offset");
+  });
+
+  it("rejects disabled, exhausted, wrong explicit product/purchase and expired credits", () => {
+    for (const change of [
+      { status: "DISABLED" },
+      { remainingUsdCents: 0 },
+      { estimatedRemainingUsdCents: 0 },
+      { applicableProductNames: ["Amazon S3"] },
+      { purchaseTypeApplications: ["Reserved"] },
+      { expiresAt: "2026-09-01T00:00:00Z" },
+      { startsAt: "2028-01-01T00:00:00Z" },
+    ]) {
+      expect(assessConditionalProviderCreditFit(
+        { ...base(), ...change }, request(), now,
+      ).status).toBe("not_applicable");
+    }
+  });
+
+  it("preserves unknown status for incomplete amounts, validity, labels and partial intervals", () => {
+    for (const change of [
+      { status: null },
+      { remainingUsdCents: null },
+      { estimatedRemainingUsdCents: null },
+      { startsAt: null },
+      { expiresAt: null },
+      { expiresAt: "2026-11-15T00:00:00Z" },
+      { applicableProductNames: [] },
+    ]) {
+      expect(assessConditionalProviderCreditFit(
+        { ...base(), ...change }, request(), now,
+      ).status).toBe("unknown");
+    }
+  });
+
+  it("recognizes omitted purchase-type restrictions but does not invent product eligibility", () => {
+    const match = assessConditionalProviderCreditFit(
+      { ...base(), purchaseTypeApplications: null }, request(), now,
+    );
+    expect(match.status).toBe("potentially_applicable");
+    const noExplicitTypes = assessConditionalProviderCreditFit(
+      { ...base(), purchaseTypeApplications: [] }, request(), now,
+    );
+    expect(noExplicitTypes.status).toBe("not_applicable");
+    expect(assessConditionalProviderCreditFit(
+      base(), { ...request(), purchaseType: "" }, now,
+    ).status).toBe("unknown");
   });
 });

@@ -253,12 +253,14 @@ export interface EnvironmentEconomicObservation {
     creditId: string | null;
     creditType: string | null;
     status: string | null;
+    startsAt: string | null;
     expiresAt: string | null;
     remainingUsdCents: number | null;
     remainingRaw: string | null;
     estimatedRemainingUsdCents: number | null;
     applicableProductNames: string[];
-    purchaseTypeApplications: string[];
+    /** null means omitted/unrestricted by purchase type; explicit [] is distinct. */
+    purchaseTypeApplications: string[] | null;
     evidence: string[];
   }>;
   /** No budget value, AWS credit or observed account spend proves general available cash. */
