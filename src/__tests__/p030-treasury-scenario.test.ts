@@ -264,6 +264,21 @@ describe("P-030 evidence-based treasury scenarios", () => {
     expect(bundle.scenario.status).toBe("review_ready");
     expect(bundle.scenario.evidence.join(" ")).toContain("supplier quote supports bundle capacity");
     expect(bundle.executionAuthorized).toBe(false);
+    const dynamicallyReserved = JSON.parse(await tool!.execute({
+      proposal_credits_cents: 100,
+      immediate_need_credits_cents: 100,
+      reserve_credits_cents: 100,
+      other_commitments_cents: 0,
+      opportunity_evidence: ["confirmed operational requirement"],
+      alternatives: supported.alternatives,
+      risks: [{ id: "provider-replacement", exposureCreditsCents: 150, evidence: "replacement quote" }],
+    }, context));
+    expect(dynamicallyReserved.scenario.status).toBe("review_ready");
+    expect(dynamicallyReserved.scenario.reserveRecommendation).toEqual({
+      targetCreditsCents: 150, additionalCreditsCents: 50,
+      freeAfterProposalAndReserveCents: 1750, disposition: "can_earmark",
+    });
+    expect(dynamicallyReserved.executionAuthorized).toBe(false);
     expect(transfer).not.toHaveBeenCalled();
     expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n).toBe(0);
   });
