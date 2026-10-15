@@ -6,18 +6,18 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / TASK_CREDIT_UNIT_SOURCE_PR_CI_PENDING / AWS_PROCUREMENT_AUTHORITY_OPEN / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / AWS_EC2_BILLABLE_AUTHORITY_SOURCE_CI_PENDING / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-task-credit-funding-units
+Current-Host-Branch: abos/p031-aws-billable-provision-boundary
 Host-Head-At-Audit-Open: 088de39896dcef837c7047c4c560e9cd0b7a29e8
 Last-Reconciled-Host-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
-Observed-Main-Head: 31d662019ce758eeb542233f15ddc045401a2608
-Last-Product-Head: 31d662019ce758eeb542233f15ddc045401a2608
+Observed-Main-Head: 1db708a34a4c9cc3746774865371155a0cb7568d
+Last-Product-Head: 1db708a34a4c9cc3746774865371155a0cb7568d
 Last-Product-CI: 38777851448 — SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: b1fdc3af6b7c96c0d5082677b1eb2b4497677cf2
@@ -385,3 +385,9 @@ Source audit continues P-031 `EN_EJECUCIÓN`: existing runtime mobility does not
 PR #82 (reconcile PR80/81) merged `main 31d662019ce758eeb542233f15ddc045401a2608` after exact PR source CI `38786870425` SUCCESS 8/8. Exact merged-main CI NOT INDEPENDENTLY VERIFIED via current connector.
 
 Further P-031 source audit confirmed `calculateTaskFundingCents` previously elevated `task_graph.estimatedCostCents` (local task_cost_cent) directly into a Conway `credit_cent` transfer amount. Existing same-unit/canonical evidence rules in P-030 prohibit that implicit conversion. Branch `abos/p031-task-credit-funding-units` corrects the shared funding calculation to use the existing configured credit funding baseline, preserving independently set amounts, zero and financial effect owner; regression committed. **Exact source CI pending; no merge or LIVE success claim at this checkpoint.** See C0027 for detailed sources and next eligible source work. P-031 EN_EJECUCIÓN; AWS procurement authority (account/unit/recurrence/idempotency) remains OPEN; P-005 E5/E6 UNKNOWN.
+
+## P-031 — new AWS EC2 billable procurement authority boundary (2026-10-15)
+
+Integrated baseline: PR #83 merged to `main 1db708a34a4c9cc3746774865371155a0cb7568d`, source PR CI `38787709189` SUCCESS 8/8. Exact integrated-main CI remains unverified in this connector (fetch_commit_workflow_runs only exposes PR-triggered runs); don't transfer an old run to this SHA.
+
+R2 causal audit identified two connected existing bypasses: `AwsEc2TaskExecutor.spawn` reaches new `EnvironmentLifecycleManager.provision` without economic account approval; `AwsEnvironmentProvider.execute` permits raw EC2 creation via `environment_exec`, bypassing tracked lifecycle. Current source branch `abos/p031-aws-billable-provision-boundary` corrects the **AWS provider owner** (not a new ledger/planner) so new EC2 requires a trusted P-010/P-025/P-030 procurement evaluator, observed STS account binding, exact unit/total-commitment/billing-term evidence before `run-instances`; missing/unverified evaluator means procurement remains UNKNOWN. Raw known EC2 capacity commands cannot bypass the tracked route; read-only commands, owned-resource reuse and reconciliation remain available. Tests are committed, exact-head CI pending. There is NO runtime evaluator wired yet, so autonomous new billable AWS acquisition is still UNAVAILABLE, **not forbidden or proved impossible**. The trusted evaluator must verify durable strategic/policy/treasury evidence; a policy decision ID supplied in task metadata is NOT proof. No external provider actions/purchases executed. See C0027 for next work; P-005 E5/E6 UNKNOWN.
