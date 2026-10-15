@@ -481,6 +481,10 @@ describe("orchestration/plan-mode", () => {
         freeCreditsBeforeCents: null,
         freeCreditsAfterCents: null,
         contingencyExposureCents: null,
+        reserveRecommendation: {
+          targetCreditsCents: null, additionalCreditsCents: null,
+          freeAfterProposalAndReserveCents: null, disposition: "unknown" as const,
+        },
         evidence: [],
         conditions: ["Credit liquidity remains UNKNOWN pending fresh provider observation."],
         limitations: ["Treasury scenario does not authorize payments."],
@@ -502,6 +506,10 @@ describe("orchestration/plan-mode", () => {
         freeCreditsBeforeCents: 100,
         freeCreditsAfterCents: 50,
         contingencyExposureCents: 0,
+        reserveRecommendation: {
+          targetCreditsCents: 0, additionalCreditsCents: 0,
+          freeAfterProposalAndReserveCents: 50, disposition: "covered" as const,
+        },
         evidence: ["Previously observed credit unit and contingency evidence"],
         conditions: [],
         limitations: ["Provider still controls final settlement."],
@@ -512,6 +520,8 @@ describe("orchestration/plan-mode", () => {
       });
       expect(independent.approved).toBe(true);
       expect(independent.feedback).toContain("Treasury projection: cost=50");
+      expect(independent.feedback).toContain("Treasury reserve scenario: target=0 credit cents");
+      expect(independent.feedback).toContain("disposition=covered");
       expect(independent.feedback).toContain("Provider still controls final settlement");
 
       const invalidPlan = await reviewPlan(makePlan({ alternatives: [] }), {
@@ -520,6 +530,29 @@ describe("orchestration/plan-mode", () => {
       });
       expect(invalidPlan.approved).toBe(false);
       expect(invalidPlan.feedback).toContain("disposition=revise");
+    });
+
+    it("passes evidenced reserve earmarking through strategic review without imposing manual approval", async () => {
+      const finance = {
+        status: "review_ready" as const,
+        proposedCreditsCents: 200,
+        freeCreditsBeforeCents: 900,
+        freeCreditsAfterCents: 300,
+        contingencyExposureCents: 500,
+        reserveRecommendation: {
+          targetCreditsCents: 500, additionalCreditsCents: 400,
+          freeAfterProposalAndReserveCents: 300, disposition: "can_earmark" as const,
+        },
+        evidence: ["Provider replacement quote"], conditions: [],
+        limitations: ["Scenario only; actual reserve allocation still requires treasury execution authority."],
+      };
+      const output = await reviewPlan(makePlan(), {
+        ...autoConfig, reviewContext: { treasuryReview: finance },
+      });
+      expect(output.approved).toBe(true);
+      expect(output.feedback).toContain("additional earmark=400 credit cents");
+      expect(output.feedback).toContain("free after purchase and reserve=300");
+      expect(output.feedback).not.toContain("awaiting human approval");
     });
 
     it("auto mode preserves unresolved capability state as UNKNOWN", async () => {
