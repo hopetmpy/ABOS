@@ -44,6 +44,7 @@ import {
 import { sanitizeInput } from "./injection-defense.js";
 import { getSurvivalTier } from "../conway/credits.js";
 import { getUsdcBalance } from "../conway/x402.js";
+import { getProviderAccountFinancialExposure } from "../economics/financial-effects.js";
 import {
   claimInboxMessages,
   markInboxProcessed,
@@ -357,6 +358,12 @@ export async function runAgentLoop(
     lifecycle: environmentLifecycle,
     getMobility: () => environmentMobility,
     getReviewedTaskPath: (taskId) => getReviewedTaskPathReceipt(db.raw, taskId),
+    getProviderAccountFinancialExposure: (providerId, providerAccountId, unit) =>
+      getProviderAccountFinancialExposure(db.raw, {
+        provider: providerId,
+        providerAccountId,
+        unit,
+      }),
   });
   const skillEvolutionTools = createSkillEvolutionTools();
   const skillEvolution = new SkillEvolutionEngine(db.raw);
