@@ -85,6 +85,33 @@ export interface AwsEc2ProcurementDecision {
   reason?: string;
 }
 
+/**
+ * A separate, operation-scoped economic mandate for changes that can restart
+ * or reprice an already owned EC2 resource. The initial provisioning mandate
+ * does not automatically authorize a later lifecycle charge.
+ */
+export interface AwsEc2MutationEconomicDecision extends AwsEc2ProcurementDecision {
+  authorizedOperation?: "resize" | "resume" | "recover" | null;
+  authorizedExternalId?: string | null;
+}
+
+function mutationMandateMetadata(mandate: AwsEc2MutationEconomicDecision): Record<string, unknown> {
+  return {
+    lastEconomicMutationDecisionId: mandate.policyDecisionId,
+    lastEconomicMutationOperation: mandate.authorizedOperation,
+    lastEconomicMutationResourceId: mandate.authorizedResourceId,
+    lastEconomicMutationExternalId: mandate.authorizedExternalId,
+    lastEconomicMutationAccountId: mandate.providerAccountId,
+    lastEconomicMutationRegion: mandate.authorizedRegion,
+    lastEconomicMutationInstanceType: mandate.authorizedInstanceType,
+    lastEconomicMutationUnit: mandate.unit,
+    lastEconomicMutationCommitmentCents: mandate.totalCommitmentCents,
+    lastEconomicMutationExpiresAt: mandate.expiresAt,
+    lastEconomicMutationBillingEvidence: mandate.billingTermsEvidence,
+    lastEconomicMutationIsSettledInvoice: false,
+  };
+}
+
 export interface AwsEnvironmentProviderOptions {
   runner?: EnvironmentCommandRunner;
   /**
@@ -99,6 +126,18 @@ export interface AwsEnvironmentProviderOptions {
     region: string | null;
     instanceType: string;
   }) => AwsEc2ProcurementDecision | Promise<AwsEc2ProcurementDecision>;
+  /** Trusted P-010/P-025/P-030 runtime decision issuer; absent means authority UNKNOWN.
+   * AWS IAM, instance ownership, previous provisioning and task price alone are
+   * insufficient to approve a new recurring cost from restart or resize.
+   */
+  authorizeBillableMutation?: (context: {
+    operation: "resize" | "resume" | "recover";
+    resource: EnvironmentResource;
+    accountId: string;
+    instanceId: string;
+    region: string;
+    targetInstanceType: string;
+  }) => AwsEc2MutationEconomicDecision | Promise<AwsEc2MutationEconomicDecision>;
   defaultRegion?: string;
   defaultInstanceType?: string;
   defaultArchitecture?: "x86_64" | "arm64";
@@ -806,6 +845,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     const ec2Index = args.findIndex((arg) => arg.toLowerCase() === "ec2");
     const knownBillableOperations = new Set([
       "run-instances", "create-fleet", "request-spot-instances", "start-instances",
+      "modify-instance-attribute", "modify-instance-credit-specification",
     ]);
     const ec2Action = ec2Index >= 0
       ? args.slice(ec2Index + 1).find((arg) =>
@@ -1247,6 +1287,11 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       throw new Error(`Cannot resize unobserved EC2 instance ${instanceId}.`);
     }
 
+    const mandate = await this.requireBillableMutationAuthority({
+      operation: "resize", resource, instanceId, region,
+      targetInstanceType: instanceType,
+    });
+
     const wasRunning = before.instance.State?.Name === "running";
     if (wasRunning) {
       await this.stopInstance(instanceId, region);
@@ -1279,6 +1324,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       metadata: {
         instanceType,
         ...cost.metadata,
+        ...mutationMandateMetadata(mandate),
         billingStartedAt: wasRunning ? new Date().toISOString() : null,
       },
     };
@@ -1306,13 +1352,31 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
   async resume(resource: EnvironmentResource): Promise<EnvironmentMutationResult> {
     const instanceId = requireInstanceId(resource);
     const region = resource.region ?? await this.resolveRegion();
+    const observed = await this.describeInstance(instanceId, region);
+    const state = observed.instance?.State?.Name ?? "unknown";
+    if (state === "running") {
+      return {
+        status: "running", providerState: "running",
+        evidence: [`AWS EC2 resume observed ${instanceId} already running; no paid start was dispatched.`],
+      };
+    }
+    if (state !== "stopped" || !observed.instance?.InstanceType) {
+      throw new AwsEc2ProcurementNotDispatchedError(
+        `AWS EC2 resume has unverified instance state/type (${state}); no billable start was dispatched.`,
+      );
+    }
+    const mandate = await this.requireBillableMutationAuthority({
+      operation: "resume", resource, instanceId, region,
+      targetInstanceType: observed.instance.InstanceType,
+    });
     await this.startInstance(instanceId, region);
     return {
       status: "running",
       providerState: "running",
-      evidence: [`AWS EC2 instance ${instanceId} started; compute-cost estimation clock resumed.`],
+      evidence: [`AWS EC2 instance ${instanceId} started after scoped economic review; compute-cost estimation clock resumed.`],
       metadata: {
         billingStartedAt: new Date().toISOString(),
+        ...mutationMandateMetadata(mandate),
       },
     };
   }
@@ -1374,11 +1438,21 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
 
     const state = observed.instance.State?.Name ?? "unknown";
     if (state === "stopped") {
+      if (!observed.instance.InstanceType) {
+        throw new AwsEc2ProcurementNotDispatchedError(
+          "AWS EC2 recover cannot verify stopped instance type; no billable restart was dispatched.",
+        );
+      }
+      const mandate = await this.requireBillableMutationAuthority({
+        operation: "recover", resource, instanceId, region,
+        targetInstanceType: observed.instance.InstanceType,
+      });
       await this.startInstance(instanceId, region);
       return {
         status: "running",
         providerState: "running",
-        evidence: [`AWS EC2 recovery restarted stopped instance ${instanceId}.`],
+        evidence: [`AWS EC2 recovery restarted stopped instance ${instanceId} after scoped economic review.`],
+        metadata: mutationMandateMetadata(mandate),
       };
     }
 
@@ -1588,6 +1662,85 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     }
 
     return invocation;
+  }
+
+  /**
+   * Monetary preflight at the LAST shared AWS provider boundary before an
+   * EC2 capacity mutation. Source-owned decision and observed STS account are
+   * separate; a valid IAM profile or historic provisioning is not a receipt.
+   * No AWS stop/start/modify action is sent on a preflight failure.
+   */
+  private async requireBillableMutationAuthority(input: {
+    operation: "resize" | "resume" | "recover";
+    resource: EnvironmentResource;
+    instanceId: string;
+    region: string | null;
+    targetInstanceType: string;
+  }): Promise<AwsEc2MutationEconomicDecision> {
+    if (!this.options.authorizeBillableMutation) {
+      throw new AwsEc2ProcurementNotDispatchedError(
+        "AWS EC2 billable mutation economic authority UNKNOWN: trusted P-010/P-030 issuer is unwired; no capacity change was dispatched.",
+      );
+    }
+    if (!input.region?.trim() || !input.targetInstanceType.trim()) {
+      throw new AwsEc2ProcurementNotDispatchedError(
+        "AWS EC2 billable mutation region/type UNKNOWN; no capacity change was dispatched.",
+      );
+    }
+    let caller: CommandResult;
+    try {
+      caller = await this.runAws([
+        "sts", "get-caller-identity", "--output", "json",
+      ], 15_000);
+    } catch {
+      throw new AwsEc2ProcurementNotDispatchedError(
+        "AWS STS account identity unavailable before billable mutation; no capacity change was dispatched.",
+      );
+    }
+    const observedAccount = caller.exitCode === 0
+      ? parseJson<{ Account?: unknown }>(caller.stdout)?.Account : null;
+    if (typeof observedAccount !== "string" ||
+        !/^\d{12}$/.test(observedAccount)) {
+      throw new AwsEc2ProcurementNotDispatchedError(
+        "AWS EC2 billable mutation account identity unverified; no capacity change was dispatched.",
+      );
+    }
+    let decision: AwsEc2MutationEconomicDecision;
+    try {
+      decision = await this.options.authorizeBillableMutation({
+        operation: input.operation,
+        resource: input.resource,
+        accountId: observedAccount,
+        instanceId: input.instanceId,
+        region: input.region,
+        targetInstanceType: input.targetInstanceType,
+      });
+    } catch {
+      throw new AwsEc2ProcurementNotDispatchedError(
+        "AWS EC2 billable mutation economic evaluator unavailable before dispatch.",
+      );
+    }
+    if (!decision?.allowed ||
+        !decision.policyDecisionId?.trim() ||
+        decision.providerAccountId !== observedAccount ||
+        decision.authorizedResourceId !== input.resource.id ||
+        decision.authorizedExternalId !== input.instanceId ||
+        decision.authorizedOperation !== input.operation ||
+        decision.authorizedRegion !== input.region ||
+        decision.authorizedInstanceType !== input.targetInstanceType ||
+        typeof decision.expiresAt !== "string" ||
+        !Number.isFinite(Date.parse(decision.expiresAt)) ||
+        Date.parse(decision.expiresAt) <= Date.now() ||
+        decision.unit !== "usd_cent" ||
+        typeof decision.totalCommitmentCents !== "number" ||
+        !Number.isSafeInteger(decision.totalCommitmentCents) ||
+        decision.totalCommitmentCents < 0 ||
+        !decision.billingTermsEvidence?.some(term => term.trim())) {
+      throw new AwsEc2ProcurementNotDispatchedError(
+        "AWS EC2 billable mutation mandate absent, expired or inconsistent with observed account, operation, resource, instance, region, shape or USD terms; no capacity change was dispatched.",
+      );
+    }
+    return decision;
   }
 
   private async runAws(
