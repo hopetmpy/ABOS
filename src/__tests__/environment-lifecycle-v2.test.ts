@@ -115,6 +115,10 @@ describe("Environment Execution & Lifecycle v2", () => {
           capabilities: [], evidence: [], constraints: [], observedAt: new Date().toISOString(),
         }),
         provision: async () => { dispatches += 1; throw new Error("provider timeout"); },
+        reconcile: async (resource) => ({
+          resource: { ...resource, externalId: "recovered-id", status: "running" },
+          actualExists: true, action: "observed", evidence: ["provider confirmed identity"],
+        }),
       });
       const life = new EnvironmentLifecycleManager(registry, new EnvironmentResourceStore(db));
       await expect(life.provision("uncertain", {
