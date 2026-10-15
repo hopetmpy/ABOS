@@ -4,6 +4,7 @@ import { pathSignature } from "../intelligence/path-signature.js";
 import type { PathCandidate } from "../intelligence/types.js";
 import type { PlannerAlternative, PlannerOutput } from "./planner.js";
 import { validatePlannerOutput } from "./planner.js";
+import type { TreasuryScenarioReview } from "../economics/treasury-scenario.js";
 
 export type StrategicReviewDisposition = "approve" | "revise" | "unknown";
 
@@ -28,6 +29,8 @@ export interface StrategicReviewContext {
   simulationEvidence?: StrategicSimulationEvidence[];
   adaptiveContext?: string;
   independentReviews?: IndependentStrategicReview[];
+  /** Optional treasury evidence for this exact plan, never an independent execution authority. */
+  treasuryReview?: TreasuryScenarioReview;
 }
 
 export interface StrategicReviewAssessment {
@@ -387,6 +390,24 @@ export function assessStrategicPlan(
 
   if (context.adaptiveContext?.trim()) {
     evidence.push("Adaptive Path/world-state context was supplied to review.");
+  }
+
+  if (context.treasuryReview) {
+    const treasury = context.treasuryReview;
+    evidence.push(...treasury.evidence.map((item) => `Treasury evidence: ${item}`));
+    evidence.push(
+      `Treasury projection: cost=${treasury.proposedCreditsCents} credit cents; ` +
+      `free before=${treasury.freeCreditsBeforeCents ?? "UNKNOWN"}; ` +
+      `free after=${treasury.freeCreditsAfterCents ?? "UNKNOWN"}; ` +
+      `scenario=${treasury.status}.`,
+    );
+    conditions.push(...treasury.limitations.map((item) => `Treasury scope: ${item}`));
+    if (treasury.status === "needs_evidence") {
+      hasUnknown = true;
+      conditions.push(...treasury.conditions.map((item) => `Treasury requires evidence: ${item}`));
+    }
+    // "review_ready" only satisfies the supplied economic evidence screen;
+    // P-025 plan review, Policy and provider authority remain mandatory.
   }
 
   if (critique.length > 0) {
