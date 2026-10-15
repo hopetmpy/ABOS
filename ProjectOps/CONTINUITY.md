@@ -6,22 +6,22 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / DECISION_READY / EXPLICIT_BUDGET_UNIT_ROUTING_PR79_DRAFT_CI_PENDING / P030_E3_MAIN_GREEN / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / DECISION_READY / STRATEGIC_REVIEW_RECOVERY_PR_PENDING_CI_PENDING / P030_E3_MAIN_GREEN / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-explicit-budget-routing
+Current-Host-Branch: abos/p031-plan-review-recovery
 Host-Head-At-Audit-Open: 088de39896dcef837c7047c4c560e9cd0b7a29e8
 Last-Reconciled-Host-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
-Observed-Main-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
-Last-Product-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
-Last-Product-CI: 38774007741 — SUCCESS 8/8
+Observed-Main-Head: b1fdc3af6b7c96c0d5082677b1eb2b4497677cf2
+Last-Product-Head: b1fdc3af6b7c96c0d5082677b1eb2b4497677cf2
+Last-Product-CI: 38777851448 — SUCCESS 8/8
 Last-Completed-Plan: P-030
-Last-Completed-Merge: 710fa0d61983a462450bde7994a5018c2172e6e4
-Last-Completed-CI: 38774007741 — SUCCESS 8/8
+Last-Completed-Merge: b1fdc3af6b7c96c0d5082677b1eb2b4497677cf2
+Last-Completed-CI: 38777851448 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -361,3 +361,7 @@ P-030 source/integration and canonical ProjectOps transition are integrated at m
 ## P-031 — explicit budget routing (2026-10-15)
 
 PR #78 merged into main `710fa0d61983a462450bde7994a5018c2172e6e4`, exact-main CI `38774007741` SUCCESS 8/8. Active branch `abos/p031-explicit-budget-routing` extends existing `EnvironmentExecutionBridge.spawn` to transmit explicitly provided budget to `EnvironmentSelector`, not deriving a monetary ceiling from `task_cost_cent`. Scenario tests committed; exact branch CI pending. This is a narrow selection seam, not autonomous monetary authority and not LIVE payment; see active `continuity/C0027.md` for precise next work. P-031 remains EN_EJECUCIÓN, P-005 E5/E6 UNKNOWN.
+
+## P-031 — plan review recovery on resume (2026-10-15)
+
+PR #79 is integrated as `main b1fdc3af6b7c96c0d5082677b1eb2b4497677cf2` with exact-main CI `38777851448` SUCCESS 8/8. Current source branch `abos/p031-plan-review-recovery` corrects the existing `Orchestrator` when persisted plans disappear or cannot be parsed in `plan_review`: never transition to `executing` without P-025 review evidence; preserve goal and replan. Regression source is committed but exact-head CI is pending. See C0027 for precise scope and next P-031 economic procurement boundary. No new wallet or money ledger, no LIVE purchases.
