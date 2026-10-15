@@ -31,6 +31,7 @@ import { reviewPlan } from "./plan-mode.js";
 import type { StrategicReviewContext } from "./strategic-review.js";
 import { getStrategicFinancialExposure } from "../economics/financial-effects.js";
 import { getTaskCostCalibration } from "../economics/treasury-projection.js";
+import { getTreasuryReserveLearning } from "../economics/treasury-reserves.js";
 import {
   loadPlanningSimulationEvidence,
   referencedSimulationEvidence,
@@ -835,6 +836,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       simulationEvidence,
       adaptiveContext: plannerContext.adaptiveContext,
       taskCostCalibration: getTaskCostCalibration(this.strategicParams.db),
+      treasuryReserveLearning: getTreasuryReserveLearning(this.strategicParams.db),
       outstandingFinancialEffects,
     };
   }

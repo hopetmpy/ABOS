@@ -6,6 +6,7 @@ import type { PlannerAlternative, PlannerOutput } from "./planner.js";
 import { validatePlannerOutput } from "./planner.js";
 import type { TreasuryScenarioReview } from "../economics/treasury-scenario.js";
 import type { TaskCostCalibration } from "../economics/treasury-projection.js";
+import type { TreasuryReserveLearning } from "../economics/treasury-reserves.js";
 
 export type StrategicReviewDisposition = "approve" | "revise" | "unknown";
 
@@ -34,6 +35,8 @@ export interface StrategicReviewContext {
   treasuryReview?: TreasuryScenarioReview;
   /** Read-only P-030 local task-cost history; not Conway credit or external P&L. */
   taskCostCalibration?: TaskCostCalibration;
+  /** Source-owned P-025 reviewed-path → P-023 outcome signal, never cash P&L. */
+  treasuryReserveLearning?: TreasuryReserveLearning;
   /** Source-owned unresolved credits; not provider settlement or free balance. */
   outstandingFinancialEffects?: {
     /** Number of outstanding Conway credit-unit effects only. */
@@ -501,6 +504,19 @@ export function assessStrategicPlan(
         "and are excluded from reserve calibration pending source correction.",
       );
     }
+  }
+
+  if (context.treasuryReserveLearning) {
+    const learning = context.treasuryReserveLearning;
+    evidence.push(
+      `Treasury P-025/P-023 causal learning: reviewed paths=${learning.reviewedPathLinked}; ` +
+      `confirmed strategic outcomes=${learning.confirmedStrategicOutcomes}; ` +
+      `contradicted strategic outcomes=${learning.contradictedStrategicOutcomes}; ` +
+      `nonterminal/inconclusive=${learning.inconclusive}; awaiting=${learning.awaitingOutcome}; ` +
+      `review provenance UNKNOWN=${learning.reviewProvenanceUnknown}; ` +
+      "real reserve utilization and realized economic return=UNKNOWN.",
+    );
+    conditions.push(...learning.limitations.map(text => `Treasury learning scope: ${text}`));
   }
 
   if (context.treasuryReview) {

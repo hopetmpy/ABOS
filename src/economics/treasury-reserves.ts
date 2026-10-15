@@ -8,7 +8,7 @@
  */
 import type { AbosDatabase } from "../types.js";
 import type Database from "better-sqlite3";
-import { appendEvidenceEvent, correlationIdFor, currentEvidenceContext } from "../observability/evidence.js";
+import { appendEvidenceEvent, correlationIdFor, currentEvidenceContext, getEvidenceByAuthority } from "../observability/evidence.js";
 import { getTreasuryProjection } from "./treasury-projection.js";
 
 export interface TreasuryReserveAllocation {
@@ -100,6 +100,112 @@ export function getTreasuryReserveSnapshot(db: Database.Database): TreasuryReser
 }
 
 /**
+ * Read P-025's already materialized reviewed path, never infer its existence
+ * from a caller's decisionEvidence text or a tool/policy approval alone.
+ * P-023 outcomes remain separately owned by Adaptive Path Intelligence.
+ */
+function reviewedReservePath(
+  db: Database.Database,
+): { pathId: string; goalId: string } | null {
+  const context = currentEvidenceContext();
+  if (!context?.goalId || !context.taskId) return null;
+  const row = db.prepare(
+    `SELECT b.path_id AS pathId, b.goal_id AS goalId, p.status
+       FROM adaptive_task_bindings b
+       JOIN adaptive_paths p ON p.id = b.path_id AND p.goal_id = b.goal_id
+       WHERE b.task_id = ? AND b.goal_id = ?`,
+  ).get(context.taskId, context.goalId) as {
+    pathId: string; goalId: string; status: string;
+  } | undefined;
+  if (!row || !["selected", "executing", "succeeded", "partial"].includes(row.status)) return null;
+  const checkpoint = db.prepare(
+    "SELECT value FROM kv WHERE key = ?",
+  ).get(`orchestrator.review_feedback.${row.goalId}`) as { value: string } | undefined;
+  // The primary P-025 orchestration only writes this after review approved
+  // and the chosen Adaptive Path + tasks materialized in one transaction.
+  if (!checkpoint?.value.split(" ; ").some(segment =>
+    segment.trim() === `materialized_path=${row.pathId}`)) return null;
+  return { pathId: row.pathId, goalId: row.goalId };
+}
+
+export interface TreasuryReserveLearning {
+  reviewedPathLinked: number;
+  reviewProvenanceUnknown: number;
+  awaitingOutcome: number;
+  inconclusive: number;
+  confirmedStrategicOutcomes: number;
+  contradictedStrategicOutcomes: number;
+  /** Causal strategic observations are not actual spend/realized P&L. */
+  observedReserveUseCreditsCents: null;
+  unit: "credit_cent";
+  limitations: string[];
+}
+
+/**
+ * P-023 economic feedback projection from P-013 evidence:
+ * reserve decision → verified P-025 path → later P-023 prediction resolution.
+ * Neither a successful strategic path nor a reserve release establishes
+ * provider settlement, actual contingency utilization or financial return.
+ */
+export function getTreasuryReserveLearning(db: Database.Database): TreasuryReserveLearning {
+  const current = getTreasuryReserveSnapshot(db).allocations;
+  const result: TreasuryReserveLearning = {
+    reviewedPathLinked: 0,
+    reviewProvenanceUnknown: 0,
+    awaitingOutcome: 0,
+    inconclusive: 0,
+    confirmedStrategicOutcomes: 0,
+    contradictedStrategicOutcomes: 0,
+    observedReserveUseCreditsCents: null,
+    unit: "credit_cent",
+    limitations: [
+      "P-023 strategic path resolution is not observed credit expenditure or business income.",
+      "Actual risk utilization and provider finality remain UNKNOWN without same-unit economic settlement provenance.",
+    ],
+  };
+  for (const allocation of current) {
+    const recorded = getEvidenceByAuthority(db, "treasury_reserve", allocation.reserveKey)
+      .findLast(event => {
+        const payload = event.payload as Record<string, unknown> | null;
+        return payload?.operationKey === allocation.operationKey;
+      });
+    const payload = recorded?.payload as Record<string, unknown> | null;
+    const pathId = typeof payload?.reviewedStrategicPathId === "string"
+      ? payload.reviewedStrategicPathId : null;
+    if (!recorded || !pathId) {
+      result.reviewProvenanceUnknown += 1;
+      continue;
+    }
+    result.reviewedPathLinked += 1;
+    // Only P-023 resolutions after the reserve decision may count as its
+    // subsequent strategic outcome. A previously successful path is not proof.
+    const events = getEvidenceByAuthority(db, "adaptive_path", pathId)
+      .filter(event => event.eventType === "adaptive.prediction_resolved" &&
+        event.sequence > recorded.sequence);
+    const outcome = events.at(-1);
+    if (!outcome) {
+      // A nonterminal attempt can be classified only by the real P-023
+      // comparison authority; do not upgrade it to confirmed/contradicted.
+      const attempts = db.prepare(
+        "SELECT id FROM adaptive_attempts WHERE path_id = ?",
+      ).all(pathId) as { id: string }[];
+      const comparisons = attempts.flatMap(item =>
+        getEvidenceByAuthority(db, "adaptive_attempt", item.id))
+        .filter(event => event.eventType === "adaptive.prediction_compared" &&
+          event.sequence > recorded.sequence);
+      if (comparisons.length) result.inconclusive += 1;
+      else result.awaitingOutcome += 1;
+      continue;
+    }
+    const status = (outcome.payload as Record<string, unknown> | null)?.resolution;
+    if (status === "confirmed") result.confirmedStrategicOutcomes += 1;
+    else if (status === "contradicted") result.contradictedStrategicOutcomes += 1;
+    else result.inconclusive += 1;
+  }
+  return result;
+}
+
+/**
  * Set a durable internal reserve to a new absolute target, including zero.
  * Positive increases need an observed credit-unit balance and complete
  * same-unit obligations; reductions can occur even during observation outages.
@@ -177,6 +283,7 @@ export function setTreasuryReserve(
     ).get(operationKey) as any;
     const allocation = toAllocation(row);
     const context = currentEvidenceContext();
+    const reviewedPath = reviewedReservePath(db.raw);
     appendEvidenceEvent(db.raw, {
       correlationId: context?.correlationId ?? correlationIdFor("treasury_reserve", reserveKey),
       causationId: context?.causationId ?? null,
@@ -194,6 +301,7 @@ export function setTreasuryReserve(
         operationKey, priorCreditsCents: prior, targetCreditsCents,
         totalReservedCreditsCents: nextTotal, unit: "credit_cent",
         decisionId, observedCreditsCents,
+        reviewedStrategicPathId: reviewedPath?.pathId ?? null,
       },
       provenance: {
         source: "treasury_reserve_allocations",
@@ -201,6 +309,7 @@ export function setTreasuryReserve(
         balanceEvidenceKind: balanceEvidence ? "caller_supplied" : "unavailable",
         balanceEvidence,
         economicOutcome: "internal_earmark_only",
+        reviewProvenance: reviewedPath ? "materialized_p025_reviewed_path" : "unknown",
       },
     });
     return { allocation, applied: true, currentTotalCreditsCents: nextTotal };

@@ -29,6 +29,7 @@ import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import { reviewPlan } from "./plan-mode.js";
 import { buildPlannerContext, getNextPlannerVersion, persistPlannerArtifacts } from "./planner-context.js";
 import { getTaskCostCalibration } from "../economics/treasury-projection.js";
+import { getTreasuryReserveLearning } from "../economics/treasury-reserves.js";
 import { getStrategicFinancialExposure } from "../economics/financial-effects.js";
 import { AgentWorkspace } from "./workspace.js";
 import {
@@ -686,6 +687,7 @@ export class Orchestrator {
         // P-025 owns the substantive strategic review; no manual gate is added.
         reviewContext: {
           taskCostCalibration: getTaskCostCalibration(this.params.db),
+          treasuryReserveLearning: getTreasuryReserveLearning(this.params.db),
           outstandingFinancialEffects: getStrategicFinancialExposure(this.params.db),
         },
       });
