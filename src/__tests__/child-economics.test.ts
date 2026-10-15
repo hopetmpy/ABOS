@@ -240,6 +240,21 @@ describe("child economic semantics", () => {
     expect(result.limitations.join(" ")).toMatch(/local task_cost_cent cannot be subtracted/);
   });
 
+  it("does not confuse incomplete local task costs with independently sourced monetary expenses", () => {
+    insertTask({id:"unmeasured-local",status:"completed",estimatedCostCents:300,actualCostCents:0});
+    const reported=getChildEconomicSnapshot(db,address,{
+      attributedRevenueCents:300,attributedRevenueUnit:"PEN",
+      attributedRevenueEvidence:"Independent PEN revenue source",
+      observedExpenseCents:120,observedExpenseUnit:"PEN",
+      observedExpenseEvidence:"Independent full PEN expense source",
+    });
+    expect(reported.realizedTaskCostCents).toBe(120);
+    expect(reported.netContributionCents).toBe(180);
+    expect(reported.netContributionUnit).toBe("PEN");
+    expect(reported.limitations.join(" ")).toMatch(/local subtotal/);
+    expect(reported.limitations.join(" ")).toMatch(/caller-supplied monetary observations/);
+  });
+
   it("does not mix monetary units, local units or missing independently sourced figures", () => {
     const observed={
       attributedRevenueCents:300,attributedRevenueUnit:"USD",

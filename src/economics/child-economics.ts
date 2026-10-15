@@ -159,7 +159,7 @@ export function getChildEconomicSnapshot(
   }
   if (tasks.unobservedTerminalCosts > 0) {
     limitations.push(
-      `${tasks.unobservedTerminalCosts} terminal task cost(s) are unobserved/invalid: task_graph default-zero is not measured zero cost. Child net contribution and profitability remain UNKNOWN.`,
+      `${tasks.unobservedTerminalCosts} terminal task cost(s) are unobserved/invalid: task_graph default-zero is not measured zero cost. Do not treat this local subtotal as a complete paid monetary expense.`,
     );
   }
 
