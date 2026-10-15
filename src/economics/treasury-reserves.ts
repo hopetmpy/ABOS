@@ -174,7 +174,7 @@ export function getTreasuryReserveLearning(db: Database.Database): TreasuryReser
   const current = getTreasuryReserveSnapshot(db).allocations;
   for (const allocation of current) {
     const recorded = getEvidenceByAuthority(db, "treasury_reserve", allocation.reserveKey)
-      .findLast(event => {
+      .reverse().find(event => {
         const payload = event.payload as Record<string, unknown> | null;
         return payload?.operationKey === allocation.operationKey;
       });
