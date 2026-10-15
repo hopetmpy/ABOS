@@ -255,6 +255,7 @@ jobs:
           GIT_TERMINAL_PROMPT: "0"
           ABOS_REPO_URL: ${{ github.event.pull_request.head.repo.clone_url || 'https://github.com/hopetmpy/ABOS.git' }}
           ABOS_REF: ${{ github.head_ref || github.ref_name }}
+          ABOS_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           unset GH_TOKEN GITHUB_TOKEN || true
@@ -265,6 +266,14 @@ jobs:
 
           test "$(git rev-parse --abbrev-ref HEAD)" = "$ABOS_REF"
           test "$(git config --get remote.origin.url)" = "$ABOS_REPO_URL"
+
+          # A moving branch must not let an older job validate a newer SHA.
+          # Fetch the event's commit anonymously, then verify its exact tree.
+          if [ "$(git rev-parse HEAD)" != "$ABOS_SHA" ]; then
+            git -c credential.helper= fetch --depth 1 origin "$ABOS_SHA"
+            git checkout --detach "$ABOS_SHA"
+          fi
+          test "$(git rev-parse HEAD)" = "$ABOS_SHA"
 
           corepack enable pnpm
           pnpm install --frozen-lockfile
