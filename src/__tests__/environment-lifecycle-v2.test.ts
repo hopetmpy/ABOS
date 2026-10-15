@@ -79,6 +79,7 @@ describe("Environment Execution & Lifecycle v2", () => {
       expect(resource.externalId).toMatch(/^ext-/);
       expect(resource.status).toBe("ready");
       expect(resource.estimatedCostCents).toBe(25);
+      expect(resource.metadata.provisionNeedsReconciliation).toBe(false);
 
       const events = store.listEvents(resource.id);
       expect(events.map((event) => event.operation)).toEqual([
