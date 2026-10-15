@@ -109,6 +109,10 @@ function adapters(quote: ProviderProcurementScenarioInput, calls: string[],
 ): ProviderProcurementExecutionDependencies {
   return {
     observeAuthenticatedEconomics: async () => quote,
+    verifyResourceUsability: async (scope) => ({
+      usable: true, resourceId: scope.resourceId,
+      evidence: ["Independent P-018 mock observed usable owned resource."],
+    }),
     dispatch: async (scope, authorization) => {
       calls.push(scope.operationKey + ":" + authorization.policyDecisionId);
       if (outcome === "throw") throw new Error("synthetic transport lost: secret not persisted");
@@ -262,6 +266,51 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
       expect(calls).toHaveLength(1);
       expect(repeat.financialEffect?.state).toBe("unknown");
     } finally { db.close(); }
+  });
+
+  it("never upgrades supplier acceptance to resource-ready when P-018 verification is absent", async () => {
+    const { db, scope } = setup();
+    try {
+      const quote = scenario(), calls: string[] = [];
+      const dependencies = adapters(quote, calls);
+      delete dependencies.verifyResourceUsability;
+      const decisionId = policy(db, scope, quote);
+      const result = await executeReviewedProviderProcurement(db.raw, {
+        scope, policyDecisionId: decisionId, dependencies,
+      });
+      expect(result.status).toBe("pending");
+      expect(result.dispatched).toBe(true);
+      expect(result.financialEffect?.state).toBe("pending");
+      expect(result.evidence.join(" ")).toContain("verification UNAVAILABLE");
+      expect((db.raw.prepare(
+        "SELECT execution_state FROM policy_decisions WHERE id = ?",
+      ).get(decisionId) as { execution_state: string }).execution_state).toBe("running");
+      expect(calls).toHaveLength(1);
+    } finally { db.close(); }
+  });
+
+  it("keeps supplier-accepted acquisition pending for another, failed or unverifiable resource", async () => {
+    for (const verify of [
+      async () => ({ usable: false, resourceId: "resource-001", evidence: ["Not ready"] }),
+      async () => ({ usable: true, resourceId: "another-resource", evidence: ["Wrong resource"] }),
+      async () => ({ usable: true, resourceId: "resource-001", evidence: [] }),
+      async (): Promise<never> => { throw new Error("provider secret health endpoint"); },
+    ]) {
+      const { db, scope } = setup();
+      try {
+        const quote = scenario(), calls: string[] = [];
+        const dependencies = adapters(quote, calls);
+        dependencies.verifyResourceUsability = verify;
+        const decisionId = policy(db, scope, quote);
+        const result = await executeReviewedProviderProcurement(db.raw, {
+          scope, policyDecisionId: decisionId, dependencies,
+        });
+        expect(result.status).toBe("pending");
+        expect(result.financialEffect?.state).toBe("pending");
+        expect(result.evidence.join(" ")).not.toContain("provider secret health endpoint");
+        expect(calls).toHaveLength(1);
+      } finally { db.close(); }
+    }
   });
 
   it("does not confuse provider rejection with a paid invoice", async () => {
