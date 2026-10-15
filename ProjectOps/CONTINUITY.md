@@ -6,22 +6,22 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / AUDIT_OPEN / SOURCE_UNMODIFIED / P030_E3_MAIN_GREEN / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / DECISION_READY / PROVISION_UNKNOWN_SOURCE_PENDING_TESTS / P030_E3_MAIN_GREEN / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p030-close-p031-audit-open
-Host-Head-At-Audit-Open: 2fd877667b493ba5cea967092d79abed41787e70
-Last-Reconciled-Host-Head: 2fd877667b493ba5cea967092d79abed41787e70
-Observed-Main-Head: 2fd877667b493ba5cea967092d79abed41787e70
-Last-Product-Head: 2fd877667b493ba5cea967092d79abed41787e70
-Last-Product-CI: 38766126322 — SUCCESS 8/8
+Current-Host-Branch: abos/p031-provision-uncertainty-recovery
+Host-Head-At-Audit-Open: ef58a1b1eba53a06fb072679454e796ceaf102f8
+Last-Reconciled-Host-Head: 583a4ca46fd5fd5df2d74ee70669c2ac66891f0e
+Observed-Main-Head: ef58a1b1eba53a06fb072679454e796ceaf102f8
+Last-Product-Head: ef58a1b1eba53a06fb072679454e796ceaf102f8
+Last-Product-CI: 38768019852 — SUCCESS 8/8
 Last-Completed-Plan: P-030
-Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
-Last-Completed-CI: 38766126322 — SUCCESS 8/8
+Last-Completed-Merge: ef58a1b1eba53a06fb072679454e796ceaf102f8
+Last-Completed-CI: 38768019852 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -353,3 +353,7 @@ NEXT_ELIGIBLE_WORK: follow C0026 source DoD integration boundary after exact doc
 PR #75 `abos/p030-family-economics-treasury` merged to `main` commit `2fd877667b493ba5cea967092d79abed41787e70` (squash). Exact source push `38765564750` SUCCESS 8/8 and PR `38765572705` SUCCESS 8/8 at `8d8a37bb`; exact merged-main CI `38766126322` **SUCCESS 8/8**. P-030 source/DoD **HECHO E3_MAIN_GREEN**; no authenticated Conway LIVE settlement, real revenue/profit or verified paid resource invoices. E5/E6 are **UNVERIFIED under P-005**, not fake zero and not a reason to duplicate P-030 financial owners.
 
 P-031 activated as `EN_EJECUCIÓN / AUDIT_OPEN / SOURCE_UNMODIFIED` in segment `continuity/C0027.md`. Reuse existing P-017 `CapabilityAcquisitionCoordinator`, P-018 `EnvironmentLifecycleManager`/`EnvironmentResourceStore`, P-026 cost intelligence, P-027 opportunity discovery, P-025 strategic review, P-030 treasury/financial effects. Audit actual missing causal wiring for business need → resource acquisition → usability verification → renew/retire/learn before building. No purchase, external authority assumption, or P-031 code yet. New activation branch is documentation-only and requires exact PR+main CI before integration claim.
+
+## P-031 current source audit (2026-10-15)
+
+P-030 source/integration and canonical ProjectOps transition are integrated at main `ef58a1b1eba53a06fb072679454e796ceaf102f8`, CI `38768019852` SUCCESS 8/8. P-031 active C0027 has a real `DECISION_READY` first HARD: ambiguous provider provisioning must remain `UNKNOWN` and observed before cleanup. Narrow source corrections are on `abos/p031-provision-uncertainty-recovery` (commits `6af524c3`, `c167733a`). **New adversarial tests are not yet written or passed** after two rejected test-file writes, so this branch must remain review-only and not be merged. See C0027 for causal evidence and next eligible work. P-005 LIVE still UNVERIFIED, no money spent.
