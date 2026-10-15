@@ -53,6 +53,9 @@ describe("AwsEnvironmentProvider lifecycle", () => {
     const runner: EnvironmentCommandRunner = async (_command, args) => {
       calls.push(args);
 
+      if (args[0] === "sts" && args[1] === "get-caller-identity") {
+        return ok(JSON.stringify({ Account: "123456789012" }));
+      }
       if (args[0] === "ec2" && args[1] === "run-instances") {
         return ok(JSON.stringify({
           InstanceId: "i-abc",
@@ -89,6 +92,20 @@ describe("AwsEnvironmentProvider lifecycle", () => {
       defaultImageId: "ami-123",
       defaultInstanceType: "t3.small",
       defaultIamInstanceProfile: "ABOS-SSM",
+      authorizeNewProvision: async ({ accountId, instanceType, region, request }) => {
+        expect(accountId).toBe("123456789012");
+        expect(instanceType).toBe("t3.small");
+        expect(region).toBe("us-east-1");
+        expect(request.resourceId).toBe("01RESOURCEABC");
+        return {
+          allowed: true,
+          policyDecisionId: "P010-P025-P030-reviewed-scenario",
+          providerAccountId: accountId,
+          unit: "usd_cent",
+          totalCommitmentCents: 150,
+          billingTermsEvidence: ["Test-only verified USD recurring obligation and contingency scenario"],
+        };
+      },
     });
 
     const result = await provider.provision({
@@ -135,6 +152,77 @@ describe("AwsEnvironmentProvider lifecycle", () => {
         { Key: "Name", Value: "abos-worker" },
       ]),
     );
+  });
+
+  it("requires trusted account-scoped economics before any new EC2 side effect", async () => {
+    const calls: string[][] = [];
+    const runner: EnvironmentCommandRunner = async (_command, args) => {
+      calls.push(args);
+      return ok(JSON.stringify({ Account: "123456789012" }));
+    };
+    const request = {
+      resourceId: "new-billable-resource",
+      resourceType: "ec2",
+      retentionPolicy: "ephemeral",
+      requiredCapabilities: ["remote compute"],
+      goalId: "goal-1",
+      pathId: "path-1",
+      taskId: "task-1",
+    };
+    const options = {
+      runner,
+      defaultRegion: "us-east-1",
+      defaultImageId: "ami-123",
+      defaultInstanceType: "t3.micro",
+      defaultIamInstanceProfile: "ABOS-SSM",
+    };
+
+    // An IAM role alone does not grant financial authorization.
+    await expect(new AwsEnvironmentProvider(options).provision(request))
+      .rejects.toThrow("procurement authority UNKNOWN");
+    expect(calls).toEqual([]);
+
+    for (const decision of [
+      { allowed: false, policyDecisionId: "policy-1", providerAccountId: "123456789012", unit: "usd_cent", totalCommitmentCents: 100, billingTermsEvidence: ["billed monthly"] },
+      { allowed: true, policyDecisionId: "policy-1", providerAccountId: "OTHER-ACCOUNT", unit: "usd_cent", totalCommitmentCents: 100, billingTermsEvidence: ["billed monthly"] },
+      { allowed: true, policyDecisionId: "", providerAccountId: "123456789012", unit: "usd_cent", totalCommitmentCents: 100, billingTermsEvidence: ["billed monthly"] },
+      { allowed: true, policyDecisionId: "policy-1", providerAccountId: "123456789012", unit: "credit_cent", totalCommitmentCents: 100, billingTermsEvidence: ["billed monthly"] },
+      { allowed: true, policyDecisionId: "policy-1", providerAccountId: "123456789012", unit: "usd_cent", totalCommitmentCents: undefined, billingTermsEvidence: ["billed monthly"] },
+      { allowed: true, policyDecisionId: "policy-1", providerAccountId: "123456789012", unit: "usd_cent", totalCommitmentCents: 100, billingTermsEvidence: [] },
+    ]) {
+      const provider = new AwsEnvironmentProvider({
+        ...options,
+        authorizeNewProvision: () => decision,
+      });
+      await expect(provider.provision(request)).rejects.toThrow(
+        "economic procurement authorization is absent",
+      );
+      expect(calls.some((args) => args[0] === "ec2" && args[1] === "run-instances")).toBe(false);
+    }
+  });
+
+  it("does not expose EC2 billable creation through raw provider-native commands", async () => {
+    const calls: string[][] = [];
+    const provider = new AwsEnvironmentProvider({
+      runner: async (_command, args) => {
+        calls.push(args);
+        return ok("[]");
+      },
+    });
+    for (const args of [
+      ["ec2", "run-instances", "--image-id", "ami-123"],
+      ["--profile", "default", "ec2", "create-fleet"],
+      ["ec2", "request-spot-instances"],
+      ["ec2", "start-instances"],
+    ]) {
+      await expect(provider.execute(args)).rejects.toThrow(
+        "tracked lifecycle and economic authority",
+      );
+    }
+    expect(calls).toEqual([]);
+    const safe = await provider.execute(["ec2", "describe-instances"]);
+    expect(safe.exitCode).toBe(0);
+    expect(calls).toEqual([["ec2", "describe-instances"]]);
   });
 
   it("recovers a provisioned EC2 after restart when InstanceId was not persisted", async () => {
