@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-030
 Active-Segment: continuity/C0026.md
-Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / BALANCE_RACE_GUARD_SOURCE_0aa30f9_E3_8_OF_8 / LIVE_UNVERIFIED
+Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / BALANCE_HTTP_NO_STORE_SOURCE_a5fb4a7_E3_8_OF_8 / LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,7 +15,7 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p030-family-economics-treasury
 Host-Head-At-Audit-Open: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
-Last-Reconciled-Host-Head: 0aa30f926a1041b489fffbc904b9d70c32419fb0
+Last-Reconciled-Host-Head: a5fb4a7564719990073e5f5102d4c9367f732dfc
 Observed-Main-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-CI: 36220600132 — SUCCESS 8/8
@@ -304,3 +304,13 @@ NEXT_ELIGIBLE_WORK: audit same-wallet freshness/provenance of observed Conway cr
 - P-030 stays `EN_EJECUCIÓN`, PR #75 DRAFT, no merge/P-031. No live funds moved during this work.
 
 NEXT_ELIGIBLE_WORK: audit the existing provider balance GET for source-scoped identity, HTTP response cache/observation timestamps and any externally supplied balance snapshot metadata. If provider doesn't expose it, preserve UNKNOWN/NO_CHANGE and continue other independent P-030 source economics without inventing fresh-balance or LIVE assertions. Then assess P-030 DoD against exact sources and known E5/E6 boundaries.
+
+## P-030 — HTTP balance cache boundary + investment evidence, verified 2026-10-15
+
+- Product/test source HEAD `a5fb4a7564719990073e5f5102d4c9367f732dfc` CI push run `38756449621` **SUCCESS 8/8** and PR run `38756458427` **SUCCESS 8/8**. Draft PR #75 open, `main d14f04b9...` unchanged; no LIVE funds, purchases or payment reconciliation.
+- Provider audit: `ConwayClient.getCreditsBalance()` reads `GET /v1/credits/balance` into an exact integer only; client has no provider-attested wallet mapping, snapshot time/version or authenticated settlement identity from that GET. Conway's published `credits_balance` describes current credits of the *authenticated account* without a supplied wallet identity or snapshot timestamp contract (`https://docs.conway.tech/terminal/tools`). NO_CHANGE to payment identity authority or extra wallet observer; P-005 owns external E5 verification.
+- `a5fb4a7` requests credit balance GET with fetch `cache: no-store`, `Cache-Control: no-store, max-age=0` and `Pragma: no-cache`, scoped to that read. Regression checks exact URL/cache headers and ignores extra unverified response wallet/timestamp claims. This is best-effort cache avoidance; it does NOT establish server freshness, right wallet, no external wallet movement or true free liquidity. Existing local in-flight financial effect race guard remains intact.
+- Earlier source `47cead6` adds read-only `inference_costs` token-count, inference-latency and registry-priced-estimate lower bounds as noncash resource investment (not paid invoices, electricity, subscriptions or realized P&L); `4a24100` keeps absent raw SQLite inference authority as UNKNOWN instead of zero. Both commits already had exact push/PR 8/8 CI at previous HEAD. Actual invested subscription, internet, energy, human work and paid inference costs need independent measurement.
+- P-030 is still `EN_EJECUCIÓN / SOURCE_PARTIAL`; no P-031, no merger. E3 green for exact tested source, E5 authenticated provider settlement and E6 realized business economics NOT VERIFIED.
+
+NEXT_ELIGIBLE_WORK: compare current P-030 DoD against `financial_effects`, `transactions`, `treasury-projection`, `treasury-scenario`, P-025 and P-023 with source evidence; identify the smallest independent source gap in same-unit costs/commitments/economic outcomes if demonstrated, without a second ledger or strategy authority. Keep monetary E5/E6 limitations with P-005 and report a source NO_CHANGE where only external provider truth is missing.
