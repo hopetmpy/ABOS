@@ -214,7 +214,9 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
    * spendable funds, a complete invoice or permission to create EC2.
    * This method is intentionally not called by inspect() or the selector.
    */
-  async observeEconomics(): Promise<EnvironmentEconomicObservation> {
+  async observeEconomics(options: {
+    includeProviderCredits?: boolean;
+  } = {}): Promise<EnvironmentEconomicObservation> {
     const observedAt = new Date().toISOString();
     const base: EnvironmentEconomicObservation = {
       provider: this.id,
@@ -244,6 +246,91 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     base.accountId = accountId;
     base.status = "partial";
     base.evidence.push("AWS STS caller account identity observed; payment and account liquidity not established.");
+    let creditsComplete = true;
+    if (options.includeProviderCredits === true) {
+      base.providerCredits = [];
+      // AWS GetCredits requires a past epoch start <= 1 year before now.
+      // Do not claim exhaustive historical/future credit coverage from this
+      // bounded window; never fetch all payer-family accounts.
+      const start = String(Math.floor(Date.now() / 1000) - 364 * 86_400);
+      try {
+        const response = await this.runner("aws", [
+          "billing", "get-credits", "--account-id", accountId,
+          "--start-date", start, "--no-payer-account-flag",
+          "--region", "us-east-1", "--output", "json",
+        ], 30_000);
+        const payload = response.exitCode === 0
+          ? parseJson<Record<string, unknown>>(response.stdout) : null;
+        if (!payload || !Array.isArray(payload.credits)) {
+          creditsComplete = false;
+          base.evidence.push("AWS Billing GetCredits unavailable, denied or malformed; credit capital remains UNKNOWN.");
+        } else {
+          const records: NonNullable<EnvironmentEconomicObservation["providerCredits"]> = [];
+          for (const raw of payload.credits) {
+            if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+              creditsComplete = false;
+              continue;
+            }
+            const entry = raw as Record<string, unknown>;
+            // Defense in depth: a payer/linked-account response is never
+            // permitted to fund this exact account's procurement.
+            if (entry.accountId !== accountId) {
+              creditsComplete = false;
+              base.evidence.push("Credit record has a different or missing owning AWS account; excluded.");
+              continue;
+            }
+            const money = (value: unknown) => {
+              const row = value && typeof value === "object" && !Array.isArray(value)
+                ? value as Record<string, unknown> : {};
+              return costAmount({
+                Amount: row.currencyAmount,
+                Unit: row.currencyCode,
+              });
+            };
+            const remaining = money(entry.remainingAmount);
+            const estimated = money(entry.estimatedAmount);
+            const unixDate = typeof entry.endDate === "number" &&
+              Number.isFinite(entry.endDate) && entry.endDate > 0
+              ? new Date(entry.endDate * 1000) : null;
+            const expiry = unixDate && Number.isFinite(unixDate.getTime())
+              ? unixDate.toISOString() : null;
+            const products = Array.isArray(entry.applicableProductNames)
+              ? entry.applicableProductNames.filter((x): x is string => typeof x === "string")
+              : [];
+            const purchaseTypes = Array.isArray(entry.purchaseTypeApplications)
+              ? entry.purchaseTypeApplications.filter((x): x is string => typeof x === "string")
+              : [];
+            const status = typeof entry.creditStatus === "string"
+              ? entry.creditStatus : null;
+            records.push({
+              creditId: typeof entry.creditId === "string" ? entry.creditId : null,
+              creditType: typeof entry.creditType === "string" ? entry.creditType : null,
+              status, expiresAt: expiry,
+              remainingUsdCents: remaining.cents,
+              remainingRaw: remaining.raw,
+              estimatedRemainingUsdCents: estimated.cents,
+              applicableProductNames: products,
+              purchaseTypeApplications: purchaseTypes,
+              evidence: [
+                "Provider-owned conditional billing credit, NOT withdrawable funds or a general USD account balance.",
+                "Service eligibility, purchase type, expiration, sharing, in-flight consumption and provider billing restrictions determine actual application.",
+                ...(status !== "ENABLED" ? ["Credit enabled billing status is not verified."] : []),
+                ...(expiry && Date.parse(expiry) <= Date.now() ? ["Credit is expired."] : []),
+                ...(remaining.raw !== null && remaining.cents === null
+                  ? ["Remaining balance currency/precision is not exact USD cents."] : []),
+              ],
+            });
+          }
+          base.providerCredits = records;
+          base.evidence.push(
+            `AWS Billing GetCredits observed ${records.length} account-owned credit entries within a 364-day request window; no unrestricted sum, payment or procurement right inferred.`,
+          );
+        }
+      } catch {
+        creditsComplete = false;
+        base.evidence.push("AWS Billing GetCredits probe failed; optional account-credit capital is UNKNOWN.");
+      }
+    }
     const result = await this.runner(
       "aws", [
         "budgets", "describe-budgets", "--account-id", accountId,
@@ -286,7 +373,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       });
     }
     base.budgets = budgets;
-    base.status = "observed";
+    base.status = creditsComplete ? "observed" : "partial";
     base.evidence.push(
       `AWS Budgets COST entries observed=${budgets.length}; no aggregation across possibly overlapping budgets.`,
     );
