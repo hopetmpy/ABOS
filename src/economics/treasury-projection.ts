@@ -24,6 +24,8 @@ export interface TreasuryProjectionInput {
   otherCommittedCreditsCents?: number | null;
   /** Explicitly valued estimated task obligations in the SAME Conway credit unit. */
   taskCommitmentCreditsCents?: number | null;
+  /** Pending refund is a claim, not observed available liquidity. */
+  pendingRefundCreditsCents?: number | null;
   /** Valuations supplied by evidence; never mixed with spend/credits or P&L. */
   resourceInvestment?: ResourceInvestmentObservation[];
 }
@@ -34,6 +36,7 @@ export interface TreasuryProjection {
   otherCommittedCreditsCents: number | null;
   taskCommitmentCreditsCents: number | null;
   pendingTransferCreditsCents: number;
+  pendingRefundCreditsCents: number | null;
   unresolvedFinancialEffects: number;
   activeTaskEstimatedCostCents: number;
   freeCreditsCents: number | null;
@@ -55,6 +58,7 @@ export function getTreasuryProjection(
   const observed = knownCents(input.observedCreditsCents, "observedCreditsCents");
   const reserved = knownCents(input.reservedCreditsCents, "reservedCreditsCents");
   const other = knownCents(input.otherCommittedCreditsCents, "otherCommittedCreditsCents");
+  const pendingRefund = knownCents(input.pendingRefundCreditsCents, "pendingRefundCreditsCents");
   const tasks = db.raw.prepare(
     "SELECT COALESCE(SUM(estimated_cost_cents), 0) AS amount FROM task_graph WHERE status IN ('assigned', 'running')",
   ).get() as { amount: number };
@@ -94,6 +98,9 @@ export function getTreasuryProjection(
   if (freeCreditsCents === null) limitations.push(
     "Free credits UNKNOWN until fresh balance, commitments, contingencies and reserves are observed.",
   );
+  if (pendingRefund !== null && pendingRefund > 0) limitations.push(
+    "Pending refund is NOT liquid capital. It is excluded until confirmed in an observed provider balance.",
+  );
   if (!input.resourceInvestment?.length) limitations.push(
     "Non-cash investment (time, electricity, subscriptions, compute) has not been valued from evidence.",
   );
@@ -103,6 +110,7 @@ export function getTreasuryProjection(
     otherCommittedCreditsCents: other,
     taskCommitmentCreditsCents: taskCredits,
     pendingTransferCreditsCents: pending,
+    pendingRefundCreditsCents: pendingRefund,
     unresolvedFinancialEffects: unresolved,
     activeTaskEstimatedCostCents,
     freeCreditsCents,
