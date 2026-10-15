@@ -126,10 +126,11 @@ export function setTreasuryReserve(
     ).get(operationKey) as any | undefined;
     if (existing) {
       const prior = toAllocation(existing);
+      // Replay identity is the economic decision, not a fresh balance sample.
+      // Preserve the original observation in the immutable journal, even if a
+      // later retry has no provider access (or a different observed balance).
       if (prior.reserveKey !== reserveKey || prior.targetCreditsCents !== targetCreditsCents ||
-          prior.decisionId !== decisionId || prior.decisionEvidence !== decisionEvidence ||
-          prior.observedCreditsCents !== observedCreditsCents ||
-          prior.balanceEvidence !== balanceEvidence) {
+          prior.decisionId !== decisionId || prior.decisionEvidence !== decisionEvidence) {
         throw new Error("Treasury reserve operation key conflicts with an earlier decision");
       }
       return {
