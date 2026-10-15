@@ -6,21 +6,21 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / AWS_PROVISION_BOUNDARY_PR84_MERGED / ACCOUNT_ECONOMIC_MANDATE_OPEN / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / AWS_ECONOMIC_OBSERVATION_PR_CI_PENDING / ACCOUNT_MANDATE_STILL_UNKNOWN / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-aws-procurement-integration-handoff
+Current-Host-Branch: abos/p031-provider-economic-observation
 Host-Head-At-Audit-Open: 088de39896dcef837c7047c4c560e9cd0b7a29e8
 Last-Reconciled-Host-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
-Observed-Main-Head: e502c8654cddc5cea68e16fc18e4962375bff21a
-Last-Product-Head: e502c8654cddc5cea68e16fc18e4962375bff21a
-Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #84 38804345170 — SUCCESS 8/8
+Observed-Main-Head: 2c67b7d6c461d1270ad3db69ba7899eb899a7cdd
+Last-Product-Head: 2c67b7d6c461d1270ad3db69ba7899eb899a7cdd
+Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #85 38805411003 — SUCCESS 8/8
 Last-Completed-Plan: P-030
-Last-Completed-Merge: e502c8654cddc5cea68e16fc18e4962375bff21a
+Last-Completed-Merge: 2c67b7d6c461d1270ad3db69ba7899eb899a7cdd
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
@@ -399,3 +399,11 @@ PR #84 `abos/p031-aws-billable-provision-boundary` final source `703e0e98117039c
 The previously ungoverned EC2 `provision` and raw `environment_exec` launch/start entrypoints now require a trusted, account-bound monetary review at the AWS provider boundary. No evaluator is installed in production yet; new billable EC2 creation remains UNAVAILABLE (not impossible or globally prohibited) rather than silently authorized from IAM, task budget or generic credentials. Read-only AWS capability investigation and ABOS-owned resource reuse remain available. Distinguish pre-dispatch denial from remote outcome UNKNOWN; protect recovery and idempotency.
 
 P-030 treasury scenario/free-liquidity authority currently concerns Conway `credit_cent`; it does not demonstrate AWS account USD liquidity, full recurring obligations or provider billing. P-025 strategic approval does NOT automatically create P-010 account spending authorization. Next P-031 source unit: audit/extend the *existing* P-030/P-025/P-010 authorities to provide a source-verified provider-account `usd_cent` economic mandate and durable billing/recovery; then wire the trusted callback. Do not build a second treasury or global spender. C0027 is the detailed recovery point. No LIVE AWS account use, charges, profit or E5/E6 claimed.
+
+## P-031 — AWS account economic evidence source (2026-10-15)
+
+PR #85 (ProjectOps checkpoint after PR #84) merged at `main 2c67b7d6c461d1270ad3db69ba7899eb899a7cdd`; exact source PR CI `38805411003` SUCCESS 8/8. Exact merged-main workflow remains independently unverified through this PR-only connector. Previous policy/provisioning source remains integrated; P-031 is still EN_EJECUCIÓN.
+
+Current isolated branch `abos/p031-provider-economic-observation` implements **read-only, explicitly invoked** provider economic evidence using the existing `EnvironmentProvider` open interface, AWS STS account identity and AWS Budgets COST rows. It distinguishes budget threshold vs reported spend vs unknown liquidity vs unknown recurring commitment; USD values convert to cents only when exact, never FX/rounding; overlapping COST budgets are never summed; missing identity, permission, pagination and non-USD/fractional-cent amounts preserve UNKNOWN/PARTIAL. `environment_economic_evidence` surfaces this for existing agent tools; no auto-polling in inspection, no payment, no new ledger. Source tests written; **exact-head CI PENDING**. AWS Budgets values are provider observations, not invoice finality, guaranteed free liquidity or proof of P-010/P-025 approval. No purchases or AWS live account access in this work.
+
+NEXT_ELIGIBLE_WORK: verify PR exact CI and merge if all green; observe real account data only under suitable permissions (P-005), then map independent AWS account financing + full recurring bill terms into existing treasury/policy identity, wire the trusted `authorizeNewProvision` callback without inventing liquidity or threshold-based creator approval. Keep provider-side purchase gate, reconcile ambiguous outcomes, and audit costs of AWS query APIs before deploying an automated polling cadence. Refer to C0027.
