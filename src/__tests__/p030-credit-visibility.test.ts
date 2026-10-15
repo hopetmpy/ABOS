@@ -8,6 +8,33 @@ const databases: AbosDatabase[] = [];
 afterEach(() => { while (databases.length) databases.pop()!.close(); });
 
 describe("P-030 Conway balance and treasury authority separation", () => {
+  it("preserves the reconciliation worklist when provider balance is unreachable", async () => {
+    const db = createTestDb();
+    databases.push(db);
+    prepareFinancialEffect(db.raw, {
+      operationKey: "need:provider-evidence", effectKind: "credit_transfer",
+      amountCents: 225, recipient: "0xrecipient", provider: "conway",
+    });
+    recordFinancialEffectObservation(db.raw, "need:provider-evidence", {
+      resolution: "unknown", providerStatus: "processing",
+      error: "provider timeout",
+    });
+    const conway = new MockConwayClient();
+    conway.getCreditsBalance = async () => { throw new Error("provider unavailable"); };
+    const context: ToolContext = {
+      identity: createTestIdentity(), config: createTestConfig(),
+      db, conway, inference: new MockInferenceClient(),
+    };
+    const tool = createBuiltinTools(context.config.sandboxId).find(t => t.name === "check_credits");
+    const result = await tool!.execute({}, context);
+    expect(result).toContain("Credit balance: UNKNOWN");
+    expect(result).toContain("free credits=UNKNOWN");
+    expect(result).toContain("immobilized pending credits=225");
+    expect(result).toContain("need:provider-evidence [unknown; provider-id=UNKNOWN]");
+    expect(result).toContain("not proof of settlement");
+    expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n).toBe(0);
+  });
+
   it("reports observed credits without claiming unknown funds are free", async () => {
     const db = createTestDb();
     databases.push(db);
@@ -30,6 +57,7 @@ describe("P-030 Conway balance and treasury authority separation", () => {
     expect(result).toContain("Credit balance: $10.00 (1000 cents)");
     expect(result).toContain("free credits=UNKNOWN");
     expect(result).toContain("immobilized pending credits=375");
+    expect(result).toContain("unresolved effect keys=pending:credit [pending; provider-id=UNKNOWN]");
     expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n).toBe(0);
   });
 });

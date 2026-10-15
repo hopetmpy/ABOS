@@ -25,6 +25,7 @@ import { createLogger } from "../observability/logger.js";
 import { appendEvidenceEvent, correlationIdFor, currentEvidenceContext, latestEvidenceByAuthority, runWithEvidenceContext } from "../observability/evidence.js";
 import { executeCreditEffect } from "../economics/credit-transfer.js";
 import { getTreasuryProjection } from "../economics/treasury-projection.js";
+import { listUnresolvedFinancialEffects } from "../economics/financial-effects.js";
 import { assessTreasuryScenario } from "../economics/treasury-scenario.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
 import { toPosixShellPath } from "../platform/home.js";
@@ -381,17 +382,33 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
       riskLevel: "safe",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
-        const balance = await ctx.conway.getCreditsBalance();
+        let balance: number | null = null;
+        try {
+          const observation = await ctx.conway.getCreditsBalance();
+          if (Number.isSafeInteger(observation)) balance = observation;
+        } catch {
+          // Provider lookup failed. Persisted pending effects remain inspectable
+          // but the spendable balance is UNKNOWN, not fabricated as zero.
+        }
         const treasury = getTreasuryProjection(ctx.db, {
-          observedCreditsCents: Number.isSafeInteger(balance) && balance >= 0 ? balance : null,
+          observedCreditsCents: balance !== null && balance >= 0 ? balance : null,
         });
-        return `Credit balance: $${(balance / 100).toFixed(2)} (${balance} cents)
+        const pending = listUnresolvedFinancialEffects(ctx.db.raw);
+        const sample = pending.slice(0, 10).map((effect) =>
+          `${effect.operationKey} [${effect.state}; provider-id=${effect.providerEffectId ?? "UNKNOWN"}]`,
+        );
+        const display = balance === null
+          ? "UNKNOWN (provider observation unavailable)"
+          : `$${(balance / 100).toFixed(2)} (${balance} cents)`;
+        return `Credit balance: ${display}
 Treasury: free credits=${treasury.freeCreditsCents ?? "UNKNOWN"};
 pending financial effects=${treasury.unresolvedFinancialEffects};
 immobilized pending credits=${treasury.pendingTransferCreditsCents};
+unresolved effect keys=${sample.join("; ") || "none"}${pending.length > sample.length ? ` (+${pending.length - sample.length} more)` : ""};
 active task estimated cost=${treasury.activeTaskEstimatedCostCents} cents (unit reconciliation may be required);
 reserves/other obligations=UNKNOWN without observed evidence.
-Credit balance is not automatically free or distributable capital.`;
+Credit balance is not automatically free or distributable capital.
+Reconciliation requires independently verified provider finality; this view is not proof of settlement.`;
       },
     },
     {
