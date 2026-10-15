@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-030
 Active-Segment: continuity/C0026.md
-Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / RESERVE_EPOCH_RECOVERY_SOURCE_8b53525_E3_8_OF_8 / LIVE_UNVERIFIED
+Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / BALANCE_RACE_GUARD_SOURCE_0aa30f9_E3_8_OF_8 / LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,7 +15,7 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p030-family-economics-treasury
 Host-Head-At-Audit-Open: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
-Last-Reconciled-Host-Head: 8b53525201c2925fe300997bdc2f256e971ad0eb
+Last-Reconciled-Host-Head: 0aa30f926a1041b489fffbc904b9d70c32419fb0
 Observed-Main-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-CI: 36220600132 — SUCCESS 8/8
@@ -293,3 +293,14 @@ NEXT_ELIGIBLE_WORK: audit source-backed reserve replenishment/release decision f
 - No transfers executed against a real wallet; no `main` modification/merge. P-030 `EN_EJECUCIÓN`; PR #75 remains DRAFT and P-031 unopened.
 
 NEXT_ELIGIBLE_WORK: audit same-wallet freshness/provenance of observed Conway credit balance at internal reserve increase, and whether its input can be stale, replayed, invalid or unrelated to canonical provider effects. Reuse existing Conway balance and Policy/Evidence owner; do not introduce a second wallet observer or arbitrary approval. Prove source invariants with negative tests; leave external LIVE P-005 independent.
+
+## P-030 — protected credit-balance observation versus concurrent financial effects (2026-10-15)
+
+- Exact source HEAD `0aa30f926a1041b489fffbc904b9d70c32419fb0`: push CI `38703252742` **SUCCESS 8/8**; PR CI `38703261596` **SUCCESS 8/8** (Linux/Windows Node 22/24, public distribution 22/24, security and ProjectOps integrity).
+- `getTreasuryFinancialEffectSequence(db)` projects the existing P-013 `evidence_events` latest `financial_effect` lifecycle position. The current `set_treasury_reserve` Policy-routed tool records that local position BEFORE `ConwayClient.getCreditsBalance()` and passes it to the existing `setTreasuryReserve` owner. A positive reserve increase atomically rejects if financial intents were prepared/updated after the read began; idempotent replay remains able to recover its prior decision. No second wallet observer, new ledger or arbitrary manual approval.
+- Balance evidence now preserves locally observed timestamp, runtime agent identity, and explicit `providerWalletOwnershipVerified:false`/`providerFinalityVerified:false`. It is **not** independently attested ownership, a provider-supplied balance timestamp, or proof of fresh external money. The raw internal function keeps optional sequence input for existing trusted tests/callers; new protected tool always supplies it on increases.
+- Tests attack changed financial intent during awaited GET and direct stale sequence, assert rollback (no created reserve) and presence of actual concurrent intent; unaffected valid tool call persists structured observation and correctly labels unverified provider ownership.
+- **HARD remaining**: foreign/external Conway wallet movements and stale/incorrect provider balance responses cannot be established from the current numeric `getCreditsBalance` response alone; real resource investment, provider finality, revenue/profit and economic reserve utilization still require external E5/E6 evidence under P-005. Do not classify this E3 guard as live wallet truth.
+- P-030 stays `EN_EJECUCIÓN`, PR #75 DRAFT, no merge/P-031. No live funds moved during this work.
+
+NEXT_ELIGIBLE_WORK: audit the existing provider balance GET for source-scoped identity, HTTP response cache/observation timestamps and any externally supplied balance snapshot metadata. If provider doesn't expose it, preserve UNKNOWN/NO_CHANGE and continue other independent P-030 source economics without inventing fresh-balance or LIVE assertions. Then assess P-030 DoD against exact sources and known E5/E6 boundaries.
