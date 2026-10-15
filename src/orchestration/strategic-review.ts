@@ -31,6 +31,11 @@ export interface StrategicReviewContext {
   independentReviews?: IndependentStrategicReview[];
   /** Optional treasury evidence for this exact plan, never an independent execution authority. */
   treasuryReview?: TreasuryScenarioReview;
+  /** Source-owned unresolved credits; not provider settlement or free balance. */
+  outstandingFinancialEffects?: {
+    count: number;
+    pendingCreditCommitments: number;
+  };
 }
 
 export interface StrategicReviewAssessment {
@@ -390,6 +395,24 @@ export function assessStrategicPlan(
 
   if (context.adaptiveContext?.trim()) {
     evidence.push("Adaptive Path/world-state context was supplied to review.");
+  }
+
+  if (context.outstandingFinancialEffects) {
+    const pending = context.outstandingFinancialEffects;
+    if (!Number.isSafeInteger(pending.count) || pending.count < 0 ||
+        !Number.isSafeInteger(pending.pendingCreditCommitments) ||
+        pending.pendingCreditCommitments < 0) {
+      hasUnknown = true;
+      conditions.push("Canonical financial-effect exposure is invalid; re-observe treasury.");
+    } else if (pending.count > 0) {
+      evidence.push(
+        `Canonical financial-effect ledger has ${pending.count} unresolved intents ` +
+        `representing ${pending.pendingCreditCommitments} credit cents of exposure.`,
+      );
+      conditions.push(
+        "Existing pending credit effects are committed capital, not free liquidity or realized spending.",
+      );
+    }
   }
 
   if (context.treasuryReview) {
