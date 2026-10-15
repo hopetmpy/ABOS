@@ -186,7 +186,7 @@ export function assessTreasuryScenario(
     throw new Error("Combined proposal and contingency exceed exact credit-cent arithmetic");
   }
   const reserveDisposition: TreasuryReserveRecommendation["disposition"] =
-    extraReserve === null || freeBefore === null ? "unknown"
+    freeAfter === null ? "unknown"
       : freeAfter < 0 ? "requires_alternative"
       : extraReserve > 0 ? "can_earmark" : "covered";
   if (reserveDisposition === "requires_alternative") {
