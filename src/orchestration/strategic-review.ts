@@ -42,6 +42,10 @@ export interface StrategicReviewContext {
     /** Separate on-chain USD-cent commitments; never summed with credits. */
     pendingUsdcTopups?: number;
     pendingUsdcCommitments?: number;
+    /** Outstanding USDC obligations that are NOT credit topups (e.g. paid APIs). */
+    pendingUsdcOtherEffects?: number;
+    /** Unrecognized financial units stay UNKNOWN, never silently ignored. */
+    unclassifiedPendingEffects?: number;
   };
 }
 
@@ -410,9 +414,14 @@ export function assessStrategicPlan(
       (Number.isSafeInteger(pending.pendingUsdcTopups) && pending.pendingUsdcTopups >= 0);
     const validUsdcAmount = pending.pendingUsdcCommitments === undefined ||
       (Number.isSafeInteger(pending.pendingUsdcCommitments) && pending.pendingUsdcCommitments >= 0);
+    const validOther = pending.pendingUsdcOtherEffects === undefined ||
+      (Number.isSafeInteger(pending.pendingUsdcOtherEffects) && pending.pendingUsdcOtherEffects >= 0);
+    const validUnclassified = pending.unclassifiedPendingEffects === undefined ||
+      (Number.isSafeInteger(pending.unclassifiedPendingEffects) && pending.unclassifiedPendingEffects >= 0);
     if (!Number.isSafeInteger(pending.count) || pending.count < 0 ||
         !Number.isSafeInteger(pending.pendingCreditCommitments) ||
-        pending.pendingCreditCommitments < 0 || !validUsdc || !validUsdcAmount) {
+        pending.pendingCreditCommitments < 0 || !validUsdc || !validUsdcAmount ||
+        !validOther || !validUnclassified) {
       hasUnknown = true;
       conditions.push("Canonical financial-effect exposure is invalid; re-observe treasury.");
     } else if (pending.count > 0) {
@@ -427,10 +436,25 @@ export function assessStrategicPlan(
     if (pending.pendingUsdcTopups && pending.pendingUsdcTopups > 0) {
       evidence.push(
         `Canonical x402 purchasing ledger: ${pending.pendingUsdcTopups} pending USDC topups ` +
-        `with ${pending.pendingUsdcCommitments ?? "UNKNOWN"} USDC cents committed.`,
+        (pending.pendingUsdcOtherEffects
+          ? "(alongside separately listed USDC service obligations)."
+          : `with ${pending.pendingUsdcCommitments ?? "UNKNOWN"} USDC cents committed.`),
       );
       conditions.push(
         "USDC purchase commitments are not Conway credit units or proof of credits received.",
+      );
+    }
+    if (pending.pendingUsdcOtherEffects && pending.pendingUsdcOtherEffects > 0) {
+      evidence.push(
+        `Canonical financial effects: ${pending.pendingUsdcOtherEffects} non-topup USDC payments remain unresolved; ` +
+        `total pending USDC obligations=${pending.pendingUsdcCommitments ?? "UNKNOWN"} USDC cents (all categories).`,
+      );
+      conditions.push("Paid service HTTP responses are not verified USDC settlement or Conway credit balances.");
+    }
+    if (pending.unclassifiedPendingEffects && pending.unclassifiedPendingEffects > 0) {
+      hasUnknown = true;
+      conditions.push(
+        `${pending.unclassifiedPendingEffects} unresolved effects have unknown financial units; obtain unit evidence before cross-currency liquidity analysis.`,
       );
     }
   }
