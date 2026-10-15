@@ -6,18 +6,18 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / DECISION_READY / BUDGET_PAIR_PR81_DRAFT_CI_PENDING / PR80_MAIN_CI_UNVERIFIED / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / ECONOMIC_AUTHORITY_AUDIT / PR80_PR81_MERGED / EXACT_MAIN_CI_UNVERIFIED / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-budget-pair-integrity
+Current-Host-Branch: main
 Host-Head-At-Audit-Open: 088de39896dcef837c7047c4c560e9cd0b7a29e8
 Last-Reconciled-Host-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
-Observed-Main-Head: 55703c08391309f5381bf7a54758f5a804840ba0
-Last-Product-Head: 55703c08391309f5381bf7a54758f5a804840ba0
+Observed-Main-Head: 8a48e61709908c0a31f7cb6bd1806b76ea799741
+Last-Product-Head: 8a48e61709908c0a31f7cb6bd1806b76ea799741
 Last-Product-CI: 38777851448 — SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: b1fdc3af6b7c96c0d5082677b1eb2b4497677cf2
@@ -373,3 +373,9 @@ PR #80 `abos/p031-plan-review-recovery` merged to `main 55703c08391309f5381bf7a5
 P-031 next source R1 found partial explicit budget intent: unit without amount silently became unbudgeted selector input. PR #81 `abos/p031-budget-pair-integrity` contains the minimum correction + regression in existing bridge/tests; CI on exact final PR head PENDING. C0027 is the sole detailed active continuity. No LIVE provisioning/purchases or financial finality proved; P-005 E5/E6 remains UNKNOWN.
 
 NEXT_ELIGIBLE_WORK: verify PR #81 exact CI, integrate if eligible, validate exact merged-main and continue source P-031 economic authorization wiring on existing P-025/P-030/P-010 authority.
+
+## P-031 — latest source integration and next authority audit (2026-10-15)
+
+PR #80 (strategic plan review recovery) merged to `main 55703c08391309f5381bf7a54758f5a804840ba0`; source PR CI `38779525118` SUCCESS 8/8. PR #81 (explicit procurement budget pair integrity) merged to `main 8a48e61709908c0a31f7cb6bd1806b76ea799741`; final source PR SHA `94d09af247d010c9ba310cef30aaaf04230ec600`, CI `38785852649` SUCCESS 8/8. **Exact postmerge main CI remains UNVERIFIED** in this tool session and no such green is claimed.
+
+Source audit continues P-031 `EN_EJECUCIÓN`: existing runtime mobility does not carry source-reviewed procurement mandate/account/unit/recurring commitment through the selected provider action. Also audit whether `calculateTaskFundingCents` improperly compares task-graph cost with Conway credit funding before touching financial transfers; NO_CHANGE until source equivalence/tests are established. C0027 owns exact next work. External purchases, real costs and provider finality remain UNKNOWN under P-005.
