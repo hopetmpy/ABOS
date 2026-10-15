@@ -134,6 +134,13 @@ describe("AwsEnvironmentProvider lifecycle", () => {
     expect(result.credentialsReference).toBe(
       "iam-instance-profile:ABOS-SSM",
     );
+    expect(result.metadata?.procurementAccountId).toBe("123456789012");
+    expect(result.metadata?.procurementCostUnit).toBe("usd_cent");
+    expect(result.metadata?.procurementCommittedCents).toBe(150);
+    expect(result.metadata?.procurementPolicyDecisionId).toBe(
+      "P010-P025-P030-reviewed-scenario",
+    );
+    expect(result.evidence?.join(" ")).toContain("NOT AWS billed-cost settlement");
 
     const run = calls.find(
       (args) => args[0] === "ec2" && args[1] === "run-instances",
@@ -270,6 +277,7 @@ describe("AwsEnvironmentProvider lifecycle", () => {
     for (const args of [
       ["ec2", "run-instances", "--image-id", "ami-123"],
       ["--profile", "default", "ec2", "create-fleet"],
+      ["ec2", "--region", "us-east-1", "run-instances"],
       ["ec2", "request-spot-instances"],
       ["ec2", "start-instances"],
     ]) {
