@@ -362,6 +362,54 @@ describe("orchestration/plan-mode", () => {
       expect(noFalsifier.feedback).toContain("falsification conditions");
     });
 
+    it("keeps treasury uncertainty inside the canonical P-025 strategic review", async () => {
+      const finance = {
+        status: "needs_evidence" as const,
+        proposedCreditsCents: 250,
+        freeCreditsBeforeCents: null,
+        freeCreditsAfterCents: null,
+        contingencyExposureCents: null,
+        evidence: [],
+        conditions: ["Credit liquidity remains UNKNOWN pending fresh provider observation."],
+        limitations: ["Treasury scenario does not authorize payments."],
+      };
+      const result = await reviewPlan(makePlan(), {
+        ...autoConfig,
+        reviewContext: { treasuryReview: finance },
+      });
+      expect(result.approved).toBe(false);
+      expect(result.feedback).toContain("disposition=unknown");
+      expect(result.feedback).toContain("Treasury requires evidence:");
+      expect(result.feedback).toContain("Credit liquidity remains UNKNOWN");
+    });
+
+    it("treats a treasury review-ready signal as evidence, never a standalone authorization", async () => {
+      const finance = {
+        status: "review_ready" as const,
+        proposedCreditsCents: 50,
+        freeCreditsBeforeCents: 100,
+        freeCreditsAfterCents: 50,
+        contingencyExposureCents: 0,
+        evidence: ["Previously observed credit unit and contingency evidence"],
+        conditions: [],
+        limitations: ["Provider still controls final settlement."],
+      };
+      const independent = await reviewPlan(makePlan(), {
+        ...autoConfig,
+        reviewContext: { treasuryReview: finance },
+      });
+      expect(independent.approved).toBe(true);
+      expect(independent.feedback).toContain("Treasury projection: cost=50");
+      expect(independent.feedback).toContain("Provider still controls final settlement");
+
+      const invalidPlan = await reviewPlan(makePlan({ alternatives: [] }), {
+        ...autoConfig,
+        reviewContext: { treasuryReview: finance },
+      });
+      expect(invalidPlan.approved).toBe(false);
+      expect(invalidPlan.feedback).toContain("disposition=revise");
+    });
+
     it("auto mode preserves unresolved capability state as UNKNOWN", async () => {
       const result = await reviewPlan(makePlan({ path: { hypothesis: "Use a CLI capability.", assumptions: ["The capability may exist."], requiredCapabilities: ["cli:example"], preferredEnvironment: null, expectedOutcome: "CLI work completes." } }), autoConfig);
       expect(result.approved).toBe(false);
