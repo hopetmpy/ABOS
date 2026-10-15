@@ -26,7 +26,7 @@ import { appendEvidenceEvent, correlationIdFor, currentEvidenceContext, latestEv
 import { executeCreditEffect } from "../economics/credit-transfer.js";
 import { executeCreditTopupEffect, listUnresolvedCreditTopups } from "../economics/credit-topup.js";
 import { getTreasuryProjection } from "../economics/treasury-projection.js";
-import { listUnresolvedFinancialEffects } from "../economics/financial-effects.js";
+import { getCommittedFinancialEffectCents, listUnresolvedFinancialEffects } from "../economics/financial-effects.js";
 import { assessTreasuryScenario } from "../economics/treasury-scenario.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
 import { toPosixShellPath } from "../platform/home.js";
@@ -395,8 +395,11 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
           observedCreditsCents: balance !== null && balance >= 0 ? balance : null,
         });
         const pending = listUnresolvedFinancialEffects(ctx.db.raw);
+        const pendingTopups = listUnresolvedCreditTopups(ctx.db, ctx.identity.address);
+        const committedUsdcCents = getCommittedFinancialEffectCents(ctx.db.raw, "usdc_cent");
         const sample = pending.slice(0, 10).map((effect) =>
-          `${effect.operationKey} [${effect.state}; provider-id=${effect.providerEffectId ?? "UNKNOWN"}]`,
+          `${effect.operationKey} [${effect.state}; provider-id=${effect.providerEffectId ?? "UNKNOWN"}]` +
+          ` (commitment=${effect.amountCents} ${effect.unit})`,
         );
         const display = balance === null
           ? "UNKNOWN (provider observation unavailable)"
@@ -405,6 +408,7 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
 Treasury: free credits=${treasury.freeCreditsCents ?? "UNKNOWN"};
 pending financial effects=${treasury.unresolvedFinancialEffects};
 immobilized pending credits=${treasury.pendingTransferCreditsCents};
+unresolved x402 USDC topups=${pendingTopups.length}; committed USDC cents (NOT Conway credits)=${committedUsdcCents};
 unresolved effect keys=${sample.join("; ") || "none"}${pending.length > sample.length ? ` (+${pending.length - sample.length} more)` : ""};
 active task estimated cost=${treasury.activeTaskEstimatedCostCents} cents (unit reconciliation may be required);
 reserves/other obligations=UNKNOWN without observed evidence.

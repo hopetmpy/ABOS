@@ -35,6 +35,37 @@ describe("P-030 Conway balance and treasury authority separation", () => {
     expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n).toBe(0);
   });
 
+  it("separates committed x402 USDC from pending Conway credits", async () => {
+    const db=createTestDb();
+    databases.push(db);
+    const identity=createTestIdentity();
+    prepareFinancialEffect(db.raw, {
+      operationKey:"topup:still-pending",
+      effectKind:"x402_credit_topup",
+      unit:"usdc_cent",amountCents:2500,
+      recipient:identity.address.toLowerCase(),
+      provider:"conway_x402",
+      request:{tierUsd:25,product:"conway_compute_credits"},
+    });
+    recordFinancialEffectObservation(db.raw,"topup:still-pending",{
+      resolution:"pending",
+      providerStatus:"signed_payment_prepared",
+      evidence:["onchain finality still UNKNOWN"],
+    });
+    const conway=new MockConwayClient();
+    conway.creditsCents=1000;
+    const ctx:ToolContext={
+      identity,config:createTestConfig(),db,conway,inference:new MockInferenceClient(),
+    };
+    const tool=createBuiltinTools(ctx.config.sandboxId).find(x=>x.name==="check_credits");
+    const result=await tool!.execute({},ctx);
+    expect(result).toContain("immobilized pending credits=0");
+    expect(result).toContain("unresolved x402 USDC topups=1");
+    expect(result).toContain("committed USDC cents (NOT Conway credits)=2500");
+    expect(result).toContain("topup:still-pending [pending; provider-id=UNKNOWN] (commitment=2500 usdc_cent)");
+    expect(result).toContain("free credits=UNKNOWN");
+  });
+
   it("reports observed credits without claiming unknown funds are free", async () => {
     const db = createTestDb();
     databases.push(db);
