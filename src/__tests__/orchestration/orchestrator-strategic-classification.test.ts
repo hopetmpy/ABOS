@@ -6,6 +6,7 @@ import type { AgentTracker, FundingProtocol } from "../../orchestration/types.js
 import { ColonyMessaging, type MessageTransport } from "../../orchestration/messaging.js";
 import type { AbosDatabase } from "../../types.js";
 import { createInMemoryDb } from "./test-db.js";
+import { prepareFinancialEffect } from "../../economics/financial-effects.js";
 
 const IDENTITY = {
   name: "test",
@@ -212,6 +213,11 @@ describe("P-025/P-026 strategic classification boundary", () => {
       "completed", "0xworker", "generalist", 50, "[]", 100, 160, now);
     insert.run(ulid(), goalId, "Old task", "Unknown actual cost",
       "failed", "0xworker", "generalist", 50, "[]", 100, 0, now);
+    prepareFinancialEffect(db, {
+      operationKey: "service:pending", effectKind: "x402_service_purchase",
+      unit: "usdc_cent", amountCents: 75, recipient: IDENTITY.address,
+      provider: "x402_service",
+    });
     const plan = {
       analysis: "Test economic learning with distinct alternatives",
       strategy: "Run task with calibrated cost",
@@ -269,6 +275,8 @@ describe("P-025/P-026 strategic classification boundary", () => {
     expect(feedback).toContain("actual/estimate=1.600");
     expect(feedback).toContain("largest=60");
     expect(feedback).toContain("task_graph local task-cost authority");
+    expect(feedback).toContain("1 non-topup USDC payments remain unresolved");
+    expect(feedback).toContain("total pending USDC obligations=75 USDC cents");
     expect(feedback).not.toContain("awaiting human approval");
     expect(inference.chat).not.toHaveBeenCalled();
 
