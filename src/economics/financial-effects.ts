@@ -748,7 +748,7 @@ export interface ProviderFundingSnapshotExposure {
   additionalHeldCents: number;
   unresolvedCount: number;
   completedAfterSnapshotCount: number;
-  /** Unresolved OR completed-since-snapshot effects without provider account. */
+  /** Unresolved OR completed effects not proven fully pre-snapshot without provider account. */
   unscopedUnresolvedCount: number;
   evidence: string[];
 }
@@ -777,29 +777,35 @@ export function getProviderFundingSnapshotExposure(
     ...listUnresolvedFinancialEffects(db),
     ...listFinancialEffectsByStates(db, ["completed"]),
   ];
+  // An intent can be prepared BEFORE funds were observed but dispatched or
+  // settled AFTERWARDS. Creation time alone cannot prove the provider charge
+  // was already reflected in the observed account balance. Only exclude a
+  // completed effect when all durable lifecycle timestamps prove it was
+  // settled before that observation; missing/invalid legacy timestamps keep
+  // the charge conservatively held until funding is independently refreshed.
+  const completedBeforeSnapshot = (effect: FinancialEffectRecord): boolean =>
+    effect.state === "completed" &&
+    [effect.createdAt, effect.settledAt, effect.completedAt].every(value => {
+      if (value === null) return false;
+      const timestamp = Date.parse(value);
+      return Number.isFinite(timestamp) && timestamp < snapshotAt;
+    });
   for (const effect of records) {
     if (effect.provider !== provider || effect.unit !== unit) continue;
     const account = typeof effect.request.providerAccountId === "string"
       ? effect.request.providerAccountId.trim() : "";
     if (!account) {
-      const createdAt = Date.parse(effect.createdAt);
-      if (!Number.isFinite(createdAt)) {
-        throw new Error("Unscoped financial intent time is UNKNOWN; account funding snapshot cannot be reconciled.");
-      }
-      if (effect.state !== "completed" || createdAt >= snapshotAt) {
-        // An unscoped completed charge AFTER the funding snapshot may also
-        // have consumed capital. It cannot safely be allocated to zero.
+      if (!completedBeforeSnapshot(effect)) {
+        // Unscoped unsettled charges, and completed charges not proven wholly
+        // pre-snapshot, cannot safely be assigned to zero account exposure.
         unscopedUnresolvedCount += 1;
       }
       continue;
     }
     if (account !== providerAccountId) continue;
     if (effect.state === "completed") {
-      const createdAt = Date.parse(effect.createdAt);
-      if (!Number.isFinite(createdAt)) {
-        throw new Error("Completed financial intent has an unparseable funding observation timestamp");
-      }
-      if (createdAt < snapshotAt) continue;
+      if (completedBeforeSnapshot(effect)) continue;
+      // Count potentially post-snapshot settlement, not only creation.
       completedAfterSnapshotCount += 1;
     } else {
       unresolvedCount += 1;
@@ -815,7 +821,7 @@ export function getProviderFundingSnapshotExposure(
     additionalHeldCents: Number(held),
     unresolvedCount, completedAfterSnapshotCount, unscopedUnresolvedCount,
     evidence: [
-      "Local P-030 unresolved intents and completed-after-snapshot intents are conservative holds against this source observation, NOT independently verified provider charges.",
+      "Local P-030 unresolved intents and completed effects not proven settled before the snapshot are conservative holds against this source observation, NOT independently verified provider charges.",
       "The trusted external funding snapshot must separately include all preexisting external recurring liabilities; local holds may overlap with externally reflected charges.",
       "Unknown-account local obligations cannot be silently allocated, and no local ledger certifies complete provider balances or authorizations.",
     ],
