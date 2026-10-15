@@ -104,15 +104,15 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
     }
 
     return {
-      // A configured instance profile is authorization evidence for a new
-      // executor, but SSM reachability is still verified after provisioning.
+      // An IAM instance profile is SSM execution configuration, not proof of
+      // account spending authority, reviewed procurement, or free liquidity.
       executable: reusable.length > 0 ? true : null,
       evidence: [
         ...snapshot.evidence,
         `AWS managed reusable EC2 executor candidates=${reusable.length}.`,
         reusable.length > 0
           ? "A previously owned AWS EC2 executor can be health-checked for reuse."
-          : `New EC2 executor provisioning is authorized with IAM instance profile=${instanceProfile}.`,
+          : `New EC2 executor has SSM instance profile=${instanceProfile}; this does NOT establish economic purchase authority or a verified cost commitment. New billable provisioning needs separate P-031/P-030 policy and treasury evidence.`,
       ],
     };
   }
