@@ -416,6 +416,8 @@ describe("orchestration/plan-mode", () => {
         observedOverrunTaskCostCents: 100,
         largestObservedOverrunTaskCostCents: 100,
         observedOverrunSamples: 1,
+        observedActualsWithoutEstimate: 1,
+        invalidCostSamples: 1,
         authority: "local_task_graph" as const,
         unit: "task_cost_cent" as const,
       };
@@ -427,6 +429,8 @@ describe("orchestration/plan-mode", () => {
       expect(observed.feedback).toContain("Local task estimate→outcome: 2 comparable tasks");
       expect(observed.feedback).toContain("Observed task overruns=100 task-cost cents");
       expect(observed.feedback).toContain("Do not net away downside overruns");
+      expect(observed.feedback).toContain("observed actual cost without an estimated baseline");
+      expect(observed.feedback).toContain("invalid negative task-cost values");
       expect(observed.feedback).toContain("actual/estimate=1.167");
       expect(observed.feedback).toContain("do not treat zero-defaults as measured savings");
       expect(observed.feedback).toContain("do not treat it as Conway credits, settled provider spend or business P&L");
