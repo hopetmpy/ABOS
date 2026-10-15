@@ -194,14 +194,16 @@ async function resolveCreditsCents(
   return null;
 }
 
-function resolveUsdcBalance(options: PlannerContextOptions, cachedUsdcBalance?: number): number {
-  if (typeof options.usdcBalance === "number" && Number.isFinite(options.usdcBalance)) {
+function resolveUsdcBalance(options: PlannerContextOptions, cachedUsdcBalance?: number): number | null {
+  if (typeof options.usdcBalance === "number" &&
+      Number.isFinite(options.usdcBalance) && options.usdcBalance >= 0) {
     return options.usdcBalance;
   }
 
-  return typeof cachedUsdcBalance === "number" && Number.isFinite(cachedUsdcBalance)
+  return typeof cachedUsdcBalance === "number" &&
+    Number.isFinite(cachedUsdcBalance) && cachedUsdcBalance >= 0
     ? cachedUsdcBalance
-    : 0;
+    : null;
 }
 
 function toSurvivalTier(creditsCents: number | null): string {

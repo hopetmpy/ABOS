@@ -82,7 +82,7 @@ export interface PlannedTask {
 
 export interface PlannerContext {
   creditsCents: number | null;
-  usdcBalance: number;
+  usdcBalance: number | null;
   survivalTier: string;
   availableRoles: string[];
   customRoles: string[];
@@ -272,7 +272,9 @@ export function buildPlannerPrompt(context: PlannerContext): string {
   const creditsDisplay = context.creditsCents === null
     ? "UNKNOWN (no current parent credit observation)"
     : `${context.creditsCents} cents`;
-  const usdcDisplay = Number.isFinite(context.usdcBalance) ? String(context.usdcBalance) : "0";
+  const usdcDisplay = context.usdcBalance !== null && Number.isFinite(context.usdcBalance) && context.usdcBalance >= 0
+    ? String(context.usdcBalance)
+    : "UNKNOWN (no observed USDC balance)";
 
   return `# Planner Agent
 

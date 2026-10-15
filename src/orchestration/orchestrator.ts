@@ -867,7 +867,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       workspace: new AgentWorkspace(goalId),
       funding: this.strategicParams.funding,
       identityAddress: this.strategicParams.identity.address,
-      usdcBalance: Number(this.strategicParams.config?.usdcBalance ?? 0),
+      usdcBalance: this.strategicParams.config?.usdcBalance,
       idleAgents: this.strategicParams.agentTracker.getIdle().length,
       busyAgents: Math.max(
         0,

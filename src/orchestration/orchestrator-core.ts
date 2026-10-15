@@ -1363,7 +1363,7 @@ export class Orchestrator {
       workspace: new AgentWorkspace(goalId),
       funding: this.params.funding,
       identityAddress: this.params.identity.address,
-      usdcBalance: Number(this.params.config?.usdcBalance ?? 0),
+      usdcBalance: this.params.config?.usdcBalance,
       idleAgents: this.params.agentTracker.getIdle().length,
       busyAgents: Math.max(
         0,
