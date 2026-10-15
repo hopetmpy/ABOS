@@ -127,6 +127,7 @@ export function assessTreasuryScenario(
 
   const seen = new Set<string>();
   let contingencyExposure: number | null = null;
+  let jointExposureUnverified = false;
   for (const risk of input.risks ?? []) {
     if (!risk.id.trim() || !risk.evidence.trim()) throw new Error("Each contingency requires a risk ID and evidence.");
     if (seen.has(risk.id)) throw new Error("Duplicate risk scenario");
@@ -139,10 +140,12 @@ export function assessTreasuryScenario(
   // is not proof of sufficient aggregate reserve.
   if ((input.risks?.length ?? 0) > 1) {
     if (jointExposure === null || jointEvidence.length === 0) {
+      jointExposureUnverified = true;
       conditions.push(
         "Several downside events are specified but their overlap/correlation is UNKNOWN; supply independent evidence of joint exposure before sizing the reserve.",
       );
     } else if (jointExposure < (contingencyExposure ?? 0)) {
+      jointExposureUnverified = true;
       conditions.push(
         "Supplied joint exposure cannot be lower than the largest individual downside unless offsetting coverage is independently reconciled.",
       );
@@ -157,9 +160,13 @@ export function assessTreasuryScenario(
     conditions.push("No evidence-based contingency scenarios were supplied; do not invent a universal reserve percentage.");
   } else if (projection.reservedCreditsCents === null) {
     conditions.push("Reserve UNKNOWN; contingency coverage cannot be checked.");
-  } else if (projection.reservedCreditsCents < contingencyExposure) {
-    conditions.push("Observed/planned reserve is below the largest individually specified downside scenario; evaluate correlation and additional coverage.");
   }
+
+  // Never infer adequate total protection from the maximum isolated loss
+  // when concurrent scenarios have no independently supported joint estimate.
+  const reserveTarget = jointExposureUnverified ? null : contingencyExposure;
+  const extraReserve = reserveTarget === null || projection.reservedCreditsCents === null
+    ? null : Math.max(0, reserveTarget - projection.reservedCreditsCents);
 
   for (const alternative of input.alternatives ?? []) {
     validCredits(alternative.costCreditsCents, "alternative cost");
@@ -172,7 +179,22 @@ export function assessTreasuryScenario(
   if (!(input.alternatives?.length)) conditions.push("No materially distinct procurement/inaction alternative was supplied.");
 
   const freeBefore = projection.freeCreditsCents;
-  const freeAfter = freeBefore === null ? null : freeBefore - proposal;
+  // A proposed reserve increase consumes otherwise free credits too.
+  const freeAfter = freeBefore === null || extraReserve === null
+    ? null : freeBefore - proposal - extraReserve;
+  if (freeAfter !== null && !Number.isSafeInteger(freeAfter)) {
+    throw new Error("Combined proposal and contingency exceed exact credit-cent arithmetic");
+  }
+  const reserveDisposition: TreasuryReserveRecommendation["disposition"] =
+    extraReserve === null || freeBefore === null ? "unknown"
+      : freeAfter < 0 ? "requires_alternative"
+      : extraReserve > 0 ? "can_earmark" : "covered";
+  if (reserveDisposition === "requires_alternative") {
+    conditions.push("Proposed spend plus scenario-based additional reserve exceeds free liquidity; examine alternatives or new observed funding.");
+  }
+  if (reserveDisposition === "can_earmark") {
+    evidence.push(`Proposed reserve adjustment: earmark ${extraReserve} additional credit cents for evidenced downside; no fixed percentage.`);
+  }
   if (freeAfter !== null && freeAfter < 0) {
     conditions.push("Proposed cost exceeds currently observed free credits; separately verified financing is required before execution.");
   }
@@ -192,6 +214,12 @@ export function assessTreasuryScenario(
     freeCreditsBeforeCents: freeBefore,
     freeCreditsAfterCents: freeAfter,
     contingencyExposureCents: contingencyExposure,
+    reserveRecommendation: {
+      targetCreditsCents: reserveTarget,
+      additionalCreditsCents: extraReserve,
+      freeAfterProposalAndReserveCents: freeAfter,
+      disposition: reserveDisposition,
+    },
     evidence,
     conditions,
     limitations: [
