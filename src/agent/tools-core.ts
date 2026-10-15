@@ -3169,7 +3169,9 @@ Model: ${ctx.inference.getDefaultModel()}
 
         // A successful HTTP response delivers content, not verified financial
         // settlement. Keep the USDC effect pending until provider/chain proof.
-
+        const paymentStatus = prepared
+          ? "\nFinancial status: PENDING independent provider/chain settlement verification."
+          : "";
 
         const responseStr =
           typeof result.response === "string"
@@ -3178,9 +3180,9 @@ Model: ${ctx.inference.getDefaultModel()}
 
         // Truncate very large responses
         if (responseStr.length > 10000) {
-          return `x402 fetch succeeded (truncated):\n${responseStr.slice(0, 10000)}...`;
+          return `x402 fetch succeeded (truncated):\n${responseStr.slice(0, 10000)}...${paymentStatus}`;
         }
-        return `x402 fetch succeeded:\n${responseStr}`;
+        return `x402 fetch succeeded:\n${responseStr}${paymentStatus}`;
       },
     },
 
