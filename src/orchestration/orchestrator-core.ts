@@ -668,13 +668,18 @@ export class Orchestrator {
       .prepare("SELECT value FROM kv WHERE key = ?")
       .get(planKey) as { value: string } | undefined;
 
-    if (!planRow?.value) {
-      return { ...state, phase: "executing" };
-    }
-
-    const planData = safeJsonParse(planRow.value);
+    // A missing/corrupt plan is NOT equivalent to strategic approval.
+    // Retain the objective and replan rather than dispatching tasks that
+    // have no verifiable P-025 review after restart or store corruption.
+    const planData = planRow?.value ? safeJsonParse(planRow.value) : null;
     if (!planData) {
-      return { ...state, phase: "executing" };
+      const reason = planRow?.value
+        ? "Persisted plan could not be parsed; strategic approval is UNKNOWN."
+        : "Persisted plan is missing; strategic approval is UNKNOWN.";
+      this.params.db.prepare(
+        "INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))",
+      ).run(`orchestrator.review_feedback.${state.goalId}`, reason);
+      return { ...state, phase: "planning", failedError: reason };
     }
 
     try {
