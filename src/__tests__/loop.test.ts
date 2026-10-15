@@ -31,6 +31,27 @@ vi.mock("../conway/x402.js", async (importOriginal) => ({
   getUsdcBalance: vi.fn(async () => 0),
 }));
 
+// Every agent-loop wake-up probes environment providers. The AWS adapter
+// normally shells out to AWS CLI and STS (each with separate external wait
+// limits), which is unrelated to these loop/tool/persistence assertions.
+// Keep the real environment registry and provider implementation, but inject
+// an immediate deterministic unavailable AWS command runner in this test file.
+vi.mock("../environments/aws.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../environments/aws.js")>();
+  return {
+    ...actual,
+    AwsEnvironmentProvider: class OfflineAwsEnvironmentProvider extends actual.AwsEnvironmentProvider {
+      constructor() {
+        super(async () => ({
+          exitCode: 1,
+          stdout: "",
+          stderr: "AWS CLI unavailable in deterministic agent-loop test",
+        }));
+      }
+    },
+  };
+});
+
 // The discover_agents behavior under test here is loop classification,
 // not the live ERC-8004 RPC.
 vi.mock("../registry/discovery.js", () => ({
