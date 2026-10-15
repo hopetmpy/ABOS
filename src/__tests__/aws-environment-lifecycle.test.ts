@@ -233,8 +233,6 @@ describe("AwsEnvironmentProvider lifecycle", () => {
         resourceType: "ec2",
         retentionPolicy: "ephemeral",
         requiredCapabilities: ["remote compute"],
-        goalId: "goal-1",
-        taskId: "task-1",
       })).rejects.toMatchObject({ externalEffectNotDispatched: true });
       expect(awsCalls).toBe(0);
       const denied = store.get("before-dispatch-denied");
