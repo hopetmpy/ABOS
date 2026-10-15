@@ -6,21 +6,21 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / AWS_EXACT_MANDATE_SCOPE_PR_CI_PENDING / ACCOUNT_FINANCING_STILL_UNKNOWN / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / PROVIDER_TREASURY_SOURCE_PR_CI_PENDING / AWS_ACCOUNT_FINANCING_NOT_ATTESTED / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-aws-mandate-scope-replay
+Current-Host-Branch: abos/p031-provider-treasury-scenario
 Host-Head-At-Audit-Open: 088de39896dcef837c7047c4c560e9cd0b7a29e8
 Last-Reconciled-Host-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
-Observed-Main-Head: 4979914a671bf662968b29479620c2b526597cc5
-Last-Product-Head: 4979914a671bf662968b29479620c2b526597cc5
-Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #86 38807703485 — SUCCESS 8/8
+Observed-Main-Head: eaeb9089106fab94240e24fc2f7b68d60095f503
+Last-Product-Head: eaeb9089106fab94240e24fc2f7b68d60095f503
+Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #87 38808756221 — SUCCESS 8/8
 Last-Completed-Plan: P-030
-Last-Completed-Merge: 4979914a671bf662968b29479620c2b526597cc5
+Last-Completed-Merge: eaeb9089106fab94240e24fc2f7b68d60095f503
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
@@ -414,3 +414,12 @@ NEXT_ELIGIBLE_WORK: verify PR exact CI and merge if all green; observe real acco
 - Existing `environment_economic_evidence` tool now exposes explicitly requested STS + AWS COST budget observations without treating monitored budgets/spend as free USD balance or a purchase mandate. No LIVE AWS invocation under this session.
 - Follow-up R2 causal source gap: `AwsEc2ProcurementDecision` previously attested account+USD total but did not bind an authorization to the **specific EC2 resource id, instance type, region and expiry**. A stale/mis-scoped decision can be reused if a trusted callback returns the wrong record. Branch `abos/p031-aws-mandate-scope-replay` requires that exact scope at provider dispatch, and persists authorization identity/expiry with resource provenance; missing resolution/expired scope -> definitely not dispatched, not fictitious provider UNKNOWN. Added negative variants and positive lifecycle regression; source CI PENDING. This is not P-010/030 mandate issuance or financing verification.
 - Next: verify scoped PR exact CI/merge; then actually source provider-account economic authority from verified financing + recurring supplier terms, bind to P-010/P-025/P-030 policy lifecycle, guard repeated purchase/reconciliation without parallel ledgers. P-031 EN_EJECUCIÓN; P-005 E5/E6 LIVE UNKNOWN.
+
+## P-031 — existing P-030 treasury can assess provider acquisition, not authorize it (2026-10-15)
+
+- PR #87 exact source `7b31931dd8e3e6c0c071f9f3f04320e2a4840b16`, CI `38808756221` SUCCESS 8/8, squash merged `main eaeb9089106fab94240e24fc2f7b68d60095f503`. Exact merged-main CI still UNVERIFIED with connector limited to PR-triggered runs.
+- R2 owner audit: P-030 `assessTreasuryScenario` is explicitly `credit_cent` and cannot represent AWS USD provider-account obligations or liquefy Conway investments. P-025 plan review is not permission to purchase. P-010 policy execution lifecycle is durable but the runtime does NOT yet hold an externally attested AWS account financing/billing mandate. AWS production callback remains unwired; do NOT self-sign a reviewed plan as account spend permission.
+- Decision: **extend existing `src/economics/treasury-scenario.ts`**, no new economic authority/ledger or hard spending threshold. `assessProviderProcurementScenario` performs read-only same-unit P-030 assessment: quoted one-time + periodic + other charges (BigInt exact), time scope, explicitly unpriced components, observed account-specific funding source/expiration, prior commitments, held reserves, incremental downside and reuse/alternative evidence. Unknown funds or budgets-as-cash keep free liquidity UNKNOWN, not zero or available. `review_ready` means supplied evidence forms a checkable scenario, NOT authenticates source or authorizes payment.
+- A new `environment_procurement_review` tool is connected to the existing provider observation interface for on-demand preparatory scenario; it deliberately never supplies user/model monetary guesses as `externally_observed`. AWS budget limits cannot become spendable cash via the model. Tests cover same-unit positive synthetic fixture, missing cost/recurring, unavailable funds, expired observation, monetary mismatch, overcommitted capital, zero-cost supplier vs noncash investment, arithmetic overflow and runtime-tool unavailability.
+- Source branch `abos/p031-provider-treasury-scenario`; exact head PR/CI **PENDING**. No AWS purchasing, paid provider dispatch, external account execution or E5/E6 credit/payment claims.
+- Next after source CI/merge: source-backed verified AWS financing terms and P-010/P-025 decision producer linked to procurement-specific P-031 provider callback; reconcile provider expense, renew/retire and idempotency. Do not treat budget monitoring or a read-only scenario as an economic mandate.
