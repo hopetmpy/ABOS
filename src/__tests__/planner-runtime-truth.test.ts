@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildPlannerPrompt } from "../orchestration/planner.js";
 import { buildPlannerContext } from "../orchestration/planner-context.js";
+import { Orchestrator } from "../orchestration/orchestrator-core.js";
 import { createTestDb } from "./mocks.js";
 
 function context() {
@@ -34,6 +35,44 @@ function context() {
     ],
   };
 }
+
+describe("planner review recovery", () => {
+  it.each([
+    ["missing", null],
+    ["malformed", "{not-json"],
+  ])("does not execute an unreviewed %s persisted plan", async (_label, saved) => {
+    const db = createTestDb();
+    try {
+      if (saved !== null) {
+        db.raw.prepare(
+          "INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))",
+        ).run("orchestrator.plan.goal-review", saved);
+      }
+      const orchestrator = new Orchestrator({
+        db: db.raw,
+        agentTracker: {} as any,
+        funding: {} as any,
+        messaging: {} as any,
+        inference: {} as any,
+        identity: {} as any,
+        config: {},
+      });
+      const state = {
+        phase: "plan_review", goalId: "goal-review", replanCount: 0,
+        failedTaskId: null, failedError: null,
+      };
+      const resumed = await (orchestrator as any).handlePlanReviewPhase(state);
+      expect(resumed.phase).toBe("planning");
+      expect(resumed.failedError).toContain("strategic approval is UNKNOWN");
+      const feedback = db.raw.prepare(
+        "SELECT value FROM kv WHERE key = ?",
+      ).get("orchestrator.review_feedback.goal-review") as { value: string };
+      expect(feedback.value).toContain("strategic approval is UNKNOWN");
+    } finally {
+      db.close();
+    }
+  });
+});
 
 describe("planner runtime truth", () => {
   it("derives role count from the injected role set rather than claiming 26 roles", () => {
