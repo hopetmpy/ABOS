@@ -16,7 +16,6 @@ import {
   prepareFinancialEffect,
 } from "../economics/financial-effects.js";
 import { getTreasuryProjection } from "../economics/treasury-projection.js";
-import { topupCredits } from "../conway/topup.js";
 
 const databases: AbosDatabase[] = [];
 const dirs: string[] = [];
@@ -107,11 +106,4 @@ describe("P-030 x402 topup durable financial intents", () => {
     expect(paid.state).toBe("pending");
   });
 
-  it("keeps provider credit quantity UNKNOWN when paid HTTP omits the credit value", async () => {
-    const fetch = vi.spyOn(await import("../conway/x402.js"),"x402Fetch");
-    // ESM bindings may be immutable under the runner; this case is covered
-    // by the integration adapter's missing-credits response above.
-    expect(typeof topupCredits).toBe("function");
-    fetch.mockRestore();
-  });
 });
