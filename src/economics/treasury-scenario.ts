@@ -368,14 +368,15 @@ export function assessProviderProcurementScenario(
   if (oneTime === null || recurring === null || periods === null || other === null) {
     conditions.push("Total one-time, recurring, duration or ancillary cost is UNKNOWN.");
   }
-  const total = oneTime === null || recurring === null || periods === null ||
-    other === null || unpriced.length > 0
-    ? null : safeProviderTotal(oneTime, other, safeProviderTotal(...[recurring * BigInt(periods)].map(v => {
-        if (v > BigInt(Number.MAX_SAFE_INTEGER)) {
-          throw new Error("Provider recurring monetary exposure exceeds exact integer arithmetic");
-        }
-        return Number(v);
-      })));
+  const costIsComplete = oneTime !== null && recurring !== null &&
+    periods !== null && other !== null && unpriced.length === 0;
+  const providerTotal = costIsComplete
+    ? BigInt(oneTime!) + BigInt(other!) + BigInt(recurring!) * BigInt(periods!)
+    : null;
+  if (providerTotal !== null && providerTotal > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error("Provider total commitment exceeds exact integer arithmetic");
+  }
+  const total = providerTotal === null ? null : Number(providerTotal);
   if (total !== null) {
     evidence.push("Proposed total=" + total + " " + unit +
       " across " + periods + " recurring periods; proposed, NOT incurred.");
