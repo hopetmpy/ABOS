@@ -666,6 +666,33 @@ export function listUnresolvedFinancialEffects(
   return listFinancialEffectsByStates(db, NON_TERMINAL_STATES);
 }
 
+/** Read-only aggregate for P-025 review, sourced from the sole financial intent owner. */
+export interface StrategicFinancialExposure {
+  count: number;
+  pendingCreditCommitments: number;
+  pendingUsdcTopups: number;
+  /** Other on-chain USDC obligations, including generic x402 service purchases. */
+  pendingUsdcOtherEffects: number;
+  pendingUsdcCommitments: number;
+  /** Do not hide an unknown accounting unit from strategic review. */
+  unclassifiedPendingEffects: number;
+}
+
+export function getStrategicFinancialExposure(db: Database.Database): StrategicFinancialExposure {
+  const pending = listUnresolvedFinancialEffects(db);
+  return {
+    count: pending.filter(effect => effect.unit === "credit_cent").length,
+    pendingCreditCommitments: getCommittedFinancialEffectCents(db, "credit_cent"),
+    pendingUsdcTopups: pending.filter(effect =>
+      effect.unit === "usdc_cent" && effect.effectKind === "x402_credit_topup").length,
+    pendingUsdcOtherEffects: pending.filter(effect =>
+      effect.unit === "usdc_cent" && effect.effectKind !== "x402_credit_topup").length,
+    pendingUsdcCommitments: getCommittedFinancialEffectCents(db, "usdc_cent"),
+    unclassifiedPendingEffects: pending.filter(effect =>
+      effect.unit !== "credit_cent" && effect.unit !== "usdc_cent").length,
+  };
+}
+
 export function getCommittedFinancialEffectCents(
   db: Database.Database,
   unit = "credit_cent",
