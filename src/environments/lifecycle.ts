@@ -76,6 +76,8 @@ export class EnvironmentLifecycleManager {
     this.resources.transition(owned.id, "provisioning", {
       operation: "provision",
       reason: "Provider provisioning started.",
+      // Persist uncertainty BEFORE dispatch: a process crash cannot reach catch.
+      metadata: { provisionNeedsReconciliation: true },
     });
 
     try {
@@ -97,7 +99,10 @@ export class EnvironmentLifecycleManager {
           credentialsReference: result.credentialsReference,
           providerState: result.providerState,
           evidence: result.evidence,
-          metadata: result.metadata,
+          metadata: {
+            ...result.metadata,
+            provisionNeedsReconciliation: false,
+          },
         },
         "provision",
         "Provider provisioning completed.",
