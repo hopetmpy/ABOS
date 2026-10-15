@@ -193,7 +193,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       return base;
     }
     const accountId = parseJson<{ Account?: unknown }>(identity.stdout)?.Account;
-    if (typeof accountId !== "string" || !/^\\d{12}$/.test(accountId)) {
+    if (typeof accountId !== "string" || !/^\d{12}$/.test(accountId)) {
       base.evidence.push("AWS STS returned no verified 12-digit account identity.");
       return base;
     }
@@ -2276,7 +2276,7 @@ function costAmount(value: unknown): { cents: number | null; raw: string | null 
   const raw = typeof obj.Amount === "string" ? obj.Amount : null;
   if (raw === null) return { cents: null, raw: null };
   if (obj.Unit !== "USD") return { cents: null, raw };
-  const match = /^(0|[1-9]\\d*)(?:\\.(\\d+))?$/.exec(raw);
+  const match = /^(0|[1-9]\d*)(?:\.(\d+))?$/.exec(raw);
   if (!match) return { cents: null, raw };
   const fraction = match[2] ?? "";
   if (fraction.length > 2 && !/^0*$/.test(fraction.slice(2))) {
