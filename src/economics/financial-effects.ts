@@ -748,6 +748,7 @@ export interface ProviderFundingSnapshotExposure {
   additionalHeldCents: number;
   unresolvedCount: number;
   completedAfterSnapshotCount: number;
+  /** Unresolved OR completed-since-snapshot effects without provider account. */
   unscopedUnresolvedCount: number;
   evidence: string[];
 }
@@ -781,7 +782,15 @@ export function getProviderFundingSnapshotExposure(
     const account = typeof effect.request.providerAccountId === "string"
       ? effect.request.providerAccountId.trim() : "";
     if (!account) {
-      if (effect.state !== "completed") unscopedUnresolvedCount += 1;
+      const createdAt = Date.parse(effect.createdAt);
+      if (!Number.isFinite(createdAt)) {
+        throw new Error("Unscoped financial intent time is UNKNOWN; account funding snapshot cannot be reconciled.");
+      }
+      if (effect.state !== "completed" || createdAt >= snapshotAt) {
+        // An unscoped completed charge AFTER the funding snapshot may also
+        // have consumed capital. It cannot safely be allocated to zero.
+        unscopedUnresolvedCount += 1;
+      }
       continue;
     }
     if (account !== providerAccountId) continue;
