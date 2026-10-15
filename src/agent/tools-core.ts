@@ -385,7 +385,7 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
         const treasury = getTreasuryProjection(ctx.db, {
           observedCreditsCents: Number.isSafeInteger(balance) && balance >= 0 ? balance : null,
         });
-        return `Credit balance: ${(balance / 100).toFixed(2)} (${balance} cents)
+        return `Credit balance: $${(balance / 100).toFixed(2)} (${balance} cents)
 Treasury: free credits=${treasury.freeCreditsCents ?? "UNKNOWN"};
 pending financial effects=${treasury.unresolvedFinancialEffects};
 immobilized pending credits=${treasury.pendingTransferCreditsCents};
