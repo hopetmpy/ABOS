@@ -157,6 +157,15 @@ describe("P-030 treasury projection", () => {
     expect(projected.status).toBe("needs_evidence");
   });
 
+  it("refuses an inexact aggregate of individually valid treasury obligations", () => {
+    const d = db();
+    expect(() => getTreasuryProjection(d, {
+      observedCreditsCents: Number.MAX_SAFE_INTEGER,
+      reservedCreditsCents: Number.MAX_SAFE_INTEGER,
+      otherCommittedCreditsCents: 1,
+    })).toThrow(/exact nonnegative safe integer credit accounting/);
+  });
+
   it("rejects duplicate resource allocations rather than inflating investment", () => {
     const d = db();
     const item = { allocationKey: "one", resource: "compute", currency: "USD",
