@@ -151,7 +151,14 @@ export function getTreasuryProjection(
   // compatible valuation.
   const inputsComplete = [observed, reserved, other, taskCredits].every(v => v !== null);
   const obligations = inputsComplete
-    ? reserved! + other! + taskCredits! + pending : null;
+    ? [reserved!, other!, taskCredits!, pending].reduce((total, amount) => {
+      if (!Number.isSafeInteger(amount) || amount < 0 ||
+          !Number.isSafeInteger(total + amount)) {
+        throw new Error("Treasury obligations exceed exact nonnegative safe integer credit accounting");
+      }
+      return total + amount;
+    }, 0)
+    : null;
   const freeCreditsCents = obligations === null ? null : Math.max(0, observed! - obligations);
   const projectedCreditShortfallCents = obligations === null ? null : Math.max(0, obligations - observed!);
 
