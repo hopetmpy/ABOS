@@ -159,7 +159,7 @@ describe("EnvironmentExecutionBridge", () => {
     const registry = new EnvironmentRegistry();
     const candidate = provider("priced", 80);
     candidate.estimate = async () => ({
-      estimatedCostCents: 80, costCoverage: "complete",
+      estimatedCostCents: 80, costCoverage: "complete", costUnit: "usd_cent",
     });
     registry.register(candidate);
     const executors = new EnvironmentTaskExecutorRegistry();
@@ -174,12 +174,18 @@ describe("EnvironmentExecutionBridge", () => {
     const bridge = new EnvironmentExecutionBridge(new EnvironmentSelector(registry), executors);
     const input = task("priced");
     input.metadata.estimatedCostCents = 1; // task_cost_cent is not a purchase budget
-    await expect(bridge.spawn(input, { maxEstimatedCostCents: 50 }))
+    await expect(bridge.spawn(input, { maxEstimatedCostCents: 50, maxEstimatedCostUnit: "usd_cent" }))
       .rejects.toMatchObject({ operation: "selection" });
+    expect(dispatches).toBe(0);
+    await expect(bridge.spawn(input, { maxEstimatedCostCents: 80 }))
+      .rejects.toMatchObject({ operation: "selection" });
+    await expect(bridge.spawn(input, {
+      maxEstimatedCostCents: 80, maxEstimatedCostUnit: "credit_cent",
+    })).rejects.toMatchObject({ operation: "selection" });
     expect(dispatches).toBe(0);
     await bridge.spawn(input); // No silent limit derived from task metadata
     expect(dispatches).toBe(1);
-    await bridge.spawn(input, { maxEstimatedCostCents: 80 });
+    await bridge.spawn(input, { maxEstimatedCostCents: 80, maxEstimatedCostUnit: "usd_cent" });
     expect(dispatches).toBe(2);
   });
 
@@ -187,7 +193,7 @@ describe("EnvironmentExecutionBridge", () => {
     const registry = new EnvironmentRegistry();
     const candidate = provider("partial", 5);
     candidate.estimate = async () => ({
-      estimatedCostCents: 5, costCoverage: "partial",
+      estimatedCostCents: 5, costCoverage: "partial", costUnit: "usd_cent",
       evidence: ["Compute only; networking and storage unpriced"],
     });
     registry.register(candidate);
@@ -201,7 +207,7 @@ describe("EnvironmentExecutionBridge", () => {
       },
     });
     const bridge = new EnvironmentExecutionBridge(new EnvironmentSelector(registry), executors);
-    await expect(bridge.spawn(task("partial"), { maxEstimatedCostCents: 10 }))
+    await expect(bridge.spawn(task("partial"), { maxEstimatedCostCents: 10, maxEstimatedCostUnit: "usd_cent" }))
       .rejects.toMatchObject({ operation: "selection" });
     expect(dispatches).toBe(0);
   });
