@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { buildPlannerPrompt } from "../orchestration/planner.js";
 import { buildPlannerContext } from "../orchestration/planner-context.js";
-import { Orchestrator } from "../orchestration/orchestrator-core.js";
+import { Orchestrator, calculateTaskFundingCents } from "../orchestration/orchestrator-core.js";
+import type { TaskNode } from "../orchestration/task-graph.js";
 import { insertGoal, insertTask } from "../state/database.js";
 import { createTestDb } from "./mocks.js";
 
@@ -151,6 +152,44 @@ describe("planner review recovery", () => {
     } finally {
       db.close();
     }
+  });
+});
+
+describe("P-031 task funding unit boundary", () => {
+  const taskWithLocalEstimate = {
+    metadata: { estimatedCostCents: 1_000_000 },
+  } as TaskNode;
+
+  it("does not treat local task_cost_cent as Conway credit_cent", () => {
+    expect(calculateTaskFundingCents(taskWithLocalEstimate, {})).toBe(25);
+    expect(calculateTaskFundingCents(taskWithLocalEstimate, {
+      defaultTaskFundingCents: 75,
+    })).toBe(75);
+  });
+
+  it("honors explicit zero and rejects invalid provider-credit funding values", () => {
+    expect(calculateTaskFundingCents(taskWithLocalEstimate, {
+      defaultTaskFundingCents: 0,
+    })).toBe(0);
+    expect(calculateTaskFundingCents(taskWithLocalEstimate, {
+      defaultTaskFundingCents: -10,
+    })).toBe(0);
+    expect(calculateTaskFundingCents(taskWithLocalEstimate, {
+      defaultTaskFundingCents: Number.NaN,
+    })).toBe(0);
+    expect(calculateTaskFundingCents(taskWithLocalEstimate, {
+      defaultTaskFundingCents: 1.5,
+    })).toBe(0);
+  });
+
+  it("preserves configurable credit funding independent of task-cost magnitude", () => {
+    const lowTaskCost = { metadata: { estimatedCostCents: 1 } } as TaskNode;
+    expect(calculateTaskFundingCents(lowTaskCost, {
+      defaultTaskFundingCents: 120,
+    })).toBe(120);
+    expect(calculateTaskFundingCents(taskWithLocalEstimate, {
+      defaultTaskFundingCents: 120,
+    })).toBe(120);
   });
 });
 
