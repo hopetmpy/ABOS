@@ -129,20 +129,28 @@ export function reconcileCreditEffect(
       ...detail, resolution: observation.resolution,
     });
   }
+  // No provider dispatch should have happened unless the intent was durably
+  // claimed beforehand. A forged "completed" observation cannot turn an
+  // undispatched prepared intent into a local ledger movement.
+  if (!effect.dispatchedAt || effect.state === "prepared") {
+    throw new Error("Provider settlement cannot materialize an undispatched financial intent");
+  }
   if (classifyCreditTransferStatus(observation.providerStatus) !== "settled") {
     throw new Error("A final provider settlement status is required before materialization");
   }
   if (!observation.providerEffectId?.trim()) {
     throw new Error("Independent settlement requires an explicit provider transfer identifier");
   }
-  if (observation.toAddress !== undefined &&
-      (typeof observation.toAddress !== "string" ||
-       observation.toAddress.trim().toLowerCase() !== effect.recipient?.toLowerCase())) {
-    throw new Error("Provider settlement recipient conflicts with durable financial intent");
+  if (typeof observation.toAddress !== "string" ||
+      observation.toAddress.trim().toLowerCase() !== effect.recipient?.toLowerCase()) {
+    throw new Error("Provider settlement requires an observed matching recipient");
   }
-  if (observation.amountCents !== undefined &&
-      (observation.amountCents !== effect.amountCents)) {
-    throw new Error("Provider settlement amount conflicts with durable financial intent");
+  if (observation.amountCents !== effect.amountCents) {
+    throw new Error("Provider settlement requires an observed matching amount");
+  }
+  if (effect.providerEffectId &&
+      observation.providerEffectId.trim() !== effect.providerEffectId) {
+    throw new Error("Provider settlement identity conflicts with durable financial effect");
   }
   if (effect.effectKind !== "child_funding" && effect.effectKind !== "credit_transfer") {
     throw new Error("Reconciliation effect kind is not a Conway credit transfer");

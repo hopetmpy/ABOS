@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AbosDatabase } from "../types.js";
 import { createTestDb } from "./mocks.js";
 import { executeCreditEffect, reconcileCreditEffect } from "../economics/credit-transfer.js";
+import { prepareFinancialEffect } from "../economics/financial-effects.js";
 
 const opened: AbosDatabase[] = [];
 function createDb() {
@@ -134,6 +135,10 @@ describe("P-030 credit effect execution and reconciliation", () => {
     };
     expect(() => reconcileCreditEffect(db, { ...valid, providerEffectId: "" }))
       .toThrow(/transfer identifier/);
+    expect(() => reconcileCreditEffect(db, { ...valid, toAddress: undefined }))
+      .toThrow(/observed matching recipient/);
+    expect(() => reconcileCreditEffect(db, { ...valid, amountCents: undefined }))
+      .toThrow(/observed matching amount/);
     expect(() => reconcileCreditEffect(db, { ...valid, providerEffectId: "different" }))
       .toThrow(/identity conflicts/);
     expect(() => reconcileCreditEffect(db, { ...valid, toAddress: "0xother" }))
@@ -143,6 +148,21 @@ describe("P-030 credit effect execution and reconciliation", () => {
     expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as any).n).toBe(0);
     expect(reconcileCreditEffect(db, valid).state).toBe("completed");
     expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as any).n).toBe(1);
+  });
+
+  it("refuses a final receipt if no external dispatch was durably claimed", () => {
+    const db = createDb();
+    prepareFinancialEffect(db.raw, {
+      operationKey: "never-dispatched", effectKind: "credit_transfer",
+      recipient: "0xrecipient", amountCents: 100, provider: "conway",
+    });
+    expect(() => reconcileCreditEffect(db, {
+      operationKey: "never-dispatched", resolution: "settled",
+      providerEffectId: "provider-misrouted", providerStatus: "completed",
+      toAddress: "0xrecipient", amountCents: 100,
+      evidence: ["unbound claimed receipt"],
+    })).toThrow(/undispatched financial intent/);
+    expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as any).n).toBe(0);
   });
 
   it("refuses externally inconsistent recipient or amount observations", async () => {
