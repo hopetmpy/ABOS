@@ -195,7 +195,7 @@ export function assessTreasuryScenario(
   if (reserveDisposition === "can_earmark") {
     evidence.push(`Proposed reserve adjustment: earmark ${extraReserve} additional credit cents for evidenced downside; no fixed percentage.`);
   }
-  if (freeAfter !== null && freeAfter < 0) {
+  if (freeBefore !== null && proposal > freeBefore) {
     conditions.push("Proposed cost exceeds currently observed free credits; separately verified financing is required before execution.");
   }
   if (expectedRevenue !== null) {
