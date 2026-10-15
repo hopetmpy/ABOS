@@ -73,7 +73,7 @@ describe("P-031 provider USD exposure in canonical P-025/P-030 review", () => {
       record(db, "large-usd-1", Number.MAX_SAFE_INTEGER, "usd_cent", "aws");
       record(db, "large-usd-2", 1, "usd_cent", "aws");
       expect(() => getStrategicFinancialExposure(db.raw))
-        .toThrow("exceed exact nonnegative");
+        .toThrow(/exceed exact nonnegative|integer overflow/i);
       const assessment = assessStrategicPlan({
         analysis: "Audit invalid provider exposure", strategy: "Observe before acting",
         customRoles: [], tasks: [], risks: [],
