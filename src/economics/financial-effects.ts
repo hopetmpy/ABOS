@@ -674,6 +674,9 @@ export interface StrategicFinancialExposure {
   /** Other on-chain USDC obligations, including generic x402 service purchases. */
   pendingUsdcOtherEffects: number;
   pendingUsdcCommitments: number;
+  /** Separate off-chain provider USD commitments; not on-chain USDC nor cash. */
+  pendingProviderUsdEffects: number;
+  pendingProviderUsdCommitments: number;
   /** Do not hide an unknown accounting unit from strategic review. */
   unclassifiedPendingEffects: number;
 }
@@ -688,8 +691,12 @@ export function getStrategicFinancialExposure(db: Database.Database): StrategicF
     pendingUsdcOtherEffects: pending.filter(effect =>
       effect.unit === "usdc_cent" && effect.effectKind !== "x402_credit_topup").length,
     pendingUsdcCommitments: getCommittedFinancialEffectCents(db, "usdc_cent"),
+    pendingProviderUsdEffects: pending.filter(effect =>
+      effect.unit === "usd_cent").length,
+    pendingProviderUsdCommitments: getCommittedFinancialEffectCents(db, "usd_cent"),
     unclassifiedPendingEffects: pending.filter(effect =>
-      effect.unit !== "credit_cent" && effect.unit !== "usdc_cent").length,
+      effect.unit !== "credit_cent" && effect.unit !== "usdc_cent" &&
+      effect.unit !== "usd_cent").length,
   };
 }
 

@@ -6,21 +6,21 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / STRATEGIC_TREASURY_LINK_INTEGRATED / P010_PROVIDER_MANDATE_UNWIRED / AWS_ACCOUNT_FINANCING_NOT_ATTESTED / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / PROVIDER_USD_FINANCIAL_EXPOSURE_SOURCE_CI_PENDING / P010_PROVIDER_MANDATE_UNWIRED / AWS_ACCOUNT_FINANCING_NOT_ATTESTED / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-reviewed-route-checkpoint
+Current-Host-Branch: abos/p031-provider-usd-exposure-review
 Host-Head-At-Audit-Open: 088de39896dcef837c7047c4c560e9cd0b7a29e8
 Last-Reconciled-Host-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
-Observed-Main-Head: bb25d0082c0292159292f2b70ed31910185d1f31
-Last-Product-Head: bb25d0082c0292159292f2b70ed31910185d1f31
-Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #89 38812117388 — SUCCESS 8/8
+Observed-Main-Head: 2a071973dadadbe3a61883ad9d9d3a77fb0c4db4
+Last-Product-Head: 2a071973dadadbe3a61883ad9d9d3a77fb0c4db4
+Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #90 38812650727 — SUCCESS 8/8
 Last-Completed-Plan: P-030
-Last-Completed-Merge: bb25d0082c0292159292f2b70ed31910185d1f31
+Last-Completed-Merge: 2a071973dadadbe3a61883ad9d9d3a77fb0c4db4
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
@@ -439,3 +439,10 @@ PR #89 exact source `fe567f9569960f5570a416787a6816f605d76531` passed CI run `38
 P-031 now has: observed provider account/Budgets evidence (PR #86); exact account/resource/shape/region/expiry EC2 dispatch boundary (PR #87); same-unit P-030 upfront+recurring+ancillary cost/finance/contingency/alternatives review that cannot treat budgets or Conway credits as AWS cash (PR #88); canonical P-025 reviewed task/path receipt integrated into the provider economic review tool (PR #89). This **does not** establish an AWS account-specific P-010 monetary authorization or externally attested USD liquidity; production `AwsEnvironmentProvider.authorizeNewProvision` is still unwired. No real AWS provisioning, transfers, invoices, provider fees or E5/E6 success were generated. Unit/identity invariants stand.
 
 CURRENT ELIGIBLE NEXT: inspect actual P-010 policy decision issuer/scope/claim/replay rules; identify independently authenticated source of AWS provider-account financing and recurring supplier commitments (not STS, IAM, Budgets, Conway credit or unaudited model assertion); only then connect an operation-keyed, recoverable P-031 purchase mandate through P-030 scenario, P-010 decision and P-018 provider callback. Autonomous when authority exists, no arbitrary creator approval threshold or second ledger. If financing/billing is unavailable, keep AWS paid dispatch UNAVAILABLE and continue other independent P-031 resource reuse/renew/retire work rather than fabricate an approval or close P-031.
+
+## P-031 — provider USD financial exposure remains visible without cross-unit liquidity mixing (2026-10-15)
+
+- PR #90 checkpoint exact source SHA `4a569e628122707f01c992b2a68b8719bb6f8e12`, CI run `38812650727` COMPLETE/SUCCESS 8/8, squash merged `main 2a071973dadadbe3a61883ad9d9d3a77fb0c4db4`. Independent merged-main CI not verified with PR-triggered run-only connector.
+- R2 source finding after same-unit P-030 review: existing canonical `getStrategicFinancialExposure` grouped Conway `credit_cent` and on-chain `usdc_cent`, but placed **legitimate off-chain provider `usd_cent` financial effects into `unclassifiedPendingEffects`**. The P-025 consumer treated these as unknown unit, thereby losing provider exposure amount/identity visibility and conflating accounting classifications. `NO_CHANGE` rejected for that future producer and partial P-031 readiness.
+- Current source branch `abos/p031-provider-usd-exposure-review` EXTENDS existing `src/economics/financial-effects.ts` (financial-effect owner) + `src/orchestration/strategic-review.ts` P-025 consumer with `pendingProviderUsdEffects`, `pendingProviderUsdCommitments` (unit `usd_cent`). Unknown units remain unclassified; USDC onchain and Conway credits unchanged. These are **pending obligations**, not verified AWS invoice, actual supplier cost, external account USD balance, P-010 approval, or a currency conversion. Test cases separate all three monetary units, reject overflow/invalid input and show unresolved USD in strategic evidence/conditions. Source CI pending.
+- No new provider payment/effect recording was introduced. P-010 account financial mandate still NOT wired; P-031 remains EN_EJECUCIÓN, P-005 E5/E6 UNKNOWN. After CI, evaluate autonomous account-specific evidence issuer or continue other independent P-031 lifecycle work. Do not promote read-only synthetic financial effects into actual AWS charge or money.
