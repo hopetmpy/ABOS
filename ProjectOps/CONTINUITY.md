@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / DECISION_READY / PROVISION_UNKNOWN_TESTS_COMMITTED_CI_PENDING / P030_E3_MAIN_GREEN / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / DECISION_READY / PROVISION_UNKNOWN_E3_MAIN_GREEN_ECONOMIC_AUTHORITY_AUDIT / P030_E3_MAIN_GREEN / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-provision-uncertainty-recovery
-Host-Head-At-Audit-Open: ef58a1b1eba53a06fb072679454e796ceaf102f8
+Current-Host-Branch: abos/p031-economic-authority-provenance
+Host-Head-At-Audit-Open: 088de39896dcef837c7047c4c560e9cd0b7a29e8
 Last-Reconciled-Host-Head: d4d20fb24a247a2bc32dee1c6a42e21e70c4baf8
-Observed-Main-Head: ef58a1b1eba53a06fb072679454e796ceaf102f8
-Last-Product-Head: ef58a1b1eba53a06fb072679454e796ceaf102f8
-Last-Product-CI: 38768019852 — SUCCESS 8/8
+Observed-Main-Head: 088de39896dcef837c7047c4c560e9cd0b7a29e8
+Last-Product-Head: 088de39896dcef837c7047c4c560e9cd0b7a29e8
+Last-Product-CI: 38772522502 — SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: ef58a1b1eba53a06fb072679454e796ceaf102f8
 Last-Completed-CI: 38768019852 — SUCCESS 8/8
