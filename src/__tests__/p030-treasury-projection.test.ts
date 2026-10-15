@@ -176,6 +176,29 @@ describe("P-030 treasury projection", () => {
     })).toThrow(/exact nonnegative local task-cost cents/);
   });
 
+  it("rejects a negative active cost even when larger positive costs hide it in SQL SUM", () => {
+    const d = db();
+    const now = new Date().toISOString();
+    d.raw.prepare("INSERT INTO goals (id, title, description, status, created_at) VALUES (?, ?, ?, ?, ?)")
+      .run("g-mixed-active", "Goal", "Mixed task costs", "active", now);
+    const insert = d.raw.prepare(
+      `INSERT INTO task_graph
+       (id, goal_id, title, description, status, assigned_to, agent_role,
+        priority, dependencies, estimated_cost_cents, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    insert.run("t-valid-active", "g-mixed-active", "Task", "Valid estimate",
+      "assigned", "0xchild", "generalist", 50, "[]", 300, now);
+    insert.run("t-negative-active", "g-mixed-active", "Task", "Corrupt estimate",
+      "running", "0xchild", "generalist", 50, "[]", -100, now);
+    // An aggregate-only negative check would accept the misleading sum of 200.
+    expect(() => getTreasuryProjection(d, {
+      observedCreditsCents: 1000,
+      reservedCreditsCents: 0,
+      otherCommittedCreditsCents: 0,
+    })).toThrow(/exact nonnegative local task-cost cents/);
+  });
+
   it("refuses an inexact aggregate of individually valid treasury obligations", () => {
     const d = db();
     expect(() => getTreasuryProjection(d, {
