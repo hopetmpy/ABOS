@@ -469,7 +469,8 @@ describe("P-030 causal reserve-funded Conway credit effects", () => {
     prepareFinancialEffect(d.raw,{
       operationKey:"bound-pending",effectKind:"credit_transfer",
       recipient:"0xrecipient",provider:"conway",amountCents:200,
-      request:{note:"pending",treasuryReserveKey:"reserve-pending"},
+      request:{note:"pending",treasuryReserveKey:"reserve-pending",
+        treasuryReserveEpoch:getTreasuryReserveSnapshot(d.raw).allocations.find(x=>x.reserveKey==="reserve-pending")!.sequence},
     });
     prepareFinancialEffect(d.raw,{
       operationKey:"unrelated-pending",effectKind:"credit_transfer",
@@ -576,5 +577,101 @@ describe("P-030 ambiguous provider outcome and corrupt local settlement", () => 
     expect(feedback.locallyReconciledReserveTransfersCreditsCents).toBeNull();
     expect(feedback.observedReserveUseCreditsCents).toBeNull();
     expect(feedback.limitations.join(" ")).toMatch(/inconsistent accounting/);
+  });
+});
+
+describe("P-030 independent reserve epochs across explicit release/reallocation", () => {
+  it("reuses completed historical credits only in their own cycle, not the replenished one", async () => {
+    const d=db(), conway=new MockConwayClient();
+    conway.creditsCents=1000;
+    let ordinal=0;
+    conway.transferCredits=async (toAddress, amountCents) => ({
+      transferId:"epoch-transfer-"+(++ordinal),
+      status:"completed", toAddress, amountCents,
+      balanceAfterCents:conway.creditsCents-=amountCents,
+    });
+    setTreasuryReserve(d,alloc("epoch-first","repeat-reserve",300));
+    const first=await executeCreditEffect({
+      db:d,conway,operationKey:"first-period",kind:"credit_transfer",
+      toAddress:"0xfirst",amountCents:200,note:"first",reserveKey:"repeat-reserve",
+    });
+    expect(first.state).toBe("completed");
+    const epoch=first.request.treasuryReserveEpoch;
+    expect(typeof epoch).toBe("number");
+    setTreasuryReserve(d,{...alloc("epoch-zero","repeat-reserve",0),
+      observedCreditsCents:null,balanceEvidence:null,otherCommittedCreditsCents:null});
+    setTreasuryReserve(d,{...alloc("epoch-new","repeat-reserve",300),
+      observedCreditsCents:800});
+    const second=await executeCreditEffect({
+      db:d,conway,operationKey:"second-period",kind:"credit_transfer",
+      toAddress:"0xsecond",amountCents:300,note:"second",reserveKey:"repeat-reserve",
+    });
+    expect(second.state).toBe("completed");
+    expect(second.request.treasuryReserveEpoch).not.toBe(epoch);
+    expect(getTreasuryReserveLocalSettlement(d.raw).locallyReconciledCreditsCents).toBe(500);
+    await expect(executeCreditEffect({
+      db:d,conway,operationKey:"third-period",kind:"credit_transfer",
+      toAddress:"0xthird",amountCents:1,note:"third",reserveKey:"repeat-reserve",
+    })).rejects.toThrow(/exceeds active earmark/);
+    const replay=await executeCreditEffect({
+      db:d,conway,operationKey:"first-period",kind:"credit_transfer",
+      toAddress:"0xfirst",amountCents:200,note:"first",reserveKey:"repeat-reserve",
+    });
+    expect(replay.id).toBe(first.id);
+    expect(ordinal).toBe(2);
+  });
+
+  it("never nets an old UNKNOWN transfer with a newly funded earmark", async () => {
+    const d=db(), conway=new MockConwayClient();
+    conway.creditsCents=1000;
+    setTreasuryReserve(d,alloc("pending-first","unknown-recycle",300));
+    conway.transferCredits=async()=>{throw new Error("provider outcome UNKNOWN");};
+    const before=await executeCreditEffect({
+      db:d,conway,operationKey:"pending-first-effect",kind:"credit_transfer",
+      toAddress:"0xrecipient",amountCents:200,note:"pending",
+      reserveKey:"unknown-recycle",
+    });
+    expect(before.state).toBe("unknown");
+    expect(getPendingReserveCreditOverlap(d.raw)).toBe(200);
+    setTreasuryReserve(d,{...alloc("pending-zero","unknown-recycle",0),
+      observedCreditsCents:null,balanceEvidence:null,otherCommittedCreditsCents:null});
+    setTreasuryReserve(d,{...alloc("pending-new","unknown-recycle",300),
+      observedCreditsCents:1000});
+    const result=getTreasuryProjection(d,{observedCreditsCents:1000,otherCommittedCreditsCents:0});
+    expect(result.pendingTransferCreditsCents).toBe(200);
+    expect(result.pendingTransferWithinReservesCreditsCents).toBe(0);
+    expect(result.freeCreditsCents).toBe(500);
+    const replay=await executeCreditEffect({
+      db:d,conway,operationKey:"pending-first-effect",kind:"credit_transfer",
+      toAddress:"0xrecipient",amountCents:200,note:"pending",
+      reserveKey:"unknown-recycle",
+    });
+    expect(replay.id).toBe(before.id);
+    expect(getPendingReserveCreditOverlap(d.raw)).toBe(0);
+  });
+
+  it("preserves epoch through revisions without allowing reuse of committed capacity", async () => {
+    const d=db(),conway=new MockConwayClient();
+    conway.creditsCents=1000;
+    let n=0;
+    conway.transferCredits=async (toAddress,amountCents)=>({
+      transferId:"revised-"+(++n),status:"completed",toAddress,amountCents,
+      balanceAfterCents:conway.creditsCents-=amountCents,
+    });
+    setTreasuryReserve(d,alloc("adjust-first","adjust-reserve",300));
+    const first=await executeCreditEffect({
+      db:d,conway,operationKey:"adjust-one",kind:"credit_transfer",
+      toAddress:"0xone",amountCents:200,note:"one",reserveKey:"adjust-reserve",
+    });
+    setTreasuryReserve(d,{...alloc("adjust-more","adjust-reserve",400),observedCreditsCents:800});
+    const second=await executeCreditEffect({
+      db:d,conway,operationKey:"adjust-two",kind:"credit_transfer",
+      toAddress:"0xtwo",amountCents:200,note:"two",reserveKey:"adjust-reserve",
+    });
+    expect(second.request.treasuryReserveEpoch).toBe(first.request.treasuryReserveEpoch);
+    await expect(executeCreditEffect({
+      db:d,conway,operationKey:"adjust-three",kind:"credit_transfer",
+      toAddress:"0xthree",amountCents:1,note:"three",reserveKey:"adjust-reserve",
+    })).rejects.toThrow(/exceeds active earmark/);
   });
 });

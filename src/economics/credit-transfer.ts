@@ -52,9 +52,19 @@ export async function executeCreditEffect(input: CreditEffectRequest): Promise<F
   // Reserve coverage and financial intent are claimed in one local SQLite
   // transaction before any provider call. Replays preserve the same identity.
   const { effect: intent } = input.db.raw.transaction(() => {
-    if (reserveKey) assertReserveCreditEffectCapacity(input.db.raw, {
+    const epoch = reserveKey ? assertReserveCreditEffectCapacity(input.db.raw, {
       reserveKey, operationKey: input.operationKey, amountCents: input.amountCents,
-    });
+    }) : null;
+    // On replay keep the original epoch (including legacy epochless intents).
+    // financial_effects still compares the complete semantic fingerprint.
+    const original = getFinancialEffectByOperationKey(input.db.raw, input.operationKey);
+    const request = reserveKey
+      ? original && original.request.treasuryReserveKey === reserveKey
+        ? {note: input.note, treasuryReserveKey: reserveKey,
+            ...(original.request.treasuryReserveEpoch === undefined ? {} :
+              {treasuryReserveEpoch: original.request.treasuryReserveEpoch})}
+        : {note: input.note, treasuryReserveKey: reserveKey, treasuryReserveEpoch: epoch}
+      : {note: input.note};
     return prepareFinancialEffect(input.db.raw, {
       operationKey: input.operationKey,
       effectKind: input.kind,
@@ -62,9 +72,7 @@ export async function executeCreditEffect(input: CreditEffectRequest): Promise<F
       recipient: toAddress,
       childId: input.childId ?? null,
       provider: "conway",
-      request: reserveKey
-        ? { note: input.note, treasuryReserveKey: reserveKey }
-        : { note: input.note },
+      request,
     });
   })();
   const claim = claimFinancialEffectDispatch(input.db.raw, intent.operationKey);

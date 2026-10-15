@@ -108,13 +108,32 @@ function creditSum(total: number, next: number, label: string): number {
   return total + next;
 }
 
+/** Existing append-only allocation sequence identifies the current
+ * reserve cycle: first positive entry after the latest explicit zero release.
+ * Target revisions within a cycle retain the same epoch.
+ */
+function activeReserveEpoch(db: Database.Database, reserveKey: string): number | null {
+  const rows = db.prepare(
+    "SELECT sequence, target_credit_cents AS target FROM treasury_reserve_allocations WHERE reserve_key = ? ORDER BY sequence",
+  ).all(reserveKey) as Array<{sequence:number; target:number}>;
+  let epoch: number | null = null;
+  for (const row of rows) {
+    if (!Number.isSafeInteger(row.sequence) || row.sequence <= 0 ||
+        !Number.isSafeInteger(row.target) || row.target < 0)
+      throw new Error("Invalid persisted reserve epoch");
+    if (row.target === 0) epoch = null;
+    else if (epoch === null) epoch = row.sequence;
+  }
+  return epoch;
+}
+
 /** Claim credit capacity from an existing reserve before external effect
  * preparation. This does not replace Policy or authorize external spending.
  */
 export function assertReserveCreditEffectCapacity(
   db: Database.Database,
   input: { reserveKey: string; operationKey: string; amountCents: number },
-): void {
+): number | null {
   const reserveKey = requireText(input.reserveKey, "reserveKey");
   const operationKey = requireText(input.operationKey, "operationKey");
   const requested = amount(input.amountCents, "amountCents");
@@ -123,10 +142,11 @@ export function assertReserveCreditEffectCapacity(
   // a prior external effect can still be pending/settled after its reserve
   // was reduced or released. Financial-effects verifies the full fingerprint
   // and refuses a semantic change on the same operation key.
-  if (getFinancialEffectByOperationKey(db, operationKey)) return;
+  if (getFinancialEffectByOperationKey(db, operationKey)) return null;
   const reserve = getTreasuryReserveSnapshot(db).allocations
     .find(item => item.reserveKey === reserveKey);
-  if (!reserve || reserve.targetCreditsCents === 0) {
+  const epoch = activeReserveEpoch(db, reserveKey);
+  if (!reserve || reserve.targetCreditsCents === 0 || epoch === null) {
     throw new Error("Credit effect reserve key is not an active durable earmark");
   }
   let committed = 0;
@@ -135,11 +155,16 @@ export function assertReserveCreditEffectCapacity(
     if (effect.request.treasuryReserveKey !== reserveKey ||
         effect.unit !== "credit_cent" || effect.provider !== "conway" ||
         !["credit_transfer", "child_funding"].includes(effect.effectKind)) continue;
+    // Pre-epoch intents are conservatively charged until independently
+    // reconciled; clearly older epochs never consume a fresh allocation.
+    const recordedEpoch = effect.request.treasuryReserveEpoch;
+    if (recordedEpoch !== undefined && recordedEpoch !== epoch) continue;
     committed = creditSum(committed, effect.amountCents, "Reserve-funded effects");
   }
   if (creditSum(committed, requested, "Reserve-funded effects") > reserve.targetCreditsCents) {
     throw new Error("Reserve-funded transfer exceeds active earmark including linked commitments");
   }
+  return epoch;
 }
 
 /** Reserve-funded unsettled credit transfers consume their reserve, not a
@@ -148,11 +173,19 @@ export function assertReserveCreditEffectCapacity(
 export function getPendingReserveCreditOverlap(db: Database.Database): number {
   const snapshot = getTreasuryReserveSnapshot(db);
   const linked = new Map<string, number>();
+  const epochs = new Map<string, number | null>();
+  for (const reserve of snapshot.allocations)
+    epochs.set(reserve.reserveKey, activeReserveEpoch(db, reserve.reserveKey));
   for (const effect of listUnresolvedFinancialEffects(db)) {
     const key = effect.request.treasuryReserveKey;
     if (typeof key !== "string" || !key.trim() ||
         effect.unit !== "credit_cent" || effect.provider !== "conway" ||
         !["credit_transfer", "child_funding"].includes(effect.effectKind)) continue;
+    // An older or epochless pending intent is independent of this new cycle.
+    // Its gross commitment must never be netted from current liquidity.
+    const currentEpoch = epochs.get(key);
+    if (currentEpoch === null || currentEpoch === undefined ||
+        effect.request.treasuryReserveEpoch !== currentEpoch) continue;
     linked.set(key, creditSum(linked.get(key) ?? 0, effect.amountCents,
       "Pending reserve-funded effects"));
   }
