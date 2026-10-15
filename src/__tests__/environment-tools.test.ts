@@ -120,6 +120,47 @@ describe("P-031 reviewed path origin in environment procurement", () => {
   });
 });
 
+describe("P-031 account-bound durable exposure inside provider procurement preview", () => {
+  it("exposes canonical known pending intent and unknown account attribution without converting it to funding", async () => {
+    const registry = new EnvironmentRegistry();
+    registry.register({
+      ...provider(), id: "aws",
+      observeEconomics: async () => ({
+        provider: "aws", status: "partial" as const,
+        accountId: "123456789012", observedAt: new Date().toISOString(),
+        budgets: [], spendableLiquidityUsdCents: null,
+        recurringCommitmentUsdCents: null,
+        procurementAuthority: "not_established" as const, evidence: [],
+      }),
+    });
+    const calls: string[] = [];
+    const tool = createEnvironmentTools(registry, {
+      getProviderAccountFinancialExposure: (providerId, accountId, unit) => {
+        calls.push([providerId, accountId, unit].join(":"));
+        return {
+          recordedPendingCount: 2, recordedPendingCents: 3500,
+          unscopedPendingCount: 1,
+          scopeCoverage: "unscoped_records_present" as const,
+          limitations: ["Only unresolved local intents, not complete supplier obligations."],
+        };
+      },
+    }).find(x => x.name === "environment_procurement_review")!;
+    const result = await tool.execute({
+      environment: "aws", unit: "usd_cent",
+      resource_need_evidence: ["Reviewed strategy"],
+      one_time_cents: 500, recurring_cents_per_period: 0,
+      periods: 1, other_charges_cents: 0,
+      billing_terms_evidence: ["Supplier quote synthetic"],
+    }, {} as any);
+    expect(calls).toEqual(["aws:123456789012:usd_cent"]);
+    expect(result).toContain('"recordedPendingCents": 3500');
+    expect(result).toContain('"unscopedPendingCount": 1');
+    expect(result).toContain('"freeBeforeProposalCents": null');
+    expect(result).toContain('"purchaseAuthorized": false');
+    expect(result).toContain("Only unresolved local intents");
+  });
+});
+
 describe("P-031 environment_procurement_review", () => {
   it("feeds observed account identity into P-030 but refuses to count provider budgets as cash", async () => {
     const registry = new EnvironmentRegistry();
