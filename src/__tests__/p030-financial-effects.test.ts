@@ -337,6 +337,42 @@ describe("P-030 financial effect authority", () => {
     );
   });
 
+  it("never downgrades a rejected effect after late pending evidence", () => {
+    const database = db();
+    prepareFinancialEffect(database.raw, {
+      operationKey: "late:rejected", effectKind: "credit_transfer",
+      amountCents: 110, recipient: "0xrej", provider: "conway",
+    });
+    claimFinancialEffectDispatch(database.raw, "late:rejected");
+    recordFinancialEffectObservation(database.raw, "late:rejected", {
+      resolution: "rejected", providerStatus: "rejected",
+    });
+    const late = recordFinancialEffectObservation(database.raw, "late:rejected", {
+      resolution: "pending", providerStatus: "submitted",
+    });
+    expect(late.state).toBe("rejected");
+    expect(getCommittedFinancialEffectCents(database.raw)).toBe(0);
+  });
+
+  it("preserves provider-settled reconciliation state against stale observations", () => {
+    const database = db();
+    prepareFinancialEffect(database.raw, {
+      operationKey: "late:reconcile", effectKind: "credit_transfer",
+      amountCents: 180, recipient: "0xrec", provider: "conway",
+    });
+    claimFinancialEffectDispatch(database.raw, "late:reconcile");
+    expect(() => settleFinancialEffect(database.raw, "late:reconcile", {
+      providerStatus: "completed",
+    }, () => { throw new Error("ledger temporarily unavailable"); }))
+      .toThrow(FinancialEffectReconciliationRequiredError);
+    const late = recordFinancialEffectObservation(database.raw, "late:reconcile", {
+      resolution: "unknown", providerStatus: "submitted",
+    });
+    expect(late.state).toBe("reconciliation_required");
+    expect(late.lastError).toContain("ledger temporarily unavailable");
+    expect(getCommittedFinancialEffectCents(database.raw)).toBe(180);
+  });
+
   it("does not count rejected or completed effects as immobilized capital", () => {
     const database = db();
     prepareFinancialEffect(database.raw, {
