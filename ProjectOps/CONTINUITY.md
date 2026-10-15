@@ -6,21 +6,21 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / AWS_EC2_BILLABLE_MUTATIONS_SOURCE_CI_PENDING / P010_PROVIDER_MANDATE_UNWIRED / AWS_ACCOUNT_FINANCING_NOT_ATTESTED / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / AWS_EC2_MUTATION_RECONCILIATION_SOURCE_CI_PENDING / P010_PROVIDER_MANDATE_UNWIRED / AWS_ACCOUNT_FINANCING_NOT_ATTESTED / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-ec2-mutation-economic-authority
+Current-Host-Branch: abos/p031-billable-mutation-unknown-recovery
 Host-Head-At-Audit-Open: 088de39896dcef837c7047c4c560e9cd0b7a29e8
 Last-Reconciled-Host-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
-Observed-Main-Head: a97e693f777981d651b01b47bf1db8a7e8cb2ce8
-Last-Product-Head: a97e693f777981d651b01b47bf1db8a7e8cb2ce8
-Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #92 38814515984 — SUCCESS 8/8
+Observed-Main-Head: 637ac0f14ccb185e98effdd720678e5ba7312358
+Last-Product-Head: 637ac0f14ccb185e98effdd720678e5ba7312358
+Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #93 38815688355 — SUCCESS 8/8
 Last-Completed-Plan: P-030
-Last-Completed-Merge: a97e693f777981d651b01b47bf1db8a7e8cb2ce8
+Last-Completed-Merge: 637ac0f14ccb185e98effdd720678e5ba7312358
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
@@ -461,3 +461,11 @@ PR #92 exact source `d7c63132f3dedfaed02d8a3e8bfb2d0296cc8029`, CI `38814515984`
 New R2 source HARD: PRs #84/#87 blocked unapproved **new EC2 provisioning**, but provider lifecycle `resize` (including stop-modify-restart), `resume` (start) and `recover` for stopped VMs could still initiate new AWS compute charges without the P-010/P-030 economic mandate. Raw `environment_exec` also permitted `ec2 modify-instance-attribute` and credit-specification modification. The same existing `AwsEnvironmentProvider` owner is extended with an optional trusted `authorizeBillableMutation` callback scoped to observed STS account, existing resource + external instance, action, target type, region, exact USD commitment, supplier terms and expiry. Missing/denied source authorization prevents new billable mutation, without impacting read-only AWS observation, already-running no-op recover/resume, suspending, terminating or other-owned-resource reuse. The existing lifecycle preserves resource status on definite pre-dispatch rejection; only remote/uncertain mutations remain recoverable. Successful mutations attach intent provenance, NOT final billed invoices. Tests cover absent issuer, wrong action/resource/instance/account/shape/region/unit/expiry, valid mock-authorized resize/resume/recover, raw bypass and lifecycle status preservation. Current branch `abos/p031-ec2-mutation-economic-authority`; exact source CI PENDING. Production P-010/P-025/P-030 funding authorizer still unwired; this is a safe seam, not live financing or the complete P-031 DoD.
 
 NEXT_ELIGIBLE_WORK: CI+review+merge source if green; then implement independently source-backed AWS financing and a real scope-checked P-010 mandate producer (do NOT infer cash from Budgets, USDC or Conway credits). Progress cost-bearing renew/resize/recover and reconciliation, including unknown post-dispatch outcomes, within P-031. P-005 E5/E6 unknown; P-032 not started.
+
+## P-031 — PR #93 integrated; reconcile unknown billable mutation effects (2026-10-15)
+
+PR #93 exact source `8de9ca69cb88e04bcf4e16cdc583d11eb13dc717`, CI `38815688355` SUCCESS 8/8 (Node 22/24 tests, Windows 22/24, security, integrity, distribution); squash integrated `main 637ac0f14ccb185e98effdd720678e5ba7312358` and GitHub HEAD verified. Exact independent main-push workflow not observed. No real AWS spend, instance start, invoice, provider USD balance or P-010 purchase authority observed.
+
+Source R2 finding after PR #93: `EnvironmentLifecycleManager.runMutation` would mark exceptions from provider `resize`/`resume`/`recover` as `degraded`, even where a remote start/type change might have completed before a timeout. A subsequent call could blindly reissue a charge-changing action. The existing `reconcile` did not explicitly clear or preserve ambiguous monetary-mutation state, and the prior pre-dispatch preservation used transient `recovering` instead of original status for denied recover. Current branch `abos/p031-billable-mutation-unknown-recovery` extends **existing lifecycle owner**: on ambiguous cost-changing mutation, persist `status=unknown`, `mutationNeedsReconciliation=true` and operation identity; reject repeat resume/resize/recover until provider-side reconcile observes a conclusive exists/absent and known terminal/running/stopped status; clear only on sufficient provider evidence; leave inconclusive probes blocked. Tagged definite pre-dispatch refusal preserves prior resource status and continues to propagate. Existing provider money gate, account/economic attestations and read-only/suspend/retire operations remain unchanged. Unit tests simulate timeout after provider call, no blind retry, conclusive or inconclusive reconciliation, denied recovery and proven remote absence. Source CI PENDING. No new ledger/scheduler or LIVE claims.
+
+P-031 continues EN_EJECUCIÓN. Next eligible: exact-source PR CI then merge; independent real AWS account funding/contract terms and P-010 mandate issuer remain unavailable; continue other reusable resource/billing reconciliation work without asserting live settlement. P-005 E5/E6 UNKNOWN.
