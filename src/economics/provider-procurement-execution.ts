@@ -19,7 +19,9 @@ import {
 } from "./treasury-scenario.js";
 import {
   claimFinancialEffectDispatch,
+  FinancialEffectIntentPendingError,
   getFinancialEffectByOperationKey,
+  listUnresolvedFinancialEffects,
   prepareFinancialEffect,
   recordFinancialEffectObservation,
   type FinancialEffectRecord,
@@ -187,6 +189,21 @@ export async function executeReviewedProviderProcurement(
       review: null,
       evidence: ["Existing P-030 financial intent requires observation/reconciliation; no repeated provider dispatch."],
     };
+  }
+  // A different key OR changed quote cannot re-dispatch an unresolved
+  // procurement for the same resource/account/operation. The pre-existing
+  // P-030 fingerprint catches identical terms; this narrower source guard
+  // also catches drift in price or financing before supplier reconciliation.
+  for (const outstanding of listUnresolvedFinancialEffects(db)) {
+    if (outstanding.effectKind !== "provider_resource_procurement" ||
+        outstanding.provider !== scope.provider ||
+        outstanding.unit !== scope.unit ||
+        outstanding.request.providerAccountId !== scope.providerAccountId ||
+        outstanding.request.resourceId !== scope.resourceId ||
+        outstanding.request.operation !== scope.operation) continue;
+    throw new FinancialEffectIntentPendingError(
+      scope.operationKey, outstanding.operationKey,
+    );
   }
   const scenario = await dependencies.observeAuthenticatedEconomics(scope);
   if (scenario.provider !== scope.provider ||
