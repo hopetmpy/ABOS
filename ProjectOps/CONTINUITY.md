@@ -13,12 +13,12 @@ Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-economic-authority-provenance
+Current-Host-Branch: abos/p031-explicit-budget-routing
 Host-Head-At-Audit-Open: 088de39896dcef837c7047c4c560e9cd0b7a29e8
 Last-Reconciled-Host-Head: d4d20fb24a247a2bc32dee1c6a42e21e70c4baf8
-Observed-Main-Head: 088de39896dcef837c7047c4c560e9cd0b7a29e8
-Last-Product-Head: 088de39896dcef837c7047c4c560e9cd0b7a29e8
-Last-Product-CI: 38772522502 — SUCCESS 8/8
+Observed-Main-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
+Last-Product-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
+Last-Product-CI: 38774007741 — SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: ef58a1b1eba53a06fb072679454e796ceaf102f8
 Last-Completed-CI: 38768019852 — SUCCESS 8/8
@@ -357,3 +357,7 @@ P-031 activated as `EN_EJECUCIÓN / AUDIT_OPEN / SOURCE_UNMODIFIED` in segment `
 ## P-031 current source audit (2026-10-15)
 
 P-030 source/integration and canonical ProjectOps transition are integrated at main `ef58a1b1eba53a06fb072679454e796ceaf102f8`, CI `38768019852` SUCCESS 8/8. P-031 active C0027 has a real `DECISION_READY` first HARD: ambiguous provider provisioning must remain `UNKNOWN` and observed before cleanup. Narrow source corrections are on `abos/p031-provision-uncertainty-recovery` (commits `6af524c3`, `c167733a`). **Adversarial tests are committed; exact-head CI is pending** after two rejected test-file writes, so this branch must remain review-only and not be merged. See C0027 for causal evidence and next eligible work. P-005 LIVE still UNVERIFIED, no money spent.
+
+## P-031 — explicit budget routing (2026-10-15)
+
+PR #78 merged into main `710fa0d61983a462450bde7994a5018c2172e6e4`, exact-main CI `38774007741` SUCCESS 8/8. Active branch `abos/p031-explicit-budget-routing` extends existing `EnvironmentExecutionBridge.spawn` to transmit explicitly provided budget to `EnvironmentSelector`, not deriving a monetary ceiling from `task_cost_cent`. Scenario tests committed; exact branch CI pending. This is a narrow selection seam, not autonomous monetary authority and not LIVE payment; see active `continuity/C0027.md` for precise next work. P-031 remains EN_EJECUCIÓN, P-005 E5/E6 UNKNOWN.
