@@ -154,6 +154,14 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     }
   }
 
+  /**
+   * Discovery-only predicate: callback presence does not certify funds,
+   * provider account authority, or approval of a particular procurement.
+   */
+  hasNewProvisionEvaluator(): boolean {
+    return typeof this.options.authorizeNewProvision === "function";
+  }
+
   getConfiguredIamInstanceProfile(
     metadata?: Record<string, unknown>,
   ): string | null {
