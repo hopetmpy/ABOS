@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / DECISION_READY / PROVISION_UNKNOWN_SOURCE_PENDING_TESTS / P030_E3_MAIN_GREEN / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / DECISION_READY / PROVISION_UNKNOWN_TESTS_COMMITTED_CI_PENDING / P030_E3_MAIN_GREEN / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,7 +15,7 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p031-provision-uncertainty-recovery
 Host-Head-At-Audit-Open: ef58a1b1eba53a06fb072679454e796ceaf102f8
-Last-Reconciled-Host-Head: 583a4ca46fd5fd5df2d74ee70669c2ac66891f0e
+Last-Reconciled-Host-Head: d4d20fb24a247a2bc32dee1c6a42e21e70c4baf8
 Observed-Main-Head: ef58a1b1eba53a06fb072679454e796ceaf102f8
 Last-Product-Head: ef58a1b1eba53a06fb072679454e796ceaf102f8
 Last-Product-CI: 38768019852 — SUCCESS 8/8
@@ -356,4 +356,4 @@ P-031 activated as `EN_EJECUCIÓN / AUDIT_OPEN / SOURCE_UNMODIFIED` in segment `
 
 ## P-031 current source audit (2026-10-15)
 
-P-030 source/integration and canonical ProjectOps transition are integrated at main `ef58a1b1eba53a06fb072679454e796ceaf102f8`, CI `38768019852` SUCCESS 8/8. P-031 active C0027 has a real `DECISION_READY` first HARD: ambiguous provider provisioning must remain `UNKNOWN` and observed before cleanup. Narrow source corrections are on `abos/p031-provision-uncertainty-recovery` (commits `6af524c3`, `c167733a`). **New adversarial tests are not yet written or passed** after two rejected test-file writes, so this branch must remain review-only and not be merged. See C0027 for causal evidence and next eligible work. P-005 LIVE still UNVERIFIED, no money spent.
+P-030 source/integration and canonical ProjectOps transition are integrated at main `ef58a1b1eba53a06fb072679454e796ceaf102f8`, CI `38768019852` SUCCESS 8/8. P-031 active C0027 has a real `DECISION_READY` first HARD: ambiguous provider provisioning must remain `UNKNOWN` and observed before cleanup. Narrow source corrections are on `abos/p031-provision-uncertainty-recovery` (commits `6af524c3`, `c167733a`). **Adversarial tests are committed; exact-head CI is pending** after two rejected test-file writes, so this branch must remain review-only and not be merged. See C0027 for causal evidence and next eligible work. P-005 LIVE still UNVERIFIED, no money spent.
