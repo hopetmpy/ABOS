@@ -284,6 +284,12 @@ describe("AwsEc2TaskExecutor", () => {
       repositoryRef: "main",
     });
 
+    const assessment = await executor.assess(task());
+    expect(assessment.executable).toBeNull();
+    expect(assessment.evidence?.join(" ")).toContain(
+      "does NOT establish economic purchase authority",
+    );
+
     const spawned = await executor.spawn(task());
 
     expect(spawned.address).toBe("aws://ec2/i-new");
