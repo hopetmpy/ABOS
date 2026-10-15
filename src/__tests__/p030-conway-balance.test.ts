@@ -36,4 +36,21 @@ describe("P-030: Conway financial balance observation is not fabricated", () => 
     expect(await client.getCreditsBalance()).toBe(expected);
     expect(mock).toHaveBeenCalledTimes(1);
   });
+  it("requests an uncached balance without treating provider metadata as verified wallet provenance", async () => {
+    const { client, mock } = mockBalance({
+      balance_cents: 525,
+      wallet_address: "0xnot-attested",
+      observed_at: "1970-01-01T00:00:00Z",
+    });
+    expect(await client.getCreditsBalance()).toBe(525);
+    const [url, options] = mock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://api.conway.tech/v1/credits/balance");
+    expect(options.cache).toBe("no-store");
+    const headers = new Headers(options.headers);
+    expect(headers.get("cache-control")).toContain("no-store");
+    expect(headers.get("pragma")).toBe("no-cache");
+    // The existing number-only API contract deliberately does not attest the
+    // wallet address, provider timestamp or finality from these extra fields.
+  });
+
 });

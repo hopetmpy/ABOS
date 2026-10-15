@@ -51,7 +51,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     method: string,
     path: string,
     body?: unknown,
-    requestOptions?: { idempotencyKey?: string; retries404?: number },
+    requestOptions?: { idempotencyKey?: string; retries404?: number; noStore?: boolean },
   ): Promise<any> {
     // Conway LB has an intermittent routing bug that returns 404 for valid
     // sandbox endpoints. Retry 404s here (outside ResilientHttpClient) to
@@ -63,7 +63,11 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
         headers: {
           "Content-Type": "application/json",
           Authorization: apiKey,
+          ...(requestOptions?.noStore
+            ? { "Cache-Control": "no-store, max-age=0", Pragma: "no-cache" }
+            : {}),
         },
+        cache: requestOptions?.noStore ? "no-store" : undefined,
         body: body ? JSON.stringify(body) : undefined,
         idempotencyKey: requestOptions?.idempotencyKey,
       });
@@ -332,7 +336,10 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
   // ─── Credits ─────────────────────────────────────────────────
 
   const getCreditsBalance = async (): Promise<number> => {
-    const result = await request("GET", "/v1/credits/balance");
+    // Prefer an uncached HTTP observation for treasury decisions. This is only
+    // a cache directive: it cannot authenticate wallet scope, provider event
+    // time or finality, and an upstream provider could still serve stale data.
+    const result = await request("GET", "/v1/credits/balance", undefined, { noStore: true });
     const observed = result?.balance_cents ?? result?.credits_cents;
     if (!Number.isSafeInteger(observed)) {
       throw new Error(
