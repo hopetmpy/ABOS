@@ -21,6 +21,7 @@ import {
   claimFinancialEffectDispatch,
   FinancialEffectIntentPendingError,
   getFinancialEffectByOperationKey,
+  getProviderFundingSnapshotExposure,
   listUnresolvedFinancialEffects,
   prepareFinancialEffect,
   recordFinancialEffectObservation,
@@ -253,32 +254,77 @@ export async function executeReviewedProviderProcurement(
     pathId: scope.pathId,
     economicScenarioHash: args.economicScenarioHash,
   };
-  const prepared = prepareFinancialEffect(db, {
-    operationKey: scope.operationKey,
-    effectKind: "provider_resource_procurement",
-    amountCents: amount,
-    unit: scope.unit,
-    provider: scope.provider,
-    policyDecisionId,
-    request,
-    evidence: [
-      ...reviewedPath.evidence,
-      ...review.evidence,
-      "P-010 exact tool policy decision was explicitly allowed; not proof of external settlement.",
-    ],
-  });
-  const claimed = claimFinancialEffectDispatch(db, scope.operationKey);
+  // Recalculate free provider-account funding after all locally known
+  // obligations against the source observation. This is a single local SQLite
+  // transaction with the durable P-030 intent claim; it cannot authorize an
+  // external AWS balance or prove real supplier invoices.
+  const stage = db.transaction(() => {
+    const exposure = getProviderFundingSnapshotExposure(db, {
+      provider: scope.provider,
+      providerAccountId: scope.providerAccountId,
+      unit: scope.unit,
+      fundingObservedAt: scenario.financing.observedAt ?? "",
+    });
+    if (exposure.unscopedUnresolvedCount > 0) {
+      throw new Error(
+        "P-030 provider account has unresolved unscoped financial obligations; free liquidity cannot be confirmed.",
+      );
+    }
+    if (scenario.existingCommitmentsCents === null) {
+      throw new Error("P-030 external commitments are UNKNOWN.");
+    }
+    const combined = BigInt(scenario.existingCommitmentsCents) +
+      BigInt(exposure.additionalHeldCents);
+    if (combined > BigInt(Number.MAX_SAFE_INTEGER)) {
+      throw new Error("P-030 account commitments exceed exact monetary arithmetic");
+    }
+    const netReview = assessProviderProcurementScenario({
+      ...scenario,
+      existingCommitmentsCents: Number(combined),
+    }, now);
+    if (netReview.status !== "review_ready" ||
+        netReview.freeAfterProposalAndContingencyCents === null ||
+        netReview.freeAfterProposalAndContingencyCents < 0) {
+      throw new Error(
+        "P-030 observed account funds are insufficient after local commitments; no provider dispatch.",
+      );
+    }
+    const prepared = prepareFinancialEffect(db, {
+      operationKey: scope.operationKey,
+      effectKind: "provider_resource_procurement",
+      amountCents: amount,
+      unit: scope.unit,
+      provider: scope.provider,
+      policyDecisionId,
+      request,
+      evidence: [
+        ...reviewedPath.evidence,
+        ...netReview.evidence,
+        ...exposure.evidence,
+        `P-030 local funds held=${exposure.additionalHeldCents} ${scope.unit} since observed snapshot ${exposure.fundingObservedAt}.`,
+        "P-010 exact tool policy decision explicitly allowed; no external settlement claimed.",
+      ],
+    });
+    if (!prepared.created && prepared.effect.policyDecisionId !== policyDecisionId) {
+      throw new Error("P-010 replay policy mismatch for existing financial effect.");
+    }
+    const claimed = claimFinancialEffectDispatch(db, scope.operationKey);
+    if (claimed.dispatchAllowed) {
+      recordPolicyExecutionOutcome(db, policyDecisionId, "running", {
+        operationKey: scope.operationKey,
+        financialEffectId: prepared.effect.id,
+      });
+    }
+    return { claimed, netReview };
+  })();
+  const { claimed, netReview } = stage;
   if (!claimed.dispatchAllowed) {
     return {
       status: "not_dispatched", dispatched: false,
-      financialEffect: claimed.effect, review,
-      evidence: ["P-030 operation key was already claimed; no duplicate external action."],
+      financialEffect: claimed.effect, review: netReview,
+      evidence: ["P-030 operation key already claimed; no duplicate provider dispatch."],
     };
   }
-  recordPolicyExecutionOutcome(db, policyDecisionId, "running", {
-    operationKey: scope.operationKey,
-    financialEffectId: prepared.effect.id,
-  });
   try {
     const outcome = await dependencies.dispatch(scope, {
       policyDecisionId, amountCents: amount, unit: scope.unit,
@@ -334,7 +380,7 @@ export async function executeReviewedProviderProcurement(
       });
     return {
       status: verifiedStatus,
-      dispatched: true, financialEffect: effect, review,
+      dispatched: true, financialEffect: effect, review: netReview,
       evidence: [
         ...outcome.evidence,
         ...resourceEvidence,
@@ -353,7 +399,7 @@ export async function executeReviewedProviderProcurement(
       providerOutcome: "unknown",
     });
     return {
-      status: "unknown", dispatched: true, financialEffect: effect, review,
+      status: "unknown", dispatched: true, financialEffect: effect, review: netReview,
       evidence: ["External procurement outcome UNKNOWN; reconcile provider and financial intent before new action."],
     };
   }
