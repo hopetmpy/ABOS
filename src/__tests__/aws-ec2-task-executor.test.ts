@@ -285,11 +285,31 @@ describe("AwsEc2TaskExecutor", () => {
     });
 
     const assessment = await executor.assess(task());
-    expect(assessment.executable).toBeNull();
+    expect(assessment.executable).toBe(false);
     expect(assessment.evidence?.join(" ")).toContain(
       "does NOT establish economic purchase authority",
     );
+    expect(assessment.evidence?.join(" ")).toContain(
+      "currently unavailable, not impossible",
+    );
 
+    // Presence of a trusted runtime evaluator permits economic review, not an
+    // automatic spending approval (the provider still rechecks scope/terms).
+    const withEvaluator = new AwsEc2TaskExecutor({
+      provider: new AwsEnvironmentProvider({
+        runner,
+        defaultRegion: "us-east-1",
+        defaultIamInstanceProfile: "ABOS-SSM",
+        authorizeNewProvision: () => ({ allowed: false }),
+      }),
+      lifecycle,
+      identity: {} as any,
+      config: {} as any,
+    });
+    expect((await withEvaluator.assess(task())).executable).toBeNull();
+
+    // The lifecycle stub deliberately isolates bootstrap transport; the real
+    // AWS provider enforces authority at provisioning, not this test stub.
     const spawned = await executor.spawn(task());
 
     expect(spawned.address).toBe("aws://ec2/i-new");

@@ -108,9 +108,24 @@ export class EnvironmentLifecycleManager {
         "Provider provisioning completed.",
       );
     } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      const definitelyNotDispatched =
+        typeof error === "object" && error !== null &&
+        (error as { externalEffectNotDispatched?: unknown })
+          .externalEffectNotDispatched === true;
+      if (definitelyNotDispatched) {
+        // A trusted provider preflight rejected the action before an external
+        // effect; don't create a fictitious billable UNKNOWN requiring cleanup.
+        this.resources.transition(resourceId, "failed", {
+          operation: "provision",
+          reason: "Provider rejected provisioning before external dispatch.",
+          evidence: [`No remote provisioning dispatched: ${detail}`],
+          metadata: { provisionNeedsReconciliation: false },
+        });
+        throw error;
+      }
       // The provider may have created a billable resource before a timeout,
       // lost callback, or local persistence error. Never claim it failed.
-      const detail = error instanceof Error ? error.message : String(error);
       this.resources.transition(resourceId, "unknown", {
         operation: "provision",
         reason: "Dispatched provisioning has no verified provider outcome.",

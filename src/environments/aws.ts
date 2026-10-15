@@ -51,8 +51,48 @@ const defaultRunner: EnvironmentCommandRunner = (
   });
 });
 
+/**
+ * Definite AWS economic rejection before any billable provider dispatch. The
+ * P-018 lifecycle can therefore distinguish this from timeout-after-creation.
+ */
+export class AwsEc2ProcurementNotDispatchedError extends Error {
+  readonly externalEffectNotDispatched = true;
+  constructor(message: string) {
+    super(message);
+    this.name = "AwsEc2ProcurementNotDispatchedError";
+  }
+}
+
+/**
+ * Attestation from a trusted P-010/P-025/P-030 authority, not caller/task
+ * metadata or IAM profile. The provider verifies observed account, currency,
+ * exact total commitment and billing-terms fields before billable EC2 creation.
+ * The callback itself must verify canonical evidence before approving.
+ */
+export interface AwsEc2ProcurementDecision {
+  allowed: boolean;
+  policyDecisionId?: string | null;
+  providerAccountId?: string | null;
+  unit?: string | null;
+  totalCommitmentCents?: number | null;
+  billingTermsEvidence?: string[];
+  reason?: string;
+}
+
 export interface AwsEnvironmentProviderOptions {
   runner?: EnvironmentCommandRunner;
+  /**
+   * Optional trusted runtime authority for new billable EC2 instances.
+   * No callback means authority UNKNOWN (not a permanent prohibition).
+   * Implementations must source this from P-025/P-030/P-010, never user-
+   * supplied task metadata. Reuse/reconcile/retire do not require this gate.
+   */
+  authorizeNewProvision?: (context: {
+    request: EnvironmentProvisionRequest;
+    accountId: string;
+    region: string | null;
+    instanceType: string;
+  }) => AwsEc2ProcurementDecision | Promise<AwsEc2ProcurementDecision>;
   defaultRegion?: string;
   defaultInstanceType?: string;
   defaultArchitecture?: "x86_64" | "arm64";
@@ -113,6 +153,14 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       this.options = input;
       this.runner = input.runner ?? defaultRunner;
     }
+  }
+
+  /**
+   * Discovery-only predicate: callback presence does not certify funds,
+   * provider account authority, or approval of a particular procurement.
+   */
+  hasNewProvisionEvaluator(): boolean {
+    return typeof this.options.authorizeNewProvision === "function";
   }
 
   getConfiguredIamInstanceProfile(
@@ -377,6 +425,54 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     const iamInstanceProfile =
       this.getConfiguredIamInstanceProfile(request.metadata);
 
+    // IAM execution configuration does NOT authorize an AWS bill. Make the
+    // economic boundary explicit at the provider itself, so lifecycle callers
+    // cannot bypass it with an unbudgeted Task or direct provision request.
+    if (!this.options.authorizeNewProvision) {
+      throw new AwsEc2ProcurementNotDispatchedError(
+        "AWS EC2 procurement authority UNKNOWN: no trusted P-025/P-030/P-010 authorization is wired. No run-instances request was dispatched.",
+      );
+    }
+    const identity = await this.runner(
+      "aws", ["sts", "get-caller-identity", "--output", "json"], 15_000,
+    );
+    if (identity.exitCode !== 0) {
+      throw new AwsEc2ProcurementNotDispatchedError(
+        "AWS STS account observation unavailable before procurement; no run-instances request was dispatched.",
+      );
+    }
+    const accountId = parseJson<{ Account?: string }>(identity.stdout)?.Account?.trim();
+    if (!accountId) {
+      throw new AwsEc2ProcurementNotDispatchedError("AWS EC2 procurement account identity is UNKNOWN; no instance was requested.");
+    }
+    let authority: AwsEc2ProcurementDecision;
+    try {
+      // The evaluator is read-only and must check canonical owner decisions.
+      authority = await this.options.authorizeNewProvision({
+        request,
+        accountId,
+        region,
+        instanceType,
+      });
+    } catch {
+      throw new AwsEc2ProcurementNotDispatchedError(
+        "AWS economic authority evaluator unavailable before provisioning; no instance was requested.",
+      );
+    }
+    if (!authority?.allowed ||
+        !authority.policyDecisionId?.trim() ||
+        authority.providerAccountId?.trim() !== accountId ||
+        authority.unit !== "usd_cent" ||
+        typeof authority.totalCommitmentCents !== "number" ||
+        !Number.isSafeInteger(authority.totalCommitmentCents) ||
+        authority.totalCommitmentCents < 0 ||
+        !authority.billingTermsEvidence?.some((entry) => entry.trim())) {
+      throw new AwsEc2ProcurementNotDispatchedError(
+        "AWS EC2 economic procurement authorization is absent, incomplete, unscoped to the observed account, or missing evidenced USD commitment/billing terms. No run-instances request was dispatched." +
+        (authority?.reason ? ` Reason: ${authority.reason}` : ""),
+      );
+    }
+
     const args = [
       "ec2",
       "run-instances",
@@ -496,6 +592,8 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       providerState,
       evidence: [
         `AWS EC2 instance ${instanceId} created.`,
+        `Procurement was authorized under P-010 decision ${authority.policyDecisionId} for observed AWS account ${accountId}, USD commitment ${authority.totalCommitmentCents} usd_cent. This is approved intent, NOT AWS billed-cost settlement.`,
+        ...(authority.billingTermsEvidence ?? []),
         `EC2 state=${providerState} instanceType=${instance.InstanceType ?? instanceType} imageId=${instance.ImageId ?? imageId}.`,
         ...(iamInstanceProfile
           ? [`IAM instance profile attached: ${iamInstanceProfile}.`]
@@ -504,6 +602,11 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
             ]),
       ],
       metadata: {
+        procurementPolicyDecisionId: authority.policyDecisionId,
+        procurementAccountId: accountId,
+        procurementCostUnit: authority.unit,
+        procurementCommittedCents: authority.totalCommitmentCents,
+        procurementBillingTermsEvidence: authority.billingTermsEvidence,
         instanceId,
         instanceType: instance.InstanceType ?? instanceType,
         imageId: instance.ImageId ?? imageId,
@@ -583,6 +686,24 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
   }
 
   async execute(args: string[], timeoutMs = this.commandTimeoutMs()): Promise<CommandResult> {
+    // Provider-native execution is a discovery/general-purpose surface, NOT a
+    // shortcut around P-031's tracked provision and economic authority. These
+    // known EC2 capacity-changing actions must use the lifecycle boundary.
+    // This is a targeted observed bypass guard, not a closed provider catalog.
+    const ec2Index = args.findIndex((arg) => arg.toLowerCase() === "ec2");
+    const knownBillableOperations = new Set([
+      "run-instances", "create-fleet", "request-spot-instances", "start-instances",
+    ]);
+    const ec2Action = ec2Index >= 0
+      ? args.slice(ec2Index + 1).find((arg) =>
+          knownBillableOperations.has(arg.toLowerCase()),
+        )?.toLowerCase()
+      : null;
+    if (ec2Action) {
+      throw new AwsEc2ProcurementNotDispatchedError(
+        `AWS EC2 ${ec2Action} requires the tracked lifecycle and economic authority; raw provider-native execution cannot create or restart billable compute.`,
+      );
+    }
     return this.runner("aws", args, timeoutMs);
   }
 

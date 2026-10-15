@@ -6,6 +6,10 @@ import { describe, expect, it } from "vitest";
 import {
   AwsEnvironmentProvider,
 } from "../environments/aws.js";
+import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
+import { EnvironmentResourceStore } from "../environments/resource-store.js";
+import { EnvironmentRegistry } from "../environments/registry.js";
+import { createTestDb } from "./mocks.js";
 import type {
   CommandResult,
   EnvironmentCommandRunner,
@@ -53,6 +57,9 @@ describe("AwsEnvironmentProvider lifecycle", () => {
     const runner: EnvironmentCommandRunner = async (_command, args) => {
       calls.push(args);
 
+      if (args[0] === "sts" && args[1] === "get-caller-identity") {
+        return ok(JSON.stringify({ Account: "123456789012" }));
+      }
       if (args[0] === "ec2" && args[1] === "run-instances") {
         return ok(JSON.stringify({
           InstanceId: "i-abc",
@@ -89,6 +96,20 @@ describe("AwsEnvironmentProvider lifecycle", () => {
       defaultImageId: "ami-123",
       defaultInstanceType: "t3.small",
       defaultIamInstanceProfile: "ABOS-SSM",
+      authorizeNewProvision: async ({ accountId, instanceType, region, request }) => {
+        expect(accountId).toBe("123456789012");
+        expect(instanceType).toBe("t3.small");
+        expect(region).toBe("us-east-1");
+        expect(request.resourceId).toBe("01RESOURCEABC");
+        return {
+          allowed: true,
+          policyDecisionId: "P010-P025-P030-reviewed-scenario",
+          providerAccountId: accountId,
+          unit: "usd_cent",
+          totalCommitmentCents: 150,
+          billingTermsEvidence: ["Test-only verified USD recurring obligation and contingency scenario"],
+        };
+      },
     });
 
     const result = await provider.provision({
@@ -113,6 +134,13 @@ describe("AwsEnvironmentProvider lifecycle", () => {
     expect(result.credentialsReference).toBe(
       "iam-instance-profile:ABOS-SSM",
     );
+    expect(result.metadata?.procurementAccountId).toBe("123456789012");
+    expect(result.metadata?.procurementCostUnit).toBe("usd_cent");
+    expect(result.metadata?.procurementCommittedCents).toBe(150);
+    expect(result.metadata?.procurementPolicyDecisionId).toBe(
+      "P010-P025-P030-reviewed-scenario",
+    );
+    expect(result.evidence?.join(" ")).toContain("NOT AWS billed-cost settlement");
 
     const run = calls.find(
       (args) => args[0] === "ec2" && args[1] === "run-instances",
@@ -135,6 +163,130 @@ describe("AwsEnvironmentProvider lifecycle", () => {
         { Key: "Name", Value: "abos-worker" },
       ]),
     );
+  });
+
+  it("requires trusted account-scoped economics before any new EC2 side effect", async () => {
+    const calls: string[][] = [];
+    const runner: EnvironmentCommandRunner = async (_command, args) => {
+      calls.push(args);
+      return ok(JSON.stringify({ Account: "123456789012" }));
+    };
+    const request = {
+      resourceId: "new-billable-resource",
+      resourceType: "ec2",
+      retentionPolicy: "ephemeral",
+      requiredCapabilities: ["remote compute"],
+      goalId: "goal-1",
+      pathId: "path-1",
+      taskId: "task-1",
+    };
+    const options = {
+      runner,
+      defaultRegion: "us-east-1",
+      defaultImageId: "ami-123",
+      defaultInstanceType: "t3.micro",
+      defaultIamInstanceProfile: "ABOS-SSM",
+    };
+
+    // An IAM role alone does not grant financial authorization.
+    await expect(new AwsEnvironmentProvider(options).provision(request))
+      .rejects.toThrow("procurement authority UNKNOWN");
+    expect(calls).toEqual([]);
+
+    for (const decision of [
+      { allowed: false, policyDecisionId: "policy-1", providerAccountId: "123456789012", unit: "usd_cent", totalCommitmentCents: 100, billingTermsEvidence: ["billed monthly"] },
+      { allowed: true, policyDecisionId: "policy-1", providerAccountId: "OTHER-ACCOUNT", unit: "usd_cent", totalCommitmentCents: 100, billingTermsEvidence: ["billed monthly"] },
+      { allowed: true, policyDecisionId: "", providerAccountId: "123456789012", unit: "usd_cent", totalCommitmentCents: 100, billingTermsEvidence: ["billed monthly"] },
+      { allowed: true, policyDecisionId: "policy-1", providerAccountId: "123456789012", unit: "credit_cent", totalCommitmentCents: 100, billingTermsEvidence: ["billed monthly"] },
+      { allowed: true, policyDecisionId: "policy-1", providerAccountId: "123456789012", unit: "usd_cent", totalCommitmentCents: undefined, billingTermsEvidence: ["billed monthly"] },
+      { allowed: true, policyDecisionId: "policy-1", providerAccountId: "123456789012", unit: "usd_cent", totalCommitmentCents: 100, billingTermsEvidence: [] },
+    ]) {
+      const provider = new AwsEnvironmentProvider({
+        ...options,
+        authorizeNewProvision: () => decision,
+      });
+      await expect(provider.provision(request)).rejects.toThrow(
+        "economic procurement authorization is absent",
+      );
+      expect(calls.some((args) => args[0] === "ec2" && args[1] === "run-instances")).toBe(false);
+    }
+  });
+
+  it("records rejected-before-dispatch AWS procurement as failed, not a ghost billable UNKNOWN", async () => {
+    const db = createTestDb();
+    try {
+      const registry = new EnvironmentRegistry();
+      let awsCalls = 0;
+      registry.register(new AwsEnvironmentProvider({
+        runner: async () => {
+          awsCalls += 1;
+          return ok("{}");
+        },
+        defaultRegion: "us-east-1",
+        defaultImageId: "ami-123",
+        defaultInstanceType: "t3.micro",
+      }));
+      const store = new EnvironmentResourceStore(db.raw);
+      const lifecycle = new EnvironmentLifecycleManager(registry, store);
+      await expect(lifecycle.provision("aws", {
+        resourceId: "before-dispatch-denied",
+        resourceType: "ec2",
+        retentionPolicy: "ephemeral",
+        requiredCapabilities: ["remote compute"],
+      })).rejects.toMatchObject({ externalEffectNotDispatched: true });
+      expect(awsCalls).toBe(0);
+      const denied = store.get("before-dispatch-denied");
+      expect(denied?.status).toBe("failed");
+      expect(denied?.externalId).toBeNull();
+      expect(denied?.metadata.provisionNeedsReconciliation).toBe(false);
+
+      // A timeout AFTER a potential provider dispatch has different semantics.
+      registry.register({
+        id: "unknown-remote",
+        inspect: async () => ({
+          id: "unknown-remote", label: "Unknown remote", availability: "available",
+          capabilities: [], constraints: [], evidence: [],
+          observedAt: new Date().toISOString(),
+        }),
+        provision: async () => { throw new Error("timeout after provider may create"); },
+      });
+      await expect(lifecycle.provision("unknown-remote", {
+        resourceId: "after-dispatch-unknown",
+        resourceType: "vm",
+        retentionPolicy: "ephemeral",
+        requiredCapabilities: [],
+      })).rejects.toThrow("timeout");
+      const unknown = store.get("after-dispatch-unknown");
+      expect(unknown?.status).toBe("unknown");
+      expect(unknown?.metadata.provisionNeedsReconciliation).toBe(true);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("does not expose EC2 billable creation through raw provider-native commands", async () => {
+    const calls: string[][] = [];
+    const provider = new AwsEnvironmentProvider({
+      runner: async (_command, args) => {
+        calls.push(args);
+        return ok("[]");
+      },
+    });
+    for (const args of [
+      ["ec2", "run-instances", "--image-id", "ami-123"],
+      ["--profile", "default", "ec2", "create-fleet"],
+      ["ec2", "--region", "us-east-1", "run-instances"],
+      ["ec2", "request-spot-instances"],
+      ["ec2", "start-instances"],
+    ]) {
+      await expect(provider.execute(args)).rejects.toThrow(
+        "tracked lifecycle and economic authority",
+      );
+    }
+    expect(calls).toEqual([]);
+    const safe = await provider.execute(["ec2", "describe-instances"]);
+    expect(safe.exitCode).toBe(0);
+    expect(calls).toEqual([["ec2", "describe-instances"]]);
   });
 
   it("recovers a provisioned EC2 after restart when InstanceId was not persisted", async () => {
