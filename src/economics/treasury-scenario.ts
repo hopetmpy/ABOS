@@ -29,12 +29,23 @@ export interface TreasuryScenarioInput {
   previousSpendCreditsCents?: number | null;
 }
 
+export interface TreasuryReserveRecommendation {
+  /** Credit-denominated downside in the supplied scenario; not an executed reserve. */
+  targetCreditsCents: number | null;
+  /** Extra credits necessary beyond the explicit current reserve. */
+  additionalCreditsCents: number | null;
+  /** Remaining free liquidity if purchase and added earmark are both funded. */
+  freeAfterProposalAndReserveCents: number | null;
+  disposition: "covered" | "can_earmark" | "requires_alternative" | "unknown";
+}
+
 export interface TreasuryScenarioReview {
   status: "review_ready" | "needs_evidence";
   proposedCreditsCents: number;
   freeCreditsBeforeCents: number | null;
   freeCreditsAfterCents: number | null;
   contingencyExposureCents: number | null;
+  reserveRecommendation: TreasuryReserveRecommendation;
   evidence: string[];
   conditions: string[];
   limitations: string[];
