@@ -169,7 +169,6 @@ export async function executeReviewedProviderProcurement(
       previous.unit === scope.unit &&
       previous.policyDecisionId === policyDecisionId &&
       stored.providerAccountId === scope.providerAccountId &&
-      stored.operationKey === scope.operationKey &&
       stored.operation === scope.operation &&
       stored.resourceId === scope.resourceId &&
       stored.goalId === scope.goalId &&
@@ -208,8 +207,12 @@ export async function executeReviewedProviderProcurement(
   const args = procurementPolicyArgs(scope, scenario);
   requirePolicyReceipt(db, policyDecisionId, args);
   const amount = review.totalProposedCommitmentCents;
+  // The idempotency key is a dispatch identity, NOT a part of the economic
+  // fingerprint. A second different key for the same unresolved resource,
+  // terms and account must not bypass P-030's equivalent-intent protection.
+  const { operationKey: _operationKey, ...economicArgs } = args;
   const request = {
-    ...args,
+    ...economicArgs,
     providerAccountId: scope.providerAccountId,
     goalId: scope.goalId,
     taskId: scope.taskId,
