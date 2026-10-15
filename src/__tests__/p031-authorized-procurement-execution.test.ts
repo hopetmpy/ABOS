@@ -35,6 +35,7 @@ function scenario(): ProviderProcurementScenarioInput {
       basis: "externally_observed",
       observedAvailableCents: 10_000,
       evidence: ["Test-only authenticated USD funding source, never AWS LIVE."],
+      observedAt: "2026-10-01T00:00:00Z",
       validUntil: "2030-01-01T00:00:00Z",
     },
     reservedCents: 2000, existingCommitmentsCents: 1000,
