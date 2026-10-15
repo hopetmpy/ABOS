@@ -5,6 +5,7 @@ import type { PathCandidate } from "../intelligence/types.js";
 import type { PlannerAlternative, PlannerOutput } from "./planner.js";
 import { validatePlannerOutput } from "./planner.js";
 import type { TreasuryScenarioReview } from "../economics/treasury-scenario.js";
+import type { TaskCostCalibration } from "../economics/treasury-projection.js";
 
 export type StrategicReviewDisposition = "approve" | "revise" | "unknown";
 
@@ -31,6 +32,8 @@ export interface StrategicReviewContext {
   independentReviews?: IndependentStrategicReview[];
   /** Optional treasury evidence for this exact plan, never an independent execution authority. */
   treasuryReview?: TreasuryScenarioReview;
+  /** Read-only P-030 local task-cost history; not Conway credit or external P&L. */
+  taskCostCalibration?: TaskCostCalibration;
   /** Source-owned unresolved credits; not provider settlement or free balance. */
   outstandingFinancialEffects?: {
     count: number;
@@ -411,6 +414,26 @@ export function assessStrategicPlan(
       );
       conditions.push(
         "Existing pending credit effects are committed capital, not free liquidity or realized spending.",
+      );
+    }
+  }
+
+  if (context.taskCostCalibration) {
+    const history = context.taskCostCalibration;
+    if (history.comparableSamples > 0 && history.actualToEstimateRatio !== null) {
+      evidence.push(
+        `Local task estimate→outcome: ${history.comparableSamples} comparable tasks, ` +
+        `actual/estimate=${history.actualToEstimateRatio.toFixed(3)}, ` +
+        `net deviation=${history.netDeviationTaskCostCents} task-cost cents.`,
+      );
+      conditions.push(
+        "Calibration belongs to task_graph local task-cost authority; do not treat it as Conway credits, settled provider spend or business P&L.",
+      );
+    }
+    if (history.estimatesAwaitingObservedCost > 0) {
+      conditions.push(
+        `${history.estimatesAwaitingObservedCost} terminal task cost estimates lack observed actuals; ` +
+        "do not treat zero-defaults as measured savings.",
       );
     }
   }

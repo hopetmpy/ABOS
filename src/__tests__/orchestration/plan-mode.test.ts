@@ -387,6 +387,35 @@ describe("orchestration/plan-mode", () => {
       expect(result.feedback).toContain("financial-effect exposure is invalid");
     });
 
+    it("uses canonical task-cost calibration as strategy evidence, not financial authorization", async () => {
+      const calibration = {
+        comparableSamples: 2,
+        estimatesAwaitingObservedCost: 1,
+        estimatedTaskCostCents: 300,
+        actualTaskCostCents: 350,
+        netDeviationTaskCostCents: 50,
+        actualToEstimateRatio: 350 / 300,
+        authority: "local_task_graph" as const,
+        unit: "task_cost_cent" as const,
+      };
+      const observed = await reviewPlan(makePlan(), {
+        ...autoConfig,
+        reviewContext: { taskCostCalibration: calibration },
+      });
+      expect(observed.approved).toBe(true);
+      expect(observed.feedback).toContain("Local task estimate→outcome: 2 comparable tasks");
+      expect(observed.feedback).toContain("actual/estimate=1.167");
+      expect(observed.feedback).toContain("do not treat zero-defaults as measured savings");
+      expect(observed.feedback).toContain("not Conway credits, settled provider spend or business P&L");
+
+      const invalid = await reviewPlan(makePlan({ alternatives: [] }), {
+        ...autoConfig,
+        reviewContext: { taskCostCalibration: calibration },
+      });
+      expect(invalid.approved).toBe(false);
+      expect(invalid.feedback).toContain("disposition=revise");
+    });
+
     it("keeps treasury uncertainty inside the canonical P-025 strategic review", async () => {
       const finance = {
         status: "needs_evidence" as const,
