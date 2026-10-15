@@ -74,6 +74,64 @@ import {
 
 export { calculateTaskFundingCents } from "./orchestrator-core.js";
 
+/**
+ * Read-only P-025 provenance check at the economic-review boundary.
+ * A path being "selected" in AdaptiveStore is not independently proof that
+ * Orchestrator.reviewPlan approved it: require the same task binding and the
+ * persisted exact materialized_path receipt from Orchestrator.
+ *
+ * This returns strategic provenance, NEVER P-010 purchasing authority.
+ */
+export interface ReviewedTaskPathReceipt {
+  taskId: string;
+  goalId: string;
+  pathId: string;
+  strategy: string;
+  evidence: string[];
+}
+
+export function getReviewedTaskPathReceipt(
+  db: Database,
+  taskId: string,
+): ReviewedTaskPathReceipt | null {
+  if (!taskId.trim()) return null;
+  const row = db.prepare(
+    `SELECT b.task_id AS taskId, b.goal_id AS goalId,
+            b.path_id AS pathId, p.strategy AS strategy, p.status AS pathStatus,
+            t.status AS taskStatus
+     FROM adaptive_task_bindings b
+     JOIN adaptive_paths p ON p.id = b.path_id AND p.goal_id = b.goal_id
+     JOIN task_graph t ON t.id = b.task_id AND t.goal_id = b.goal_id
+     WHERE b.task_id = ?`,
+  ).get(taskId) as {
+    taskId: string; goalId: string; pathId: string;
+    strategy: string; pathStatus: string; taskStatus: string;
+  } | undefined;
+  if (!row || !["selected", "executing"].includes(row.pathStatus) ||
+      !["pending", "assigned", "running", "blocked"].includes(row.taskStatus)) {
+    return null;
+  }
+  const review = db.prepare(
+    "SELECT value FROM kv WHERE key = ?",
+  ).get(`orchestrator.review_feedback.${row.goalId}`) as { value: string } | undefined;
+  // Exact trailing provenance marker from the canonical Orchestrator's review
+  // transition. Do not accept substring/old reviewed path from a stale goal.
+  if (!review?.value.endsWith(`; materialized_path=${row.pathId}`)) return null;
+  return {
+    taskId: row.taskId,
+    goalId: row.goalId,
+    pathId: row.pathId,
+    strategy: row.strategy,
+    evidence: [
+      `P-025 reviewed Orchestrator path=${row.pathId}, goal=${row.goalId}, task=${taskId}.`,
+      `Canonical strategic route: ${row.strategy}`,
+      "Strategic path review does NOT attest account funding, all-in provider costs, or Policy purchasing authority.",
+    ],
+  };
+}
+
+
+
 const logger = createLogger("orchestration.orchestrator.strategic");
 const ORCHESTRATOR_STATE_KEY = "orchestrator.state";
 const ORCHESTRATOR_TODO_KEY = "orchestrator.todo_md";
