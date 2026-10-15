@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-030
 Active-Segment: continuity/C0026.md
-Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / DYNAMIC_RESERVE_SOURCE_309f70c_CI_8_OF_8 / LIVE_UNVERIFIED
+Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / DURABLE_RESERVE_SOURCE_a0fe3fa_E3_8_OF_8 / LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,7 +15,7 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p030-family-economics-treasury
 Host-Head-At-Audit-Open: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
-Last-Reconciled-Host-Head: 67e39c9b54f3dd6d2ed1372dd3d53de04e18dcf2
+Last-Reconciled-Host-Head: a0fe3fa14ef6e81cea7e89270e6ba49dd55b4a34
 Observed-Main-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-CI: 36220600132 — SUCCESS 8/8
@@ -231,3 +231,15 @@ La auditoría hasta DECISION_READY se conserva como historia en C0026; ya no des
 - Existing read-only `assessTreasuryScenario` now returns a same-unit `reserveRecommendation`: observed downside target, incremental earmark, free credit remainder after procurement AND the proposed reserve, and `covered|can_earmark|requires_alternative|unknown`. Joint overlapping risk without independent exposure evidence remains UNKNOWN; no fixed reserve percentage, automatic creator approval or standalone execution policy. P-025 strategic-review incorporates the structured recommendation.
 - Adversarial coverage: full-capital spend if justified downside is zero; risk coverage/replenishment from genuinely free credits; insufficient concurrent procurement+reserve; no release of prior larger reserves from one narrow downside; delayed refund still NOT liquid in protected tool; existing projected credit shortfall cannot be called fully financed; null loss/quote is not zero. Protected tool remains read-only and never sends credit transfers.
 - Important limitation: projection `reservedCreditsCents` is an EXPLICIT INPUT, not durable source-backed treasury earmark. Recommendation is NOT an actual committed/reserved balance and cannot be treated as realized allocation on restart. Durable internal reserve ownership/reconciliation and outcome adaptation remain P-030 work, without violating external financial-effect/transactions ownership. Real provider settlement/income/revenue is P-005 boundary.
+
+## P-030 — internal durable reserve authority, exact source CI (2026-10-15)
+
+- Branch `abos/p030-family-economics-treasury`, PR #75 **DRAFT**, main unchanged `d14f04b9`. Product source through `a0fe3fa14ef6e81cea7e89270e6ba49dd55b4a34` validated by push run `38693190077` **SUCCESS 8/8** and PR run `38693195502` **SUCCESS 8/8**. Source E3, **NOT LIVE**.
+- Source `57fa21b`: SQLite v23 `treasury_reserve_allocations` append-only internal earmark authority, independent of `transactions` and `financial_effects`; `setTreasuryReserve` creates/adjusts/releases by stable operation key and exact Conway credit-unit target; durable restart/replay history, causal Evidence Fabric, conservative increase gate requiring observed balance, evidence and same-unit obligations. Overcommitted/UNKNOWN increases rollback atomically; decreases under provider outage cannot invent free liquidity.
+- `getTreasuryProjection` now resolves reserve amount from persisted owner when initialized; a contradictory caller-supplied reserve is rejected, not used to override ownership. Legacy explicit scenario-only input remains available when no reserve is initialized.
+- `290a9c2` updates PROJECT canonical schema baseline v23; `0cf5810` wires a Policy-catalog `set_treasury_reserve` action plus `check_credits` visibility, preserving read-only `assess_treasury_scenario` and no provider transfer/transaction side effect. `a0fe3fa` removes dynamically resampled balance from replay identity, preserving original observation while preventing semantic drift. Linux CI exposed and corrected old v22 assertion and replay mismatch before exact-head 8/8.
+- Coverage includes reserve inflation/overflow guard, separate active commitments, missing provider evidence, conflicting operation keys, replay after intervening changes, release and SQLite physical restart; 8/8 run covers Node 22/24, Windows 22/24, public distribution 22/24, security audit, ProjectOps integrity.
+- Scope boundary: the tool records internal allocations only. `decisionEvidence` and balance provenance currently carry caller/provider-adapter assertions; the journal is **not proof** of authenticated provider settlement, verified economic return or a P-025 strategic review. P-025/Policy must own execution decisions; no automatic human gate was added. No funds, wallet operation, payment or business revenue observed here.
+- **HARD still open:** ensure P-025's actual decision and P-023's prediction→observed economic outcome (including reserve use/release and recovery) are causally wired E2E, validate compatible/liquid reserve coverage against changing external obligations and test v22→v23 migration on persisted legacy state. External payment/provider finality and economic LIVE remain P-005, not a source PASS.
+
+NEXT_ELIGIBLE_WORK: re-audit the real P-025 decision→reserve allocation linkage and observed reserve outcome under P-023; attach meaningful evidence/decision ownership without another planner, policy, ledger or journal. P-030 remains `EN_EJECUCIÓN`; PR #75 remains DRAFT; no merge and no P-031.
