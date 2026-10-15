@@ -424,7 +424,7 @@ describe("orchestration/plan-mode", () => {
       expect(observed.feedback).toContain("Local task estimate→outcome: 2 comparable tasks");
       expect(observed.feedback).toContain("actual/estimate=1.167");
       expect(observed.feedback).toContain("do not treat zero-defaults as measured savings");
-      expect(observed.feedback).toContain("not Conway credits, settled provider spend or business P&L");
+      expect(observed.feedback).toContain("do not treat it as Conway credits, settled provider spend or business P&L");
 
       const invalid = await reviewPlan(makePlan({ alternatives: [] }), {
         ...autoConfig,
