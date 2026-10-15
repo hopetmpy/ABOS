@@ -70,6 +70,8 @@ describe("P-030 financial effect authority", () => {
       pendingUsdcTopups: 1,
       pendingUsdcOtherEffects: 1,
       pendingUsdcCommitments: 600,
+      pendingProviderUsdEffects: 0,
+      pendingProviderUsdCommitments: 0,
       unclassifiedPendingEffects: 1,
     });
     expect(getCommittedFinancialEffectCents(database.raw)).toBe(300);
