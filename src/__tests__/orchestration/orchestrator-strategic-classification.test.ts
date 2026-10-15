@@ -199,4 +199,78 @@ describe("P-025/P-026 strategic classification boundary", () => {
       reworkCount: 0,
     });
   });
+  it("connects terminal economic prediction misses to the real auto plan-review feedback without requesting human approval", async () => {
+    const goalId = insertGoal(db);
+    const now = new Date().toISOString();
+    const insert = db.prepare(
+      `INSERT INTO task_graph
+       (id, goal_id, title, description, status, assigned_to, agent_role,
+        priority, dependencies, estimated_cost_cents, actual_cost_cents, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    insert.run(ulid(), goalId, "Old task", "Cost with positive overrun",
+      "completed", "0xworker", "generalist", 50, "[]", 100, 160, now);
+    insert.run(ulid(), goalId, "Old task", "Unknown actual cost",
+      "failed", "0xworker", "generalist", 50, "[]", 100, 0, now);
+    const plan = {
+      analysis: "Test economic learning with distinct alternatives",
+      strategy: "Run task with calibrated cost",
+      path: {
+        hypothesis: "Observed cost data can inform a better task budget.",
+        assumptions: ["The workload remains comparable to past tasks."],
+        requiredCapabilities: [],
+        preferredEnvironment: null,
+        expectedOutcome: "A calibrated estimate is produced.",
+      },
+      alternatives: [{
+        label: "probe-first",
+        strategy: "Measure before investing",
+        hypothesis: "A probe reduces the cost uncertainty.",
+        assumptions: ["The workload can be sampled."],
+        requiredCapabilities: [],
+        preferredEnvironment: null,
+        sequence: ["Probe", "Execute"],
+        expectedOutcome: "A calibrated estimate is produced.",
+        estimatedCostCents: 1400,
+        discriminants: ["Needs an extra measurement before spending."],
+      }],
+      decisionFactors: ["Task costs and downside history"],
+      preMortem: ["Costs could run above the prior estimate."],
+      falsificationConditions: ["Observed costs contradict the estimate."],
+      customRoles: [],
+      tasks: [{
+        title: "Execute",
+        description: "Execution with cost estimate",
+        agentRole: "generalist",
+        dependencies: [],
+        estimatedCostCents: 1200,
+        priority: 1,
+        timeoutMs: 60_000,
+      }],
+      risks: ["Estimated expenses are uncertain."],
+      // Deliberately lower than task floor so review writes its feedback.
+      estimatedTotalCostCents: 1000,
+      estimatedTimeMinutes: 30,
+    };
+    db.prepare("INSERT OR REPLACE INTO kv (key,value,updated_at) VALUES (?,?,datetime('now'))")
+      .run(`orchestrator.plan.${goalId}`, JSON.stringify(plan));
+    db.prepare("INSERT OR REPLACE INTO kv (key,value,updated_at) VALUES (?,?,datetime('now'))")
+      .run("orchestrator.state", JSON.stringify({
+        phase: "plan_review", goalId, replanCount: 0,
+        failedTaskId: null, failedError: null,
+      }));
+
+    const inference = { chat: vi.fn() };
+    const result = await makeOrchestrator(db, inference).tick();
+    expect(result.phase).toBe("planning");
+    const feedback = (db.prepare("SELECT value FROM kv WHERE key = ?")
+      .get(`orchestrator.review_feedback.${goalId}`) as { value: string }).value;
+    expect(feedback).toContain("Local task estimate→outcome: 1 comparable tasks");
+    expect(feedback).toContain("actual/estimate=1.600");
+    expect(feedback).toContain("largest=60");
+    expect(feedback).toContain("task_graph local task-cost authority");
+    expect(feedback).not.toContain("awaiting human approval");
+    expect(inference.chat).not.toHaveBeenCalled();
+  });
+
 });
