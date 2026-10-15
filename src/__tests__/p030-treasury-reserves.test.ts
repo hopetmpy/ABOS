@@ -12,7 +12,7 @@ import { createTestDb } from "./mocks.js";
 import { AdaptivePathEngine } from "../intelligence/adaptive-engine.js";
 import { getEvidenceByAuthority } from "../observability/evidence.js";
 import { getTreasuryProjection } from "../economics/treasury-projection.js";
-import { getTreasuryReserveSnapshot, getTreasuryReserveLearning, describeTreasuryReserveLearning, setTreasuryReserve, getPendingReserveCreditOverlap, getTreasuryReserveLocalSettlement } from "../economics/treasury-reserves.js";
+import { getTreasuryReserveSnapshot, getTreasuryReserveLearning, describeTreasuryReserveLearning, setTreasuryReserve, getPendingReserveCreditOverlap, getTreasuryReserveLocalSettlement, getTreasuryFinancialEffectSequence } from "../economics/treasury-reserves.js";
 import { prepareFinancialEffect, recordFinancialEffectObservation } from "../economics/financial-effects.js";
 import { executeCreditEffect, reconcileCreditEffect } from "../economics/credit-transfer.js";
 
@@ -839,5 +839,78 @@ describe("P-030 delayed Conway financial reconciliation versus changing reserve 
     expect((d.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as {n:number}).n).toBe(1);
     expect(getTreasuryReserveLocalSettlement(d.raw).locallyReconciledCreditsCents).toBe(300);
     expect(getTreasuryReserveLearning(d.raw).observedReserveUseCreditsCents).toBeNull();
+  });
+});
+
+describe("P-030 stale Conway balance versus concurrent financial intents", () => {
+  it("detects a new financial-effect intent between local position and attempted reserve increase", () => {
+    const d=db();
+    const before=getTreasuryFinancialEffectSequence(d.raw);
+    prepareFinancialEffect(d.raw,{
+      operationKey:"concurrent-finance",effectKind:"credit_transfer",
+      recipient:"0xprovider",provider:"conway",amountCents:150,
+      request:{note:"concurrent separate funds"},
+    });
+    expect(getTreasuryFinancialEffectSequence(d.raw)).toBeGreaterThan(before);
+    expect(()=>setTreasuryReserve(d,{
+      ...alloc("stale-balance","stale-proof",200),
+      financialEffectsSequenceBeforeBalance:before,
+    })).toThrow(/stale: financial-effect lifecycle changed/);
+    expect(getTreasuryReserveSnapshot(d.raw).initialized).toBe(false);
+  });
+
+  it("protected catalog refresh rejects an observation invalidated during awaited provider GET", async () => {
+    const d=db(), conway=new MockConwayClient();
+    const ctx: ToolContext={
+      db:d,conway,identity:createTestIdentity(),
+      config:createTestConfig(),inference:new MockInferenceClient(),
+    };
+    const tool=createBuiltinTools(ctx.config.sandboxId)
+      .find(x=>x.name==="set_treasury_reserve")!;
+    conway.getCreditsBalance=async()=>{
+      prepareFinancialEffect(d.raw,{
+        operationKey:"payment-during-credit-get",effectKind:"credit_transfer",
+        recipient:"0xconcurrent",provider:"conway",amountCents:100,
+        request:{note:"lifecycle changed after balance request began"},
+      });
+      return 1000;
+    };
+    await expect(runWithEvidenceContext(
+      {correlationId:"p030-balance-race",toolCallId:"reserve-race",policyDecisionId:"policy-race"},
+      ()=>tool.execute({
+        reserve_key:"race",target_credits_cents:200,
+        decision_evidence:"strategic contingency",other_commitments_cents:0,
+      },ctx),
+    )).rejects.toThrow(/stale: financial-effect lifecycle changed/);
+    expect(getTreasuryReserveSnapshot(d.raw).initialized).toBe(false);
+    expect((d.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects").get() as {n:number}).n).toBe(1);
+  });
+
+  it("persists source-labeled observation time and runtime identity without claiming provider ownership", async () => {
+    const d=db(),conway=new MockConwayClient();
+    conway.creditsCents=1000;
+    const ctx:ToolContext={
+      db:d,conway,identity:createTestIdentity(),
+      config:createTestConfig(),inference:new MockInferenceClient(),
+    };
+    const tool=createBuiltinTools(ctx.config.sandboxId)
+      .find(x=>x.name==="set_treasury_reserve")!;
+    const result=await runWithEvidenceContext(
+      {correlationId:"p030-valid-balance",toolCallId:"reserve-valid",policyDecisionId:"policy-valid"},
+      ()=>tool.execute({
+        reserve_key:"fresh",target_credits_cents:250,
+        decision_evidence:"documented strategic reason",other_commitments_cents:0,
+      },ctx),
+    );
+    expect(JSON.parse(result).applied).toBe(true);
+    const recorded=getTreasuryReserveSnapshot(d.raw).allocations
+      .find(x=>x.reserveKey==="fresh")!;
+    const observation=JSON.parse(recorded.balanceEvidence!);
+    expect(observation.source).toBe("ConwayClient.getCreditsBalance");
+    expect(observation.runtimeAgentAddress).toBe(ctx.identity.address);
+    expect(Number.isFinite(Date.parse(observation.observedAt))).toBe(true);
+    expect(observation.providerWalletOwnershipVerified).toBe(false);
+    expect(observation.providerFinalityVerified).toBe(false);
+    expect(recorded.observedCreditsCents).toBe(1000);
   });
 });

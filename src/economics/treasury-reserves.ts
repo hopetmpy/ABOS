@@ -43,6 +43,8 @@ export interface SetTreasuryReserveInput {
   observedCreditsCents?: number | null;
   /** Provenance for the supplied credit observation; NOT provider authentication. */
   balanceEvidence?: string | null;
+  /** Local financial-effects event position observed BEFORE the Conway balance GET. */
+  financialEffectsSequenceBeforeBalance?: number;
   otherCommittedCreditsCents?: number | null;
   /** Needed if task_graph contains active tasks; do not convert task_cost_cent. */
   taskCommitmentCreditsCents?: number | null;
@@ -106,6 +108,20 @@ function creditSum(total: number, next: number, label: string): number {
     throw new Error(label + " exceeds exact safe credit-unit accounting");
   }
   return total + next;
+}
+
+/** Snapshot of the existing financial intent lifecycle evidence, not a
+ * second ledger or an authenticated provider wallet observation.
+ */
+export function getTreasuryFinancialEffectSequence(db: Database.Database): number {
+  const row = db.prepare(
+    "SELECT COALESCE(MAX(sequence), 0) AS seq FROM evidence_events WHERE domain='economic' AND authority_type='financial_effect'",
+  ).get() as { seq: number };
+  const sequence = Number(row?.seq ?? 0);
+  if (!Number.isSafeInteger(sequence) || sequence < 0) {
+    throw new Error("Financial effect observation sequence is invalid");
+  }
+  return sequence;
 }
 
 /** Existing append-only allocation sequence identifies the current
@@ -404,6 +420,11 @@ export function setTreasuryReserve(
   if (targetCreditsCents === null) throw new Error("targetCreditsCents is required");
   const observedCreditsCents = amount(input.observedCreditsCents, "observedCreditsCents");
   const balanceEvidence = input.balanceEvidence?.trim() || null;
+  const observedSequence = input.financialEffectsSequenceBeforeBalance;
+  if (observedSequence !== undefined &&
+      (!Number.isSafeInteger(observedSequence) || observedSequence < 0)) {
+    throw new Error("Invalid financial-effects balance observation sequence");
+  }
   const otherCommittedCreditsCents = amount(input.otherCommittedCreditsCents, "otherCommittedCreditsCents");
   const taskCommitmentCreditsCents = amount(input.taskCommitmentCreditsCents, "taskCommitmentCreditsCents");
 
@@ -436,6 +457,10 @@ export function setTreasuryReserve(
     if (increasing && (observedCreditsCents === null || !balanceEvidence ||
         otherCommittedCreditsCents === null)) {
       throw new Error("Increasing reserve requires observed credit balance, provenance and known other commitments");
+    }
+    if (increasing && observedSequence !== undefined &&
+        observedSequence !== getTreasuryFinancialEffectSequence(db.raw)) {
+      throw new Error("Balance observation is stale: financial-effect lifecycle changed after Conway balance read began");
     }
     const now = new Date().toISOString();
     db.raw.prepare(
@@ -482,6 +507,7 @@ export function setTreasuryReserve(
         operationKey, priorCreditsCents: prior, targetCreditsCents,
         totalReservedCreditsCents: nextTotal, unit: "credit_cent",
         decisionId, observedCreditsCents,
+        financialEffectsSequenceBeforeBalance: observedSequence ?? null,
         reviewedStrategicPathId: reviewedPath?.pathId ?? null,
       },
       provenance: {

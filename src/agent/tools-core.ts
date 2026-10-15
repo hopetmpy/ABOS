@@ -27,7 +27,7 @@ import { appendEvidenceEvent, correlationIdFor, currentEvidenceContext, latestEv
 import { executeCreditEffect } from "../economics/credit-transfer.js";
 import { executeCreditTopupEffect, listUnresolvedCreditTopups } from "../economics/credit-topup.js";
 import { getTreasuryProjection } from "../economics/treasury-projection.js";
-import { getTreasuryReserveSnapshot, setTreasuryReserve } from "../economics/treasury-reserves.js";
+import { getTreasuryFinancialEffectSequence, getTreasuryReserveSnapshot, setTreasuryReserve } from "../economics/treasury-reserves.js";
 import { claimFinancialEffectDispatch, getCommittedFinancialEffectCents, listUnresolvedFinancialEffects, prepareFinancialEffect, recordFinancialEffectObservation } from "../economics/financial-effects.js";
 import { assessTreasuryScenario } from "../economics/treasury-scenario.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
@@ -1373,10 +1373,16 @@ Model: ${ctx.inference.getDefaultModel()}
           .find(item => item.reserveKey === reserveKey?.trim());
         const increasing = target > (existing?.targetCreditsCents ?? 0);
         let observedCreditsCents: number | null = null;
+        const financialEffectsSequenceBeforeBalance = increasing
+          ? getTreasuryFinancialEffectSequence(ctx.db.raw) : undefined;
+        let balanceObservedAt: string | null = null;
         if (increasing) {
           try {
             const observed = await ctx.conway.getCreditsBalance();
-            if (Number.isSafeInteger(observed) && observed >= 0) observedCreditsCents = observed;
+            if (Number.isSafeInteger(observed) && observed >= 0) {
+              observedCreditsCents = observed;
+              balanceObservedAt = new Date().toISOString();
+            }
           } catch {
             // Provider outage never becomes a fictitious balance.
           }
@@ -1388,8 +1394,15 @@ Model: ${ctx.inference.getDefaultModel()}
           decisionId: evidence?.policyDecisionId ?? causalId,
           decisionEvidence: args.decision_evidence as string,
           observedCreditsCents,
-          balanceEvidence: observedCreditsCents === null ? null :
-            "ConwayClient.getCreditsBalance observed in current reserve-tool invocation; external verification not independently attested",
+          financialEffectsSequenceBeforeBalance,
+          balanceEvidence: observedCreditsCents === null ? null : JSON.stringify({
+            source: "ConwayClient.getCreditsBalance",
+            observedAt: balanceObservedAt,
+            runtimeAgentAddress: ctx.identity.address,
+            kind: "local_client_balance_observation",
+            providerWalletOwnershipVerified: false,
+            providerFinalityVerified: false,
+          }),
           otherCommittedCreditsCents: args.other_commitments_cents as number | undefined,
           taskCommitmentCreditsCents: args.task_commitments_credits_cents as number | undefined,
         });
