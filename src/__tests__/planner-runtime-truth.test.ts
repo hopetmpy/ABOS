@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildPlannerPrompt } from "../orchestration/planner.js";
+import { buildPlannerContext } from "../orchestration/planner-context.js";
+import { createTestDb } from "./mocks.js";
 
 function context() {
   return {
@@ -61,4 +63,30 @@ describe("planner runtime truth", () => {
     expect(prompt).toContain("do not manufacture a numeric authority");
     expect(prompt).not.toContain("credits < 1000");
   });
+  it("does not invent USDC=0 for a missing balance but preserves an observed zero", async () => {
+    const db = createTestDb();
+    try {
+      const unknown = await buildPlannerContext({ db: db.raw });
+      expect(unknown.usdcBalance).toBeNull();
+      const prompt = buildPlannerPrompt(unknown);
+      expect(prompt).toContain("UNKNOWN (no observed USDC balance)");
+      expect(prompt).not.toContain("0 USDC");
+
+      const zero = await buildPlannerContext({ db: db.raw, usdcBalance: 0 });
+      expect(zero.usdcBalance).toBe(0);
+      expect(buildPlannerPrompt(zero)).toContain("0 USDC");
+
+      const invalid = await buildPlannerContext({ db: db.raw, usdcBalance: -50 });
+      expect(invalid.usdcBalance).toBeNull();
+
+      db.raw.prepare("INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))")
+        .run("last_known_balance", JSON.stringify({ usdcBalance: 12.75 }));
+      const cached = await buildPlannerContext({ db: db.raw });
+      expect(cached.usdcBalance).toBe(12.75);
+      expect(buildPlannerPrompt(cached)).toContain("12.75 USDC");
+    } finally {
+      db.close();
+    }
+  });
+
 });
