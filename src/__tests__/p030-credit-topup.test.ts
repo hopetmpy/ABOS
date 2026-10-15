@@ -3,7 +3,13 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDatabase } from "../state/database.js";
-import { createTestDb } from "./mocks.js";
+import {
+  createTestDb, createTestIdentity, createTestConfig,
+  MockConwayClient, MockInferenceClient,
+} from "./mocks.js";
+import { executeAutonomousTopup } from "../agent/autonomous-topup.js";
+import { createBuiltinTools } from "../agent/tools.js";
+import type { PolicyEngine } from "../agent/policy-engine.js";
 import type { AbosDatabase } from "../types.js";
 import {
   executeCreditTopupEffect,
@@ -100,6 +106,41 @@ describe("P-030 x402 topup durable financial intents", () => {
     expect(execute).toHaveBeenCalledTimes(1);
     expect(newCall).not.toHaveBeenCalled();
     expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as {n:number}).n).toBe(0);
+  });
+
+  it("halts automatic recovery from a durable x402 pending effect before any fresh balance lookup", async () => {
+    const db=mkdb();
+    const identity=createTestIdentity();
+    prepareFinancialEffect(db.raw,{
+      operationKey:"topup:recover", effectKind:"x402_credit_topup",
+      unit:"usdc_cent",amountCents:500,
+      recipient:identity.address.toLowerCase(),provider:"conway_x402",
+      request:{tierUsd:5,product:"conway_compute_credits"},
+    });
+    const conway=new MockConwayClient();
+    const observe=vi.spyOn(conway,"getCreditsBalance");
+    const result=await executeAutonomousTopup({
+      db, identity,config:createTestConfig(),conway,
+      inference:new MockInferenceClient(),
+      policyEngine:{} as PolicyEngine,source:"runtime_recovery",cooldownMs:0,
+    });
+    expect(result.status).toBe("unresolved_previous_effect");
+    expect(result.evidence.join(" ")).toContain("topup:recover");
+    expect(observe).not.toHaveBeenCalled();
+  });
+
+  it("rejects x402 payments if signer wallet and tracked recipient differ", async () => {
+    const db=mkdb();
+    const identity=createTestIdentity();
+    const config=createTestConfig();
+    const target=createBuiltinTools(config.sandboxId)
+      .find((tool) => tool.name === "topup_credits");
+    expect(target).toBeDefined();
+    await expect(target!.execute({amount_usd:5},{
+      db, config,identity:{...identity,address:"0xnot-the-signer"},
+      conway:new MockConwayClient(),inference:new MockInferenceClient(),
+    })).rejects.toThrow(/signing wallet conflicts/);
+    expect((db.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects").get() as {n:number}).n).toBe(0);
   });
 
   it("does not prevent independent wallet funding and allows an explicitly rejected pre-payment intent", async () => {
