@@ -315,7 +315,7 @@ describe("AwsEnvironmentProvider lifecycle", () => {
       { ...scope, authorizedRegion: "us-west-2" },
       { ...scope, expiresAt: new Date(Date.now() - 60_000).toISOString() },
       { ...scope, expiresAt: undefined },
-    ]) {{
+    ]) {
       const provider = new AwsEnvironmentProvider({
         ...options,
         authorizeNewProvision: () => decision,
