@@ -430,8 +430,9 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         !authority.policyDecisionId?.trim() ||
         authority.providerAccountId?.trim() !== accountId ||
         authority.unit !== "usd_cent" ||
+        typeof authority.totalCommitmentCents !== "number" ||
         !Number.isSafeInteger(authority.totalCommitmentCents) ||
-        (authority.totalCommitmentCents ?? -1) < 0 ||
+        authority.totalCommitmentCents < 0 ||
         !authority.billingTermsEvidence?.some((entry) => entry.trim())) {
       throw new Error(
         "AWS EC2 economic procurement authorization is absent, incomplete, unscoped to the observed account, or missing evidenced USD commitment/billing terms. No run-instances request was dispatched." +
