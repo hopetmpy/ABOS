@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-030
 Active-Segment: continuity/C0026.md
-Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / CODE_5d64fea_CI_GREEN_8_OF_8 / LIVE_FINALITY_UNPROVEN
+Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / X402_SOURCE_67e39c_CI_8_OF_8 / LIVE_FINALITY_UNPROVEN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,7 +15,7 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p030-family-economics-treasury
 Host-Head-At-Audit-Open: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
-Last-Reconciled-Host-Head: 5d64fead2a50500023fd95692f450fed8306d770
+Last-Reconciled-Host-Head: 67e39c9b54f3dd6d2ed1372dd3d53de04e18dcf2
 Observed-Main-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-CI: 36220600132 — SUCCESS 8/8
@@ -129,7 +129,7 @@ Decision gate registrado en `continuity/C0026.md` por commit `9ac10272bcbd6b661d
 
 Plan P-030: blueprint vigente. La auditoría resolvió su arquitectura de implementación sin cambiar objetivo, alcance ni dependencias; no se requiere reescribir el blueprint antes de source.
 
-NEXT_ELIGIBLE_WORK: P-030 PR #75 DRAFT with code HEAD 5d64fea push+PR CI 8/8; complete P-030 causal decision/outcome adaptation and real provider finality authority evidence when available, adversarially validate; do not merge or advance P-031 until DoD.
+NEXT_ELIGIBLE_WORK: P-030 PR #75 DRAFT; x402 durable purchase source HEAD 67e39c validated push+PR 8/8. Next eligible: evidence-based economic prediction→outcome calibration/adaptive reserves and cross-source P-025 strategic decisions; provider payment/funds/Conway credits finality remains P-005 external authority. No merge or P-031 until P-030 DoD.
 
 ## P-030 — checkpoint de implementación 2026-10-14
 
