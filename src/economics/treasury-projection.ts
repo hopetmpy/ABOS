@@ -4,6 +4,7 @@
  * automatically interchangeable or business revenue.
  */
 import type { AbosDatabase } from "../types.js";
+import type Database from "better-sqlite3";
 import { getCommittedFinancialEffectCents, listUnresolvedFinancialEffects } from "./financial-effects.js";
 
 export interface ResourceInvestmentObservation {
@@ -66,21 +67,11 @@ function knownCents(value: number | null | undefined, label: string): number | n
   return value;
 }
 
-export function getTreasuryProjection(
-  db: AbosDatabase,
-  input: TreasuryProjectionInput = {},
-): TreasuryProjection {
-  const observed = knownCents(input.observedCreditsCents, "observedCreditsCents");
-  const reserved = knownCents(input.reservedCreditsCents, "reservedCreditsCents");
-  const other = knownCents(input.otherCommittedCreditsCents, "otherCommittedCreditsCents");
-  const pendingRefund = knownCents(input.pendingRefundCreditsCents, "pendingRefundCreditsCents");
-  const tasks = db.raw.prepare(
-    "SELECT COALESCE(SUM(estimated_cost_cents), 0) AS amount FROM task_graph WHERE status IN ('assigned', 'running')",
-  ).get() as { amount: number };
-  const activeTaskEstimatedCostCents = Math.max(0, Number(tasks?.amount ?? 0));
+/** Canonical read-only comparison from the task_graph SQLite owner. */
+export function getTaskCostCalibration(db: Database.Database): TaskCostCalibration {
   // 0 is the schema default for actual cost and is not enough to establish
   // realized zero spending. Exclude those tasks from measured comparisons.
-  const history = db.raw.prepare(
+  const history = db.prepare(
     `SELECT
        COALESCE(SUM(CASE WHEN actual_cost_cents > 0 THEN 1 ELSE 0 END),0) AS comparable,
        COALESCE(SUM(CASE WHEN actual_cost_cents = 0 THEN 1 ELSE 0 END),0) AS unobserved,
@@ -105,6 +96,22 @@ export function getTreasuryProjection(
     authority: "local_task_graph",
     unit: "task_cost_cent",
   };
+  return historicalTaskCostCalibration;
+}
+
+export function getTreasuryProjection(
+  db: AbosDatabase,
+  input: TreasuryProjectionInput = {},
+): TreasuryProjection {
+  const observed = knownCents(input.observedCreditsCents, "observedCreditsCents");
+  const reserved = knownCents(input.reservedCreditsCents, "reservedCreditsCents");
+  const other = knownCents(input.otherCommittedCreditsCents, "otherCommittedCreditsCents");
+  const pendingRefund = knownCents(input.pendingRefundCreditsCents, "pendingRefundCreditsCents");
+  const tasks = db.raw.prepare(
+    "SELECT COALESCE(SUM(estimated_cost_cents), 0) AS amount FROM task_graph WHERE status IN ('assigned', 'running')",
+  ).get() as { amount: number };
+  const activeTaskEstimatedCostCents = Math.max(0, Number(tasks?.amount ?? 0));
+  const historicalTaskCostCalibration = getTaskCostCalibration(db.raw);
   const taskCredits = activeTaskEstimatedCostCents === 0
     ? 0 : knownCents(input.taskCommitmentCreditsCents, "taskCommitmentCreditsCents");
   const pending = getCommittedFinancialEffectCents(db.raw);

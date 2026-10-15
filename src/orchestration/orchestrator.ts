@@ -30,7 +30,7 @@ import {
 import { reviewPlan } from "./plan-mode.js";
 import type { StrategicReviewContext } from "./strategic-review.js";
 import { getCommittedFinancialEffectCents, listUnresolvedFinancialEffects } from "../economics/financial-effects.js";
-import { getTreasuryProjection } from "../economics/treasury-projection.js";
+import { getTaskCostCalibration } from "../economics/treasury-projection.js";
 import {
   loadPlanningSimulationEvidence,
   referencedSimulationEvidence,
@@ -840,7 +840,7 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       environmentSnapshots,
       simulationEvidence,
       adaptiveContext: plannerContext.adaptiveContext,
-      taskCostCalibration: getTreasuryProjection(this.strategicParams.db).historicalTaskCostCalibration,
+      taskCostCalibration: getTaskCostCalibration(this.strategicParams.db),
       outstandingFinancialEffects: {
         count: unsettledCreditEffects.length,
         pendingCreditCommitments,
