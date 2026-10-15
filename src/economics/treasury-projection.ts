@@ -6,6 +6,7 @@
 import type { AbosDatabase } from "../types.js";
 import type Database from "better-sqlite3";
 import { getCommittedFinancialEffectCents, listUnresolvedFinancialEffects } from "./financial-effects.js";
+import { getTreasuryReserveSnapshot } from "./treasury-reserves.js";
 
 export interface ResourceInvestmentObservation {
   allocationKey: string;
@@ -57,6 +58,7 @@ export interface TreasuryProjection {
   historicalTaskCostCalibration: TaskCostCalibration;
   observedCreditsCents: number | null;
   reservedCreditsCents: number | null;
+  reserveSource: "durable" | "caller_supplied" | "unknown";
   otherCommittedCreditsCents: number | null;
   taskCommitmentCreditsCents: number | null;
   pendingTransferCreditsCents: number;
@@ -173,7 +175,18 @@ export function getTreasuryProjection(
   input: TreasuryProjectionInput = {},
 ): TreasuryProjection {
   const observed = knownCents(input.observedCreditsCents, "observedCreditsCents");
-  const reserved = knownCents(input.reservedCreditsCents, "reservedCreditsCents");
+  const statedReserve = knownCents(input.reservedCreditsCents, "reservedCreditsCents");
+  const durableReserves = getTreasuryReserveSnapshot(db.raw);
+  // Once durable reserves exist, caller input is never allowed to bypass them.
+  // A supplied amount may confirm the owner, but may not replace it.
+  if (durableReserves.initialized && statedReserve !== null &&
+      statedReserve !== durableReserves.totalCreditsCents) {
+    throw new Error("Caller reserve conflicts with durable treasury reserve authority");
+  }
+  const reserved = durableReserves.initialized
+    ? durableReserves.totalCreditsCents : statedReserve;
+  const reserveSource = durableReserves.initialized ? "durable" as const
+    : statedReserve !== null ? "caller_supplied" as const : "unknown" as const;
   const other = knownCents(input.otherCommittedCreditsCents, "otherCommittedCreditsCents");
   const pendingRefund = knownCents(input.pendingRefundCreditsCents, "pendingRefundCreditsCents");
   const tasks = db.raw.prepare(
@@ -225,6 +238,7 @@ export function getTreasuryProjection(
   }
   const limitations = [
     "Credit liquidity and externally settled business P&L are different authorities.",
+    "A caller-supplied reserve is not a persisted internal allocation; durable treasury records govern once initialized.",
     "Task estimates are not converted to credit obligations without unit-compatible evidence.",
     "Resource valuations remain separate from actual invoice/ledger expense and revenue.",
     "Task estimate→actual history is local task-cost evidence, not automatically Conway credit spending, verified invoices or cash P&L.",
@@ -251,6 +265,7 @@ export function getTreasuryProjection(
     historicalTaskCostCalibration,
     observedCreditsCents: observed,
     reservedCreditsCents: reserved,
+    reserveSource,
     otherCommittedCreditsCents: other,
     taskCommitmentCreditsCents: taskCredits,
     pendingTransferCreditsCents: pending,

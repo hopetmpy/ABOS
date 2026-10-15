@@ -7,7 +7,25 @@ import { WORLD_MODEL_SCHEMA } from "./world-model-schema.js";
  * The database IS the abos's memory.
  */
 
-export const SCHEMA_VERSION = 22;
+export const SCHEMA_VERSION = 23;
+
+// P-030: internal reserve allocations are earmarks, not settled cash movements.
+// Append-only decisions retain idempotency/recovery without a second payment ledger.
+export const MIGRATION_V23_TREASURY_RESERVES = `
+  CREATE TABLE IF NOT EXISTS treasury_reserve_allocations (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    operation_key TEXT NOT NULL UNIQUE,
+    reserve_key TEXT NOT NULL,
+    target_credit_cents INTEGER NOT NULL CHECK(target_credit_cents >= 0),
+    decision_id TEXT NOT NULL,
+    decision_evidence TEXT NOT NULL,
+    observed_credit_cents INTEGER CHECK(observed_credit_cents >= 0),
+    balance_evidence TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_treasury_reserve_allocations_key
+    ON treasury_reserve_allocations(reserve_key, sequence DESC);
+`;
 
 export const CREATE_TABLES = `
   -- Schema version tracking
@@ -114,6 +132,8 @@ export const CREATE_TABLES = `
     WHERE provider_effect_id IS NOT NULL AND provider_effect_id != '';
   CREATE INDEX IF NOT EXISTS idx_financial_effects_child
     ON financial_effects(child_id, state, updated_at);
+
+  ${MIGRATION_V23_TREASURY_RESERVES}
 
   -- Installed tools and MCP servers
   CREATE TABLE IF NOT EXISTS installed_tools (
