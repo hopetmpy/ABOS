@@ -51,8 +51,35 @@ const defaultRunner: EnvironmentCommandRunner = (
   });
 });
 
+/**
+ * Attestation from a trusted P-010/P-025/P-030 authority, not caller/task
+ * metadata or a provider IAM profile. The provider verifies the account,
+ * scope and economic fields before any billable EC2 creation.
+ */
+export interface AwsEc2ProcurementDecision {
+  allowed: boolean;
+  policyDecisionId?: string | null;
+  providerAccountId?: string | null;
+  unit?: string | null;
+  totalCommitmentCents?: number | null;
+  billingTermsEvidence?: string[];
+  reason?: string;
+}
+
 export interface AwsEnvironmentProviderOptions {
   runner?: EnvironmentCommandRunner;
+  /**
+   * Optional trusted runtime authority for new billable EC2 instances.
+   * No callback means authority UNKNOWN (not a permanent prohibition).
+   * Implementations must source this from P-025/P-030/P-010, never user-
+   * supplied task metadata. Reuse/reconcile/retire do not require this gate.
+   */
+  authorizeNewProvision?: (context: {
+    request: EnvironmentProvisionRequest;
+    accountId: string;
+    region: string | null;
+    instanceType: string;
+  }) => AwsEc2ProcurementDecision | Promise<AwsEc2ProcurementDecision>;
   defaultRegion?: string;
   defaultInstanceType?: string;
   defaultArchitecture?: "x86_64" | "arm64";
@@ -377,6 +404,41 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     const iamInstanceProfile =
       this.getConfiguredIamInstanceProfile(request.metadata);
 
+    // IAM execution configuration does NOT authorize an AWS bill. Make the
+    // economic boundary explicit at the provider itself, so lifecycle callers
+    // cannot bypass it with an unbudgeted Task or direct provision request.
+    if (!this.options.authorizeNewProvision) {
+      throw new Error(
+        "AWS EC2 procurement authority UNKNOWN: no trusted P-025/P-030/P-010 authorization is wired. No run-instances request was dispatched.",
+      );
+    }
+    const identity = await this.runner(
+      "aws", ["sts", "get-caller-identity", "--output", "json"], 15_000,
+    );
+    requireAwsSuccess(identity, "AWS STS account observation before procurement");
+    const accountId = parseJson<{ Account?: string }>(identity.stdout)?.Account?.trim();
+    if (!accountId) {
+      throw new Error("AWS EC2 procurement account identity is UNKNOWN; no instance was requested.");
+    }
+    const authority = await this.options.authorizeNewProvision({
+      request,
+      accountId,
+      region,
+      instanceType,
+    });
+    if (!authority?.allowed ||
+        !authority.policyDecisionId?.trim() ||
+        authority.providerAccountId?.trim() !== accountId ||
+        authority.unit !== "usd_cent" ||
+        !Number.isSafeInteger(authority.totalCommitmentCents) ||
+        (authority.totalCommitmentCents ?? -1) < 0 ||
+        !authority.billingTermsEvidence?.some((entry) => entry.trim())) {
+      throw new Error(
+        "AWS EC2 economic procurement authorization is absent, incomplete, unscoped to the observed account, or missing evidenced USD commitment/billing terms. No run-instances request was dispatched." +
+        (authority?.reason ? ` Reason: ${authority.reason}` : ""),
+      );
+    }
+
     const args = [
       "ec2",
       "run-instances",
@@ -583,6 +645,21 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
   }
 
   async execute(args: string[], timeoutMs = this.commandTimeoutMs()): Promise<CommandResult> {
+    // Provider-native execution is a discovery/general-purpose surface, NOT a
+    // shortcut around P-031's tracked provision and economic authority. These
+    // known EC2 capacity-changing actions must use the lifecycle boundary.
+    // This is a targeted observed bypass guard, not a closed provider catalog.
+    const ec2Index = args.findIndex((arg) => arg.toLowerCase() === "ec2");
+    const ec2Action = ec2Index >= 0
+      ? args[ec2Index + 1]?.toLowerCase()
+      : null;
+    if (ec2Action && [
+      "run-instances", "create-fleet", "request-spot-instances", "start-instances",
+    ].includes(ec2Action)) {
+      throw new Error(
+        `AWS EC2 ${ec2Action} requires the tracked lifecycle and economic authority; raw provider-native execution cannot create or restart billable compute.`,
+      );
+    }
     return this.runner("aws", args, timeoutMs);
   }
 
