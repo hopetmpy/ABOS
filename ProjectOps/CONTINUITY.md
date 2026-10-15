@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-030
 Active-Segment: continuity/C0026.md
-Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / BALANCE_HTTP_NO_STORE_SOURCE_a5fb4a7_E3_8_OF_8 / LIVE_UNVERIFIED
+Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / CHILD_ECONOMIC_UNKNOWN_SOURCE_570609e_E3_8_OF_8 / LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,7 +15,7 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p030-family-economics-treasury
 Host-Head-At-Audit-Open: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
-Last-Reconciled-Host-Head: a5fb4a7564719990073e5f5102d4c9367f732dfc
+Last-Reconciled-Host-Head: 570609ed7e43073f5adeaeeef4878d54dbaba163
 Observed-Main-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-CI: 36220600132 — SUCCESS 8/8
@@ -314,3 +314,12 @@ NEXT_ELIGIBLE_WORK: audit the existing provider balance GET for source-scoped id
 - P-030 is still `EN_EJECUCIÓN / SOURCE_PARTIAL`; no P-031, no merger. E3 green for exact tested source, E5 authenticated provider settlement and E6 realized business economics NOT VERIFIED.
 
 NEXT_ELIGIBLE_WORK: compare current P-030 DoD against `financial_effects`, `transactions`, `treasury-projection`, `treasury-scenario`, P-025 and P-023 with source evidence; identify the smallest independent source gap in same-unit costs/commitments/economic outcomes if demonstrated, without a second ledger or strategy authority. Keep monetary E5/E6 limitations with P-005 and report a source NO_CHANGE where only external provider truth is missing.
+
+## P-030 — Child economy UNKNOWN and exact source CI (2026-10-15)
+
+- Source `01fbbf770c74fe2e416a77f687c92d2bc5a74b56`: push CI `38757529940` and PR CI `38757543303`, both SUCCESS 8/8. `child-economics.ts` now rejects invalid externally asserted money (negative, fractional, nonfinite and unsafe amounts) as UNKNOWN instead of flooring or clamping to zero. Regressions preserve an actually observed zero and prevent false child P&L or ROI.
+- Source `570609ed7e43073f5adeaeeef4878d54dbaba163`: push CI `38758067510` and PR CI `38758078108`, both SUCCESS 8/8 (Linux/Windows Node 22/24, public distro, security, integrity). SQLite `task_graph.actual_cost_cents` has schema DEFAULT 0, which is NOT proof of free completed work. Existing P-030 task calibration already preserves unobserved cost. The child economic projection now detects terminal default-zero, negative or malformed cost rows, retains the measured positive subtotal but makes net contribution, profitability and ROI UNKNOWN until all terminal costs are observed. Adversarial tests cover zero defaults and negative rows.
+- Prior documentary HEAD `ab23eaafbbd9073834fba66feaf7d978be5faf7b`: push CI `38757072269` and PR CI `38757085291` both SUCCESS 8/8. The source cache-boundary commit `a5fb4a7` also passed its own exact green CI as recorded above. No external LIVE provider data or payment was tested.
+- Branch `abos/p030-family-economics-treasury`, PR #75 still DRAFT, `main d14f04b9...` unchanged. P-030 stays EN_EJECUCIÓN; no P-031 or merge. E3 success cannot establish E5 authenticated financial outcome or E6 realized economic profitability. Exact CI of this documentary HEAD is a distinct check, not inferred from prior successful runs.
+
+NEXT_ELIGIBLE_WORK: audit if `child-economics.ts` treats local `task_cost_cent` and externally attributed revenue/exposure in demonstrably compatible monetary units; cross-check P-030 DoD with `transactions`, `financial_effects`, treasury reserve/scenario, and P-023/P-025. Implement only source-backed gaps and otherwise preserve UNKNOWN / NO_CHANGE. Real authenticated provider balances, settlements, realized revenue and profitability remain P-005 LIVE evidence boundaries.
