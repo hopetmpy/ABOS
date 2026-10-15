@@ -31,6 +31,16 @@ export async function executeCreditEffect(input: CreditEffectRequest): Promise<F
   if (!input.operationKey.trim() || !toAddress) {
     throw new Error("Financial effect requires an operation key and a recipient");
   }
+  if (input.kind === "child_funding") {
+    const child = input.childId
+      ? input.db.getChildById(input.childId)
+      : input.db.getChildren().find((entry) =>
+          entry.address.toLowerCase() === toAddress.toLowerCase(),
+        );
+    if (!child || child.address.toLowerCase() !== toAddress.toLowerCase()) {
+      throw new Error("Child funding recipient does not match the persisted child identity");
+    }
+  }
   const { effect: intent } = prepareFinancialEffect(input.db.raw, {
     operationKey: input.operationKey,
     effectKind: input.kind,
@@ -160,6 +170,16 @@ export function reconcileCreditEffect(
     throw new Error("Observed provider balance is invalid");
   }
   return settleFinancialEffect(db.raw, effect.operationKey, detail, () => {
+    if (effect.effectKind === "child_funding") {
+      const child = effect.childId
+        ? db.getChildById(effect.childId)
+        : db.getChildren().find((entry) =>
+            entry.address.toLowerCase() === effect.recipient?.toLowerCase(),
+          );
+      if (!child || child.address.toLowerCase() !== effect.recipient?.toLowerCase()) {
+        throw new Error("Child funding ledger recipient no longer matches the persisted child identity");
+      }
+    }
     const id = ulid();
     db.insertTransaction({
       id,

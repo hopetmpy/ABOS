@@ -278,7 +278,7 @@ describe("orchestration/SimpleFundingProtocol", () => {
 
   it("fundChild calls transferCredits with the correct amount", async () => {
     const mockConway = {
-      transferCredits: vi.fn().mockResolvedValue({ status: "completed", amountCents: 100 }),
+      transferCredits: vi.fn().mockResolvedValue({ transferId: "provider-child-100", status: "completed", toAddress: "0xchild", amountCents: 100 }),
       getCreditsBalance: vi.fn().mockResolvedValue(500),
     } as any;
 
@@ -298,7 +298,7 @@ describe("orchestration/SimpleFundingProtocol", () => {
 
   it("fundChild updates funded_amount_cents in the children table on success", async () => {
     const mockConway = {
-      transferCredits: vi.fn().mockResolvedValue({ status: "completed" }),
+      transferCredits: vi.fn().mockResolvedValue({ transferId: "provider-child-200", status: "completed", toAddress: "0xchild", amountCents: 200 }),
     } as any;
 
     const identity = { address: "0xparent" } as any;

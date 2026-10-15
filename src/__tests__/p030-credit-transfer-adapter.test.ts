@@ -6,7 +6,7 @@ import { createDatabase } from "../state/database.js";
 import type { AbosDatabase } from "../types.js";
 import { createTestDb } from "./mocks.js";
 import { executeCreditEffect, reconcileCreditEffect } from "../economics/credit-transfer.js";
-import { prepareFinancialEffect } from "../economics/financial-effects.js";
+import { getFinancialEffectByOperationKey, prepareFinancialEffect } from "../economics/financial-effects.js";
 
 const opened: AbosDatabase[] = [];
 const temporaryDirectories: string[] = [];
@@ -114,6 +114,56 @@ describe("P-030 credit effect execution and reconciliation", () => {
       evidence: ["external verified transfer receipt"],
     }).state).toBe("completed");
     expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as any).n).toBe(1);
+  });
+
+  it("rejects a mismatched child identity and recipient before any external dispatch", async () => {
+    const db = createDb();
+    db.insertChild({
+      id: "child-verified", name: "child", address: "0xreal",
+      sandboxId: "sb-real", genesisPrompt: "test",
+      fundedAmountCents: 0, status: "wallet_verified",
+      createdAt: new Date().toISOString(),
+    });
+    const conway = { transferCredits: vi.fn() } as any;
+    await expect(executeCreditEffect({
+      db, conway, operationKey: "fund:wrong-wallet", kind: "child_funding",
+      toAddress: "0xother", childId: "child-verified",
+      amountCents: 300, note: "must reject",
+    })).rejects.toThrow(/does not match the persisted child identity/);
+    expect(conway.transferCredits).not.toHaveBeenCalled();
+    expect(getFinancialEffectByOperationKey(db.raw, "fund:wrong-wallet")).toBeUndefined();
+  });
+
+  it("preserves reconciliation-required state if a child wallet changes before settlement", async () => {
+    const db = createDb();
+    db.insertChild({
+      id: "child-switched", name: "child", address: "0xold-wallet",
+      sandboxId: "sb-switched", genesisPrompt: "test",
+      fundedAmountCents: 0, status: "wallet_verified",
+      createdAt: new Date().toISOString(),
+    });
+    const conway = { transferCredits: vi.fn().mockResolvedValue({
+      transferId: "provider-allocated", status: "pending",
+      toAddress: "0xold-wallet", amountCents: 260,
+    }) } as any;
+    const request = {
+      db, conway, operationKey: "fund:child-switched",
+      kind: "child_funding" as const, toAddress: "0xold-wallet",
+      childId: "child-switched", amountCents: 260, note: "child allocation",
+    };
+    expect((await executeCreditEffect(request)).state).toBe("pending");
+    db.raw.prepare("UPDATE children SET address = ? WHERE id = ?")
+      .run("0xnew-wallet", "child-switched");
+    expect(() => reconcileCreditEffect(db, {
+      operationKey: request.operationKey, resolution: "settled",
+      providerEffectId: "provider-allocated", providerStatus: "completed",
+      toAddress: "0xold-wallet", amountCents: 260,
+      evidence: ["independent transfer observed"],
+    })).toThrow(/requires reconciliation/);
+    expect(getFinancialEffectByOperationKey(db.raw, "fund:child-switched")?.state).toBe("reconciliation_required");
+    expect(db.getChildById("child-switched")?.fundedAmountCents).toBe(0);
+    expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as any).n).toBe(0);
+    expect(conway.transferCredits).toHaveBeenCalledTimes(1);
   });
 
   it("reconciles child funding exactly once without treating capital as expense", async () => {
