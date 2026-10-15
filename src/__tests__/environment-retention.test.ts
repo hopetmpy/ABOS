@@ -91,6 +91,32 @@ function provider(
 }
 
 describe("EnvironmentRetentionCoordinator", () => {
+  it("defers cleanup when an uncertain provision has no observed external identity", async () => {
+    const db = createDb();
+    try {
+      insertGoal(db, "g-uncertain", "completed");
+      insertTask(db, "t-uncertain", "g-uncertain", "completed");
+      let destroys = 0;
+      const registry = new EnvironmentRegistry();
+      registry.register(provider({
+        reconcile: async (resource) => ({
+          resource, actualExists: null, action: "unknown", evidence: ["still uncertain"],
+        }),
+        destroy: async () => { destroys += 1; return { status: "terminated" }; },
+      }));
+      const lifecycle = new EnvironmentLifecycleManager(registry, new EnvironmentResourceStore(db));
+      lifecycle.adopt({
+        provider: "cloud", type: "compute", goalId: "g-uncertain",
+        taskId: "t-uncertain", status: "unknown", retentionPolicy: "ephemeral",
+        metadata: { provisionNeedsReconciliation: true },
+      });
+      const outcome = await new EnvironmentRetentionCoordinator(db, registry, lifecycle).sweep();
+      expect(outcome.pendingObservation).toBe(1);
+      expect(outcome.destroyAttempts).toBe(0);
+      expect(destroys).toBe(0);
+    } finally { db.close(); }
+  });
+
   it("releases until_goal_complete resources only after the owning Goal settles", async () => {
     const db = createDb();
     try {
