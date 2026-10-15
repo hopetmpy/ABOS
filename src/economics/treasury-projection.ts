@@ -86,21 +86,44 @@ function knownCents(value: number | null | undefined, label: string): number | n
  */
 export interface RecordedInferenceResources {
   authority: "inference_costs";
-  recordedCalls: number;
-  callsWithTokenEvidence: number;
-  callsWithoutTokenEvidence: number;
-  invalidMetricRows: number;
+  /** Legacy/embedded SQLite consumers may not have installed this authority. */
+  sourceAvailable: boolean;
+  recordedCalls: number | null;
+  callsWithTokenEvidence: number | null;
+  callsWithoutTokenEvidence: number | null;
+  invalidMetricRows: number | null;
   recordedInputTokensLowerBound: number | null;
   recordedOutputTokensLowerBound: number | null;
   recordedInferenceLatencyMsLowerBound: number | null;
   pricedInferenceCostEstimateCents: number | null;
-  callsWithPricedEstimate: number;
+  callsWithPricedEstimate: number | null;
   actualPaidCostCents: null;
   electricityCostCents: null;
   humanTimeCostCents: null;
 }
 
 export function getRecordedInferenceResources(db: Database.Database): RecordedInferenceResources {
+  // Do not require every raw SQLite embedding to materialize the inference
+  // sidecar. Missing table means UNKNOWN coverage, never zero consumption.
+  const exists = db.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='inference_costs'",
+  ).get();
+  if (!exists) return {
+    authority:"inference_costs",
+    sourceAvailable:false,
+    recordedCalls:null,
+    callsWithTokenEvidence:null,
+    callsWithoutTokenEvidence:null,
+    invalidMetricRows:null,
+    recordedInputTokensLowerBound:null,
+    recordedOutputTokensLowerBound:null,
+    recordedInferenceLatencyMsLowerBound:null,
+    pricedInferenceCostEstimateCents:null,
+    callsWithPricedEstimate:null,
+    actualPaidCostCents:null,
+    electricityCostCents:null,
+    humanTimeCostCents:null,
+  };
   const rows = db.prepare(
     "SELECT input_tokens, output_tokens, latency_ms, cost_cents FROM inference_costs",
   ).all() as Array<{input_tokens:number;output_tokens:number;latency_ms:number;cost_cents:number}>;
@@ -132,6 +155,7 @@ export function getRecordedInferenceResources(db: Database.Database): RecordedIn
   }
   return {
     authority:"inference_costs",
+    sourceAvailable:true,
     recordedCalls:rows.length,
     callsWithTokenEvidence,
     callsWithoutTokenEvidence:rows.length-callsWithTokenEvidence,
@@ -148,7 +172,7 @@ export function getRecordedInferenceResources(db: Database.Database): RecordedIn
 }
 
 export function describeRecordedInferenceResources(report: RecordedInferenceResources): string | null {
-  if (report.recordedCalls === 0) return null;
+  if (!report.sourceAvailable || report.recordedCalls === 0) return null;
   return "P-030 inference resource investment from existing inference_costs: " +
     `calls=${report.recordedCalls}, input tokens >=${report.recordedInputTokensLowerBound ?? "UNKNOWN"}, ` +
     `output tokens >=${report.recordedOutputTokensLowerBound ?? "UNKNOWN"}, ` +
@@ -350,8 +374,11 @@ export function getTreasuryProjection(
   if (!input.resourceInvestment?.length) limitations.push(
     "Non-cash investment (human time, electricity, subscriptions) is not monetarily valued from evidence; observed inference usage is reported separately.",
   );
-  if (recordedInferenceResources.callsWithoutTokenEvidence > 0 ||
-      recordedInferenceResources.invalidMetricRows > 0) limitations.push(
+  if (!recordedInferenceResources.sourceAvailable) limitations.push(
+    "Inference resource authority not materialized in this SQLite context; compute investment UNKNOWN, never zero.",
+  );
+  if ((recordedInferenceResources.callsWithoutTokenEvidence ?? 0) > 0 ||
+      (recordedInferenceResources.invalidMetricRows ?? 0) > 0) limitations.push(
     "Missing or invalid inference telemetry makes resource totals lower bounds, not evidence of zero cost.",
   );
   return {

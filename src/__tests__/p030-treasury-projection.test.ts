@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import Database from "better-sqlite3";
 import { createTestDb } from "./mocks.js";
 import type { AbosDatabase } from "../types.js";
 import { getTaskCostCalibration, getTreasuryProjection, describeTaskCostLearning, getRecordedInferenceResources, describeRecordedInferenceResources } from "../economics/treasury-projection.js";
@@ -319,5 +320,22 @@ describe("P-030 source-owned compute/time resource investment", () => {
     expect(result.recordedOutputTokensLowerBound).toBe(30);
     expect(result.pricedInferenceCostEstimateCents).toBe(0.125);
     expect(result.callsWithoutTokenEvidence).toBe(1);
+  });
+});
+
+describe("P-030 minimal SQLite embeddings with no inference-cost schema", () => {
+  it("preserves UNKNOWN without creating a parallel sidecar or blocking existing orchestration", () => {
+    const lean = new Database(":memory:");
+    try {
+      const before=lean.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table'").get() as {n:number};
+      const resources=getRecordedInferenceResources(lean);
+      expect(resources.sourceAvailable).toBe(false);
+      expect(resources.recordedCalls).toBeNull();
+      expect(resources.recordedInputTokensLowerBound).toBeNull();
+      expect(resources.pricedInferenceCostEstimateCents).toBeNull();
+      expect(describeRecordedInferenceResources(resources)).toBeNull();
+      const after=lean.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table'").get() as {n:number};
+      expect(after.n).toBe(before.n);
+    } finally { lean.close(); }
   });
 });
