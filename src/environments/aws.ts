@@ -56,6 +56,18 @@ const defaultRunner: EnvironmentCommandRunner = (
  * metadata or a provider IAM profile. The provider verifies the account,
  * scope and economic fields before any billable EC2 creation.
  */
+/**
+ * Definite AWS economic rejection before any billable provider dispatch. The
+ * P-018 lifecycle can therefore distinguish this from timeout-after-creation.
+ */
+export class AwsEc2ProcurementNotDispatchedError extends Error {
+  readonly externalEffectNotDispatched = true;
+  constructor(message: string) {
+    super(message);
+    this.name = "AwsEc2ProcurementNotDispatchedError";
+  }
+}
+
 export interface AwsEc2ProcurementDecision {
   allowed: boolean;
   policyDecisionId?: string | null;
@@ -408,24 +420,36 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     // economic boundary explicit at the provider itself, so lifecycle callers
     // cannot bypass it with an unbudgeted Task or direct provision request.
     if (!this.options.authorizeNewProvision) {
-      throw new Error(
+      throw new AwsEc2ProcurementNotDispatchedError(
         "AWS EC2 procurement authority UNKNOWN: no trusted P-025/P-030/P-010 authorization is wired. No run-instances request was dispatched.",
       );
     }
     const identity = await this.runner(
       "aws", ["sts", "get-caller-identity", "--output", "json"], 15_000,
     );
-    requireAwsSuccess(identity, "AWS STS account observation before procurement");
+    if (identity.exitCode !== 0) {
+      throw new AwsEc2ProcurementNotDispatchedError(
+        "AWS STS account observation unavailable before procurement; no run-instances request was dispatched.",
+      );
+    }
     const accountId = parseJson<{ Account?: string }>(identity.stdout)?.Account?.trim();
     if (!accountId) {
-      throw new Error("AWS EC2 procurement account identity is UNKNOWN; no instance was requested.");
+      throw new AwsEc2ProcurementNotDispatchedError("AWS EC2 procurement account identity is UNKNOWN; no instance was requested.");
     }
-    const authority = await this.options.authorizeNewProvision({
-      request,
-      accountId,
-      region,
-      instanceType,
-    });
+    let authority: AwsEc2ProcurementDecision;
+    try {
+      // The evaluator is read-only and must check canonical owner decisions.
+      authority = await this.options.authorizeNewProvision({
+        request,
+        accountId,
+        region,
+        instanceType,
+      });
+    } catch {
+      throw new AwsEc2ProcurementNotDispatchedError(
+        "AWS economic authority evaluator unavailable before provisioning; no instance was requested.",
+      );
+    }
     if (!authority?.allowed ||
         !authority.policyDecisionId?.trim() ||
         authority.providerAccountId?.trim() !== accountId ||
@@ -434,7 +458,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         !Number.isSafeInteger(authority.totalCommitmentCents) ||
         authority.totalCommitmentCents < 0 ||
         !authority.billingTermsEvidence?.some((entry) => entry.trim())) {
-      throw new Error(
+      throw new AwsEc2ProcurementNotDispatchedError(
         "AWS EC2 economic procurement authorization is absent, incomplete, unscoped to the observed account, or missing evidenced USD commitment/billing terms. No run-instances request was dispatched." +
         (authority?.reason ? ` Reason: ${authority.reason}` : ""),
       );
@@ -651,13 +675,16 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     // known EC2 capacity-changing actions must use the lifecycle boundary.
     // This is a targeted observed bypass guard, not a closed provider catalog.
     const ec2Index = args.findIndex((arg) => arg.toLowerCase() === "ec2");
-    const ec2Action = ec2Index >= 0
-      ? args[ec2Index + 1]?.toLowerCase()
-      : null;
-    if (ec2Action && [
+    const knownBillableOperations = new Set([
       "run-instances", "create-fleet", "request-spot-instances", "start-instances",
-    ].includes(ec2Action)) {
-      throw new Error(
+    ]);
+    const ec2Action = ec2Index >= 0
+      ? args.slice(ec2Index + 1).find((arg) =>
+          knownBillableOperations.has(arg.toLowerCase()),
+        )?.toLowerCase()
+      : null;
+    if (ec2Action) {
+      throw new AwsEc2ProcurementNotDispatchedError(
         `AWS EC2 ${ec2Action} requires the tracked lifecycle and economic authority; raw provider-native execution cannot create or restart billable compute.`,
       );
     }
