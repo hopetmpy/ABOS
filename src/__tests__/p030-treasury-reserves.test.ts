@@ -202,3 +202,35 @@ describe("P-030 policy-catalog internal reserve action", () => {
     expect(getTreasuryReserveSnapshot(d.raw).initialized).toBe(false);
   });
 });
+
+describe("P-030 persisted v22 upgrade", () => {
+  it("reopens legacy v22 state and materializes the v23 reserve authority without losing settled rows", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "abos-p030-upgrade-"));
+    dirs.push(dir);
+    const file = path.join(dir, "legacy.db");
+    const legacy = createDatabase(file);
+    open.push(legacy);
+    legacy.raw.prepare(
+      "INSERT INTO transactions (id,type,amount_cents,description) VALUES (?,?,?,?)",
+    ).run("historical-capital", "capital_allocation", 175, "pre-upgrade economic history");
+    // Reconstruct the persisted v22 schema boundary: no reserve table/version23.
+    legacy.raw.exec(
+      "DROP TABLE treasury_reserve_allocations; DELETE FROM schema_version WHERE version=23;",
+    );
+    legacy.close();
+    const upgraded = createDatabase(file);
+    open.push(upgraded);
+    const version = upgraded.raw.prepare(
+      "SELECT MAX(version) AS version FROM schema_version",
+    ).get() as {version:number};
+    expect(version.version).toBe(23);
+    expect((upgraded.raw.prepare(
+      "SELECT amount_cents FROM transactions WHERE id='historical-capital'",
+    ).get() as {amount_cents:number}).amount_cents).toBe(175);
+    expect(getTreasuryReserveSnapshot(upgraded.raw).initialized).toBe(false);
+    expect(setTreasuryReserve(upgraded, alloc("legacy-upgrade-1", "contingency", 75)).applied).toBe(true);
+    expect(getTreasuryProjection(upgraded, {
+      observedCreditsCents: 1000, otherCommittedCreditsCents: 100,
+    }).freeCreditsCents).toBe(825);
+  });
+});
