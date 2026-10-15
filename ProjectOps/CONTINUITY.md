@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / DECISION_READY / PROVISION_UNKNOWN_E3_MAIN_GREEN_ECONOMIC_AUTHORITY_AUDIT / P030_E3_MAIN_GREEN / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / DECISION_READY / EXPLICIT_BUDGET_UNIT_ROUTING_PR79_DRAFT_CI_PENDING / P030_E3_MAIN_GREEN / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,13 +15,13 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p031-explicit-budget-routing
 Host-Head-At-Audit-Open: 088de39896dcef837c7047c4c560e9cd0b7a29e8
-Last-Reconciled-Host-Head: d4d20fb24a247a2bc32dee1c6a42e21e70c4baf8
+Last-Reconciled-Host-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
 Observed-Main-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
 Last-Product-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
 Last-Product-CI: 38774007741 — SUCCESS 8/8
 Last-Completed-Plan: P-030
-Last-Completed-Merge: ef58a1b1eba53a06fb072679454e796ceaf102f8
-Last-Completed-CI: 38768019852 — SUCCESS 8/8
+Last-Completed-Merge: 710fa0d61983a462450bde7994a5018c2172e6e4
+Last-Completed-CI: 38774007741 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
