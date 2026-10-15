@@ -415,6 +415,25 @@ export class EnvironmentLifecycleManager {
         `${operation} completed.`,
       );
     } catch (error) {
+      if (typeof error === "object" && error !== null &&
+          (error as { externalEffectNotDispatched?: unknown })
+            .externalEffectNotDispatched === true) {
+        // Economic preflight denied BEFORE any external lifecycle mutation.
+        // Preserve the observed resource status (including a suspended VM).
+        // Unlike a remote timeout, this is not degraded or billable UNKNOWN.
+        this.resources.applyMutation(
+          resourceId,
+          {
+            status: resource.status,
+            evidence: [
+              `${operation} not dispatched: ${error instanceof Error ? error.message : String(error)}`,
+            ],
+          },
+          operation,
+          `${operation} rejected before external dispatch; resource status preserved.`,
+        );
+        throw error;
+      }
       return this.resources.applyMutation(
         resourceId,
         {
