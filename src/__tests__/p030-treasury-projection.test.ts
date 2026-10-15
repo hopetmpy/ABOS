@@ -50,6 +50,37 @@ describe("P-030 treasury projection", () => {
     expect(s.freeCreditsCents).toBeNull();
   });
 
+  it("requires compatible evidence before task estimates reduce free credits", () => {
+    const d = db();
+    const now = new Date().toISOString();
+    d.raw.prepare(
+      "INSERT INTO goals (id, title, description, status, created_at) VALUES (?, ?, ?, ?, ?)",
+    ).run("goal-liquidity", "Goal", "Estimate", "active", now);
+    d.raw.prepare(
+      `INSERT INTO task_graph
+        (id, goal_id, title, description, status, assigned_to, agent_role,
+         priority, dependencies, estimated_cost_cents, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run("task-liquidity", "goal-liquidity", "Task", "Task",
+      "assigned", "0xchild", "generalist", 50, "[]", 250, now);
+
+    const input = {
+      observedCreditsCents: 1000,
+      reservedCreditsCents: 100,
+      otherCommittedCreditsCents: 100,
+    };
+    const unknown = getTreasuryProjection(d, input);
+    expect(unknown.activeTaskEstimatedCostCents).toBe(250);
+    expect(unknown.freeCreditsCents).toBeNull();
+
+    const compatible = getTreasuryProjection(d, {
+      ...input, taskCommitmentCreditsCents: 250,
+    });
+    expect(compatible.taskCommitmentCreditsCents).toBe(250);
+    expect(compatible.freeCreditsCents).toBe(550);
+    expect(compatible.projectedCreditShortfallCents).toBe(0);
+  });
+
   it("rejects duplicate resource allocations rather than inflating investment", () => {
     const d = db();
     const item = { allocationKey: "one", resource: "compute", currency: "USD",
