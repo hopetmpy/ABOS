@@ -137,12 +137,15 @@ export function getTreasuryProjection(
   const other = knownCents(input.otherCommittedCreditsCents, "otherCommittedCreditsCents");
   const pendingRefund = knownCents(input.pendingRefundCreditsCents, "pendingRefundCreditsCents");
   const tasks = db.raw.prepare(
-    "SELECT COALESCE(SUM(estimated_cost_cents), 0) AS amount FROM task_graph WHERE status IN ('assigned', 'running')",
-  ).get() as { amount: number };
+    `SELECT COALESCE(SUM(estimated_cost_cents), 0) AS amount,
+            COALESCE(SUM(CASE WHEN estimated_cost_cents < 0 THEN 1 ELSE 0 END), 0) AS invalid_count
+       FROM task_graph WHERE status IN ('assigned', 'running')`,
+  ).get() as { amount: number; invalid_count: number };
   const activeTaskEstimatedCostCents = Number(tasks?.amount ?? 0);
-  // Negative/corrupt or rounded task estimates cannot be silently presented
-  // as zero-cost capacity; this unit is separate from Conway credit cents.
-  if (!Number.isSafeInteger(activeTaskEstimatedCostCents) || activeTaskEstimatedCostCents < 0) {
+  // Reject corrupt individual rows even when positive task estimates happen
+  // to mask them in SQL SUM. This local unit is not a Conway credit balance.
+  if (Number(tasks?.invalid_count ?? 0) > 0 ||
+      !Number.isSafeInteger(activeTaskEstimatedCostCents) || activeTaskEstimatedCostCents < 0) {
     throw new Error("Active task estimates require exact nonnegative local task-cost cents");
   }
   const historicalTaskCostCalibration = getTaskCostCalibration(db.raw);
