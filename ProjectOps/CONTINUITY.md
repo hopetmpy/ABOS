@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-030
 Active-Segment: continuity/C0026.md
-Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / SECURITY_AUDIT_GREEN / EXACT_HEAD_CI_PENDING
+Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / SOURCE_PARTIAL / PR75_DRAFT / EXACT_HEAD_CI_PENDING / PROVIDER_VERIFICATION_UNPROVEN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,7 +15,7 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p030-family-economics-treasury
 Host-Head-At-Audit-Open: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
-Last-Reconciled-Host-Head: a5577465d7306a150bd6a18dd2f769c6fe82a84c
+Last-Reconciled-Host-Head: 149f364b5d935098262ad021dd6b3679558db12c
 Observed-Main-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-CI: 36220600132 — SUCCESS 8/8
@@ -129,7 +129,7 @@ Decision gate registrado en `continuity/C0026.md` por commit `9ac10272bcbd6b661d
 
 Plan P-030: blueprint vigente. La auditoría resolvió su arquitectura de implementación sin cambiar objetivo, alcance ni dependencias; no se requiere reescribir el blueprint antes de source.
 
-NEXT_ELIGIBLE_WORK: P-030 PR #75 DRAFT; verificar CI exacto de a5577465d7306a150bd6a18dd2f769c6fe82a84c, atacar cualquier fallo del último HEAD, mantener reconciliación financiera UNKNOWN hasta observación confiable, y decidir la integración solo tras alcanzar DoD P-030 y pruebas suficientes. No declarar HECHO ni fusionar mientras haya HARD abierto.
+NEXT_ELIGIBLE_WORK: P-030 PR #75 DRAFT; verify 8/8 push+PR exact HEAD and reconcile any genuine CI regression. External provider settlement provenance remains a HARD boundary; do not invent a credits-transfer lookup or claim LIVE. Continue P-030 adaptive reserve/decision/outcome DoD and source work independently when eligible; only merge when evidenced criteria are met.
 
 ## P-030 — checkpoint de implementación 2026-10-14
 
@@ -166,3 +166,15 @@ La auditoría hasta DECISION_READY se conserva como historia en C0026; ya no des
 - `9b51868`, `6f11512`: proyección distingue reembolso pendiente sin sumarlo a crédito líquido observado; prueba de regresión.
 - GitHub Actions originalmente ejecutaba push y PR por commit, duplicando runners y presionando timing. `4817d0f` agregó concurrencia separada por evento/branch con cancelación de ejecuciones superadas. Se observó CI `944123a` public-distribution de una rama móvil compilando código de un commit posterior; `a557746` corrigió la prueba pública para fijar `ABOS_SHA` al commit del evento y verificar `git rev-parse HEAD`.
 - Bloque material: último HEAD `a5577465d7306a150bd6a18dd2f769c6fe82a84c` no tenía CI exacto terminado al registrar checkpoint; ejecutar lectura CI y resolver solo fallos reales actuales. Deben verificarse decisiones económicas contra P-030 DoD, incluido provenance confiable de settlement y contingencias; provider LIVE, fondos, medición de recursos físicos y P&L realizado siguen no verificados.
+
+## P-030 — checkpoint de conciliación 2026-10-14
+
+- Branch `abos/p030-family-economics-treasury`, HEAD source antes de este checkpoint `149f364b5d935098262ad021dd6b3679558db12c`; PR #75 DRAFT. `main` observado `d14f04b9fdea98eecd9d8e772b223b55d1fcf010` sin merge.
+- Baseline inmediatamente anterior `7bbf34551d9f77edb7985a13d078cd830787c43e`: CI push `38662652549` y PR `38662659035`, ambos SUCCESS **8/8** (Node22/24, Windows22/24, distribution22/24, security-audit, rebrand-integrity).
+- `4ca9aac`: adapter de `credit-transfer` trata éxito sin transfer ID como UNKNOWN/no materialized; receipt externo opcionalmente correlaciona proveedor/destinatario/importe, con regresiones de contradicción.
+- `9f977ec`: finality externa requiere intento de dispatch reclamado, transfer ID no vacío, destinatario e importe explícitos que coincidan con intención persistente; receipt repetido con ID contradictorio se rechaza. No infiere autenticidad de un string de evidencia.
+- `edb49e1`: recuperación del adaptador a través de cierre/reapertura física de SQLite, sin redispatch, ledger exactly-once; test agregado.
+- `506c4a7`: `ConwayClient.getCreditsBalance` deja de convertir payload faltante o inválido en saldo cero; falla explícitamente y pruebas de HTTP mock separan 0 real, saldo negativo y UNKNOWN.
+- `149f364`: `check_credits` mantiene vista read-only de intents pendientes y capital comprometido cuando balance provider es unavailable; reporta UNKNOWN y no inventa recepción o gasto.
+- LIMITACIÓN MATERIAL: documentación pública Conway muestra `credits_balance` y `credits_history` pero no demuestra aquí una API `GET transferId` específica con contrato, autenticación y finality verificable. El método de reconciliación manual de receipt aún depende de una observación que el caller dice haber verificado. No afirmar E4/LIVE autenticado ni cerrar esta frontera sin evidencia/material provider P-005.
+- `HEAD 149f364b5d935098262ad021dd6b3679558db12c` al registrar checkpoint estaba pendiente de CI exact-head. **No elevar a HECHO**, no merge, no transferencias LIVE ni ingresos inventados. Validar primero latest exact source+document commit; si faltan condiciones DoD seguir P-030.
