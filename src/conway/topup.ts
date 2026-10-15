@@ -215,16 +215,14 @@ export async function topupCredits(
 
   logger.info(`Attempting credit topup: $${amountUsd} USD for ${address}`);
 
-  const result = await x402Fetch(
-    url,
-    account,
-    "GET",
-    undefined,
-    undefined,
-    maxPaymentCents,
-    undefined,
-    onPaymentPrepared,
-  );
+  // Preserve the historical six-argument x402 contract for existing clients.
+  // Only the P-030 durable-payment route supplies a pre-dispatch observer.
+  const result = onPaymentPrepared
+    ? await x402Fetch(
+        url, account, "GET", undefined, undefined,
+        maxPaymentCents, undefined, onPaymentPrepared,
+      )
+    : await x402Fetch(url, account, "GET", undefined, undefined, maxPaymentCents);
 
   if (!result.success) {
     const detail = result.error || `HTTP ${result.status}`;
