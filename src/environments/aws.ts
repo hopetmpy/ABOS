@@ -540,7 +540,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       );
     }
     const accountId = parseJson<{ Account?: string }>(identity.stdout)?.Account?.trim();
-    if (!accountId || !/^\\d{12}$/.test(accountId)) {
+    if (!accountId || !/^\d{12}$/.test(accountId)) {
       throw new AwsEc2ProcurementNotDispatchedError("AWS EC2 procurement account identity is UNKNOWN; no instance was requested.");
     }
     if (!region) {
