@@ -40,6 +40,10 @@ export interface TaskCostCalibration {
   actualTaskCostCents: number | null;
   netDeviationTaskCostCents: number | null;
   actualToEstimateRatio: number | null;
+  /** Separate observed upside misses from offsetting underruns; not a reserve mandate. */
+  observedOverrunTaskCostCents?: number | null;
+  largestObservedOverrunTaskCostCents?: number | null;
+  observedOverrunSamples?: number;
   authority: "local_task_graph";
   /** No cross-unit conversion into Conway credits or external P&L. */
   unit: "task_cost_cent";
@@ -76,11 +80,20 @@ export function getTaskCostCalibration(db: Database.Database): TaskCostCalibrati
        COALESCE(SUM(CASE WHEN actual_cost_cents > 0 THEN 1 ELSE 0 END),0) AS comparable,
        COALESCE(SUM(CASE WHEN actual_cost_cents = 0 THEN 1 ELSE 0 END),0) AS unobserved,
        COALESCE(SUM(CASE WHEN actual_cost_cents > 0 THEN estimated_cost_cents ELSE 0 END),0) AS estimate,
-       COALESCE(SUM(CASE WHEN actual_cost_cents > 0 THEN actual_cost_cents ELSE 0 END),0) AS actual
+       COALESCE(SUM(CASE WHEN actual_cost_cents > 0 THEN actual_cost_cents ELSE 0 END),0) AS actual,
+       COALESCE(SUM(CASE WHEN actual_cost_cents > estimated_cost_cents
+         THEN actual_cost_cents - estimated_cost_cents ELSE 0 END),0) AS overruns,
+       COALESCE(MAX(CASE WHEN actual_cost_cents > estimated_cost_cents
+         THEN actual_cost_cents - estimated_cost_cents ELSE 0 END),0) AS largest_overrun,
+       COALESCE(SUM(CASE WHEN actual_cost_cents > estimated_cost_cents
+         THEN 1 ELSE 0 END),0) AS overrun_samples
      FROM task_graph
      WHERE status IN ('completed','failed','cancelled')
        AND estimated_cost_cents > 0`,
-  ).get() as { comparable: number; unobserved: number; estimate: number; actual: number };
+  ).get() as {
+    comparable: number; unobserved: number; estimate: number; actual: number;
+    overruns: number; largest_overrun: number; overrun_samples: number;
+  };
   const comparable = Number(history.comparable);
   const estimated = Number(history.estimate);
   const realized = Number(history.actual);
@@ -93,6 +106,12 @@ export function getTaskCostCalibration(db: Database.Database): TaskCostCalibrati
     actualTaskCostCents: verifiedTotals ? realized : null,
     netDeviationTaskCostCents: verifiedTotals ? realized - estimated : null,
     actualToEstimateRatio: verifiedTotals ? realized / estimated : null,
+    observedOverrunTaskCostCents:
+      verifiedTotals && Number.isSafeInteger(history.overruns) ? history.overruns : null,
+    largestObservedOverrunTaskCostCents:
+      verifiedTotals && Number.isSafeInteger(history.largest_overrun) ? history.largest_overrun : null,
+    observedOverrunSamples:
+      verifiedTotals && Number.isSafeInteger(history.overrun_samples) ? history.overrun_samples : 0,
     authority: "local_task_graph",
     unit: "task_cost_cent",
   };

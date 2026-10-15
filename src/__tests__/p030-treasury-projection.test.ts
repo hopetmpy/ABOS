@@ -128,6 +128,9 @@ describe("P-030 treasury projection", () => {
     expect(h.estimatedTaskCostCents).toBe(300);
     expect(h.actualTaskCostCents).toBe(350);
     expect(h.netDeviationTaskCostCents).toBe(50);
+    expect(h.observedOverrunTaskCostCents).toBe(100);
+    expect(h.largestObservedOverrunTaskCostCents).toBe(100);
+    expect(h.observedOverrunSamples).toBe(1);
     expect(h.actualToEstimateRatio).toBeCloseTo(350/300);
     expect(h.unit).toBe("task_cost_cent");
     // Still-running generic task cost cannot be silently converted into Conway credits.
@@ -142,6 +145,8 @@ describe("P-030 treasury projection", () => {
       risks:[{id:"incident",exposureCreditsCents:50,evidence:"scenario"}],
     });
     expect(projected.evidence.join(" ")).toContain("actual/estimate=1.167");
+    expect(projected.evidence.join(" ")).toContain("largest single overrun=100");
+    expect(projected.evidence.join(" ")).toContain("not a validated Conway-credit reserve");
     expect(projected.evidence.join(" ")).toContain("Not interchangeable with Conway credit unit");
     expect(projected.status).toBe("needs_evidence");
   });

@@ -446,6 +446,18 @@ export function assessStrategicPlan(
       conditions.push(
         "Calibration belongs to task_graph local task-cost authority; do not treat it as Conway credits, settled provider spend or business P&L.",
       );
+      if (history.observedOverrunTaskCostCents !== null &&
+          history.observedOverrunTaskCostCents !== undefined) {
+        evidence.push(
+          `Observed task overruns=${history.observedOverrunTaskCostCents} task-cost cents; ` +
+          `largest=${history.largestObservedOverrunTaskCostCents ?? "UNKNOWN"}; ` +
+          `sample count=${history.observedOverrunSamples ?? "UNKNOWN"}.`,
+        );
+        conditions.push(
+          "Do not net away downside overruns against underruns when reviewing reserves; " +
+          "a task-cost signal needs independently supported unit conversion before allocating Conway credits.",
+        );
+      }
     }
     if (history.estimatesAwaitingObservedCost > 0) {
       conditions.push(

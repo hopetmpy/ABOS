@@ -73,6 +73,15 @@ export function assessTreasuryScenario(
       `net deviation=${history.netDeviationTaskCostCents} task-cost cents. ` +
       "Not interchangeable with Conway credit unit or independently verified business P&L.",
     );
+    if (history.observedOverrunTaskCostCents !== null &&
+        history.observedOverrunTaskCostCents !== undefined) {
+      evidence.push(
+        `Observed local task overruns: ${history.observedOverrunTaskCostCents} task-cost cents ` +
+        `across ${history.observedOverrunSamples ?? "UNKNOWN"} tasks; ` +
+        `largest single overrun=${history.largestObservedOverrunTaskCostCents ?? "UNKNOWN"}. ` +
+        "Net deviations conceal simultaneous downside; this is an input to a reserve scenario, not a validated Conway-credit reserve.",
+      );
+    }
   }
   const futureEvidence = uniqueEvidence(input.futureNeedEvidence);
   const conditions: string[] = [];
