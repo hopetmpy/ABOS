@@ -75,6 +75,8 @@ interface TaskEconomicAggregate {
   completedTasks: number;
   failedTasks: number;
   activeTasks: number;
+  /** Terminal task_cost_cent lacking positive source evidence cannot fund a P&L claim. */
+  unobservedTerminalCosts: number;
 }
 
 export function getChildEconomicSnapshot(
@@ -98,10 +100,13 @@ export function getChildEconomicSnapshot(
     observation.capitalExposureCents,
   );
 
-  const netContributionCents =
-    attributedRevenueCents === null
-      ? null
-      : attributedRevenueCents - tasks.realizedCostCents;
+  // The task_graph schema defaults actual_cost_cents to zero. Such a row
+  // is not proof of a free task: its cost is UNKNOWN, not observed zero.
+  // Likewise malformed/negative terminal task costs may not become savings.
+  const candidateNet = attributedRevenueCents === null || tasks.unobservedTerminalCosts > 0
+    ? null : attributedRevenueCents - tasks.realizedCostCents;
+  const netContributionCents = candidateNet !== null && Number.isSafeInteger(candidateNet)
+    ? candidateNet : null;
 
   const profitability = classifyProfitability(netContributionCents);
 
@@ -132,6 +137,11 @@ export function getChildEconomicSnapshot(
   if (attributedRevenueCents === null) {
     limitations.push(
       "Revenue is not causally attributed per child; profitability must remain unknown.",
+    );
+  }
+  if (tasks.unobservedTerminalCosts > 0) {
+    limitations.push(
+      `${tasks.unobservedTerminalCosts} terminal task cost(s) are unobserved/invalid: task_graph default-zero is not measured zero cost. Child net contribution and profitability remain UNKNOWN.`,
     );
   }
 
@@ -193,6 +203,11 @@ function aggregateTaskEconomics(
              ELSE 0
            END
          ), 0) AS activeCommitmentCents,
+         COALESCE(SUM(CASE
+           WHEN status IN ('completed','failed','cancelled')
+                AND (actual_cost_cents <= 0 OR actual_cost_cents IS NULL
+                     OR typeof(actual_cost_cents) != 'integer')
+           THEN 1 ELSE 0 END),0) AS unobservedTerminalCosts,
          SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completedTasks,
          SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failedTasks,
          SUM(CASE WHEN status IN ('assigned','running') THEN 1 ELSE 0 END) AS activeTasks
@@ -205,6 +220,7 @@ function aggregateTaskEconomics(
       completedTasks: number;
       failedTasks: number;
       activeTasks: number;
+      unobservedTerminalCosts: number;
     };
 
   return {
@@ -216,6 +232,7 @@ function aggregateTaskEconomics(
     completedTasks: Math.max(0, Number(row?.completedTasks ?? 0)),
     failedTasks: Math.max(0, Number(row?.failedTasks ?? 0)),
     activeTasks: Math.max(0, Number(row?.activeTasks ?? 0)),
+    unobservedTerminalCosts: Math.max(0, Number(row?.unobservedTerminalCosts ?? 0)),
   };
 }
 

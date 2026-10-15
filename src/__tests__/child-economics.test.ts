@@ -168,6 +168,42 @@ describe("child economic semantics", () => {
     expect(snapshot.roi).toBeNull();
   });
 
+  it("does not invent profitable child P&L from task_graph's default-zero terminal cost", () => {
+    insertTask({
+      id: "terminal-unmeasured-cost",
+      status: "completed",
+      estimatedCostCents: 500,
+      actualCostCents: 0,
+    });
+    const result = getChildEconomicSnapshot(db, address, {
+      attributedRevenueCents: 300,
+      capitalExposureCents: 600,
+      evidence: ["Externally asserted child revenue"],
+    });
+    expect(result.realizedTaskCostCents).toBe(120); // partial positive evidence, NOT total
+    expect(result.netContributionCents).toBeNull();
+    expect(result.profitability).toBe("unknown");
+    expect(result.roi).toBeNull();
+    expect(result.limitations.join(" ")).toContain("default-zero is not measured zero cost");
+  });
+
+  it("does not count a negative terminal cost as zero-cost savings for child ROI", () => {
+    insertTask({
+      id: "terminal-malformed-cost",
+      status: "failed",
+      estimatedCostCents: 100,
+      actualCostCents: -50,
+    });
+    const result = getChildEconomicSnapshot(db, address, {
+      attributedRevenueCents: 300,
+      capitalExposureCents: 600,
+    });
+    expect(result.netContributionCents).toBeNull();
+    expect(result.profitability).toBe("unknown");
+    expect(result.roi).toBeNull();
+    expect(result.limitations.join(" ")).toContain("unobserved/invalid");
+  });
+
   it("states the attribution limitation instead of fabricating failed-task ownership", () => {
     const snapshot = getChildEconomicSnapshot(db, address);
     expect(snapshot.limitations.join(" ")).toContain(
