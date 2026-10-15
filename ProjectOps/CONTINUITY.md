@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-030
 Active-Segment: continuity/C0026.md
-Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / X402_SOURCE_67e39c_CI_8_OF_8 / LIVE_FINALITY_UNPROVEN
+Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / FINANCIAL_INTEGRITY_SOURCE_ae3cd7e / CI_PENDING / LIVE_FINALITY_UNPROVEN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -129,7 +129,7 @@ Decision gate registrado en `continuity/C0026.md` por commit `9ac10272bcbd6b661d
 
 Plan P-030: blueprint vigente. La auditoría resolvió su arquitectura de implementación sin cambiar objetivo, alcance ni dependencias; no se requiere reescribir el blueprint antes de source.
 
-NEXT_ELIGIBLE_WORK: P-030 PR #75 DRAFT; x402 durable purchase source HEAD 67e39c validated push+PR 8/8. Next eligible: evidence-based economic prediction→outcome calibration/adaptive reserves and cross-source P-025 strategic decisions; provider payment/funds/Conway credits finality remains P-005 external authority. No merge or P-031 until P-030 DoD.
+NEXT_ELIGIBLE_WORK: P-030 PR #75 DRAFT, source HEAD ae3cd7e + ProjectOps recovery checkpoint in C0026; verify exact current branch/PR CI, fix real regressions, continue evidence-backed adaptive reserve and economic prediction→outcome integration with P-023/P-025. Provider settlement and LIVE remain P-005. No merge or P-031 before DoD.
 
 ## P-030 — checkpoint de implementación 2026-10-14
 
@@ -197,3 +197,9 @@ La auditoría hasta DECISION_READY se conserva como historia en C0026; ya no des
 - Public Conway terminal docs confirm `credits_balance` and `credits_history`; no provider-authenticated transferId-specific finality/replay contract was established for the legacy credits transfer path. **Post-dispatch LIVE authoritative verification remains UNPROVEN, owned by P-005 / provider**, not a reason to fabricate paid status. No provider credentials/funds were used.
 - Source P-030 still **EN_EJECUCIÓN / PR75_DRAFT**: scenario reviews are evidence-oriented and optional in strategic review; end-to-end economic prediction-to-outcome calibration, dynamic reserve policy and source-backed financial decision authority still require explicit DoD examination. No automatic approval or P-031 start.
 - NEXT_ELIGIBLE_WORK: investigate remaining P-030 decision/outcome integration and scenario evidence, verify receipts/funding bypass surfaces and live authority only when externally available; avoid CI churn, preserve existing 8/8 exact-head evidence, do not merge before full DoD.
+
+## P-030 — actualización de continuidad tras integridad económica (2026-10-14)
+
+- Último source confirmado por Git y registrado en `continuity/C0026.md`: `ae3cd7e5dbc44d0e1685b815bb85d39a7e126bcc` en `abos/p030-family-economics-treasury`, PR #75 DRAFT. Es posterior al último head reconciliado con CI `67e39c9`.
+- Cambios: revisión de surplus sobre demanda futura y evidencia de bundle, protección de sumas enteras de compromisos/reservas y rechazo de estimaciones activas negativas. Tests escritos; ejecución CI exacta pendiente de lectura. El checkpoint C0026 tiene el detalle causal y recovery.
+- Estado: `EN_EJECUCIÓN / SOURCE_DELTA / CI_PENDING / LIVE_UNVERIFIED`. P-030 no se declara HECHO, P-031 no iniciado, fondos/pagos LIVE no ejecutados.
