@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createTestDb } from "./mocks.js";
 import type { AbosDatabase } from "../types.js";
-import { getTreasuryProjection } from "../economics/treasury-projection.js";
+import { getTaskCostCalibration, getTreasuryProjection, describeTaskCostLearning } from "../economics/treasury-projection.js";
+import { buildPlannerContext } from "../orchestration/planner-context.js";
+import { buildPlannerPrompt } from "../orchestration/planner.js";
 import { assessTreasuryScenario } from "../economics/treasury-scenario.js";
 import { prepareFinancialEffect, recordFinancialEffectObservation } from "../economics/financial-effects.js";
 let dbs: AbosDatabase[] = [];
@@ -155,6 +157,51 @@ describe("P-030 treasury projection", () => {
     expect(projected.evidence.join(" ")).toContain("not a validated Conway-credit reserve");
     expect(projected.evidence.join(" ")).toContain("Not interchangeable with Conway credit unit");
     expect(projected.status).toBe("needs_evidence");
+  });
+
+  it("automatically feeds measured economic errors into P-023 planner context without inventing spendable money", async () => {
+    const d = db();
+    const now = new Date().toISOString();
+    d.raw.prepare("INSERT INTO goals (id, title, description, status, created_at) VALUES (?, ?, ?, ?, ?)")
+      .run("g-learning", "Cost learning", "Predict and compare", "active", now);
+    const insert = d.raw.prepare(
+      `INSERT INTO task_graph
+       (id, goal_id, title, description, status, assigned_to, agent_role,
+        priority, dependencies, estimated_cost_cents, actual_cost_cents, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    insert.run("cost-over", "g-learning", "Task", "Overrun", "completed",
+      "0xchild", "generalist", 50, "[]", 100, 160, now);
+    insert.run("cost-even", "g-learning", "Task", "On budget", "completed",
+      "0xchild", "generalist", 50, "[]", 100, 100, now);
+    insert.run("unknown-cost", "g-learning", "Task", "Unknown observed cost", "failed",
+      "0xchild", "generalist", 50, "[]", 100, 0, now);
+
+    const history = getTaskCostCalibration(d.raw);
+    const learning = describeTaskCostLearning(history);
+    expect(learning).toContain("2 comparable terminal tasks");
+    expect(learning).toContain("observed/estimated cost ratio=1.300");
+    expect(learning).toContain("largest observed individual downside=60 task_cost_cent");
+    expect(learning).toContain("1 terminal estimates have no observed actual");
+    expect(learning).toContain("not a mandated reserve or spending cap");
+
+    const planner = await buildPlannerContext({
+      db: d.raw, adaptiveContext: "Existing P-023 path learning",
+    });
+    expect(planner.adaptiveContext).toContain("Existing P-023 path learning");
+    expect(planner.adaptiveContext).toContain("largest observed individual downside=60");
+    const prompt = buildPlannerPrompt(planner);
+    expect(prompt).toContain("observed/estimated cost ratio=1.300");
+    expect(prompt).toContain("task_cost_cent ONLY");
+    expect(prompt).toContain("cannot be added to Conway credits");
+    expect(planner.creditsCents).toBeNull();
+  });
+
+  it("does not fabricate economic calibration when task outcomes are absent", async () => {
+    const d = db();
+    expect(describeTaskCostLearning(getTaskCostCalibration(d.raw))).toBeNull();
+    const planner = await buildPlannerContext({ db: d.raw, adaptiveContext: "Existing adaptive context" });
+    expect(planner.adaptiveContext).toBe("Existing adaptive context");
   });
 
   it("does not convert corrupt active task-cost estimates into a fictitious zero", () => {
