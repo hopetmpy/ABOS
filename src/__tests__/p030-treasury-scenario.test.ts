@@ -76,8 +76,58 @@ describe("P-030 evidence-based treasury scenarios", () => {
       alternatives: supported.alternatives,
       risks: [{ id: "delayed-refund", exposureCreditsCents: 400, evidence: "refund delay history" }],
     });
-    expect(underReserved.status).toBe("needs_evidence");
-    expect(underReserved.conditions.join(" ")).toMatch(/reserve is below/i);
+    expect(underReserved.status).toBe("review_ready");
+    expect(underReserved.reserveRecommendation).toEqual({
+      targetCreditsCents: 400,
+      additionalCreditsCents: 300,
+      freeAfterProposalAndReserveCents: 1300,
+      disposition: "can_earmark",
+    });
+    expect(underReserved.freeCreditsAfterCents).toBe(1300);
+  });
+
+  it("keeps earmarked downside separate from spendable credit liquidity", () => {
+    const d = newDb();
+    const scenario = assessTreasuryScenario(projection(d, 1_000, 100), {
+      proposalCreditsCents: 200, immediateNeedCreditsCents: 200,
+      opportunityEvidence: ["observed supplier quote"], alternatives: supported.alternatives,
+      risks: [{ id: "replacement", exposureCreditsCents: 500, evidence: "replacement quote" }],
+    });
+    expect(scenario.reserveRecommendation).toEqual({
+      targetCreditsCents: 500, additionalCreditsCents: 400,
+      freeAfterProposalAndReserveCents: 300, disposition: "can_earmark",
+    });
+    expect(scenario.status).toBe("review_ready");
+    expect(scenario.freeCreditsBeforeCents).toBe(900);
+    expect(scenario.evidence.join(" ")).toContain("no fixed percentage");
+    expect((d.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n).toBe(0);
+  });
+
+  it("seeks alternatives when scenario downside plus purchase exceeds observed free liquidity", () => {
+    const scenario = assessTreasuryScenario(projection(newDb(), 500, 100), {
+      proposalCreditsCents: 250, immediateNeedCreditsCents: 250,
+      opportunityEvidence: ["verified workload"], alternatives: supported.alternatives,
+      risks: [{ id: "refund-delay", exposureCreditsCents: 350, evidence: "refund delay history" }],
+    });
+    expect(scenario.reserveRecommendation).toEqual({
+      targetCreditsCents: 350, additionalCreditsCents: 250,
+      freeAfterProposalAndReserveCents: -100, disposition: "requires_alternative",
+    });
+    expect(scenario.status).toBe("needs_evidence");
+    expect(scenario.conditions.join(" ")).toMatch(/examine alternatives/);
+  });
+
+  it("does not release earlier reserves on the strength of a narrow risk scenario", () => {
+    const scenario = assessTreasuryScenario(projection(newDb(), 1_000, 650), {
+      proposalCreditsCents: 300, immediateNeedCreditsCents: 300,
+      opportunityEvidence: ["purchase order"], alternatives: supported.alternatives,
+      risks: [{ id: "risk", exposureCreditsCents: 100, evidence: "provider history" }],
+    });
+    expect(scenario.reserveRecommendation).toEqual({
+      targetCreditsCents: 100, additionalCreditsCents: 0,
+      freeAfterProposalAndReserveCents: 50, disposition: "covered",
+    });
+    expect(scenario.status).toBe("review_ready");
   });
 
   it("requires joint-risk evidence when multiple contingencies may coincide", () => {
