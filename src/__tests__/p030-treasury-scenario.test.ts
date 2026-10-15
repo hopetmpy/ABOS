@@ -154,7 +154,7 @@ describe("P-030 evidence-based treasury scenarios", () => {
     const justified = assessTreasuryScenario(projection(db, 100, 0), proposal);
     expect(justified.status).toBe("review_ready");
     expect(justified.evidence.join(" ")).toMatch(/uncovered procurement surplus of 20 credit cents/);
-    expect(justified.limitations.join(" ")).toMatch(/not.*authorization/i);
+    expect(justified.limitations.join(" ")).toMatch(/nor transfer authorization/i);
 
     const withoutFutureUse = assessTreasuryScenario(projection(db, 100, 0), {
       ...proposal, futureNeedCreditsCents: 0,
