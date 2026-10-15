@@ -194,6 +194,10 @@ describe("AwsEnvironmentProvider lifecycle", () => {
           allowed: true,
           policyDecisionId: "P010-P025-P030-reviewed-scenario",
           providerAccountId: accountId,
+          authorizedResourceId: request.resourceId,
+          authorizedInstanceType: instanceType,
+          authorizedRegion: region,
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
           unit: "usd_cent",
           totalCommitmentCents: 150,
           billingTermsEvidence: ["Test-only verified USD recurring obligation and contingency scenario"],
@@ -224,6 +228,11 @@ describe("AwsEnvironmentProvider lifecycle", () => {
       "iam-instance-profile:ABOS-SSM",
     );
     expect(result.metadata?.procurementAccountId).toBe("123456789012");
+    expect(result.metadata?.procurementAuthorizedResourceId).toBe("01RESOURCEABC");
+    expect(result.metadata?.procurementAuthorizedInstanceType).toBe("t3.small");
+    expect(result.metadata?.procurementAuthorizedRegion).toBe("us-east-1");
+    expect(Date.parse(String(result.metadata?.procurementAuthorizationExpiresAt)))
+      .toBeGreaterThan(Date.now());
     expect(result.metadata?.procurementCostUnit).toBe("usd_cent");
     expect(result.metadata?.procurementCommittedCents).toBe(150);
     expect(result.metadata?.procurementPolicyDecisionId).toBe(
@@ -282,14 +291,31 @@ describe("AwsEnvironmentProvider lifecycle", () => {
       .rejects.toThrow("procurement authority UNKNOWN");
     expect(calls).toEqual([]);
 
+    const scope = {
+      allowed: true,
+      policyDecisionId: "policy-1",
+      providerAccountId: "123456789012",
+      authorizedResourceId: "new-billable-resource",
+      authorizedInstanceType: "t3.micro",
+      authorizedRegion: "us-east-1",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      unit: "usd_cent",
+      totalCommitmentCents: 100,
+      billingTermsEvidence: ["billed monthly"],
+    };
     for (const decision of [
-      { allowed: false, policyDecisionId: "policy-1", providerAccountId: "123456789012", unit: "usd_cent", totalCommitmentCents: 100, billingTermsEvidence: ["billed monthly"] },
-      { allowed: true, policyDecisionId: "policy-1", providerAccountId: "OTHER-ACCOUNT", unit: "usd_cent", totalCommitmentCents: 100, billingTermsEvidence: ["billed monthly"] },
-      { allowed: true, policyDecisionId: "", providerAccountId: "123456789012", unit: "usd_cent", totalCommitmentCents: 100, billingTermsEvidence: ["billed monthly"] },
-      { allowed: true, policyDecisionId: "policy-1", providerAccountId: "123456789012", unit: "credit_cent", totalCommitmentCents: 100, billingTermsEvidence: ["billed monthly"] },
-      { allowed: true, policyDecisionId: "policy-1", providerAccountId: "123456789012", unit: "usd_cent", totalCommitmentCents: undefined, billingTermsEvidence: ["billed monthly"] },
-      { allowed: true, policyDecisionId: "policy-1", providerAccountId: "123456789012", unit: "usd_cent", totalCommitmentCents: 100, billingTermsEvidence: [] },
-    ]) {
+      { ...scope, allowed: false },
+      { ...scope, providerAccountId: "OTHER-ACCOUNT" },
+      { ...scope, policyDecisionId: "" },
+      { ...scope, unit: "credit_cent" },
+      { ...scope, totalCommitmentCents: undefined },
+      { ...scope, billingTermsEvidence: [] },
+      { ...scope, authorizedResourceId: "another-resource" },
+      { ...scope, authorizedInstanceType: "t3.large" },
+      { ...scope, authorizedRegion: "us-west-2" },
+      { ...scope, expiresAt: new Date(Date.now() - 60_000).toISOString() },
+      { ...scope, expiresAt: undefined },
+    ]) {{
       const provider = new AwsEnvironmentProvider({
         ...options,
         authorizeNewProvision: () => decision,
