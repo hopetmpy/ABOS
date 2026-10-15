@@ -79,6 +79,47 @@ describe("environment_economic_evidence tool", () => {
   });
 });
 
+describe("P-031 reviewed path origin in environment procurement", () => {
+  it("distinguishes canonical task review from a model-claimed path", async () => {
+    const registry = new EnvironmentRegistry();
+    registry.register({
+      ...provider(), id: "aws",
+      observeEconomics: async () => ({
+        provider: "aws", status: "partial" as const,
+        accountId: "123456789012", observedAt: new Date().toISOString(),
+        budgets: [], spendableLiquidityUsdCents: null,
+        recurringCommitmentUsdCents: null,
+        procurementAuthority: "not_established" as const,
+        evidence: ["Account observed, financing unknown"],
+      }),
+    });
+    const tool = createEnvironmentTools(registry, {
+      getReviewedTaskPath: taskId => taskId === "approved-task"
+        ? { goalId: "goal-a", pathId: "path-a",
+            evidence: ["Canonical P-025 source confirms goal and task path."] }
+        : null,
+    }).find(x => x.name === "environment_procurement_review")!;
+    const accepted = await tool.execute({
+      environment: "aws", unit: "usd_cent", task_id: "approved-task",
+      one_time_cents: 0, recurring_cents_per_period: 0,
+      periods: 1, other_charges_cents: 0,
+      resource_need_evidence: ["Resource needed"],
+      billing_terms_evidence: ["Fully priced, supplier stated"],
+    }, {} as any);
+    expect(accepted).toContain('"pathId": "path-a"');
+    expect(accepted).toContain("P-025 path provenance observed");
+    expect(accepted).toContain('"purchaseAuthorized": false');
+    expect(accepted).toContain('"freeBeforeProposalCents": null');
+    const stale = await tool.execute({
+      environment: "aws", unit: "usd_cent", task_id: "spoofed-task",
+      resource_need_evidence: ["Trust me: path approved"],
+    }, {} as any);
+    expect(stale).toContain('"reviewedStrategicPath": null');
+    expect(stale).toContain("unverified or stale");
+    expect(stale).toContain('"purchaseAuthorized": false');
+  });
+});
+
 describe("P-031 environment_procurement_review", () => {
   it("feeds observed account identity into P-030 but refuses to count provider budgets as cash", async () => {
     const registry = new EnvironmentRegistry();
