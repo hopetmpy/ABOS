@@ -108,12 +108,13 @@ describe("Environment Execution & Lifecycle v2", () => {
     const db = createDb();
     try {
       const registry = new EnvironmentRegistry();
+      let dispatches = 0;
       registry.register({
         id: "uncertain", inspect: async () => ({
           id: "uncertain", label: "Uncertain", availability: "available",
           capabilities: [], evidence: [], constraints: [], observedAt: new Date().toISOString(),
         }),
-        provision: async () => { throw new Error("provider timeout"); },
+        provision: async () => { dispatches += 1; throw new Error("provider timeout"); },
       });
       const life = new EnvironmentLifecycleManager(registry, new EnvironmentResourceStore(db));
       await expect(life.provision("uncertain", {
