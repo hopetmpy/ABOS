@@ -128,6 +128,46 @@ export function getTaskCostCalibration(db: Database.Database): TaskCostCalibrati
   return historicalTaskCostCalibration;
 }
 
+/**
+ * Read-only P-023/P-025 planning feedback from observed task outcomes.
+ * Source is task_graph's estimate→actual comparison; there is no implicit
+ * conversion into Conway credits, USDC, provider payments or realized P&L.
+ */
+export function describeTaskCostLearning(history: TaskCostCalibration): string | null {
+  const signals: string[] = [];
+  if (history.comparableSamples > 0 && history.actualToEstimateRatio !== null) {
+    signals.push(
+      `${history.comparableSamples} comparable terminal tasks, ` +
+      `observed/estimated cost ratio=${history.actualToEstimateRatio.toFixed(3)}, ` +
+      `net deviation=${history.netDeviationTaskCostCents} task_cost_cent`,
+    );
+    if (history.largestObservedOverrunTaskCostCents !== null &&
+        history.largestObservedOverrunTaskCostCents !== undefined) {
+      signals.push(
+        `gross overruns=${history.observedOverrunTaskCostCents ?? "UNKNOWN"} ` +
+        `task_cost_cent across ${history.observedOverrunSamples ?? "UNKNOWN"} samples; ` +
+        `largest observed individual downside=${history.largestObservedOverrunTaskCostCents} task_cost_cent`,
+      );
+    }
+  }
+  if (history.estimatesAwaitingObservedCost > 0) {
+    signals.push(`${history.estimatesAwaitingObservedCost} terminal estimates have no observed actual; never treat zero defaults as savings`);
+  }
+  if ((history.observedActualsWithoutEstimate ?? 0) > 0) {
+    signals.push(`${history.observedActualsWithoutEstimate} actuals have no positive baseline; cannot calibrate those predictions`);
+  }
+  if ((history.invalidCostSamples ?? 0) > 0) {
+    signals.push(`${history.invalidCostSamples} invalid negative samples excluded from calibration`);
+  }
+  if (!signals.length) return null;
+  return (
+    "Observed P-030 economic prediction→outcome feedback (task_graph authority, local task_cost_cent ONLY): " +
+    signals.join("; ") + ". " +
+    "Use these measurements to challenge future cost estimates, investigate causes of misses, compare alternatives and build context-sensitive contingencies. " +
+    "They are not a mandated reserve or spending cap and cannot be added to Conway credits, USDC, verified invoices or business profit without independent same-unit evidence."
+  );
+}
+
 export function getTreasuryProjection(
   db: AbosDatabase,
   input: TreasuryProjectionInput = {},
