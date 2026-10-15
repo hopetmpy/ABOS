@@ -223,6 +223,12 @@ export class EnvironmentSelector {
         );
       } else if (estimate.estimatedCostCents == null) {
         blockers.push("estimated cost is unknown under an explicit budget");
+      } else if (requirements.maxEstimatedCostUnit &&
+        (estimate.costUnit?.trim().toLowerCase() ?? null) !==
+          requirements.maxEstimatedCostUnit.trim().toLowerCase()) {
+        blockers.push(
+          `estimated cost unit=${estimate.costUnit ?? "UNKNOWN"} does not match explicit budget unit=${requirements.maxEstimatedCostUnit}`,
+        );
       } else if (estimate.estimatedCostCents > requirements.maxEstimatedCostCents) {
         blockers.push(
           `estimated cost ${estimate.estimatedCostCents} exceeds budget ${requirements.maxEstimatedCostCents}`,
