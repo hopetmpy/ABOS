@@ -362,6 +362,31 @@ describe("orchestration/plan-mode", () => {
       expect(noFalsifier.feedback).toContain("falsification conditions");
     });
 
+    it("exposes unsettled financial commitments as evidence, without making them executed costs", async () => {
+      const result = await reviewPlan(makePlan(), {
+        ...autoConfig,
+        reviewContext: {
+          outstandingFinancialEffects: { count: 2, pendingCreditCommitments: 950 },
+        },
+      });
+      expect(result.approved).toBe(true);
+      expect(result.feedback).toContain("2 unresolved intents");
+      expect(result.feedback).toContain("950 credit cents of exposure");
+      expect(result.feedback).toContain("not free liquidity or realized spending");
+    });
+
+    it("preserves UNKNOWN when a financially inconsistent exposure is injected", async () => {
+      const result = await reviewPlan(makePlan(), {
+        ...autoConfig,
+        reviewContext: {
+          outstandingFinancialEffects: { count: 1, pendingCreditCommitments: -1 },
+        },
+      });
+      expect(result.approved).toBe(false);
+      expect(result.feedback).toContain("disposition=unknown");
+      expect(result.feedback).toContain("financial-effect exposure is invalid");
+    });
+
     it("keeps treasury uncertainty inside the canonical P-025 strategic review", async () => {
       const finance = {
         status: "needs_evidence" as const,
