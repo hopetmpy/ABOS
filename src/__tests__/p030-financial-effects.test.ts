@@ -12,6 +12,7 @@ import {
   FinancialEffectReconciliationRequiredError,
   claimFinancialEffectDispatch,
   getCommittedFinancialEffectCents,
+  getStrategicFinancialExposure,
   getFinancialEffectByOperationKey,
   prepareFinancialEffect,
   recordFinancialEffectObservation,
@@ -50,6 +51,32 @@ afterEach(() => {
 });
 
 describe("P-030 financial effect authority", () => {
+  it("reports mixed unsettled credit, USDC topup/service and unknown units without a fake balance", () => {
+    const database = db();
+    for (const [operationKey, effectKind, amountCents, unit] of [
+      ["credits:1", "credit_transfer", 300, "credit_cent"],
+      ["topup:1", "x402_credit_topup", 200, "usdc_cent"],
+      ["service:1", "x402_service_purchase", 400, "usdc_cent"],
+      ["unknown:1", "unclassified_external_payment", 10, "unclassified_unit"],
+    ] as const) {
+      prepareFinancialEffect(database.raw, {
+        operationKey, effectKind, amountCents, unit,
+        recipient: operationKey, provider: "test-economic",
+      });
+    }
+    expect(getStrategicFinancialExposure(database.raw)).toEqual({
+      count: 1,
+      pendingCreditCommitments: 300,
+      pendingUsdcTopups: 1,
+      pendingUsdcOtherEffects: 1,
+      pendingUsdcCommitments: 600,
+      unclassifiedPendingEffects: 1,
+    });
+    expect(getCommittedFinancialEffectCents(database.raw)).toBe(300);
+    expect(getCommittedFinancialEffectCents(database.raw, "usdc_cent")).toBe(600);
+    expect((database.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n).toBe(0);
+  });
+
   it("does not dispatch a second equivalent unresolved effect using another key", () => {
     const database = db();
     const input = {
