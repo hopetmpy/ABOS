@@ -1,16 +1,26 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { createDatabase } from "../state/database.js";
 import type { AbosDatabase } from "../types.js";
 import { createTestDb } from "./mocks.js";
 import { executeCreditEffect, reconcileCreditEffect } from "../economics/credit-transfer.js";
 import { prepareFinancialEffect } from "../economics/financial-effects.js";
 
 const opened: AbosDatabase[] = [];
+const temporaryDirectories: string[] = [];
 function createDb() {
   const database = createTestDb();
   opened.push(database);
   return database;
 }
-afterEach(() => { while (opened.length) opened.pop()!.close(); });
+afterEach(() => {
+  while (opened.length) opened.pop()!.close();
+  while (temporaryDirectories.length) {
+    fs.rmSync(temporaryDirectories.pop()!, { recursive: true, force: true });
+  }
+});
 
 describe("P-030 credit effect execution and reconciliation", () => {
   it("submits once and waits for provider finality before writing a ledger movement", async () => {
@@ -46,6 +56,45 @@ describe("P-030 credit effect execution and reconciliation", () => {
       evidence: ["replayed provider event"],
     }).state).toBe("completed");
     expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as any).n).toBe(1);
+  });
+
+  it("recovers a pending provider receipt after restart without dispatching twice", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "p030-credit-effect-"));
+    temporaryDirectories.push(tmpDir);
+    const location = path.join(tmpDir, "effect.db");
+    const first = createDatabase(location);
+    opened.push(first);
+    const conway = { transferCredits: vi.fn().mockResolvedValue({
+      transferId: "remote-restart", status: "submitted",
+      toAddress: "0xrecipient", amountCents: 380,
+    }) } as any;
+    const request = {
+      db: first, conway, operationKey: "restart-settlement",
+      kind: "credit_transfer" as const, toAddress: "0xrecipient",
+      amountCents: 380, note: "restart test",
+    };
+    expect((await executeCreditEffect(request)).state).toBe("pending");
+    first.close();
+    opened.splice(opened.indexOf(first), 1);
+    const reopened = createDatabase(location);
+    opened.push(reopened);
+    expect((await executeCreditEffect({ ...request, db: reopened })).state).toBe("pending");
+    expect(conway.transferCredits).toHaveBeenCalledTimes(1);
+
+    const receipt = {
+      operationKey: request.operationKey, resolution: "settled" as const,
+      providerEffectId: "remote-restart", providerStatus: "completed",
+      toAddress: "0xrecipient", amountCents: 380,
+      evidence: ["independent correlated final settlement observation"],
+    };
+    expect(reconcileCreditEffect(reopened, receipt).state).toBe("completed");
+    reopened.close();
+    opened.splice(opened.indexOf(reopened), 1);
+    const verify = createDatabase(location);
+    opened.push(verify);
+    expect(reconcileCreditEffect(verify, receipt).state).toBe("completed");
+    expect((verify.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as any).n).toBe(1);
+    expect(conway.transferCredits).toHaveBeenCalledTimes(1);
   });
 
   it("does not retry after a lost response and can reconcile later", async () => {
