@@ -123,6 +123,11 @@ describe("Environment Execution & Lifecycle v2", () => {
       })).rejects.toThrow("provider timeout");
       expect(life.resources.get("r-unknown")?.status).toBe("unknown");
       expect(life.resources.get("r-unknown")?.metadata.provisionNeedsReconciliation).toBe(true);
+      await expect(life.provision("uncertain", {
+        resourceId: "r-unknown", resourceType: "compute",
+        retentionPolicy: "ephemeral", requiredCapabilities: [],
+      })).rejects.toThrow();
+      expect(dispatches).toBe(1);
     } finally { db.close(); }
   });
 
