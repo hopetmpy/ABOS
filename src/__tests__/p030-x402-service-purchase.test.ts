@@ -59,6 +59,7 @@ describe("P-030 autonomous x402 service-purchase accounting", () => {
     });
     const outcome = await tool.execute({ url: "https://conway.tech/service" }, context);
     expect(outcome).toContain("service response");
+    expect(outcome).toContain("PENDING independent provider/chain settlement verification");
     expect(dispatched).toBe(1);
     expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n).toBe(0);
     const effects = listUnresolvedFinancialEffects(db.raw);
