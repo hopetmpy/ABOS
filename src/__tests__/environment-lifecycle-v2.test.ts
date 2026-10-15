@@ -104,6 +104,27 @@ describe("Environment Execution & Lifecycle v2", () => {
     }
   });
 
+  it("keeps ambiguous provider provisioning unknown", async () => {
+    const db = createDb();
+    try {
+      const registry = new EnvironmentRegistry();
+      registry.register({
+        id: "uncertain", inspect: async () => ({
+          id: "uncertain", label: "Uncertain", availability: "available",
+          capabilities: [], evidence: [], constraints: [], observedAt: new Date().toISOString(),
+        }),
+        provision: async () => { throw new Error("provider timeout"); },
+      });
+      const life = new EnvironmentLifecycleManager(registry, new EnvironmentResourceStore(db));
+      await expect(life.provision("uncertain", {
+        resourceId: "r-unknown", resourceType: "compute", retentionPolicy: "ephemeral",
+        requiredCapabilities: [],
+      })).rejects.toThrow("provider timeout");
+      expect(life.resources.get("r-unknown")?.status).toBe("unknown");
+      expect(life.resources.get("r-unknown")?.metadata.provisionNeedsReconciliation).toBe(true);
+    } finally { db.close(); }
+  });
+
   it("reports unsupported provider operation as unavailable, not impossible", async () => {
     const db = createDb();
     try {
