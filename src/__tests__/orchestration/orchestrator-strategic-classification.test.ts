@@ -7,6 +7,7 @@ import { ColonyMessaging, type MessageTransport } from "../../orchestration/mess
 import type { AbosDatabase } from "../../types.js";
 import { createInMemoryDb } from "./test-db.js";
 import { prepareFinancialEffect } from "../../economics/financial-effects.js";
+import { MIGRATION_V18_EVIDENCE_FABRIC } from "../../state/schema.js";
 
 const IDENTITY = {
   name: "test",
@@ -213,6 +214,9 @@ describe("P-025/P-026 strategic classification boundary", () => {
       "completed", "0xworker", "generalist", 50, "[]", 100, 160, now);
     insert.run(ulid(), goalId, "Old task", "Unknown actual cost",
       "failed", "0xworker", "generalist", 50, "[]", 100, 0, now);
+    // The lean orchestration fixture predates P-013; prepare its canonical
+    // evidence schema before inserting a real financial-effect intent.
+    db.exec(MIGRATION_V18_EVIDENCE_FABRIC);
     prepareFinancialEffect(db, {
       operationKey: "service:pending", effectKind: "x402_service_purchase",
       unit: "usdc_cent", amountCents: 75, recipient: IDENTITY.address,
