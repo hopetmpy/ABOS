@@ -658,6 +658,35 @@ export class Orchestrator {
     };
   }
 
+  /**
+   * Plans are persisted and Task-bound before P-025 review. A rejected or
+   * missing review must not leave those pending tasks executable when a later
+   * path is approved. Preserve older executing/finished paths and results.
+   */
+  private retireUnreviewedPlanTasks(goalId: string): number {
+    const unreviewed = this.adaptive.store.listPaths(goalId)
+      .filter((path) => path.status === "selected");
+    if (unreviewed.length === 0) return 0;
+    return this.params.db.transaction(() => {
+      const changed = this.params.db.prepare(
+        `UPDATE task_graph
+         SET status = 'cancelled', assigned_to = NULL,
+             completed_at = COALESCE(completed_at, ?)
+         WHERE goal_id = ? AND status IN ('pending', 'blocked')
+           AND EXISTS (
+             SELECT 1 FROM adaptive_task_bindings b
+             JOIN adaptive_paths p ON p.id = b.path_id
+             WHERE b.task_id = task_graph.id AND b.goal_id = ?
+               AND p.goal_id = ? AND p.status = 'selected'
+           )`,
+      ).run(new Date().toISOString(), goalId, goalId, goalId).changes;
+      for (const path of unreviewed) {
+        this.adaptive.store.setPathStatus(path.id, "blocked");
+      }
+      return changed;
+    })();
+  }
+
   private async handlePlanReviewPhase(state: OrchestratorState): Promise<OrchestratorState> {
     if (!state.goalId) {
       return { ...state, phase: "idle" };
@@ -676,9 +705,10 @@ export class Orchestrator {
       const reason = planRow?.value
         ? "Persisted plan could not be parsed; strategic approval is UNKNOWN."
         : "Persisted plan is missing; strategic approval is UNKNOWN.";
+      const retired = this.retireUnreviewedPlanTasks(state.goalId);
       this.params.db.prepare(
         "INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))",
-      ).run(`orchestrator.review_feedback.${state.goalId}`, reason);
+      ).run(`orchestrator.review_feedback.${state.goalId}`, `${reason} Unreviewed pending tasks retired=${retired}.`);
       return { ...state, phase: "planning", failedError: reason };
     }
 
@@ -701,9 +731,11 @@ export class Orchestrator {
         return { ...state, phase: "executing" };
       }
 
+      const retired = this.retireUnreviewedPlanTasks(state.goalId);
       this.params.db.prepare(
         "INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))",
-      ).run(`orchestrator.review_feedback.${state.goalId}`, result.feedback ?? "Plan rejected");
+      ).run(`orchestrator.review_feedback.${state.goalId}`,
+        `${result.feedback ?? "Plan rejected"} ; unreviewed pending tasks retired=${retired}.`);
 
       return { ...state, phase: "planning" };
     } catch (error) {
