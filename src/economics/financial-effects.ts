@@ -666,6 +666,69 @@ export function listUnresolvedFinancialEffects(
   return listFinancialEffectsByStates(db, NON_TERMINAL_STATES);
 }
 
+/**
+ * P-031 read-only account attribution within the canonical P-030 financial
+ * effects. An operation's payee/recipient is NOT necessarily the account
+ * that incurs the provider bill: only an explicit providerAccountId from the
+ * durable request has meaning for account attribution.
+ *
+ * A zero here means no *recorded unresolved local intents* for this scope,
+ * never proof of zero AWS invoices, recurring contracts or available money.
+ */
+export interface ProviderAccountFinancialExposure {
+  provider: string;
+  providerAccountId: string;
+  unit: string;
+  recordedPendingCount: number;
+  recordedPendingCents: number;
+  /** Relevant provider+unit effects lacking trustworthy account attribution. */
+  unscopedPendingCount: number;
+  /** Keep source totals separate: scope-incomplete is not spendable capital. */
+  scopeCoverage: "scoped_records" | "unscoped_records_present";
+  limitations: string[];
+}
+
+export function getProviderAccountFinancialExposure(
+  db: Database.Database,
+  scope: { provider: string; providerAccountId: string; unit: string },
+): ProviderAccountFinancialExposure {
+  const provider = requireText(scope.provider, "provider");
+  const providerAccountId = requireText(scope.providerAccountId, "providerAccountId");
+  const unit = requireText(scope.unit, "unit");
+  let recordedPendingCents = 0n;
+  let recordedPendingCount = 0;
+  let unscopedPendingCount = 0;
+  // Existing durable intent owner, including UNKNOWN and pending callbacks.
+  for (const effect of listUnresolvedFinancialEffects(db)) {
+    if (effect.provider !== provider || effect.unit !== unit) continue;
+    const account = typeof effect.request.providerAccountId === "string"
+      ? effect.request.providerAccountId.trim() : "";
+    if (!account) {
+      unscopedPendingCount += 1;
+      continue;
+    }
+    if (account !== providerAccountId) continue;
+    recordedPendingCount += 1;
+    recordedPendingCents += BigInt(effect.amountCents);
+    if (recordedPendingCents > BigInt(Number.MAX_SAFE_INTEGER)) {
+      throw new Error("Provider-account pending obligations exceed exact integer arithmetic");
+    }
+  }
+  return {
+    provider, providerAccountId, unit,
+    recordedPendingCount,
+    recordedPendingCents: Number(recordedPendingCents),
+    unscopedPendingCount,
+    scopeCoverage: unscopedPendingCount
+      ? "unscoped_records_present" : "scoped_records",
+    limitations: [
+      "Only unresolved financial_effects are counted; a missing or zero local record is not evidence of zero provider bills, reserves, contracts, settlements or free funds.",
+      "Provider/monetary unit/account must match independently; other accounts and USDC/Conway credits are never included.",
+      "Unscoped provider effects remain UNKNOWN for account attribution, never silently allocated to this account.",
+    ],
+  };
+}
+
 /** Read-only aggregate for P-025 review, sourced from the sole financial intent owner. */
 export interface StrategicFinancialExposure {
   count: number;
