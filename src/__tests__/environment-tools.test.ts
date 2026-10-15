@@ -79,6 +79,47 @@ describe("environment_economic_evidence tool", () => {
   });
 });
 
+describe("P-031 optional provider-credit tool observation", () => {
+  it("forwards optional scoped credit request only when explicitly selected", async () => {
+    const registry = new EnvironmentRegistry();
+    const observations: Array<boolean | undefined> = [];
+    registry.register({
+      ...provider(), id: "aws",
+      async observeEconomics(options) {
+        observations.push(options?.includeProviderCredits);
+        return {
+          provider: "aws", status: "partial" as const,
+          accountId: "123456789012",
+          observedAt: new Date().toISOString(), budgets: [],
+          providerCredits: options?.includeProviderCredits ? [{
+            creditId: "test-1", creditType: "Promotion", status: "ENABLED",
+            expiresAt: null, remainingUsdCents: 400,
+            remainingRaw: "4.00", estimatedRemainingUsdCents: 250,
+            applicableProductNames: ["EC2"], purchaseTypeApplications: ["OnDemand"],
+            evidence: ["Restricted supplier credit; not general-purpose cash."],
+          }] : [],
+          spendableLiquidityUsdCents: null,
+          recurringCommitmentUsdCents: null,
+          procurementAuthority: "not_established" as const,
+          evidence: ["Mocked provider credit observation"],
+        };
+      },
+    });
+    const tool = createEnvironmentTools(registry).find(
+      x => x.name === "environment_economic_evidence",
+    )!;
+    const ordinary = await tool.execute({ environment: "aws" }, {} as any);
+    expect(ordinary).not.toContain("test-1");
+    const enabled = await tool.execute({
+      environment: "aws", include_provider_credits: true,
+    }, {} as any);
+    expect(enabled).toContain('"creditId": "test-1"');
+    expect(enabled).toContain('"spendableLiquidityUsdCents": null');
+    expect(enabled).toContain('"procurementAuthority": "not_established"');
+    expect(observations).toEqual([false, true]);
+  });
+});
+
 describe("P-031 reviewed path origin in environment procurement", () => {
   it("distinguishes canonical task review from a model-claimed path", async () => {
     const registry = new EnvironmentRegistry();

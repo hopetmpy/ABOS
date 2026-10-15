@@ -203,6 +203,10 @@ export function createEnvironmentTools(
       type: "object",
       properties: {
         environment: { type: "string", description: "Registered provider ID." },
+        include_provider_credits: {
+          type: "boolean",
+          description: "Explicit opt-in to additional provider-account credit observation; provider API reads may have their own costs.",
+        },
       },
       required: ["environment"],
     },
@@ -215,7 +219,9 @@ export function createEnvironmentTools(
         return `UNAVAILABLE: ${environment} has no economic observation adapter yet; not evidence that external economics are impossible.`;
       }
       try {
-        const result = await provider.observeEconomics();
+        const result = await provider.observeEconomics({
+          includeProviderCredits: args.include_provider_credits === true,
+        });
         return sanitizeProviderOutput(JSON.stringify(result, null, 2));
       } catch {
         return `UNKNOWN: ${environment} economic observation failed; no account balance, budget or spending authority can be inferred.`;

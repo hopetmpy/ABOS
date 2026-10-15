@@ -244,7 +244,24 @@ export interface EnvironmentEconomicObservation {
     reportedSpendRaw: string | null;
     evidence: string[];
   }>;
-  /** No budget value or observed account spend proves available cash. */
+  /**
+   * Explicitly requested account-owned billing credits. Amounts represent
+   * restricted provider credits, never general cash or purchase authority.
+   * Missing means this optional API was not queried.
+   */
+  providerCredits?: Array<{
+    creditId: string | null;
+    creditType: string | null;
+    status: string | null;
+    expiresAt: string | null;
+    remainingUsdCents: number | null;
+    remainingRaw: string | null;
+    estimatedRemainingUsdCents: number | null;
+    applicableProductNames: string[];
+    purchaseTypeApplications: string[];
+    evidence: string[];
+  }>;
+  /** No budget value, AWS credit or observed account spend proves general available cash. */
   spendableLiquidityUsdCents: null;
   recurringCommitmentUsdCents: null;
   procurementAuthority: "not_established";
@@ -262,7 +279,10 @@ export interface EnvironmentProvider {
 
   inspect(): Promise<EnvironmentSnapshot>;
   /** Optional explicit read-only provider economics; not a spend command. */
-  observeEconomics?(): Promise<EnvironmentEconomicObservation>;
+  observeEconomics?(options?: {
+    /** Explicit opt-in for additional provider credit observation/API calls. */
+    includeProviderCredits?: boolean;
+  }): Promise<EnvironmentEconomicObservation>;
   canSatisfy?(
     requirements: EnvironmentRequirements,
     snapshot?: EnvironmentSnapshot,
