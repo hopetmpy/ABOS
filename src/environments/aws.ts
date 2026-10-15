@@ -289,23 +289,25 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
             };
             const remaining = money(entry.remainingAmount);
             const estimated = money(entry.estimatedAmount);
-            const unixDate = typeof entry.endDate === "number" &&
-              Number.isFinite(entry.endDate) && entry.endDate > 0
-              ? new Date(entry.endDate * 1000) : null;
-            const expiry = unixDate && Number.isFinite(unixDate.getTime())
-              ? unixDate.toISOString() : null;
+            const awsTimestamp = (value: unknown) => {
+              if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
+              const date = new Date(value * 1000);
+              return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+            };
+            const startAt = awsTimestamp(entry.startDate);
+            const expiry = awsTimestamp(entry.endDate);
             const products = Array.isArray(entry.applicableProductNames)
               ? entry.applicableProductNames.filter((x): x is string => typeof x === "string")
               : [];
             const purchaseTypes = Array.isArray(entry.purchaseTypeApplications)
               ? entry.purchaseTypeApplications.filter((x): x is string => typeof x === "string")
-              : [];
+              : null;
             const status = typeof entry.creditStatus === "string"
               ? entry.creditStatus : null;
             records.push({
               creditId: typeof entry.creditId === "string" ? entry.creditId : null,
               creditType: typeof entry.creditType === "string" ? entry.creditType : null,
-              status, expiresAt: expiry,
+              status, startsAt: startAt, expiresAt: expiry,
               remainingUsdCents: remaining.cents,
               remainingRaw: remaining.raw,
               estimatedRemainingUsdCents: estimated.cents,
