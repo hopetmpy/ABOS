@@ -442,6 +442,25 @@ describe("P-030 causal reserve-funded Conway credit effects", () => {
     });
     expect(replay.id).toBe(effect.id);
     expect((d.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as {n:number}).n).toBe(1);
+    // Replay remains safe even after releasing/reassigning the reserve.
+    // No new capacity is required because no new provider effect is created.
+    setTreasuryReserve(d,{
+      ...alloc("release-cap", "provider-replacement", 0),
+      observedCreditsCents:null, balanceEvidence:null,
+      otherCommittedCreditsCents:null,
+    });
+    const afterRelease = await executeCreditEffect({
+      db:d,conway,operationKey:"reserve-provider-1",kind:"credit_transfer",
+      toAddress:"0xrecipient",amountCents:200,note:"replacement capacity",
+      reserveKey:"provider-replacement",
+    });
+    expect(afterRelease.id).toBe(effect.id);
+    expect((d.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as {n:number}).n).toBe(1);
+    await expect(executeCreditEffect({
+      db:d,conway,operationKey:"reserve-new-after-release",kind:"credit_transfer",
+      toAddress:"0xnew",amountCents:20,note:"new request",
+      reserveKey:"provider-replacement",
+    })).rejects.toThrow(/not an active durable earmark/);
   });
 
   it("counts unsettled reserved credits only once while preserving unrelated credit/USDC units", () => {

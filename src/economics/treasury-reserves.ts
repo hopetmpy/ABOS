@@ -119,14 +119,16 @@ export function assertReserveCreditEffectCapacity(
   const operationKey = requireText(input.operationKey, "operationKey");
   const requested = amount(input.amountCents, "amountCents");
   if (requested === null || requested === 0) throw new Error("Reserved effect amount must be positive");
+  // Replay MUST be checked before requiring current earmark capacity:
+  // a prior external effect can still be pending/settled after its reserve
+  // was reduced or released. Financial-effects verifies the full fingerprint
+  // and refuses a semantic change on the same operation key.
+  if (getFinancialEffectByOperationKey(db, operationKey)) return;
   const reserve = getTreasuryReserveSnapshot(db).allocations
     .find(item => item.reserveKey === reserveKey);
   if (!reserve || reserve.targetCreditsCents === 0) {
     throw new Error("Credit effect reserve key is not an active durable earmark");
   }
-  // A replay is semantically checked by financial_effects' fingerprint and
-  // must not consume a second portion of the same reserve.
-  if (getFinancialEffectByOperationKey(db, operationKey)) return;
   let committed = 0;
   for (const effect of listFinancialEffectsByStates(db,
     ["prepared", "dispatching", "pending", "unknown", "reconciliation_required", "completed"])) {
