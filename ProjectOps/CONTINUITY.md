@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-030
 Active-Segment: continuity/C0026.md
-Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / USDC_UNKNOWN_SOURCE_15d45e2_CI_8_OF_8 / LIVE_FINALITY_UNPROVEN
+Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / DYNAMIC_RESERVE_SOURCE_309f70c_CI_8_OF_8 / LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -129,7 +129,7 @@ Decision gate registrado en `continuity/C0026.md` por commit `9ac10272bcbd6b661d
 
 Plan P-030: blueprint vigente. La auditoría resolvió su arquitectura de implementación sin cambiar objetivo, alcance ni dependencias; no se requiere reescribir el blueprint antes de source.
 
-NEXT_ELIGIBLE_WORK: P-030 PR #75 DRAFT; source HEAD 15d45e24 CI push 38685293689 SUCCESS 8/8 + PR 38685289941 SUCCESS 8/8. Finish P-030 adaptive reserve/contingency decisions and economic prediction→outcome proof in compatible units; no default human approval. P-005 owns external LIVE finality/revenue. Verify checkpoint HEAD before any merge.
+NEXT_ELIGIBLE_WORK: P-030 PR75 DRAFT; reserve decision source 309f70c4 CI push 38689187817 SUCCESS 8/8 + PR 38689182837 SUCCESS 8/8. Next: audit/implement durable actual reserve allocation and revisit learning from observed reserve decisions in existing P-023/P-025 without second ledger or manual approval. P-005 external LIVE financial proof remains unverified; P-031 not opened.
 
 ## P-030 — checkpoint de implementación 2026-10-14
 
@@ -224,3 +224,10 @@ La auditoría hasta DECISION_READY se conserva como historia en C0026; ya no des
 - Source `15d45e243c85735b329cf5c9fce23dd3f7b4dde0`, following economic learning checkpoint, exact CI push `38685293689` SUCCESS 8/8, PR `38685289941` SUCCESS 8/8.
 - `src/orchestration/planner-context.ts`, `planner.ts` and primary+legacy orchestrators no longer turn absent USDC observation into zero; null/UNKNOWN remains separate from explicit observed 0 or valid cached USDC observation. Negative or invalid USDC values no longer fabricate a balance. New `planner-runtime-truth` tests verify the distinction.
 - No new manual payment authorization, no wallet use, no movement of external cash, no transfer settlement or verified income. PR #75 remains DRAFT; P-030 remains EN_EJECUCIÓN, not merged; next dynamic economic reserve/contingency policy and E5/E6 evidence remain pending.
+
+## P-030 — reserve funding recommendation from scenario evidence (2026-10-15)
+
+- `309f70c4f3ea85df3f1c758530aa76e4fba59f69` source; PR #75 DRAFT, `main` unchanged. Exact source CI push `38689187817` SUCCESS **8/8** and PR `38689182837` SUCCESS **8/8**. No money moved and no provider LIVE validation.
+- Existing read-only `assessTreasuryScenario` now returns a same-unit `reserveRecommendation`: observed downside target, incremental earmark, free credit remainder after procurement AND the proposed reserve, and `covered|can_earmark|requires_alternative|unknown`. Joint overlapping risk without independent exposure evidence remains UNKNOWN; no fixed reserve percentage, automatic creator approval or standalone execution policy. P-025 strategic-review incorporates the structured recommendation.
+- Adversarial coverage: full-capital spend if justified downside is zero; risk coverage/replenishment from genuinely free credits; insufficient concurrent procurement+reserve; no release of prior larger reserves from one narrow downside; delayed refund still NOT liquid in protected tool; existing projected credit shortfall cannot be called fully financed; null loss/quote is not zero. Protected tool remains read-only and never sends credit transfers.
+- Important limitation: projection `reservedCreditsCents` is an EXPLICIT INPUT, not durable source-backed treasury earmark. Recommendation is NOT an actual committed/reserved balance and cannot be treated as realized allocation on restart. Durable internal reserve ownership/reconciliation and outcome adaptation remain P-030 work, without violating external financial-effect/transactions ownership. Real provider settlement/income/revenue is P-005 boundary.
