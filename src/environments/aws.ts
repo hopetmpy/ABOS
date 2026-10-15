@@ -95,6 +95,23 @@ export interface AwsEc2MutationEconomicDecision extends AwsEc2ProcurementDecisio
   authorizedExternalId?: string | null;
 }
 
+function mutationMandateMetadata(mandate: AwsEc2MutationEconomicDecision): Record<string, unknown> {
+  return {
+    lastEconomicMutationDecisionId: mandate.policyDecisionId,
+    lastEconomicMutationOperation: mandate.authorizedOperation,
+    lastEconomicMutationResourceId: mandate.authorizedResourceId,
+    lastEconomicMutationExternalId: mandate.authorizedExternalId,
+    lastEconomicMutationAccountId: mandate.providerAccountId,
+    lastEconomicMutationRegion: mandate.authorizedRegion,
+    lastEconomicMutationInstanceType: mandate.authorizedInstanceType,
+    lastEconomicMutationUnit: mandate.unit,
+    lastEconomicMutationCommitmentCents: mandate.totalCommitmentCents,
+    lastEconomicMutationExpiresAt: mandate.expiresAt,
+    lastEconomicMutationBillingEvidence: mandate.billingTermsEvidence,
+    lastEconomicMutationIsSettledInvoice: false,
+  };
+}
+
 export interface AwsEnvironmentProviderOptions {
   runner?: EnvironmentCommandRunner;
   /**
@@ -1270,7 +1287,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       throw new Error(`Cannot resize unobserved EC2 instance ${instanceId}.`);
     }
 
-    await this.requireBillableMutationAuthority({
+    const mandate = await this.requireBillableMutationAuthority({
       operation: "resize", resource, instanceId, region,
       targetInstanceType: instanceType,
     });
@@ -1307,6 +1324,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       metadata: {
         instanceType,
         ...cost.metadata,
+        ...mutationMandateMetadata(mandate),
         billingStartedAt: wasRunning ? new Date().toISOString() : null,
       },
     };
@@ -1347,7 +1365,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         `AWS EC2 resume has unverified instance state/type (${state}); no billable start was dispatched.`,
       );
     }
-    await this.requireBillableMutationAuthority({
+    const mandate = await this.requireBillableMutationAuthority({
       operation: "resume", resource, instanceId, region,
       targetInstanceType: observed.instance.InstanceType,
     });
@@ -1358,6 +1376,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       evidence: [`AWS EC2 instance ${instanceId} started after scoped economic review; compute-cost estimation clock resumed.`],
       metadata: {
         billingStartedAt: new Date().toISOString(),
+        ...mutationMandateMetadata(mandate),
       },
     };
   }
@@ -1424,7 +1443,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
           "AWS EC2 recover cannot verify stopped instance type; no billable restart was dispatched.",
         );
       }
-      await this.requireBillableMutationAuthority({
+      const mandate = await this.requireBillableMutationAuthority({
         operation: "recover", resource, instanceId, region,
         targetInstanceType: observed.instance.InstanceType,
       });
@@ -1433,6 +1452,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         status: "running",
         providerState: "running",
         evidence: [`AWS EC2 recovery restarted stopped instance ${instanceId} after scoped economic review.`],
+        metadata: mutationMandateMetadata(mandate),
       };
     }
 
@@ -1656,7 +1676,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     instanceId: string;
     region: string | null;
     targetInstanceType: string;
-  }): Promise<void> {
+  }): Promise<AwsEc2MutationEconomicDecision> {
     if (!this.options.authorizeBillableMutation) {
       throw new AwsEc2ProcurementNotDispatchedError(
         "AWS EC2 billable mutation economic authority UNKNOWN: trusted P-010/P-030 issuer is unwired; no capacity change was dispatched.",
@@ -1720,6 +1740,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         "AWS EC2 billable mutation mandate absent, expired or inconsistent with observed account, operation, resource, instance, region, shape or USD terms; no capacity change was dispatched.",
       );
     }
+    return decision;
   }
 
   private async runAws(
