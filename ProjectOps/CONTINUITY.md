@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-030
 Active-Segment: continuity/C0026.md
-Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / X402_SERVICE_SOURCE_ac423a_CI_8_OF_8 / LIVE_FINALITY_UNPROVEN
+Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / COGNITIVE_ECONOMIC_SOURCE_3b390b6_CI_8_OF_8 / LIVE_FINALITY_UNPROVEN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -129,7 +129,7 @@ Decision gate registrado en `continuity/C0026.md` por commit `9ac10272bcbd6b661d
 
 Plan P-030: blueprint vigente. La auditoría resolvió su arquitectura de implementación sin cambiar objetivo, alcance ni dependencias; no se requiere reescribir el blueprint antes de source.
 
-NEXT_ELIGIBLE_WORK: P-030 PR #75 DRAFT, source ac423a7c exact CI push 38680325974 8/8 and PR 38680323592 rerun attempt 2 8/8. Continue P-030 economic decision→outcome learning, evidence-backed adaptive reserves, cross-source P-023/P-025; financial LIVE finality P-005. No merge/P-031 until P-030 DoD.
+NEXT_ELIGIBLE_WORK: P-030 source 3b390b69 E3 CI push 38684898226 SUCCESS 8/8, PR 38684893362 SUCCESS 8/8. Continue adaptive reserve/contingency decisions with grounded same-unit external commitments and P-023/P-025 outcome learning. Validate exact HEAD after docs; do not merge P-030 or start P-031 until DoD; E5/E6 external money P-005 unverified.
 
 ## P-030 — checkpoint de implementación 2026-10-14
 
@@ -211,3 +211,10 @@ La auditoría hasta DECISION_READY se conserva como historia en C0026; ya no des
 - Source `b91640e`, `deac222`, `74832e1`, `ac423a7`: generic `x402_fetch` now persists a canonical USDC financial effect before paid dispatch, stores signed-payment terms and nonce, does not turn HTTP 200 into settled `transactions`, exposes pending finality to agent feedback, and has duplicate-unknown/signer regressions.
 - P-010 already supports auto versus explicitly supervised planning; P-016 computer/browser/GUI and P-017 capability acquisition exist. No new human approval or duplicate permission authority was created. The default x402 domain allowlist remains scoped; broader service-provider delegation was NOT implemented in this block.
 - P-030 remains `EN_EJECUCIÓN`; provider authenticated LIVE and external P&L are unverified (P-005). The active segment has detailed evidence and next work.
+
+## P-030 — cost learning and financial exposure operationally wired (2026-10-14)
+
+- Source `3b390b69d1552d46a4ed8993b0a729dc2425ffb2` on `abos/p030-family-economics-treasury` (PR #75 DRAFT). Exact source CI push `38684898226` **SUCCESS 8/8**, PR `38684893362` **SUCCESS 8/8**; no merge, no real funds used.
+- `task_graph` measured estimate→actual deviations now feed the canonical planner adaptive context, preserving UNKNOWN defaults and separating `task_cost_cent` from credit/USDC/P&L. Both core and strategic reviewers use the same task cost owner and its recorded history; no mandatory cost percentage or approval introduced.
+- `financial_effects` pending USDC topups and generic service payments, credit obligations, and unclassified units are projected for canonical strategic review, not treated as liquid credit or paid expense. Both `orchestrator-core.ts` and the actual primary `orchestrator.ts` wiring were reconciled. Test-fixture evidence DDL and primary-path regression failure corrected on source prior to 8/8.
+- Remaining within P-030: evidence-backed dynamic reserve/contingency execution policy (not just reports), economic decision→outcome with authentic source and causal alternative review, and P-030 DoD integration. LIVE settlement/real revenues/cost metering remain unverified and P-005-owned.
