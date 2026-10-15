@@ -345,7 +345,7 @@ export function describeTreasuryReserveLearning(learning: TreasuryReserveLearnin
     `contradicted strategic paths=${learning.contradictedStrategicOutcomes}, ` +
     `inconclusive=${learning.inconclusive}, awaiting=${learning.awaitingOutcome}. ` +
     `locally reconciled reserved transfers=${learning.locallyReconciledReserveTransfersCreditsCents ?? "UNKNOWN"} credit cents (local ledger only); ` +
-    "These are causal strategy feedback, not independently verified provider settlement or reserve savings; " +
+    "These are causal strategy feedback, not measured reserve usage or independently verified provider settlement or reserve savings; " +
     "monetary adaptation still requires provider-observed same-unit costs and outcomes.";
 }
 
