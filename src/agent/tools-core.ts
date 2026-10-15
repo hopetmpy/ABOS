@@ -1287,6 +1287,7 @@ Model: ${ctx.inference.getDefaultModel()}
           task_commitments_credits_cents: { type: "integer" },
           opportunity_evidence: { type: "array", items: { type: "string" } },
           future_need_evidence: { type: "array", items: { type: "string" } },
+          bundle_economics_evidence: { type: "array", items: { type: "string" } },
           alternatives: { type: "array", items: {
             type: "object", properties: {
               id: { type: "string" }, costCreditsCents: { type: "integer" },
@@ -1327,6 +1328,7 @@ Model: ${ctx.inference.getDefaultModel()}
           futureNeedCreditsCents: args.future_need_credits_cents as number | undefined,
           opportunityEvidence: args.opportunity_evidence as string[] | undefined,
           futureNeedEvidence: args.future_need_evidence as string[] | undefined,
+          bundleEconomicsEvidence: args.bundle_economics_evidence as string[] | undefined,
           alternatives: args.alternatives as Array<{ id: string; costCreditsCents: number; evidence: string }> | undefined,
           risks: args.risks as Array<{ id: string; exposureCreditsCents: number; evidence: string }> | undefined,
           jointRiskExposureCreditsCents: args.joint_risk_exposure_credits_cents as number | undefined,
