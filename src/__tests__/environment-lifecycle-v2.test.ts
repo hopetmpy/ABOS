@@ -132,6 +132,11 @@ describe("Environment Execution & Lifecycle v2", () => {
         retentionPolicy: "ephemeral", requiredCapabilities: [],
       })).rejects.toThrow();
       expect(dispatches).toBe(1);
+      const restarted = new EnvironmentLifecycleManager(registry, new EnvironmentResourceStore(db));
+      const recovered = await restarted.reconcile("r-unknown");
+      expect(recovered.status).toBe("running");
+      expect(recovered.externalId).toBe("recovered-id");
+      expect(recovered.metadata.provisionNeedsReconciliation).toBe(false);
     } finally { db.close(); }
   });
 
