@@ -6,21 +6,21 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / CREDIT_ELIGIBILITY_P030_REVIEW_PR_CI_PENDING / LIVE_AWS_ISSUER_UNWIRED / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / ATOMIC_ACCOUNT_FINANCING_RECHECK_SOURCE_CI_PENDING / LIVE_AWS_ISSUER_UNWIRED / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-aws-credit-eligibility-review
+Current-Host-Branch: abos/p031-atomic-account-funding-recheck
 Host-Head-At-Audit-Open: 088de39896dcef837c7047c4c560e9cd0b7a29e8
 Last-Reconciled-Host-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
-Observed-Main-Head: cd4ff5037011461bc61f60efdf2588a710209c2c
-Last-Product-Head: cd4ff5037011461bc61f60efdf2588a710209c2c
-Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #98 38821766242 — SUCCESS 8/8
+Observed-Main-Head: d817c6ee5b509703f2d3259c44d268918b28f8e7
+Last-Product-Head: d817c6ee5b509703f2d3259c44d268918b28f8e7
+Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #99 38822618925 — SUCCESS 8/8
 Last-Completed-Plan: P-030
-Last-Completed-Merge: cd4ff5037011461bc61f60efdf2588a710209c2c
+Last-Completed-Merge: d817c6ee5b509703f2d3259c44d268918b28f8e7
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
@@ -507,3 +507,11 @@ NEXT_ELIGIBLE_WORK: run exact source CI then integrate if green; audit/adapt pro
 - R2: reading provider-owned `billing get-credits` is not sufficient to know whether a named AWS credit applies to this EC2 purchase, interval and terms. AWS CreditData carries `startDate`, `endDate`, `creditStatus`, `applicableProductNames`, `purchaseTypeApplications`, and in-flight-adjusted estimated balance; purchase type null/omitted is documented as all types, explicit nonmatching restrictions exclude this purchase. Source docs `https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_billing_CreditData.html`.
 - Source branch `abos/p031-aws-credit-eligibility-review`: enhance existing AWS observation to preserve activation date and null-vs-explicit purchase type restriction; extend **existing P-030 treasury-scenario owner** with `assessConditionalProviderCreditFit`. Possible match requires ENABLED, precise positive USD observed AND estimated remaining, future quoted service window fully within known credit validity, exact service/purchase eligibility; disabled, expired, mismatched, exhausted = not applicable; missing, incomplete or partially overlapping coverage = unknown. Returns **potentially_applicable**, never guaranteed cash offset. No aggregation or discount of full supplier price; P-030 provider procurement review can optionally request extra provider credits and show per-credit fit candidates, retaining `purchaseAuthorized=false` and `freeBeforeProposalCents=null`. No production paid dispatch, bills or live account claims. Source tests for all restrictions, unknown cases and no gross-cost reduction; CI PENDING.
 - P-031 EN_EJECUCIÓN, P-005 E5/E6 LIVE unknown; P-010 issuer for account USD/eligible credits remains unwired, and actual AWS supplier invoice/eligibility must be independently checked before any purchase. P-032 not started.
+
+## P-031 — PR #99 integrated, no double-spend from stale account-funding snapshots (2026-10-15)
+
+- PR #99 exact source `815ddc7907c1ee9c7b1dd495ab72222e36aa8110` completed source CI `38822618925` SUCCESS 8/8 (Node22/24 + Windows22/24, security, integrity, distribution), merged `main d817c6ee5b509703f2d3259c44d268918b28f8e7` confirmed GitHub HEAD. Independent exact-main push CI not observed.
+- R2 HARD: the P-031 source-only authorized procurement function reviewed P-030 externally observed same-account funds and individually valid P-010 operation permits, but **two different resource operations could consume the same still-valid funding snapshot without subtracting local obligations from one another**. Also a previously completed supplier charge might consume the snapshot yet be missing from the outstanding-only query. This defeats reserve/contingency accounting even though each individual operation passes.
+- Branch `abos/p031-atomic-account-funding-recheck`: in existing P-030 scenario require explicit source-backed `financing.observedAt`, fresh relative to evaluation time and preceding expiration; absent/future/malformed observation cannot be counted as free liquidity. Add read-only account/unit/provider snapshot exposure owner on the **existing P-030 financial_effects journal**; it conservatively holds all local unresolved intents, PLUS completed effects created since the last externally authenticated funding observation, while excluding different provider/account/unit. Unknown-account obligations pending OR created after the snapshot prevent confirming account-free funds; no false zero. Monetary summation uses exact BigInt cents. These are local accounting holds, not external provider invoices, and may conservatively overlap with supplier-observed liabilities.
+- P-031 authorized procurement source composes this owner into one local SQLite transaction: re-evaluate original P-030 reviewed funding with local account holds, fail before any provider action if combined commitment/contingency exceeds observed capital; atomically create/claim the canonical financial effect and mark the P-010 decision running. Revalidation stays local and cannot manufacture AWS account funds. Source tests: multiple distinct authorized resources competing against one funding observation, later settlement with no refreshed cash observation, separate accounts/currency isolation, unscoped effects, absent/future time, no provider side effect on blocked second/third attempt. Source CI PENDING. No new ledger, money cap or user approval. LIVE AWS and P-005 E5/E6 UNKNOWN.
+- NEXT: exact source CI 8/8 and merge if valid; then independently authenticated external provider funding and recurring contracts required for actual AWS economic issuer. P-031 remains EN_EJECUCIÓN; P-032 not started.
