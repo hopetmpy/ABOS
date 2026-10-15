@@ -141,6 +141,92 @@ describe("AwsEnvironmentProvider lifecycle", () => {
     expect(incomplete.evidence.join(" ")).toContain("paginated");
   });
 
+  it("explicitly observes account-owned AWS Billing credits without treating them as cash", async () => {
+    const calls: string[][] = [];
+    const runner: EnvironmentCommandRunner = async (_cmd, args) => {
+      calls.push(args);
+      if (args[0] === "sts") return ok(JSON.stringify({ Account: "123456789012" }));
+      if (args[0] === "budgets") return ok(JSON.stringify({ Budgets: [] }));
+      if (args[0] === "billing" && args[1] === "get-credits") return ok(JSON.stringify({
+        credits: [
+          {
+            creditId: "101", accountId: "123456789012", creditType: "Promotion",
+            creditStatus: "ENABLED", endDate: 1910000000,
+            remainingAmount: { currencyCode: "USD", currencyAmount: "28.50" },
+            estimatedAmount: { currencyCode: "USD", currencyAmount: "21.10" },
+            applicableProductNames: ["Amazon Elastic Compute Cloud"],
+            purchaseTypeApplications: ["OnDemand"],
+          },
+          {
+            creditId: "202", accountId: "123456789012", creditStatus: "DISABLED",
+            remainingAmount: { currencyCode: "USD", currencyAmount: "5.125" },
+            estimatedAmount: { currencyCode: "EUR", currencyAmount: "2.00" },
+            applicableProductNames: ["Amazon S3"],
+          },
+          {
+            creditId: "foreign", accountId: "999999999999",
+            remainingAmount: { currencyCode: "USD", currencyAmount: "1000.00" },
+          },
+        ],
+      }));
+      throw new Error("unexpected AWS credit query");
+    };
+    const provider = new AwsEnvironmentProvider({ runner });
+    const initial = await provider.observeEconomics();
+    expect(initial.providerCredits).toBeUndefined();
+    expect(calls.map(x => x[0])).toEqual(["sts", "budgets"]);
+    calls.length = 0;
+    const observed = await provider.observeEconomics({ includeProviderCredits: true });
+    expect(calls.map(x => x[0])).toEqual(["sts", "billing", "budgets"]);
+    const requested = calls[1];
+    expect(requested).toContain("--no-payer-account-flag");
+    expect(requested).toContain("123456789012");
+    expect(requested).toContain("--start-date");
+    expect(requested).toContain("us-east-1");
+    expect(observed.accountId).toBe("123456789012");
+    expect(observed.status).toBe("partial"); // A returned foreign-account record was excluded.
+    expect(observed.providerCredits).toHaveLength(2);
+    expect(observed.providerCredits![0]).toMatchObject({
+      creditId: "101", status: "ENABLED",
+      remainingUsdCents: 2850, estimatedRemainingUsdCents: 2110,
+      applicableProductNames: ["Amazon Elastic Compute Cloud"],
+      purchaseTypeApplications: ["OnDemand"],
+    });
+    expect(observed.providerCredits![1]).toMatchObject({
+      creditId: "202", status: "DISABLED",
+      remainingUsdCents: null, remainingRaw: "5.125",
+      estimatedRemainingUsdCents: null,
+    });
+    expect(observed.providerCredits![1]!.evidence.join(" ")).toContain("not verified");
+    expect(observed.spendableLiquidityUsdCents).toBeNull();
+    expect(observed.recurringCommitmentUsdCents).toBeNull();
+    expect(observed.procurementAuthority).toBe("not_established");
+    expect(observed.evidence.join(" ")).toContain("different or missing owning AWS account");
+  });
+
+  it("preserves partial credit observations when Billing permissions are missing or payload malformed", async () => {
+    for (const denied of [true, false]) {
+      const calls: string[][] = [];
+      const provider = new AwsEnvironmentProvider({
+        runner: async (_cmd, args) => {
+          calls.push(args);
+          if (args[0] === "sts") return ok(JSON.stringify({ Account: "123456789012" }));
+          if (args[0] === "billing") return denied
+            ? { exitCode: 255, stdout: "", stderr: "AccessDenied" }
+            : ok(JSON.stringify({ wrongShape: [] }));
+          if (args[0] === "budgets") return ok(JSON.stringify({ Budgets: [] }));
+          throw new Error("unexpected AWS query");
+        },
+      });
+      const observed = await provider.observeEconomics({ includeProviderCredits: true });
+      expect(observed.status).toBe("partial");
+      expect(observed.providerCredits).toEqual([]);
+      expect(observed.evidence.join(" ")).toContain("credit capital remains UNKNOWN");
+      expect(observed.spendableLiquidityUsdCents).toBeNull();
+      expect(calls.map(x => x[0])).toEqual(["sts", "billing", "budgets"]);
+    }
+  });
+
   it("provisions one tagged EC2 instance and waits for provider readiness", async () => {
     const calls: string[][] = [];
     const runner: EnvironmentCommandRunner = async (_command, args) => {
