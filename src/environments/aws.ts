@@ -9,6 +9,7 @@ import type {
   EnvironmentCollectionResult,
   EnvironmentCommandRunner,
   EnvironmentEstimate,
+  EnvironmentEconomicObservation,
   EnvironmentHealthResult,
   EnvironmentMutationResult,
   EnvironmentPreparationResult,
@@ -161,6 +162,98 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
    */
   hasNewProvisionEvaluator(): boolean {
     return typeof this.options.authorizeNewProvision === "function";
+  }
+
+  /**
+   * Explicit read-only AWS account/budget observation. AWS Budgets values may
+   * be scoped, overlapping or delayed: never sum them or treat a limit as
+   * spendable funds, a complete invoice or permission to create EC2.
+   * This method is intentionally not called by inspect() or the selector.
+   */
+  async observeEconomics(): Promise<EnvironmentEconomicObservation> {
+    const observedAt = new Date().toISOString();
+    const base: EnvironmentEconomicObservation = {
+      provider: this.id,
+      status: "unknown",
+      accountId: null,
+      observedAt,
+      budgets: [],
+      spendableLiquidityUsdCents: null,
+      recurringCommitmentUsdCents: null,
+      procurementAuthority: "not_established",
+      evidence: [
+        "AWS account budgets are cost-monitoring thresholds, not funds, credit balances, procurement mandates or full recurring billing terms.",
+      ],
+    };
+    const identity = await this.runner(
+      "aws", ["sts", "get-caller-identity", "--output", "json"], 15_000,
+    );
+    if (identity.exitCode !== 0) {
+      base.evidence.push("AWS STS account identity unavailable; account economics remain UNKNOWN.");
+      return base;
+    }
+    const accountId = parseJson<{ Account?: unknown }>(identity.stdout)?.Account;
+    if (typeof accountId !== "string" || !/^\d{12}$/.test(accountId)) {
+      base.evidence.push("AWS STS returned no verified 12-digit account identity.");
+      return base;
+    }
+    base.accountId = accountId;
+    base.status = "partial";
+    base.evidence.push("AWS STS caller account identity observed; payment and account liquidity not established.");
+    const result = await this.runner(
+      "aws", [
+        "budgets", "describe-budgets", "--account-id", accountId,
+        "--max-items", "100", "--output", "json",
+      ], 30_000,
+    );
+    if (result.exitCode !== 0) {
+      base.evidence.push("AWS Budgets observation unavailable or permission denied; no budget or spend asserted.");
+      return base;
+    }
+    const output = parseJson<Record<string, unknown>>(result.stdout);
+    if (!output || !Array.isArray(output.Budgets)) {
+      base.evidence.push("AWS Budgets response malformed; no budget or spend asserted.");
+      return base;
+    }
+    const budgets: EnvironmentEconomicObservation["budgets"] = [];
+    for (const item of output.Budgets) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+      const row = item as Record<string, unknown>;
+      if (row.BudgetType !== "COST") continue;
+      const limit = costAmount(row.BudgetLimit);
+      const calculated = row.CalculatedSpend &&
+        typeof row.CalculatedSpend === "object" && !Array.isArray(row.CalculatedSpend)
+        ? row.CalculatedSpend as Record<string, unknown>
+        : {};
+      const actual = costAmount(calculated.ActualSpend);
+      budgets.push({
+        name: typeof row.BudgetName === "string" ? row.BudgetName : "(unnamed cost budget)",
+        period: typeof row.TimeUnit === "string" ? row.TimeUnit : null,
+        budgetLimitUsdCents: limit.cents,
+        reportedSpendUsdCents: actual.cents,
+        reportedSpendRaw: actual.raw,
+        evidence: [
+          "AWS Budgets COST threshold and reported spend only; time window/cost filters may not cover the whole AWS account.",
+          ...(limit.raw !== null && limit.cents === null
+            ? ["Limit has unsupported precision/unit; USD cents UNKNOWN."] : []),
+          ...(actual.raw !== null && actual.cents === null
+            ? ["Reported spend has finer precision/non-USD unit; USD cents UNKNOWN."] : []),
+        ],
+      });
+    }
+    base.budgets = budgets;
+    base.status = "observed";
+    base.evidence.push(
+      `AWS Budgets COST entries observed=${budgets.length}; no aggregation across possibly overlapping budgets.`,
+    );
+    if (typeof output.NextToken === "string" && output.NextToken.length > 0) {
+      base.status = "partial";
+      base.evidence.push("AWS Budgets response is paginated/truncated; other cost budgets may exist.");
+    }
+    if (budgets.length === 0) {
+      base.evidence.push("No COST budget returned is not proof of zero AWS spend.");
+    }
+    return base;
   }
 
   getConfiguredIamInstanceProfile(
@@ -2168,6 +2261,30 @@ function metadataArchitecture(
   value: unknown,
 ): "x86_64" | "arm64" | null {
   return value === "x86_64" || value === "arm64" ? value : null;
+}
+
+/**
+ * Preserve AWS Budgets decimal precision: cents are known only when the USD
+ * amount is exactly representable without rounding. Never convert usage,
+ * non-USD, scientific notation, negative values or oversized numbers.
+ */
+function costAmount(value: unknown): { cents: number | null; raw: string | null } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { cents: null, raw: null };
+  }
+  const obj = value as Record<string, unknown>;
+  const raw = typeof obj.Amount === "string" ? obj.Amount : null;
+  if (raw === null) return { cents: null, raw: null };
+  if (obj.Unit !== "USD") return { cents: null, raw };
+  const match = /^(0|[1-9]\d*)(?:\.(\d+))?$/.exec(raw);
+  if (!match) return { cents: null, raw };
+  const fraction = match[2] ?? "";
+  if (fraction.length > 2 && !/^0*$/.test(fraction.slice(2))) {
+    return { cents: null, raw };
+  }
+  const cents = BigInt(match[1]!) * 100n +
+    BigInt((fraction + "00").slice(0, 2));
+  return { cents: cents <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(cents) : null, raw };
 }
 
 function positiveNumber(value: unknown): number | null {

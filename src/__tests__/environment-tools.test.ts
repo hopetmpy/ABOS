@@ -27,6 +27,58 @@ function provider(): EnvironmentProvider {
   };
 }
 
+describe("environment_economic_evidence tool", () => {
+  it("discovers provider-neutral read-only economics without purchase authority", async () => {
+    const registry = new EnvironmentRegistry();
+    let observed = 0;
+    registry.register({
+      ...provider(),
+      async observeEconomics() {
+        observed += 1;
+        return {
+          provider: "mock",
+          status: "observed" as const,
+          accountId: "account-test",
+          observedAt: new Date(0).toISOString(),
+          budgets: [],
+          spendableLiquidityUsdCents: null,
+          recurringCommitmentUsdCents: null,
+          procurementAuthority: "not_established" as const,
+          evidence: ["Threshold is not liquidity."],
+        };
+      },
+    });
+    const tool = createEnvironmentTools(registry).find(
+      (entry) => entry.name === "environment_economic_evidence",
+    )!;
+    expect(tool).toBeDefined();
+    const result = await tool.execute({ environment: "mock" }, {} as any);
+    expect(observed).toBe(1);
+    expect(result).toContain('"procurementAuthority": "not_established"');
+    expect(result).toContain('"spendableLiquidityUsdCents": null');
+    expect(result).toContain("Threshold is not liquidity");
+  });
+
+  it("does not fabricate economics for providers without adapter or failed probes", async () => {
+    const registry = new EnvironmentRegistry();
+    registry.register(provider());
+    registry.register({
+      ...provider(), id: "broken",
+      observeEconomics: async () => { throw new Error("sensitive secret"); },
+    });
+    const tool = createEnvironmentTools(registry).find(
+      (entry) => entry.name === "environment_economic_evidence",
+    )!;
+    expect(await tool.execute({ environment: "mock" }, {} as any))
+      .toContain("UNAVAILABLE");
+    const failed = await tool.execute({ environment: "broken" }, {} as any);
+    expect(failed).toContain("UNKNOWN");
+    expect(failed).not.toContain("sensitive secret");
+    expect(await tool.execute({ environment: "missing" }, {} as any))
+      .toContain("BLOCKED");
+  });
+});
+
 describe("environment_exec tool", () => {
   it("routes argv to the selected registered provider without shell interpolation", async () => {
     const registry = new EnvironmentRegistry();

@@ -52,6 +52,95 @@ function resource(
 }
 
 describe("AwsEnvironmentProvider lifecycle", () => {
+  it("observes AWS Budgets COST evidence without inventing provider liquidity or authority", async () => {
+    const calls: string[][] = [];
+    const provider = new AwsEnvironmentProvider({
+      runner: async (_command, args) => {
+        calls.push(args);
+        if (args[0] === "sts") {
+          return ok(JSON.stringify({ Account: "123456789012" }));
+        }
+        if (args[0] === "budgets" && args[1] === "describe-budgets") {
+          return ok(JSON.stringify({
+            Budgets: [
+              { BudgetType: "COST", BudgetName: "Monthly all-in",
+                TimeUnit: "MONTHLY",
+                BudgetLimit: { Amount: "100.00", Unit: "USD" },
+                CalculatedSpend: { ActualSpend: { Amount: "35.20", Unit: "USD" } } },
+              { BudgetType: "COST", BudgetName: "EC2 subset",
+                TimeUnit: "MONTHLY",
+                BudgetLimit: { Amount: "50.00", Unit: "USD" },
+                CalculatedSpend: { ActualSpend: { Amount: "4.125", Unit: "USD" } } },
+              { BudgetType: "USAGE", BudgetName: "compute hours",
+                BudgetLimit: { Amount: "100", Unit: "Hrs" } },
+            ],
+          }));
+        }
+        throw new Error(`unexpected AWS call ${args.join(" ")}`);
+      },
+    });
+    const observed = await provider.observeEconomics();
+    expect(observed.status).toBe("observed");
+    expect(observed.accountId).toBe("123456789012");
+    expect(observed.budgets).toHaveLength(2);
+    expect(observed.budgets[0]).toMatchObject({
+      budgetLimitUsdCents: 10_000,
+      reportedSpendUsdCents: 3_520,
+    });
+    expect(observed.budgets[1]).toMatchObject({
+      budgetLimitUsdCents: 5_000,
+      reportedSpendUsdCents: null,
+      reportedSpendRaw: "4.125",
+    });
+    expect(observed.spendableLiquidityUsdCents).toBeNull();
+    expect(observed.recurringCommitmentUsdCents).toBeNull();
+    expect(observed.procurementAuthority).toBe("not_established");
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toEqual([
+      "budgets", "describe-budgets", "--account-id", "123456789012",
+      "--max-items", "100", "--output", "json",
+    ]);
+  });
+
+  it("preserves UNKNOWN when account identity, budgets permissions or coverage are incomplete", async () => {
+    const noIdentity = new AwsEnvironmentProvider({
+      runner: async () => ({ stdout: "", stderr: "unauthorized", exitCode: 1 }),
+    });
+    const unknown = await noIdentity.observeEconomics();
+    expect(unknown.status).toBe("unknown");
+    expect(unknown.accountId).toBeNull();
+    expect(unknown.budgets).toEqual([]);
+
+    const noBudgetPermission = new AwsEnvironmentProvider({
+      runner: async (_cmd, args) => args[0] === "sts"
+        ? ok(JSON.stringify({ Account: "123456789012" }))
+        : { stdout: "", stderr: "AccessDenied", exitCode: 255 },
+    });
+    const partial = await noBudgetPermission.observeEconomics();
+    expect(partial.status).toBe("partial");
+    expect(partial.accountId).toBe("123456789012");
+    expect(partial.budgets).toEqual([]);
+    expect(partial.evidence.join(" ")).toContain("permission denied");
+
+    const paginated = new AwsEnvironmentProvider({
+      runner: async (_cmd, args) => args[0] === "sts"
+        ? ok(JSON.stringify({ Account: "123456789012" }))
+        : ok(JSON.stringify({
+            Budgets: [{ BudgetType: "COST", BudgetName: "not cash",
+              BudgetLimit: { Amount: "999", Unit: "EUR" },
+              CalculatedSpend: { ActualSpend: { Amount: "0", Unit: "USD" } },
+            }],
+            NextToken: "another-page",
+          })),
+    });
+    const incomplete = await paginated.observeEconomics();
+    expect(incomplete.status).toBe("partial");
+    expect(incomplete.budgets[0].budgetLimitUsdCents).toBeNull();
+    expect(incomplete.budgets[0].reportedSpendUsdCents).toBe(0);
+    expect(incomplete.spendableLiquidityUsdCents).toBeNull();
+    expect(incomplete.evidence.join(" ")).toContain("paginated");
+  });
+
   it("provisions one tagged EC2 instance and waits for provider readiness", async () => {
     const calls: string[][] = [];
     const runner: EnvironmentCommandRunner = async (_command, args) => {

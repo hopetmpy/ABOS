@@ -171,6 +171,40 @@ export function createEnvironmentTools(
     },
   ];
 
+  // Explicit read-only economic observation for any provider that implements
+  // the open lifecycle contract; it never grants spending authority.
+  tools.push({
+    name: "environment_economic_evidence",
+    description:
+      "Observe provider-attributed account/budget cost evidence on demand. " +
+      "Budget thresholds, reported spend, Conway credits and usable liquidity are separate; " +
+      "this tool never approves or executes a purchase.",
+    category: "environment",
+    riskLevel: "caution",
+    parameters: {
+      type: "object",
+      properties: {
+        environment: { type: "string", description: "Registered provider ID." },
+      },
+      required: ["environment"],
+    },
+    execute: async (args) => {
+      const environment = String(args.environment ?? "").trim();
+      if (!environment) return "BLOCKED: environment is required.";
+      const provider = registry.get(environment);
+      if (!provider) return `BLOCKED: unknown environment "${environment}".`;
+      if (!provider.observeEconomics) {
+        return `UNAVAILABLE: ${environment} has no economic observation adapter yet; not evidence that external economics are impossible.`;
+      }
+      try {
+        const result = await provider.observeEconomics();
+        return sanitizeProviderOutput(JSON.stringify(result, null, 2));
+      } catch {
+        return `UNKNOWN: ${environment} economic observation failed; no account balance, budget or spending authority can be inferred.`;
+      }
+    },
+  });
+
   if (options.selector) {
     tools.push({
       name: "environment_select",
