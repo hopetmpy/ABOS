@@ -28,6 +28,7 @@ import { generateTodoMd } from "./attention.js";
 import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import { reviewPlan } from "./plan-mode.js";
 import { buildPlannerContext, getNextPlannerVersion, persistPlannerArtifacts } from "./planner-context.js";
+import { getTaskCostCalibration } from "../economics/treasury-projection.js";
 import { AgentWorkspace } from "./workspace.js";
 import {
   getActiveGoals,
@@ -680,6 +681,11 @@ export class Orchestrator {
         autoBudgetThreshold: 5000,
         consensusCriticRole: "reviewer",
         reviewTimeoutMs: 1800000,
+        // This is canonical task-cost evidence, not a spending authorization.
+        // P-025 owns the substantive strategic review; no manual gate is added.
+        reviewContext: {
+          taskCostCalibration: getTaskCostCalibration(this.params.db),
+        },
       });
 
       if (result.approved) {
