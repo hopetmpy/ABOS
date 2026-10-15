@@ -74,6 +74,11 @@ export interface AwsEc2ProcurementDecision {
   allowed: boolean;
   policyDecisionId?: string | null;
   providerAccountId?: string | null;
+  /** Scope a one-time mandate to the actual tracked resource and EC2 shape. */
+  authorizedResourceId?: string | null;
+  authorizedInstanceType?: string | null;
+  authorizedRegion?: string | null;
+  expiresAt?: string | null;
   unit?: string | null;
   totalCommitmentCents?: number | null;
   billingTermsEvidence?: string[];
@@ -535,8 +540,13 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       );
     }
     const accountId = parseJson<{ Account?: string }>(identity.stdout)?.Account?.trim();
-    if (!accountId) {
+    if (!accountId || !/^\d{12}$/.test(accountId)) {
       throw new AwsEc2ProcurementNotDispatchedError("AWS EC2 procurement account identity is UNKNOWN; no instance was requested.");
+    }
+    if (!region) {
+      throw new AwsEc2ProcurementNotDispatchedError(
+        "AWS EC2 procurement region is UNKNOWN; scoped purchase authorization cannot be checked before dispatch.",
+      );
     }
     let authority: AwsEc2ProcurementDecision;
     try {
@@ -555,13 +565,19 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     if (!authority?.allowed ||
         !authority.policyDecisionId?.trim() ||
         authority.providerAccountId?.trim() !== accountId ||
+        authority.authorizedResourceId !== request.resourceId ||
+        authority.authorizedInstanceType !== instanceType ||
+        authority.authorizedRegion !== region ||
+        typeof authority.expiresAt !== "string" ||
+        !Number.isFinite(Date.parse(authority.expiresAt)) ||
+        Date.parse(authority.expiresAt) <= Date.now() ||
         authority.unit !== "usd_cent" ||
         typeof authority.totalCommitmentCents !== "number" ||
         !Number.isSafeInteger(authority.totalCommitmentCents) ||
         authority.totalCommitmentCents < 0 ||
         !authority.billingTermsEvidence?.some((entry) => entry.trim())) {
       throw new AwsEc2ProcurementNotDispatchedError(
-        "AWS EC2 economic procurement authorization is absent, incomplete, unscoped to the observed account, or missing evidenced USD commitment/billing terms. No run-instances request was dispatched." +
+        "AWS EC2 economic procurement authorization is absent, incomplete, expired, inconsistent with the resource/instance/region/account, or missing evidenced USD commitment/billing terms. No run-instances request was dispatched." +
         (authority?.reason ? ` Reason: ${authority.reason}` : ""),
       );
     }
@@ -697,6 +713,10 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       metadata: {
         procurementPolicyDecisionId: authority.policyDecisionId,
         procurementAccountId: accountId,
+        procurementAuthorizedResourceId: request.resourceId,
+        procurementAuthorizedInstanceType: instanceType,
+        procurementAuthorizedRegion: region,
+        procurementAuthorizationExpiresAt: authority.expiresAt,
         procurementCostUnit: authority.unit,
         procurementCommittedCents: authority.totalCommitmentCents,
         procurementBillingTermsEvidence: authority.billingTermsEvidence,

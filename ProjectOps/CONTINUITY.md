@@ -6,21 +6,21 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / AWS_ECONOMIC_OBSERVATION_PR_CI_PENDING / ACCOUNT_MANDATE_STILL_UNKNOWN / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / AWS_EXACT_MANDATE_SCOPE_PR_CI_PENDING / ACCOUNT_FINANCING_STILL_UNKNOWN / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-provider-economic-observation
+Current-Host-Branch: abos/p031-aws-mandate-scope-replay
 Host-Head-At-Audit-Open: 088de39896dcef837c7047c4c560e9cd0b7a29e8
 Last-Reconciled-Host-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
-Observed-Main-Head: 2c67b7d6c461d1270ad3db69ba7899eb899a7cdd
-Last-Product-Head: 2c67b7d6c461d1270ad3db69ba7899eb899a7cdd
-Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #85 38805411003 — SUCCESS 8/8
+Observed-Main-Head: 4979914a671bf662968b29479620c2b526597cc5
+Last-Product-Head: 4979914a671bf662968b29479620c2b526597cc5
+Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #86 38807703485 — SUCCESS 8/8
 Last-Completed-Plan: P-030
-Last-Completed-Merge: 2c67b7d6c461d1270ad3db69ba7899eb899a7cdd
+Last-Completed-Merge: 4979914a671bf662968b29479620c2b526597cc5
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
@@ -407,3 +407,10 @@ PR #85 (ProjectOps checkpoint after PR #84) merged at `main 2c67b7d6c461d1270ad3
 Current isolated branch `abos/p031-provider-economic-observation` implements **read-only, explicitly invoked** provider economic evidence using the existing `EnvironmentProvider` open interface, AWS STS account identity and AWS Budgets COST rows. It distinguishes budget threshold vs reported spend vs unknown liquidity vs unknown recurring commitment; USD values convert to cents only when exact, never FX/rounding; overlapping COST budgets are never summed; missing identity, permission, pagination and non-USD/fractional-cent amounts preserve UNKNOWN/PARTIAL. `environment_economic_evidence` surfaces this for existing agent tools; no auto-polling in inspection, no payment, no new ledger. Source tests written; **exact-head CI PENDING**. AWS Budgets values are provider observations, not invoice finality, guaranteed free liquidity or proof of P-010/P-025 approval. No purchases or AWS live account access in this work.
 
 NEXT_ELIGIBLE_WORK: verify PR exact CI and merge if all green; observe real account data only under suitable permissions (P-005), then map independent AWS account financing + full recurring bill terms into existing treasury/policy identity, wire the trusted `authorizeNewProvision` callback without inventing liquidity or threshold-based creator approval. Keep provider-side purchase gate, reconcile ambiguous outcomes, and audit costs of AWS query APIs before deploying an automated polling cadence. Refer to C0027.
+
+## P-031 — PR #86 integrated and AWS mandate scope source branch (2026-10-15)
+
+- PR #86 final source `69cffe613da33523f497d67cec232c0b0dbff854`, exact source CI run `38807703485` SUCCESS 8/8, merged to `main 4979914a671bf662968b29479620c2b526597cc5`. Postmerge main CI NOT independently retrieved through connector.
+- Existing `environment_economic_evidence` tool now exposes explicitly requested STS + AWS COST budget observations without treating monitored budgets/spend as free USD balance or a purchase mandate. No LIVE AWS invocation under this session.
+- Follow-up R2 causal source gap: `AwsEc2ProcurementDecision` previously attested account+USD total but did not bind an authorization to the **specific EC2 resource id, instance type, region and expiry**. A stale/mis-scoped decision can be reused if a trusted callback returns the wrong record. Branch `abos/p031-aws-mandate-scope-replay` requires that exact scope at provider dispatch, and persists authorization identity/expiry with resource provenance; missing resolution/expired scope -> definitely not dispatched, not fictitious provider UNKNOWN. Added negative variants and positive lifecycle regression; source CI PENDING. This is not P-010/030 mandate issuance or financing verification.
+- Next: verify scoped PR exact CI/merge; then actually source provider-account economic authority from verified financing + recurring supplier terms, bind to P-010/P-025/P-030 policy lifecycle, guard repeated purchase/reconciliation without parallel ledgers. P-031 EN_EJECUCIÓN; P-005 E5/E6 LIVE UNKNOWN.
