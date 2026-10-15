@@ -216,7 +216,7 @@ export function createEnvironmentTools(
       "Provider economic observations are used for identity only; AWS budget limits are not financing. " +
       "This is a read-only preliminary scenario, never permission to buy.",
     category: "environment",
-    riskLevel: "safe",
+    riskLevel: "caution",
     parameters: {
       type: "object",
       properties: {
