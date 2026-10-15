@@ -355,3 +355,51 @@ describe("P-030 adaptive-context economic history persistence", () => {
     expect(getTreasuryReserveSnapshot(d.raw).totalCreditsCents).toBe(0);
   });
 });
+
+describe("P-030 P-025/P-023 cross-authority physical recovery", () => {
+  it("reopens actual SQLite and retains reviewed reserve decision plus later P-023 learning exactly once", async () => {
+    const dir=fs.mkdtempSync(path.join(os.tmpdir(),"abos-p030-p023-recovery-"));
+    dirs.push(dir);
+    const filename=path.join(dir,"state.db");
+    const first=createDatabase(filename);
+    open.push(first);
+    const timestamp=new Date().toISOString();
+    first.raw.prepare("INSERT INTO goals (id,title,description,status,created_at) VALUES (?,?,?,?,?)")
+      .run("g-recovery","Strategy","Economic learning","active",timestamp);
+    const candidate={
+      goalId:"g-recovery",taskId:"t-recovery",
+      hypothesis:"Reserved downside is adequate",
+      strategy:"Execute validated strategy",assumptions:["Provider available"],
+      requiredCapabilities:[],sequence:["Reserve","Observe"],expectedOutcome:"Delivery confirmed",
+    };
+    const engine=new AdaptivePathEngine(first.raw);
+    const selected=engine.selectCandidate(candidate,{provider:"observed"}).path;
+    engine.store.bindTask({goalId:"g-recovery",taskId:"t-recovery",pathId:selected.id});
+    first.raw.prepare("INSERT OR REPLACE INTO kv (key,value,updated_at) VALUES (?,?,datetime('now'))")
+      .run("orchestrator.review_feedback.g-recovery",
+        `Strategic plan approved ; materialized_path=${selected.id}`);
+    runWithEvidenceContext(
+      {correlationId:"goal:g-recovery",goalId:"g-recovery",taskId:"t-recovery"},
+      ()=>setTreasuryReserve(first,alloc("recovery-op","risk-recovery",175)),
+    );
+    engine.recordSuccess({
+      candidate,pathId:selected.id,markPathSucceeded:true,
+      evidence:["terminally observed output"],conditions:{provider:"observed"},
+    });
+    const before=getTreasuryReserveLearning(first.raw);
+    expect(before.reviewedPathLinked).toBe(1);
+    expect(before.confirmedStrategicOutcomes).toBe(1);
+    first.close();
+
+    const second=createDatabase(filename);
+    open.push(second);
+    const after=getTreasuryReserveLearning(second.raw);
+    expect(after).toEqual(before);
+    expect(setTreasuryReserve(second,alloc("recovery-op","risk-recovery",175)).applied).toBe(false);
+    expect(getTreasuryReserveLearning(second.raw)).toEqual(before);
+    expect((await buildPlannerContext({db:second.raw})).adaptiveContext)
+      .toContain("confirmed strategic paths=1");
+    expect(getTreasuryReserveSnapshot(second.raw).totalCreditsCents).toBe(175);
+    expect((second.raw.prepare("SELECT count(*) AS n FROM transactions").get() as {n:number}).n).toBe(0);
+  });
+});
