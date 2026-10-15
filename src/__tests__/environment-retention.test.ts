@@ -118,14 +118,17 @@ describe("EnvironmentRetentionCoordinator", () => {
       lifecycle.resources.create({
         provider: "cloud", type: "compute", goalId: "g-uncertain",
         taskId: "t-uncertain", status: "unknown", retentionPolicy: "ephemeral",
-        metadata: { provisionNeedsReconciliation: true },
+        metadata: { provisionNeedsReconciliation: true, artifactCollectionState: "pending", remoteArtifacts: ["/tmp/uncollected.log"] },
       });
       const retention = new EnvironmentRetentionCoordinator(db, registry, lifecycle);
       const outcome = await retention.sweep();
       expect(outcome.pendingObservation).toBe(1);
+      expect(outcome.artifactHolds).toBe(0);
       expect(outcome.destroyAttempts).toBe(0);
       expect(destroys).toBe(0);
       observed = true;
+      const prior = lifecycle.resources.list()[0]!;
+      lifecycle.resources.applyMutation(prior.id, { metadata: { artifactCollectionState: "collected" } });
       const settled = await retention.sweep();
       expect(settled.destroyAttempts).toBe(1);
       expect(settled.released).toBe(1);
