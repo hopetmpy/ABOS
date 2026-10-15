@@ -55,6 +55,10 @@ export interface EnvironmentToolingOptions {
    * is assembled. Returns the single runtime mobility authority when ready.
    */
   getMobility?: () => EnvironmentMobilityCoordinator | null;
+  /** Read-only P-025 Orchestrator receipt; no model-provided path can attest itself. */
+  getReviewedTaskPath?: (taskId: string) => {
+    goalId: string; pathId: string; evidence: string[];
+  } | null;
 }
 
 export function createEnvironmentTools(
@@ -222,6 +226,7 @@ export function createEnvironmentTools(
       properties: {
         environment: { type: "string" },
         unit: { type: "string", description: "Explicit currency unit (for example usd_cent)." },
+        task_id: { type: "string", description: "Optional canonical task ID whose reviewed P-025 path must be independently checked." },
         resource_need_evidence: { type: "array", items: { type: "string" } },
         one_time_cents: { type: ["number", "null"] },
         recurring_cents_per_period: { type: ["number", "null"] },
@@ -258,6 +263,11 @@ export function createEnvironmentTools(
         // Caller-supplied model numbers never become independently observed
         // financing. Even with Budgets present, UNKNOWN is correct.
         const unit = String(args.unit ?? "").trim();
+        const taskId = typeof args.task_id === "string"
+          ? args.task_id.trim() : "";
+        const pathReceipt = taskId && options.getReviewedTaskPath
+          ? options.getReviewedTaskPath(taskId)
+          : null;
         const rawAlternatives = Array.isArray(args.alternatives) ? args.alternatives : [];
         const alternatives: NonNullable<ProviderProcurementScenarioInput["alternatives"]> =
           rawAlternatives.filter((x): x is Record<string, unknown> =>
@@ -272,7 +282,10 @@ export function createEnvironmentTools(
           provider: id,
           accountId: observed.accountId,
           unit,
-          resourceNeedEvidence: strings(args.resource_need_evidence),
+          resourceNeedEvidence: [
+            ...strings(args.resource_need_evidence),
+            ...(pathReceipt?.evidence ?? []),
+          ],
           alternatives,
           noAlternativeEvidence: strings(args.no_alternative_evidence),
           cost: {
@@ -298,6 +311,15 @@ export function createEnvironmentTools(
         return sanitizeProviderOutput(JSON.stringify({
           observationStatus: observed.status,
           accountId: observed.accountId,
+          reviewedStrategicPath: pathReceipt
+            ? { goalId: pathReceipt.goalId, pathId: pathReceipt.pathId,
+                taskId }
+            : null,
+          strategicPathCondition: !taskId
+            ? "No task id supplied: this is an exploratory scenario, not reviewed path evidence."
+            : !pathReceipt
+              ? "P-025 reviewed binding for this exact task is unverified or stale."
+              : "P-025 path provenance observed, not a purchase permit.",
           // No budget amount is allowed to flow as verified cash.
           scenario: review,
           purchaseAuthorized: false,

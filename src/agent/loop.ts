@@ -76,6 +76,7 @@ import {
 import {
   Orchestrator,
   calculateTaskFundingCents,
+  getReviewedTaskPathReceipt,
 } from "../orchestration/orchestrator.js";
 import { PlanModeController } from "../orchestration/plan-mode.js";
 import { generateTodoMd } from "../orchestration/attention.js";
@@ -355,6 +356,7 @@ export async function runAgentLoop(
     selector: environmentSelector,
     lifecycle: environmentLifecycle,
     getMobility: () => environmentMobility,
+    getReviewedTaskPath: (taskId) => getReviewedTaskPathReceipt(db.raw, taskId),
   });
   const skillEvolutionTools = createSkillEvolutionTools();
   const skillEvolution = new SkillEvolutionEngine(db.raw);
