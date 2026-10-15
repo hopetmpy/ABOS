@@ -17,6 +17,8 @@ export interface TreasuryScenarioInput {
   futureNeedCreditsCents?: number | null;
   opportunityEvidence?: string[];
   futureNeedEvidence?: string[];
+  /** Evidence of bundle savings/reliability when proposed spend exceeds measured total demand. */
+  bundleEconomicsEvidence?: string[];
   alternatives?: Array<{ id: string; costCreditsCents: number; evidence: string }>;
   risks?: TreasuryRiskScenario[];
   /** Joint exposure, validated in the same credit unit rather than guessed. */
@@ -84,6 +86,7 @@ export function assessTreasuryScenario(
     }
   }
   const futureEvidence = uniqueEvidence(input.futureNeedEvidence);
+  const bundleEvidence = uniqueEvidence(input.bundleEconomicsEvidence);
   const conditions: string[] = [];
 
   if (evidence.length === 0) conditions.push("Benefit or obligation evidence is absent; a price or wallet balance does not prove value.");
@@ -92,10 +95,22 @@ export function assessTreasuryScenario(
   if (immediate === null) {
     conditions.push("Immediate required capacity is unmeasured; cannot discriminate procurement size.");
   } else if (proposal > immediate) {
-    if (future === null || futureEvidence.length === 0) {
-      conditions.push("Proposal exceeds immediate need; future use or bundle economics require independent evidence.");
+    // An assertion that SOME future demand exists does not support an arbitrarily
+    // oversized purchase. Quantify the uncovered surplus in the same credit unit,
+    // while allowing evidence-based bundle economics rather than a fixed cap.
+    const surplus = proposal - immediate;
+    if (future === null || future === 0 || futureEvidence.length === 0) {
+      conditions.push("Proposal exceeds immediate need; future use or bundle economics require measured future demand and independent evidence.");
     } else {
-      evidence.push("Additional future use asserted in the same credit unit: " + future + " cents.");
+      evidence.push("Additional future use asserted in the same credit unit: " + future + " cents; evidence=" + futureEvidence.join(" | "));
+      if (future < surplus) {
+        if (bundleEvidence.length === 0) {
+          conditions.push("Measured future demand does not cover the procurement surplus; independently supported bundle economics or additional demand evidence are required.");
+        } else {
+          evidence.push("Bundle economics offered for the uncovered procurement surplus of " + (surplus - future) +
+            " credit cents; evidence=" + bundleEvidence.join(" | "));
+        }
+      }
     }
   }
 
