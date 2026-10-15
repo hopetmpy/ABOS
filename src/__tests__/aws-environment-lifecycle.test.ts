@@ -6,6 +6,10 @@ import { describe, expect, it } from "vitest";
 import {
   AwsEnvironmentProvider,
 } from "../environments/aws.js";
+import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
+import { EnvironmentResourceStore } from "../environments/resource-store.js";
+import { EnvironmentRegistry } from "../environments/registry.js";
+import { createTestDb } from "./mocks.js";
 import type {
   CommandResult,
   EnvironmentCommandRunner,
@@ -198,6 +202,60 @@ describe("AwsEnvironmentProvider lifecycle", () => {
         "economic procurement authorization is absent",
       );
       expect(calls.some((args) => args[0] === "ec2" && args[1] === "run-instances")).toBe(false);
+    }
+  });
+
+  it("records rejected-before-dispatch AWS procurement as failed, not a ghost billable UNKNOWN", async () => {
+    const db = createTestDb();
+    try {
+      const registry = new EnvironmentRegistry();
+      let awsCalls = 0;
+      registry.register(new AwsEnvironmentProvider({
+        runner: async () => {
+          awsCalls += 1;
+          return ok("{}");
+        },
+        defaultRegion: "us-east-1",
+        defaultImageId: "ami-123",
+        defaultInstanceType: "t3.micro",
+      }));
+      const store = new EnvironmentResourceStore(db.raw);
+      const lifecycle = new EnvironmentLifecycleManager(registry, store);
+      await expect(lifecycle.provision("aws", {
+        resourceId: "before-dispatch-denied",
+        resourceType: "ec2",
+        retentionPolicy: "ephemeral",
+        requiredCapabilities: ["remote compute"],
+        goalId: "goal-1",
+        taskId: "task-1",
+      })).rejects.toMatchObject({ externalEffectNotDispatched: true });
+      expect(awsCalls).toBe(0);
+      const denied = store.get("before-dispatch-denied");
+      expect(denied?.status).toBe("failed");
+      expect(denied?.externalId).toBeNull();
+      expect(denied?.metadata.provisionNeedsReconciliation).toBe(false);
+
+      // A timeout AFTER a potential provider dispatch has different semantics.
+      registry.register({
+        id: "unknown-remote",
+        inspect: async () => ({
+          id: "unknown-remote", label: "Unknown remote", availability: "available",
+          capabilities: [], constraints: [], evidence: [],
+          observedAt: new Date().toISOString(),
+        }),
+        provision: async () => { throw new Error("timeout after provider may create"); },
+      });
+      await expect(lifecycle.provision("unknown-remote", {
+        resourceId: "after-dispatch-unknown",
+        resourceType: "vm",
+        retentionPolicy: "ephemeral",
+        requiredCapabilities: [],
+      })).rejects.toThrow("timeout");
+      const unknown = store.get("after-dispatch-unknown");
+      expect(unknown?.status).toBe("unknown");
+      expect(unknown?.metadata.provisionNeedsReconciliation).toBe(true);
+    } finally {
+      db.close();
     }
   });
 
