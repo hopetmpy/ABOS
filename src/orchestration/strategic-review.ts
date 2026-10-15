@@ -465,6 +465,18 @@ export function assessStrategicPlan(
         "do not treat zero-defaults as measured savings.",
       );
     }
+    if (history.observedActualsWithoutEstimate) {
+      conditions.push(
+        `${history.observedActualsWithoutEstimate} terminal tasks have an observed actual cost ` +
+        "without an estimated baseline; no prediction→outcome comparison is valid for them.",
+      );
+    }
+    if (history.invalidCostSamples) {
+      conditions.push(
+        `${history.invalidCostSamples} terminal tasks have invalid negative task-cost values ` +
+        "and are excluded from reserve calibration pending source correction.",
+      );
+    }
   }
 
   if (context.treasuryReview) {

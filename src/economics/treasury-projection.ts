@@ -44,6 +44,10 @@ export interface TaskCostCalibration {
   observedOverrunTaskCostCents?: number | null;
   largestObservedOverrunTaskCostCents?: number | null;
   observedOverrunSamples?: number;
+  /** Observed terminal cost exists, but no positive prior estimate is available. */
+  observedActualsWithoutEstimate?: number;
+  /** Invalid negative task costs are excluded and surfaced, never netted away. */
+  invalidCostSamples?: number;
   authority: "local_task_graph";
   /** No cross-unit conversion into Conway credits or external P&L. */
   unit: "task_cost_cent";
@@ -77,22 +81,26 @@ export function getTaskCostCalibration(db: Database.Database): TaskCostCalibrati
   // realized zero spending. Exclude those tasks from measured comparisons.
   const history = db.prepare(
     `SELECT
-       COALESCE(SUM(CASE WHEN actual_cost_cents > 0 THEN 1 ELSE 0 END),0) AS comparable,
-       COALESCE(SUM(CASE WHEN actual_cost_cents = 0 THEN 1 ELSE 0 END),0) AS unobserved,
-       COALESCE(SUM(CASE WHEN actual_cost_cents > 0 THEN estimated_cost_cents ELSE 0 END),0) AS estimate,
-       COALESCE(SUM(CASE WHEN actual_cost_cents > 0 THEN actual_cost_cents ELSE 0 END),0) AS actual,
-       COALESCE(SUM(CASE WHEN actual_cost_cents > estimated_cost_cents
+       COALESCE(SUM(CASE WHEN estimated_cost_cents > 0 AND actual_cost_cents > 0 THEN 1 ELSE 0 END),0) AS comparable,
+       COALESCE(SUM(CASE WHEN estimated_cost_cents > 0 AND actual_cost_cents = 0 THEN 1 ELSE 0 END),0) AS unobserved,
+       COALESCE(SUM(CASE WHEN estimated_cost_cents > 0 AND actual_cost_cents > 0 THEN estimated_cost_cents ELSE 0 END),0) AS estimate,
+       COALESCE(SUM(CASE WHEN estimated_cost_cents > 0 AND actual_cost_cents > 0 THEN actual_cost_cents ELSE 0 END),0) AS actual,
+       COALESCE(SUM(CASE WHEN estimated_cost_cents > 0 AND actual_cost_cents > estimated_cost_cents
          THEN actual_cost_cents - estimated_cost_cents ELSE 0 END),0) AS overruns,
-       COALESCE(MAX(CASE WHEN actual_cost_cents > estimated_cost_cents
+       COALESCE(MAX(CASE WHEN estimated_cost_cents > 0 AND actual_cost_cents > estimated_cost_cents
          THEN actual_cost_cents - estimated_cost_cents ELSE 0 END),0) AS largest_overrun,
-       COALESCE(SUM(CASE WHEN actual_cost_cents > estimated_cost_cents
-         THEN 1 ELSE 0 END),0) AS overrun_samples
+       COALESCE(SUM(CASE WHEN estimated_cost_cents > 0 AND actual_cost_cents > estimated_cost_cents
+         THEN 1 ELSE 0 END),0) AS overrun_samples,
+       COALESCE(SUM(CASE WHEN estimated_cost_cents = 0 AND actual_cost_cents > 0
+         THEN 1 ELSE 0 END),0) AS missing_estimate,
+       COALESCE(SUM(CASE WHEN estimated_cost_cents < 0 OR actual_cost_cents < 0
+         THEN 1 ELSE 0 END),0) AS invalid
      FROM task_graph
-     WHERE status IN ('completed','failed','cancelled')
-       AND estimated_cost_cents > 0`,
+     WHERE status IN ('completed','failed','cancelled')`,
   ).get() as {
     comparable: number; unobserved: number; estimate: number; actual: number;
     overruns: number; largest_overrun: number; overrun_samples: number;
+    missing_estimate: number; invalid: number;
   };
   const comparable = Number(history.comparable);
   const estimated = Number(history.estimate);
@@ -112,6 +120,8 @@ export function getTaskCostCalibration(db: Database.Database): TaskCostCalibrati
       verifiedTotals && Number.isSafeInteger(history.largest_overrun) ? history.largest_overrun : null,
     observedOverrunSamples:
       verifiedTotals && Number.isSafeInteger(history.overrun_samples) ? history.overrun_samples : 0,
+    observedActualsWithoutEstimate: Number(history.missing_estimate),
+    invalidCostSamples: Number(history.invalid),
     authority: "local_task_graph",
     unit: "task_cost_cent",
   };
@@ -166,6 +176,12 @@ export function getTreasuryProjection(
   ];
   if (historicalTaskCostCalibration.estimatesAwaitingObservedCost > 0) limitations.push(
     "Some terminal task estimates have no observed actual cost; missing measurements must not be treated as zero deviations.",
+  );
+  if (historicalTaskCostCalibration.observedActualsWithoutEstimate) limitations.push(
+    "Some terminal task costs are observed without a positive prior estimate; do not infer prediction accuracy for them.",
+  );
+  if (historicalTaskCostCalibration.invalidCostSamples) limitations.push(
+    "Some terminal task-cost observations contain invalid negative values; exclude them from financial calibration.",
   );
   if (freeCreditsCents === null) limitations.push(
     "Free credits UNKNOWN until fresh balance, commitments, contingencies and reserves are observed.",

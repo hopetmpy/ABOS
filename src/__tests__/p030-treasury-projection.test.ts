@@ -117,6 +117,8 @@ describe("P-030 treasury projection", () => {
     task("observed-overrun","completed",100,200);
     task("observed-under","failed",200,150);
     task("unknown-zero-default","completed",100,0);
+    task("observed-no-estimate","completed",0,70);
+    task("invalid-negative","completed",100,-20);
     task("still-running","running",100,500);
 
     const value=getTreasuryProjection(d,{
@@ -125,6 +127,8 @@ describe("P-030 treasury projection", () => {
     const h=value.historicalTaskCostCalibration;
     expect(h.comparableSamples).toBe(2);
     expect(h.estimatesAwaitingObservedCost).toBe(1);
+    expect(h.observedActualsWithoutEstimate).toBe(1);
+    expect(h.invalidCostSamples).toBe(1);
     expect(h.estimatedTaskCostCents).toBe(300);
     expect(h.actualTaskCostCents).toBe(350);
     expect(h.netDeviationTaskCostCents).toBe(50);
@@ -136,6 +140,8 @@ describe("P-030 treasury projection", () => {
     // Still-running generic task cost cannot be silently converted into Conway credits.
     expect(value.freeCreditsCents).toBeNull();
     expect(value.limitations.join(" ")).toContain("missing measurements must not be treated as zero");
+    expect(value.limitations.join(" ")).toContain("without a positive prior estimate");
+    expect(value.limitations.join(" ")).toContain("invalid negative values");
 
     const projected=assessTreasuryScenario(value,{
       proposalCreditsCents:100,
