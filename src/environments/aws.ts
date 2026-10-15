@@ -583,6 +583,8 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       providerState,
       evidence: [
         `AWS EC2 instance ${instanceId} created.`,
+        `Procurement was authorized under P-010 decision ${authority.policyDecisionId} for observed AWS account ${accountId}, USD commitment ${authority.totalCommitmentCents} usd_cent. This is approved intent, NOT AWS billed-cost settlement.`,
+        ...(authority.billingTermsEvidence ?? []),
         `EC2 state=${providerState} instanceType=${instance.InstanceType ?? instanceType} imageId=${instance.ImageId ?? imageId}.`,
         ...(iamInstanceProfile
           ? [`IAM instance profile attached: ${iamInstanceProfile}.`]
@@ -591,6 +593,11 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
             ]),
       ],
       metadata: {
+        procurementPolicyDecisionId: authority.policyDecisionId,
+        procurementAccountId: accountId,
+        procurementCostUnit: authority.unit,
+        procurementCommittedCents: authority.totalCommitmentCents,
+        procurementBillingTermsEvidence: authority.billingTermsEvidence,
         instanceId,
         instanceType: instance.InstanceType ?? instanceType,
         imageId: instance.ImageId ?? imageId,
