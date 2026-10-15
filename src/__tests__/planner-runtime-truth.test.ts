@@ -73,6 +73,51 @@ describe("planner review recovery", () => {
       db.close();
     }
   });
+
+  it("retires only pending tasks of the unreviewed selected path, preserving an older executing path", async () => {
+    const db = createTestDb();
+    try {
+      const goalId = insertGoal(db.raw, { title: "Goal", description: "Need reviewed execution" });
+      const pendingId = insertTask(db.raw, { goalId, title: "Unreviewed", description: "Not yet approved", status: "pending" });
+      const priorId = insertTask(db.raw, { goalId, title: "Prior", description: "Previously executing", status: "pending" });
+      const orchestrator = new Orchestrator({
+        db: db.raw, agentTracker: {} as any, funding: {} as any,
+        messaging: {} as any, inference: {} as any, identity: {} as any, config: {},
+      });
+      for (const [pathId, status, taskId] of [
+        ["path-selected", "selected", pendingId],
+        ["path-prior", "executing", priorId],
+      ]) {
+        db.raw.prepare(`INSERT INTO adaptive_paths
+          (id, goal_id, signature, hypothesis, strategy, assumptions,
+           required_capabilities, sequence, expected_outcome, status, created_at, updated_at)
+          VALUES (?, ?, ?, 'hypothesis', 'strategy', '[]', '[]', '[]',
+                  'deliver result', ?, datetime('now'), datetime('now'))`
+        ).run(pathId, goalId, pathId, status);
+        db.raw.prepare(`INSERT INTO adaptive_task_bindings
+          (task_id, goal_id, path_id, created_at, updated_at)
+          VALUES (?, ?, ?, datetime('now'), datetime('now'))`
+        ).run(taskId, goalId, pathId);
+      }
+      const outcome = await (orchestrator as any).handlePlanReviewPhase({
+        phase: "plan_review", goalId, replanCount: 0,
+        failedTaskId: null, failedError: null,
+      });
+      expect(outcome.phase).toBe("planning");
+      const taskStatus = (id: string) => (db.raw.prepare(
+        "SELECT status FROM task_graph WHERE id = ?",
+      ).get(id) as { status: string }).status;
+      expect(taskStatus(pendingId)).toBe("cancelled");
+      expect(taskStatus(priorId)).toBe("pending");
+      const pathStatus = (id: string) => (db.raw.prepare(
+        "SELECT status FROM adaptive_paths WHERE id = ?",
+      ).get(id) as { status: string }).status;
+      expect(pathStatus("path-selected")).toBe("blocked");
+      expect(pathStatus("path-prior")).toBe("executing");
+    } finally {
+      db.close();
+    }
+  });
 });
 
 describe("planner runtime truth", () => {
