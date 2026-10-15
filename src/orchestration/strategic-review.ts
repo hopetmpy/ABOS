@@ -47,6 +47,9 @@ export interface StrategicReviewContext {
     pendingUsdcCommitments?: number;
     /** Outstanding USDC obligations that are NOT credit topups (e.g. paid APIs). */
     pendingUsdcOtherEffects?: number;
+    /** Provider-account USD commitments, not USDC, Conway credits or available cash. */
+    pendingProviderUsdEffects?: number;
+    pendingProviderUsdCommitments?: number;
     /** Unrecognized financial units stay UNKNOWN, never silently ignored. */
     unclassifiedPendingEffects?: number;
   };
@@ -419,12 +422,19 @@ export function assessStrategicPlan(
       (Number.isSafeInteger(pending.pendingUsdcCommitments) && pending.pendingUsdcCommitments >= 0);
     const validOther = pending.pendingUsdcOtherEffects === undefined ||
       (Number.isSafeInteger(pending.pendingUsdcOtherEffects) && pending.pendingUsdcOtherEffects >= 0);
+    const validProviderCount = pending.pendingProviderUsdEffects === undefined ||
+      (Number.isSafeInteger(pending.pendingProviderUsdEffects) &&
+       pending.pendingProviderUsdEffects >= 0);
+    const validProviderAmount = pending.pendingProviderUsdCommitments === undefined ||
+      (Number.isSafeInteger(pending.pendingProviderUsdCommitments) &&
+       pending.pendingProviderUsdCommitments >= 0);
     const validUnclassified = pending.unclassifiedPendingEffects === undefined ||
       (Number.isSafeInteger(pending.unclassifiedPendingEffects) && pending.unclassifiedPendingEffects >= 0);
     if (!Number.isSafeInteger(pending.count) || pending.count < 0 ||
         !Number.isSafeInteger(pending.pendingCreditCommitments) ||
         pending.pendingCreditCommitments < 0 || !validUsdc || !validUsdcAmount ||
-        !validOther || !validUnclassified) {
+        !validOther || !validProviderCount || !validProviderAmount ||
+        !validUnclassified) {
       hasUnknown = true;
       conditions.push("Canonical financial-effect exposure is invalid; re-observe treasury.");
     } else if (pending.count > 0) {
@@ -453,6 +463,15 @@ export function assessStrategicPlan(
         `total pending USDC obligations=${pending.pendingUsdcCommitments ?? "UNKNOWN"} USDC cents (all categories).`,
       );
       conditions.push("Paid service HTTP responses are not verified USDC settlement or Conway credit balances.");
+    }
+    if (pending.pendingProviderUsdEffects && pending.pendingProviderUsdEffects > 0) {
+      evidence.push(
+        `Canonical P-030 provider exposure: ${pending.pendingProviderUsdEffects} unresolved USD-denominated effects, ` +
+        `${pending.pendingProviderUsdCommitments ?? "UNKNOWN"} usd_cent committed; no AWS billing settlement or available cash inferred.`,
+      );
+      conditions.push(
+        "Pending provider USD commitments are not on-chain USDC, Conway credits, final supplier expenses, or verified free account liquidity.",
+      );
     }
     if (pending.unclassifiedPendingEffects && pending.unclassifiedPendingEffects > 0) {
       hasUnknown = true;
