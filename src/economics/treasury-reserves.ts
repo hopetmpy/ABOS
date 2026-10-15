@@ -171,8 +171,13 @@ export function getTreasuryReserveLearning(db: Database.Database): TreasuryReser
     result.limitations.push("Treasury reserve authority unavailable: allocation/outcome coverage UNKNOWN.");
     return result;
   }
-  const current = getTreasuryReserveSnapshot(db).allocations;
-  for (const allocation of current) {
+  // Learn from the immutable history, not just currently active reserves:
+  // releasing an earmark must not erase its previous decision/outcome evidence.
+  const history = db.prepare(
+    "SELECT reserve_key AS reserveKey, operation_key AS operationKey FROM treasury_reserve_allocations ORDER BY sequence",
+  ).all() as Array<{ reserveKey: string; operationKey: string }>;
+  const countedResolutionEvents = new Set<string>();
+  for (const allocation of history) {
     const recorded = getEvidenceByAuthority(db, "treasury_reserve", allocation.reserveKey)
       .reverse().find(event => {
         const payload = event.payload as Record<string, unknown> | null;
@@ -207,11 +212,29 @@ export function getTreasuryReserveLearning(db: Database.Database): TreasuryReser
       continue;
     }
     const status = (outcome.payload as Record<string, unknown> | null)?.resolution;
+    // A single strategic path resolution must not become N independent
+    // successful business outcomes merely because N reservations referred to it.
+    if (countedResolutionEvents.has(outcome.id)) continue;
+    countedResolutionEvents.add(outcome.id);
     if (status === "confirmed") result.confirmedStrategicOutcomes += 1;
     else if (status === "contradicted") result.contradictedStrategicOutcomes += 1;
     else result.inconclusive += 1;
   }
   return result;
+}
+
+/** Source-derived P-023/P-025 context for the existing planner; never a cash KPI. */
+export function describeTreasuryReserveLearning(learning: TreasuryReserveLearning): string | null {
+  const observations = learning.reviewedPathLinked + learning.reviewProvenanceUnknown;
+  if (observations === 0 && !learning.limitations.some(text =>
+    text.includes("authority unavailable"))) return null;
+  return "P-030 reserve decision→P-025 reviewed path→P-023 observed strategic outcome: " +
+    `reviewed decisions=${learning.reviewedPathLinked}, provenance UNKNOWN=${learning.reviewProvenanceUnknown}, ` +
+    `confirmed strategic paths=${learning.confirmedStrategicOutcomes}, ` +
+    `contradicted strategic paths=${learning.contradictedStrategicOutcomes}, ` +
+    `inconclusive=${learning.inconclusive}, awaiting=${learning.awaitingOutcome}. ` +
+    "These are causal strategy feedback, not measured reserve usage or validated credit spending; " +
+    "monetary adaptation still requires provider-observed same-unit costs and outcomes.";
 }
 
 /**

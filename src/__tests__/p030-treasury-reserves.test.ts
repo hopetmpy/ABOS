@@ -5,13 +5,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { AbosDatabase, ToolContext } from "../types.js";
 import { createTestConfig, createTestIdentity, MockConwayClient, MockInferenceClient } from "./mocks.js";
 import { createBuiltinTools } from "../agent/tools.js";
+import { buildPlannerContext } from "../orchestration/planner-context.js";
 import { runWithEvidenceContext } from "../observability/evidence.js";
 import { createDatabase } from "../state/database.js";
 import { createTestDb } from "./mocks.js";
 import { AdaptivePathEngine } from "../intelligence/adaptive-engine.js";
 import { getEvidenceByAuthority } from "../observability/evidence.js";
 import { getTreasuryProjection } from "../economics/treasury-projection.js";
-import { getTreasuryReserveSnapshot, getTreasuryReserveLearning, setTreasuryReserve } from "../economics/treasury-reserves.js";
+import { getTreasuryReserveSnapshot, getTreasuryReserveLearning, describeTreasuryReserveLearning, setTreasuryReserve } from "../economics/treasury-reserves.js";
 import { prepareFinancialEffect } from "../economics/financial-effects.js";
 
 const open: AbosDatabase[] = [];
@@ -318,5 +319,39 @@ describe("P-030 actual P-025 → P-023 prediction/outcome reuse", () => {
     );
     expect(getTreasuryReserveLearning(d.raw).confirmedStrategicOutcomes).toBe(0);
     expect(getTreasuryReserveLearning(d.raw).awaitingOutcome).toBe(1);
+  });
+});
+
+describe("P-030 adaptive-context economic history persistence", () => {
+  it("keeps P-023 learning after a reserve is released, with no invented credit spend", async () => {
+    const d=db();
+    const now = new Date().toISOString();
+    d.raw.prepare("INSERT INTO goals (id,title,description,status,created_at) VALUES (?,?,?,?,?)")
+      .run("g-learn","Reserve calibration","Causal result","active",now);
+    const candidate = {
+      goalId:"g-learn",taskId:"t-learn",hypothesis:"A reserved contingency supports execution",
+      strategy:"Selected strategy", assumptions:["Provider is available"],
+      requiredCapabilities:[],sequence:["Reserve","Measure"],expectedOutcome:"Delivery observed",
+    };
+    const engine = new AdaptivePathEngine(d.raw);
+    const path = engine.selectCandidate(candidate,{provider:"available"}).path;
+    engine.store.bindTask({taskId:"t-learn",goalId:"g-learn",pathId:path.id});
+    d.raw.prepare("INSERT OR REPLACE INTO kv (key,value,updated_at) VALUES (?,?,datetime('now'))")
+      .run("orchestrator.review_feedback.g-learn",
+        `P025 approve ; materialized_path=${path.id}`);
+    runWithEvidenceContext({correlationId:"goal:g-learn",goalId:"g-learn",taskId:"t-learn"},
+      ()=>setTreasuryReserve(d,alloc("learning-start","contingency",150)));
+    engine.recordSuccess({candidate,pathId:path.id,markPathSucceeded:true,
+      evidence:["observed delivery"],conditions:{provider:"available"}});
+    setTreasuryReserve(d,{...alloc("learning-release","contingency",0),
+      observedCreditsCents:null,balanceEvidence:null,otherCommittedCreditsCents:null});
+    const learning=getTreasuryReserveLearning(d.raw);
+    expect(learning.confirmedStrategicOutcomes).toBe(1);
+    expect(learning.reviewProvenanceUnknown).toBe(1);
+    expect(learning.observedReserveUseCreditsCents).toBeNull();
+    const planner=await buildPlannerContext({db:d.raw});
+    expect(planner.adaptiveContext).toContain("confirmed strategic paths=1");
+    expect(planner.adaptiveContext).toContain("not measured reserve usage");
+    expect(getTreasuryReserveSnapshot(d.raw).totalCreditsCents).toBe(0);
   });
 });
