@@ -1,6 +1,7 @@
 /** One Conway credit-effect boundary; financial_effects owns intent and
  * transactions owns realized movements. Neither replaces policy authority. */
 import { ulid } from "ulid";
+import { assertReserveCreditEffectCapacity } from "./treasury-reserves.js";
 import type { AbosDatabase, ConwayClient, SpendTrackerInterface } from "../types.js";
 import { classifyCreditTransferStatus } from "../conway/credits.js";
 import {
@@ -18,6 +19,8 @@ export interface CreditEffectRequest {
   toAddress: string;
   amountCents: number;
   note: string;
+  /** Optional causal earmark identity; does not authorize a payment. */
+  reserveKey?: string;
   childId?: string;
   spendTracker?: SpendTrackerInterface;
 }
@@ -41,15 +44,29 @@ export async function executeCreditEffect(input: CreditEffectRequest): Promise<F
       throw new Error("Child funding recipient does not match the persisted child identity");
     }
   }
-  const { effect: intent } = prepareFinancialEffect(input.db.raw, {
-    operationKey: input.operationKey,
-    effectKind: input.kind,
-    amountCents: input.amountCents,
-    recipient: toAddress,
-    childId: input.childId ?? null,
-    provider: "conway",
-    request: { note: input.note },
-  });
+  const reserveKey = input.reserveKey === undefined
+    ? undefined : input.reserveKey.trim();
+  if (input.reserveKey !== undefined && !reserveKey) {
+    throw new Error("Reserved credit funding key cannot be blank");
+  }
+  // Reserve coverage and financial intent are claimed in one local SQLite
+  // transaction before any provider call. Replays preserve the same identity.
+  const { effect: intent } = input.db.raw.transaction(() => {
+    if (reserveKey) assertReserveCreditEffectCapacity(input.db.raw, {
+      reserveKey, operationKey: input.operationKey, amountCents: input.amountCents,
+    });
+    return prepareFinancialEffect(input.db.raw, {
+      operationKey: input.operationKey,
+      effectKind: input.kind,
+      amountCents: input.amountCents,
+      recipient: toAddress,
+      childId: input.childId ?? null,
+      provider: "conway",
+      request: reserveKey
+        ? { note: input.note, treasuryReserveKey: reserveKey }
+        : { note: input.note },
+    });
+  })();
   const claim = claimFinancialEffectDispatch(input.db.raw, intent.operationKey);
   if (!claim.dispatchAllowed) return claim.effect;
 

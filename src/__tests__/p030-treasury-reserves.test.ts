@@ -12,8 +12,9 @@ import { createTestDb } from "./mocks.js";
 import { AdaptivePathEngine } from "../intelligence/adaptive-engine.js";
 import { getEvidenceByAuthority } from "../observability/evidence.js";
 import { getTreasuryProjection } from "../economics/treasury-projection.js";
-import { getTreasuryReserveSnapshot, getTreasuryReserveLearning, describeTreasuryReserveLearning, setTreasuryReserve } from "../economics/treasury-reserves.js";
+import { getTreasuryReserveSnapshot, getTreasuryReserveLearning, describeTreasuryReserveLearning, setTreasuryReserve, getPendingReserveCreditOverlap, getTreasuryReserveLocalSettlement } from "../economics/treasury-reserves.js";
 import { prepareFinancialEffect } from "../economics/financial-effects.js";
+import { executeCreditEffect } from "../economics/credit-transfer.js";
 
 const open: AbosDatabase[] = [];
 const dirs: string[] = [];
@@ -401,5 +402,89 @@ describe("P-030 P-025/P-023 cross-authority physical recovery", () => {
       .toContain("confirmed strategic paths=1");
     expect(getTreasuryReserveSnapshot(second.raw).totalCreditsCents).toBe(175);
     expect((second.raw.prepare("SELECT count(*) AS n FROM transactions").get() as {n:number}).n).toBe(0);
+  });
+});
+
+describe("P-030 causal reserve-funded Conway credit effects", () => {
+  it("binds reserve to a real locally reconciled credit effect and never treats it as LIVE P&L", async () => {
+    const d=db(), conway=new MockConwayClient();
+    conway.creditsCents=1000;
+    setTreasuryReserve(d,alloc("cap-1","provider-replacement",300));
+    const effect=await executeCreditEffect({
+      db:d,conway,operationKey:"reserve-provider-1",kind:"credit_transfer",
+      toAddress:"0xrecipient",amountCents:200,note:"replacement capacity",
+      reserveKey:"provider-replacement",
+    });
+    expect(effect.state).toBe("completed");
+    expect(effect.request.treasuryReserveKey).toBe("provider-replacement");
+    const local=getTreasuryReserveLocalSettlement(d.raw);
+    expect(local).toEqual({locallyReconciledCreditsCents:200,
+      matchingEffects:1,unverifiableEffects:0});
+    expect(getTreasuryReserveLearning(d.raw).observedReserveUseCreditsCents).toBeNull();
+    expect(getTreasuryReserveLearning(d.raw).locallyReconciledReserveTransfersCreditsCents).toBe(200);
+    expect(getTreasuryProjection(d,{
+      observedCreditsCents:800,otherCommittedCreditsCents:0,
+    }).freeCreditsCents).toBe(500);
+    expect((d.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as {n:number}).n).toBe(1);
+
+    // Existing reserve has 100 cents remaining after the linked completed effect.
+    await expect(executeCreditEffect({
+      db:d,conway,operationKey:"reserve-provider-2",kind:"credit_transfer",
+      toAddress:"0xanother",amountCents:150,note:"overspend",
+      reserveKey:"provider-replacement",
+    })).rejects.toThrow(/exceeds active earmark/);
+    expect((d.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects").get() as {n:number}).n).toBe(1);
+    expect((d.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as {n:number}).n).toBe(1);
+    const replay=await executeCreditEffect({
+      db:d,conway,operationKey:"reserve-provider-1",kind:"credit_transfer",
+      toAddress:"0xrecipient",amountCents:200,note:"replacement capacity",
+      reserveKey:"provider-replacement",
+    });
+    expect(replay.id).toBe(effect.id);
+    expect((d.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as {n:number}).n).toBe(1);
+  });
+
+  it("counts unsettled reserved credits only once while preserving unrelated credit/USDC units", () => {
+    const d=db();
+    setTreasuryReserve(d,alloc("pending-cap","reserve-pending",300));
+    prepareFinancialEffect(d.raw,{
+      operationKey:"bound-pending",effectKind:"credit_transfer",
+      recipient:"0xrecipient",provider:"conway",amountCents:200,
+      request:{note:"pending",treasuryReserveKey:"reserve-pending"},
+    });
+    prepareFinancialEffect(d.raw,{
+      operationKey:"unrelated-pending",effectKind:"credit_transfer",
+      recipient:"0xunrelated",provider:"conway",amountCents:100,
+      request:{note:"unrelated"},
+    });
+    prepareFinancialEffect(d.raw,{
+      operationKey:"usdc-topup",effectKind:"x402_credit_topup",
+      recipient:"0xwallet",provider:"conway",amountCents:400,unit:"usdc_cent",
+      request:{treasuryReserveKey:"reserve-pending"},
+    });
+    expect(getPendingReserveCreditOverlap(d.raw)).toBe(200);
+    const report=getTreasuryProjection(d,{
+      observedCreditsCents:1000,otherCommittedCreditsCents:0,
+    });
+    expect(report.pendingTransferCreditsCents).toBe(300);
+    expect(report.pendingTransferWithinReservesCreditsCents).toBe(200);
+    expect(report.reservedCreditsCents).toBe(300);
+    expect(report.freeCreditsCents).toBe(600);
+    expect(report.projectedCreditShortfallCents).toBe(0);
+    expect(getTreasuryReserveLocalSettlement(d.raw).locallyReconciledCreditsCents).toBeNull();
+  });
+
+  it("refuses unknown, empty or inactive reserve identity before provider dispatch", async () => {
+    const d=db(), conway=new MockConwayClient();
+    await expect(executeCreditEffect({
+      db:d,conway,operationKey:"no-cap-1",kind:"credit_transfer",
+      toAddress:"0xrecipient",amountCents:20,note:"try",reserveKey:"absent",
+    })).rejects.toThrow(/not an active durable earmark/);
+    await expect(executeCreditEffect({
+      db:d,conway,operationKey:"no-cap-2",kind:"credit_transfer",
+      toAddress:"0xrecipient",amountCents:20,note:"try",reserveKey:" ",
+    })).rejects.toThrow(/cannot be blank/);
+    expect((d.raw.prepare("SELECT count(*) AS n FROM financial_effects").get() as {n:number}).n).toBe(0);
+    expect((d.raw.prepare("SELECT count(*) AS n FROM transactions").get() as {n:number}).n).toBe(0);
   });
 });

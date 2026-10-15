@@ -1419,6 +1419,7 @@ Model: ${ctx.inference.getDefaultModel()}
           amount_cents: { type: "number", description: "Amount in cents" },
           reason: { type: "string", description: "Reason for transfer" },
           operation_key: { type: "string", description: "Durable operation key for replay/reconciliation" },
+          reserve_key: { type: "string", description: "Optional durable internal Conway credit reserve funding this transfer; does not authorize payment" },
         },
         required: ["to_address", "amount_cents"],
       },
@@ -1438,6 +1439,7 @@ Model: ${ctx.inference.getDefaultModel()}
           db: ctx.db, conway: ctx.conway, operationKey, kind: "credit_transfer",
           toAddress: args.to_address as string, amountCents: amount,
           note: (args.reason as string | undefined) ?? "", spendTracker: ctx.spendTracker,
+          reserveKey: args.reserve_key as string | undefined,
         });
         if (effect.state === "rejected") throw new Error(
           `Credit transfer ${effect.operationKey} rejected by provider.`);

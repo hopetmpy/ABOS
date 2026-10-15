@@ -514,7 +514,8 @@ export function assessStrategicPlan(
       `contradicted strategic outcomes=${learning.contradictedStrategicOutcomes}; ` +
       `nonterminal/inconclusive=${learning.inconclusive}; awaiting=${learning.awaitingOutcome}; ` +
       `review provenance UNKNOWN=${learning.reviewProvenanceUnknown}; ` +
-      "real reserve utilization and realized economic return=UNKNOWN.",
+      `locally reconciled reserve transfers=${learning.locallyReconciledReserveTransfersCreditsCents ?? "UNKNOWN"} Conway credit cents (local ledger only); ` +
+      "external provider finality and realized economic return=UNKNOWN.",
     );
     conditions.push(...learning.limitations.map(text => `Treasury learning scope: ${text}`));
   }
