@@ -30,6 +30,10 @@ describe("P-030 evidence-based treasury scenarios", () => {
     });
     expect(v.status).toBe("review_ready");
     expect(v.freeCreditsAfterCents).toBe(0);
+    expect(v.reserveRecommendation).toEqual({
+      targetCreditsCents: 0, additionalCreditsCents: 0,
+      freeAfterProposalAndReserveCents: 0, disposition: "covered",
+    });
     expect(v.limitations.join(" ")).toMatch(/nor transfer authorization/i);
   });
 
@@ -144,6 +148,10 @@ describe("P-030 evidence-based treasury scenarios", () => {
     });
     expect(review.status).toBe("needs_evidence");
     expect(review.conditions.join(" ")).toMatch(/overlap\/correlation is UNKNOWN/);
+    expect(review.reserveRecommendation).toEqual({
+      targetCreditsCents: null, additionalCreditsCents: null,
+      freeAfterProposalAndReserveCents: null, disposition: "unknown",
+    });
   });
 
   it("can evaluate several contingencies when documented joint downside is supplied", () => {
@@ -162,6 +170,10 @@ describe("P-030 evidence-based treasury scenarios", () => {
     expect(scenario.status).toBe("review_ready");
     expect(scenario.contingencyExposureCents).toBe(1_400);
     expect(scenario.evidence.join(" ")).toContain("Combined risk exposure");
+    expect(scenario.reserveRecommendation).toEqual({
+      targetCreditsCents: 1400, additionalCreditsCents: 0,
+      freeAfterProposalAndReserveCents: 2700, disposition: "covered",
+    });
   });
 
   it("rejects unsupported oversizing despite a token future demand claim", () => {
