@@ -512,6 +512,13 @@ export function assessStrategicPlan(
       `free after=${treasury.freeCreditsAfterCents ?? "UNKNOWN"}; ` +
       `scenario=${treasury.status}.`,
     );
+    const reserve = treasury.reserveRecommendation;
+    evidence.push(
+      `Treasury reserve scenario: target=${reserve.targetCreditsCents ?? "UNKNOWN"} credit cents; ` +
+      `additional earmark=${reserve.additionalCreditsCents ?? "UNKNOWN"} credit cents; ` +
+      `free after purchase and reserve=${reserve.freeAfterProposalAndReserveCents ?? "UNKNOWN"}; ` +
+      `disposition=${reserve.disposition}.`,
+    );
     conditions.push(...treasury.limitations.map((item) => `Treasury scope: ${item}`));
     if (treasury.status === "needs_evidence") {
       hasUnknown = true;
