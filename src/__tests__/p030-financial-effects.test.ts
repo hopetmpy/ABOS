@@ -337,6 +337,26 @@ describe("P-030 financial effect authority", () => {
     );
   });
 
+  it("rejects a changed provider transfer id before accounting materialization", () => {
+    const database = db();
+    prepareFinancialEffect(database.raw, {
+      operationKey: "provider-id:bound", effectKind: "credit_transfer",
+      amountCents: 350, recipient: "0xrec", provider: "conway",
+    });
+    claimFinancialEffectDispatch(database.raw, "provider-id:bound");
+    recordFinancialEffectObservation(database.raw, "provider-id:bound", {
+      resolution: "pending", providerEffectId: "remote-A", providerStatus: "submitted",
+    });
+    expect(() => recordFinancialEffectObservation(database.raw, "provider-id:bound", {
+      resolution: "pending", providerEffectId: "remote-B", providerStatus: "submitted",
+    })).toThrow(/settlement identity conflicts/);
+    expect(() => settleFinancialEffect(database.raw, "provider-id:bound", {
+      providerEffectId: "remote-B", providerStatus: "completed",
+    }, () => "wrong-provider-tx")).toThrow(/settlement identity conflicts/);
+    expect(getFinancialEffectByOperationKey(database.raw, "provider-id:bound")?.providerEffectId).toBe("remote-A");
+    expect((database.raw.prepare("SELECT COUNT(*) AS count FROM transactions").get() as { count: number }).count).toBe(0);
+  });
+
   it("never downgrades a rejected effect after late pending evidence", () => {
     const database = db();
     prepareFinancialEffect(database.raw, {
