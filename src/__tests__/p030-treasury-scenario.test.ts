@@ -114,6 +114,55 @@ describe("P-030 evidence-based treasury scenarios", () => {
     expect(scenario.evidence.join(" ")).toContain("Combined risk exposure");
   });
 
+  it("rejects unsupported oversizing despite a token future demand claim", () => {
+    const db = newDb();
+    const review = assessTreasuryScenario(projection(db, 20_000, 0), {
+      proposalCreditsCents: 5_000,
+      immediateNeedCreditsCents: 10,
+      futureNeedCreditsCents: 1,
+      futureNeedEvidence: ["one additional credit cent forecast"],
+      ...supported,
+    });
+    expect(review.status).toBe("needs_evidence");
+    expect(review.conditions.join(" ")).toMatch(/does not cover the procurement surplus/i);
+    expect(review.freeCreditsAfterCents).toBe(15_000);
+  });
+
+  it("accepts adequately evidenced future demand without an arbitrary spending cap", () => {
+    const db = newDb();
+    const review = assessTreasuryScenario(projection(db, 20_000, 0), {
+      proposalCreditsCents: 5_000,
+      immediateNeedCreditsCents: 10,
+      futureNeedCreditsCents: 4_990,
+      futureNeedEvidence: ["confirmed future workload denominated in Conway credits"],
+      ...supported,
+    });
+    expect(review.status).toBe("review_ready");
+    expect(review.evidence.join(" ")).toMatch(/confirmed future workload/i);
+  });
+
+  it("permits source-backed bundle economics for unmet demand but not bundles without future demand", () => {
+    const db = newDb();
+    const proposal = {
+      proposalCreditsCents: 50,
+      immediateNeedCreditsCents: 10,
+      futureNeedCreditsCents: 20,
+      futureNeedEvidence: ["future use forecast"],
+      bundleEconomicsEvidence: ["documented annual bundle economics and usable capacity"],
+      ...supported,
+    };
+    const justified = assessTreasuryScenario(projection(db, 100, 0), proposal);
+    expect(justified.status).toBe("review_ready");
+    expect(justified.evidence.join(" ")).toMatch(/uncovered procurement surplus of 20 credit cents/);
+    expect(justified.limitations.join(" ")).toMatch(/not.*authorization/i);
+
+    const withoutFutureUse = assessTreasuryScenario(projection(db, 100, 0), {
+      ...proposal, futureNeedCreditsCents: 0,
+    });
+    expect(withoutFutureUse.status).toBe("needs_evidence");
+    expect(withoutFutureUse.conditions.join(" ")).toMatch(/measured future demand/i);
+  });
+
   it("exposes scenario evidence through the protected catalog without making payments", async () => {
     const db = newDb();
     const conway = new MockConwayClient();
@@ -138,6 +187,21 @@ describe("P-030 evidence-based treasury scenarios", () => {
     expect(result.executionAuthorized).toBe(false);
     expect(result.projection.observedCreditsCents).toBe(2000);
     expect(result.scenario.status).toBe("review_ready");
+    const bundle = JSON.parse(await tool!.execute({
+      proposal_credits_cents: 50,
+      immediate_need_credits_cents: 10,
+      future_need_credits_cents: 20,
+      future_need_evidence: ["future workload"],
+      bundle_economics_evidence: ["supplier quote supports bundle capacity"],
+      reserve_credits_cents: 100,
+      other_commitments_cents: 0,
+      opportunity_evidence: ["verified requirement"],
+      alternatives: supported.alternatives,
+      risks: [{ id: "downside", exposureCreditsCents: 50, evidence: "scenario" }],
+    }, context));
+    expect(bundle.scenario.status).toBe("review_ready");
+    expect(bundle.scenario.evidence.join(" ")).toContain("supplier quote supports bundle capacity");
+    expect(bundle.executionAuthorized).toBe(false);
     expect(transfer).not.toHaveBeenCalled();
     expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n).toBe(0);
   });
