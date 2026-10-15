@@ -21,7 +21,7 @@ describe("P-030 topup HTTP claims vs observed credit quantity", () => {
     [{}, undefined],
     [{ credits_cents: "500" }, undefined],
     [{ credits_cents: -1 }, undefined],
-    [{ amount_cents: 499 }, 499],
+    [{ amount_cents: 499 }, undefined],
     [{ credits_cents: 0 }, 0],
   ] as const)("never substitutes nominal tier for absent or invalid credited balance %j", async (response, expected) => {
     vi.mocked(x402Fetch).mockResolvedValue({

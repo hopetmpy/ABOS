@@ -236,13 +236,13 @@ export async function topupCredits(
   }
 
   const reportedCredits = typeof result.response === "object"
-    ? result.response?.credits_cents ?? result.response?.amount_cents
+    ? result.response?.credits_cents
     : undefined;
   const creditsCentsAdded = Number.isSafeInteger(reportedCredits) && reportedCredits >= 0
     ? reportedCredits as number : undefined;
 
   logger.info(
-    `Credit topup HTTP accepted: $${amountUsd} USD tier; ` +
+    `Credit topup HTTP accepted: ${amountUsd} USD tier; ` +
     `credits reported=${creditsCentsAdded ?? "UNKNOWN"} (not verified settlement)`,
   );
 
