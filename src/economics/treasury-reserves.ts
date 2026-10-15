@@ -10,6 +10,7 @@ import type { AbosDatabase } from "../types.js";
 import type Database from "better-sqlite3";
 import { appendEvidenceEvent, correlationIdFor, currentEvidenceContext, getEvidenceByAuthority } from "../observability/evidence.js";
 import { getTreasuryProjection } from "./treasury-projection.js";
+import { getFinancialEffectByOperationKey, listFinancialEffectsByStates, listUnresolvedFinancialEffects } from "./financial-effects.js";
 
 export interface TreasuryReserveAllocation {
   operationKey: string;
@@ -99,6 +100,109 @@ export function getTreasuryReserveSnapshot(db: Database.Database): TreasuryReser
   return { initialized: allocations.length > 0, totalCreditsCents, allocations };
 }
 
+
+function creditSum(total: number, next: number, label: string): number {
+  if (!Number.isSafeInteger(next) || next < 0 || !Number.isSafeInteger(total + next)) {
+    throw new Error(label + " exceeds exact safe credit-unit accounting");
+  }
+  return total + next;
+}
+
+/** Claim credit capacity from an existing reserve before external effect
+ * preparation. This does not replace Policy or authorize external spending.
+ */
+export function assertReserveCreditEffectCapacity(
+  db: Database.Database,
+  input: { reserveKey: string; operationKey: string; amountCents: number },
+): void {
+  const reserveKey = requireText(input.reserveKey, "reserveKey");
+  const operationKey = requireText(input.operationKey, "operationKey");
+  const requested = amount(input.amountCents, "amountCents");
+  if (requested === null || requested === 0) throw new Error("Reserved effect amount must be positive");
+  const reserve = getTreasuryReserveSnapshot(db).allocations
+    .find(item => item.reserveKey === reserveKey);
+  if (!reserve || reserve.targetCreditsCents === 0) {
+    throw new Error("Credit effect reserve key is not an active durable earmark");
+  }
+  // A replay is semantically checked by financial_effects' fingerprint and
+  // must not consume a second portion of the same reserve.
+  if (getFinancialEffectByOperationKey(db, operationKey)) return;
+  let committed = 0;
+  for (const effect of listFinancialEffectsByStates(db,
+    ["prepared", "dispatching", "pending", "unknown", "reconciliation_required", "completed"])) {
+    if (effect.request.treasuryReserveKey !== reserveKey ||
+        effect.unit !== "credit_cent" || effect.provider !== "conway" ||
+        !["credit_transfer", "child_funding"].includes(effect.effectKind)) continue;
+    committed = creditSum(committed, effect.amountCents, "Reserve-funded effects");
+  }
+  if (creditSum(committed, requested, "Reserve-funded effects") > reserve.targetCreditsCents) {
+    throw new Error("Reserve-funded transfer exceeds active earmark including linked commitments");
+  }
+}
+
+/** Reserve-funded unsettled credit transfers consume their reserve, not a
+ * second simultaneous obligation. Unknown/unlinked effects remain separate.
+ */
+export function getPendingReserveCreditOverlap(db: Database.Database): number {
+  const snapshot = getTreasuryReserveSnapshot(db);
+  const linked = new Map<string, number>();
+  for (const effect of listUnresolvedFinancialEffects(db)) {
+    const key = effect.request.treasuryReserveKey;
+    if (typeof key !== "string" || !key.trim() ||
+        effect.unit !== "credit_cent" || effect.provider !== "conway" ||
+        !["credit_transfer", "child_funding"].includes(effect.effectKind)) continue;
+    linked.set(key, creditSum(linked.get(key) ?? 0, effect.amountCents,
+      "Pending reserve-funded effects"));
+  }
+  let overlap = 0;
+  for (const reserve of snapshot.allocations) {
+    overlap = creditSum(overlap,
+      Math.min(reserve.targetCreditsCents, linked.get(reserve.reserveKey) ?? 0),
+      "Reserve/pending overlap");
+  }
+  return overlap;
+}
+
+export interface TreasuryReserveLocalSettlement {
+  locallyReconciledCreditsCents: number | null;
+  matchingEffects: number;
+  unverifiableEffects: number;
+}
+
+/** Existing financial_effects and transactions remain the only settlement
+ * authorities. Local reconciliation is not independent provider LIVE evidence.
+ */
+export function getTreasuryReserveLocalSettlement(
+  db: Database.Database,
+): TreasuryReserveLocalSettlement {
+  let total = 0, matchingEffects = 0, unverifiableEffects = 0;
+  for (const effect of listFinancialEffectsByStates(db, ["completed"])) {
+    if (typeof effect.request.treasuryReserveKey !== "string") continue;
+    if (effect.unit !== "credit_cent" || effect.provider !== "conway" ||
+        !["credit_transfer", "child_funding"].includes(effect.effectKind) ||
+        !effect.providerEffectId || !effect.transactionId) {
+      unverifiableEffects++;
+      continue;
+    }
+    const row = db.prepare(
+      "SELECT type, amount_cents AS amount FROM transactions WHERE id = ?",
+    ).get(effect.transactionId) as { type: string; amount: number | null } | undefined;
+    const expected = effect.effectKind === "child_funding" ? "capital_allocation" : "transfer_out";
+    if (!row || row.type !== expected || row.amount === null ||
+        row.amount !== effect.amountCents || !Number.isSafeInteger(row.amount) ||
+        row.amount < 0) {
+      unverifiableEffects++;
+      continue;
+    }
+    total = creditSum(total, effect.amountCents, "Locally reconciled reserve transfers");
+    matchingEffects++;
+  }
+  return {
+    locallyReconciledCreditsCents: unverifiableEffects || !matchingEffects ? null : total,
+    matchingEffects, unverifiableEffects,
+  };
+}
+
 /**
  * Read P-025's already materialized reviewed path, never infer its existence
  * from a caller's decisionEvidence text or a tool/policy approval alone.
@@ -137,6 +241,7 @@ export interface TreasuryReserveLearning {
   contradictedStrategicOutcomes: number;
   /** Causal strategic observations are not actual spend/realized P&L. */
   observedReserveUseCreditsCents: null;
+  locallyReconciledReserveTransfersCreditsCents: number | null;
   unit: "credit_cent";
   limitations: string[];
 }
@@ -156,6 +261,7 @@ export function getTreasuryReserveLearning(db: Database.Database): TreasuryReser
     confirmedStrategicOutcomes: 0,
     contradictedStrategicOutcomes: 0,
     observedReserveUseCreditsCents: null,
+    locallyReconciledReserveTransfersCreditsCents: null,
     unit: "credit_cent",
     limitations: [
       "P-023 strategic path resolution is not observed credit expenditure or business income.",
@@ -173,6 +279,11 @@ export function getTreasuryReserveLearning(db: Database.Database): TreasuryReser
   }
   // Learn from the immutable history, not just currently active reserves:
   // releasing an earmark must not erase its previous decision/outcome evidence.
+  const local = getTreasuryReserveLocalSettlement(db);
+  result.locallyReconciledReserveTransfersCreditsCents = local.locallyReconciledCreditsCents;
+  if (local.unverifiableEffects) result.limitations.push(
+    `${local.unverifiableEffects} linked local financial effects have inconsistent accounting; settlement attribution UNKNOWN.`,
+  );
   const history = db.prepare(
     "SELECT reserve_key AS reserveKey, operation_key AS operationKey FROM treasury_reserve_allocations ORDER BY sequence",
   ).all() as Array<{ reserveKey: string; operationKey: string }>;
@@ -233,7 +344,8 @@ export function describeTreasuryReserveLearning(learning: TreasuryReserveLearnin
     `confirmed strategic paths=${learning.confirmedStrategicOutcomes}, ` +
     `contradicted strategic paths=${learning.contradictedStrategicOutcomes}, ` +
     `inconclusive=${learning.inconclusive}, awaiting=${learning.awaitingOutcome}. ` +
-    "These are causal strategy feedback, not measured reserve usage or validated credit spending; " +
+    `locally reconciled reserved transfers=${learning.locallyReconciledReserveTransfersCreditsCents ?? "UNKNOWN"} credit cents (local ledger only); ` +
+    "These are causal strategy feedback, not independently verified provider settlement or reserve savings; " +
     "monetary adaptation still requires provider-observed same-unit costs and outcomes.";
 }
 

@@ -6,7 +6,7 @@
 import type { AbosDatabase } from "../types.js";
 import type Database from "better-sqlite3";
 import { getCommittedFinancialEffectCents, listUnresolvedFinancialEffects } from "./financial-effects.js";
-import { getTreasuryReserveSnapshot } from "./treasury-reserves.js";
+import { getPendingReserveCreditOverlap, getTreasuryReserveSnapshot } from "./treasury-reserves.js";
 
 export interface ResourceInvestmentObservation {
   allocationKey: string;
@@ -62,6 +62,7 @@ export interface TreasuryProjection {
   otherCommittedCreditsCents: number | null;
   taskCommitmentCreditsCents: number | null;
   pendingTransferCreditsCents: number;
+  pendingTransferWithinReservesCreditsCents: number;
   pendingRefundCreditsCents: number | null;
   unresolvedFinancialEffects: number;
   activeTaskEstimatedCostCents: number;
@@ -205,6 +206,9 @@ export function getTreasuryProjection(
   const taskCredits = activeTaskEstimatedCostCents === 0
     ? 0 : knownCents(input.taskCommitmentCreditsCents, "taskCommitmentCreditsCents");
   const pending = getCommittedFinancialEffectCents(db.raw);
+  const overlap = getPendingReserveCreditOverlap(db.raw);
+  if (overlap > pending) throw new Error("Reserve overlap exceeds pending Conway credit effects");
+  const independentPending = pending - overlap;
   const unresolved = listUnresolvedFinancialEffects(db.raw).length;
 
   // Financial-effect intents are measured in credit cents. Task_graph estimates
@@ -212,7 +216,7 @@ export function getTreasuryProjection(
   // compatible valuation.
   const inputsComplete = [observed, reserved, other, taskCredits].every(v => v !== null);
   const obligations = inputsComplete
-    ? [reserved!, other!, taskCredits!, pending].reduce((total, amount) => {
+    ? [reserved!, other!, taskCredits!, independentPending].reduce((total, amount) => {
       if (!Number.isSafeInteger(amount) || amount < 0 ||
           !Number.isSafeInteger(total + amount)) {
         throw new Error("Treasury obligations exceed exact nonnegative safe integer credit accounting");
@@ -238,6 +242,7 @@ export function getTreasuryProjection(
   }
   const limitations = [
     "Credit liquidity and externally settled business P&L are different authorities.",
+    "An unresolved Conway credit transfer bound to a durable reserve is counted within that same earmark, not twice.",
     "A caller-supplied reserve is not a persisted internal allocation; durable treasury records govern once initialized.",
     "Task estimates are not converted to credit obligations without unit-compatible evidence.",
     "Resource valuations remain separate from actual invoice/ledger expense and revenue.",
@@ -269,6 +274,7 @@ export function getTreasuryProjection(
     otherCommittedCreditsCents: other,
     taskCommitmentCreditsCents: taskCredits,
     pendingTransferCreditsCents: pending,
+    pendingTransferWithinReservesCreditsCents: overlap,
     pendingRefundCreditsCents: pendingRefund,
     unresolvedFinancialEffects: unresolved,
     activeTaskEstimatedCostCents,
