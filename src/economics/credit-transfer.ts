@@ -77,13 +77,18 @@ export async function executeCreditEffect(input: CreditEffectRequest): Promise<F
     });
   }
   const disposition = classifyCreditTransferStatus(transfer.status);
-  if (disposition === "settled" && !transfer.transferId?.trim()) {
-    // A status string without a provider effect identifier cannot be tied
-    // unambiguously to this intended transfer. Keep the effect unresolved.
+  if (disposition === "settled" &&
+      (!transfer.transferId?.trim() ||
+       typeof transfer.toAddress !== "string" ||
+       transfer.toAddress.trim().toLowerCase() !== toAddress.toLowerCase() ||
+       transfer.amountCents !== input.amountCents)) {
+    // Finality cannot be attributed to the intended effect unless the actual
+    // provider response names the same ID, recipient and amount. A missing
+    // provider echo is not equivalent to the request's own asserted terms.
     return recordFinancialEffectObservation(input.db.raw, claim.effect.operationKey, {
       ...common,
       resolution: "unknown",
-      error: "Final provider response lacks a transfer identifier; independent reconciliation required",
+      error: "Final provider response lacks a matching transfer identifier, recipient or amount; independent reconciliation required",
     });
   }
   if (disposition !== "settled") {

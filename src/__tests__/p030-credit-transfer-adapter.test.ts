@@ -197,6 +197,25 @@ describe("P-030 credit effect execution and reconciliation", () => {
     expect(conway.transferCredits).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    { transferId: "provider-incomplete", status: "completed", amountCents: 200 },
+    { transferId: "provider-incomplete", status: "completed", toAddress: "0xrecipient" },
+    { transferId: "provider-incomplete", status: "completed", toAddress: "0xrecipient", amountCents: 201 },
+  ])("does not settle when provider response omits or changes correlated terms: %j", async (response) => {
+    const db = createDb();
+    const conway = { transferCredits: vi.fn().mockResolvedValue(response) } as any;
+    const input = {
+      db, conway, operationKey: "incomplete-final:case", kind: "credit_transfer" as const,
+      toAddress: "0xrecipient", amountCents: 200, note: "test",
+    };
+    const effect = await executeCreditEffect(input);
+    expect(effect.state).toBe("unknown");
+    expect(effect.lastError).toMatch(/matching transfer identifier, recipient or amount/);
+    expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as any).n).toBe(0);
+    await executeCreditEffect(input);
+    expect(conway.transferCredits).toHaveBeenCalledTimes(1);
+  });
+
   it("does not materialize a final-looking transfer response without a provider receipt ID", async () => {
     const db = createDb();
     const conway = { transferCredits: vi.fn().mockResolvedValue({

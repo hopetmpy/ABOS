@@ -581,8 +581,10 @@ export interface PricingTier {
 export interface CreditTransferResult {
   transferId: string;
   status: string;
-  toAddress: string;
-  amountCents: number;
+  /** Observed provider echo only; absence is not evidence of requested address. */
+  toAddress?: string;
+  /** Observed provider echo only; absence is not evidence of requested amount. */
+  amountCents?: number;
   balanceAfterCents?: number;
 }
 

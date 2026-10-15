@@ -415,8 +415,10 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
       return {
         transferId: data.transfer_id || data.id || "",
         status: data.status || "submitted",
-        toAddress: data.to_address || toAddress,
-        amountCents: data.amount_cents ?? amountCents,
+        // Never fill missing provider observations from the submitted request.
+        // Missing terms may be reconciled later, but cannot prove settlement.
+        toAddress: typeof data.to_address === "string" ? data.to_address : undefined,
+        amountCents: Number.isSafeInteger(data.amount_cents) ? data.amount_cents : undefined,
         balanceAfterCents:
           data.balance_after_cents ?? data.new_balance_cents ?? undefined,
       };
