@@ -53,6 +53,21 @@ describe("P-030 x402 topup durable financial intents", () => {
     expect(execute).toHaveBeenCalledTimes(1);
   });
 
+  it("persists the signed authorization nonce before paid dispatch", async () => {
+    const db=mkdb();
+    const execute=vi.fn(async (onPrepared: (payment: any) => void) => {
+      onPrepared({ ...payment, authorizationNonce: "0xnonce-public" });
+      const record=db.raw.prepare(
+        "SELECT evidence_json FROM financial_effects WHERE operation_key = ?",
+      ).get("topup:nonce") as { evidence_json: string };
+      expect(record.evidence_json).toContain("0xnonce-public");
+      return {success:true,amountUsd:5,payment:{...payment,authorizationNonce:"0xnonce-public"}};
+    });
+    const effect=await executeCreditTopupEffect(request(db,execute,"topup:nonce"));
+    expect(effect.state).toBe("pending");
+    expect(effect.evidence.join(" ")).toContain("0xnonce-public");
+  });
+
   it("blocks a different tier or key while a prior wallet purchase is pending", async () => {
     const db=mkdb();
     await executeCreditTopupEffect(request(db,vi.fn().mockResolvedValue({

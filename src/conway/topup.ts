@@ -199,6 +199,7 @@ export async function topupCredits(
   account: PrivateKeyAccount,
   amountUsd: number,
   recipientAddress?: Address,
+  onPaymentPrepared?: (payment: X402PaymentMetadata) => Promise<void> | void,
 ): Promise<TopupResult> {
   if (!TOPUP_TIERS.includes(amountUsd)) {
     return {
@@ -221,6 +222,8 @@ export async function topupCredits(
     undefined,
     undefined,
     maxPaymentCents,
+    undefined,
+    onPaymentPrepared,
   );
 
   if (!result.success) {
@@ -228,10 +231,12 @@ export async function topupCredits(
     logger.error(`Credit topup failed: ${detail}`);
     const error = new Error(`Credit topup failed: ${detail}`) as Error & {
       externalEffectOutcomeUnknown?: boolean;
+      externalPaymentNotDispatched?: boolean;
+      payment?: X402PaymentMetadata;
     };
-    if (result.payment?.settlement === "unknown") {
-      error.externalEffectOutcomeUnknown = true;
-    }
+    error.payment = result.payment;
+    if (result.payment) error.externalEffectOutcomeUnknown = true;
+    else error.externalPaymentNotDispatched = true;
     throw error;
   }
 

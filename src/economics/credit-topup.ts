@@ -6,6 +6,7 @@
 import { ulid } from "ulid";
 import type { AbosDatabase } from "../types.js";
 import type { TopupResult } from "../conway/topup.js";
+import type { X402PaymentMetadata } from "../conway/x402.js";
 import {
   claimFinancialEffectDispatch,
   getFinancialEffectByOperationKey,
@@ -34,7 +35,7 @@ export async function executeCreditTopupEffect(input: {
   amountUsd: number;
   operationKey?: string;
   policyDecisionId?: string | null;
-  executePayment: () => Promise<TopupResult>;
+  executePayment: (onPaymentPrepared: (payment: X402PaymentMetadata) => void) => Promise<TopupResult>;
 }): Promise<FinancialEffectRecord> {
   if (!Number.isSafeInteger(input.amountUsd) || input.amountUsd <= 0 ||
       !input.walletAddress.trim()) {
@@ -58,11 +59,35 @@ export async function executeCreditTopupEffect(input: {
 
   let response: TopupResult;
   try {
-    response = await input.executePayment();
+    response = await input.executePayment((signed) => {
+      recordFinancialEffectObservation(input.db.raw, key, {
+        resolution: "pending",
+        providerStatus: "signed_payment_prepared",
+        evidence: [
+          `x402 authorization nonce=${signed.authorizationNonce ?? "UNKNOWN"}; ` +
+          `amount=${signed.amountMicroUsdc} micro-USDC; ` +
+          `network=${signed.network}; payTo=${signed.payToAddress}. ` +
+          "Signed authorization is not proof of final settlement.",
+        ],
+      });
+    });
   } catch (error) {
+    const failure = error as {
+      externalPaymentNotDispatched?: boolean;
+      payment?: X402PaymentMetadata;
+    } | null;
+    const paid = failure?.payment;
     return recordFinancialEffectObservation(input.db.raw, key, {
-      resolution: "unknown",
-      error: `x402 payment outcome UNKNOWN: ${error instanceof Error ? error.message : String(error)}`,
+      resolution: failure?.externalPaymentNotDispatched ? "rejected" : "unknown",
+      providerStatus: paid ? "paid_dispatch_outcome_unknown" :
+        failure?.externalPaymentNotDispatched ? "pre_payment_rejected" : "unknown",
+      evidence: paid ? [
+        `x402 paid request: nonce=${paid.authorizationNonce ?? "UNKNOWN"}; ` +
+        `amount=${paid.amountMicroUsdc} micro-USDC; ` +
+        `network=${paid.network}; payTo=${paid.payToAddress}; no verified settlement.`,
+      ] : [],
+      error: `x402 payment outcome ${failure?.externalPaymentNotDispatched ? "rejected before dispatch" : "UNKNOWN"}: ` +
+        (error instanceof Error ? error.message : String(error)),
     });
   }
   const payment = response.payment;

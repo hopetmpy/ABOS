@@ -36,12 +36,29 @@ describe("P-030 topup HTTP claims vs observed credit quantity", () => {
     expect(x402Fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("passes the paid-request observer through the x402 wrapper", async () => {
+    const observed=vi.fn();
+    vi.mocked(x402Fetch).mockImplementation(async (...args) => {
+      const callback=args[7];
+      expect(typeof callback).toBe("function");
+      await callback!({...paid,authorizationNonce:"0xtestnonce"});
+      return {success:true,response:{credits_cents:500},payment:paid};
+    });
+    await topupCredits("https://conway.example",{address:"0xwallet"} as any,5,undefined,observed);
+    expect(observed).toHaveBeenCalledWith(expect.objectContaining({
+      authorizationNonce:"0xtestnonce",
+    }));
+  });
+
   it("distinguishes a paid request that lost its response from a confirmed payment", async () => {
     vi.mocked(x402Fetch).mockResolvedValue({
       success: false, error: "HTTP transport dropped",
       payment: { ...paid, settlement: "unknown" },
     });
     await expect(topupCredits("https://conway.example",{ address:"0xwallet" } as any,5))
-      .rejects.toMatchObject({ externalEffectOutcomeUnknown: true });
+      .rejects.toMatchObject({
+        externalEffectOutcomeUnknown: true,
+        payment: expect.objectContaining({ amountMicroUsdc:"5000000" }),
+      });
   });
 });

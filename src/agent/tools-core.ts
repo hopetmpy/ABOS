@@ -482,10 +482,12 @@ Reconciliation requires independently verified provider finality; this view is n
           operationKey: currentEvidenceContext()?.policyDecisionId
             ? `topup:${currentEvidenceContext()!.policyDecisionId}`
             : undefined,
-          executePayment: () => topupCredits(
+          executePayment: (onPaymentPrepared) => topupCredits(
             ctx.config.conwayApiUrl,
             ctx.identity.account,
             amountUsd,
+            undefined,
+            onPaymentPrepared,
           ),
         });
         if (effect.state === "rejected") {

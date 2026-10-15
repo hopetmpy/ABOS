@@ -67,6 +67,8 @@ export interface X402PaymentMetadata {
   payToAddress: string;
   network: string;
   settlement: "accepted_response" | "unknown";
+  /** EIP-3009 authorization nonce; no proof of settlement. */
+  authorizationNonce?: string;
 }
 
 export interface X402PaymentResult {
@@ -348,6 +350,7 @@ export async function x402Fetch(
   headers?: Record<string, string>,
   maxPaymentCents?: number,
   chainType?: ChainType,
+  onPaymentPrepared?: (payment: X402PaymentMetadata) => Promise<void> | void,
 ): Promise<X402PaymentResult> {
   // Solana wallets cannot sign EVM x402 payments
   if (chainType === "solana") {
@@ -422,12 +425,17 @@ export async function x402Fetch(
       JSON.stringify(payment),
     ).toString("base64");
 
-    dispatchedPayment = {
+    const signedPayment: X402PaymentMetadata = {
       ...amountDescription,
       payToAddress: parsed.requirement.payToAddress,
       network: parsed.requirement.network,
       settlement: "unknown",
+      authorizationNonce: payment.payload.authorization.nonce,
     };
+    // Persist a nonsecret authorization reference before external paid dispatch.
+    // If evidence persistence fails, the paid request must not be sent.
+    if (onPaymentPrepared) await onPaymentPrepared(signedPayment);
+    dispatchedPayment = signedPayment;
 
     const paidResp = await x402HttpClient.request(url, {
       method,
