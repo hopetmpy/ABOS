@@ -6,21 +6,21 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / AWS_EC2_MUTATION_RECONCILIATION_PR94_MERGED / P010_PROVIDER_MANDATE_UNWIRED / AWS_ACCOUNT_FINANCING_NOT_ATTESTED / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / P010_P025_P030_PROCUREMENT_SOURCE_SIMULATION_PR_CI_PENDING / LIVE_AWS_ISSUER_UNWIRED / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-ec2-mutation-postmerge-checkpoint
+Current-Host-Branch: abos/p031-authorized-procurement-e2e-simulation
 Host-Head-At-Audit-Open: 088de39896dcef837c7047c4c560e9cd0b7a29e8
 Last-Reconciled-Host-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
-Observed-Main-Head: 0b93551b9ad9aae058c5cea849fe61bdd0619f6f
-Last-Product-Head: 0b93551b9ad9aae058c5cea849fe61bdd0619f6f
-Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #94 38816401386 — SUCCESS 8/8
+Observed-Main-Head: 14f7e4446b7c5bc78504d880951d20cc065d1bcd
+Last-Product-Head: 14f7e4446b7c5bc78504d880951d20cc065d1bcd
+Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #95 38816875676 — SUCCESS 8/8
 Last-Completed-Plan: P-030
-Last-Completed-Merge: 0b93551b9ad9aae058c5cea849fe61bdd0619f6f
+Last-Completed-Merge: 14f7e4446b7c5bc78504d880951d20cc065d1bcd
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
@@ -476,3 +476,12 @@ P-031 continues EN_EJECUCIÓN. Next eligible: exact-source PR CI then merge; ind
 - The provider side (PR #93) now checks separate P-010/P-025/P-030 monetary mandates before cost-changing EC2 `resize`, `resume` and restart-on-`recover`; direct native EC2 known modify/start bypasses are closed. P-018 lifecycle (PR #94) now treats timeout-after-possible-mutation as UNKNOWN, prevents repeat before conclusive provider reconcile and distinguishes definite pre-dispatch denial, including preserving original stopped status through a transient recovery state.
 - Financial infrastructure (PRs #84–#92) continues to be generic provider observations, account-scoped local pending intents and same-unit, time-bounded planning; P-030 Conway `credit_cent` and AWS Budgets do NOT constitute USD provider financing/authority. `AwsEnvironmentProvider.authorizeNewProvision` and `authorizeBillableMutation` are BOTH intentionally unconfigured by the production runtime. No LIVE purchases, AWS billing, provider-contract verification, profit or P-005 E5/E6 material acceptance demonstrated.
 - P-031 remains EN_EJECUCIÓN; next eligible work is to audit a provider-authenticated AWS account funding/contract source and P-010 durable mandate issuer, or continue independently eligible reuse/cancel/retire optimization without inventing authorizations. Validate end-to-end mock provision→use→cost→settlement→retire, including unknown reconciliation and recurring expiry when provider facts can be proven. Avoid a second ledger, scheduler, fixed human approval, closed provider list or unit conversion guessing.
+
+## P-031 — policy-bound simulated procurement dispatch using existing owners (2026-10-15)
+
+Baseline `main 14f7e4446b7c5bc78504d880951d20cc065d1bcd`: PR #95 source `e7fba49a0ddfc42bd374ebca0737ef6558b5c85d`, CI run `38816875676` SUCCESS 8/8, squash integrated. Exact postmerge main CI not independently verified via PR-filtered workflow connector.
+
+Root R2: prior P-031 work provided independent P-025 reviewed path receipts, P-030 provider-unit cost scenario and durable financial effects, and P-010 persisted policy decisions, but no single checked execution path. A P-010 default ALLOW when no rule triggers is not external monetary authority. Source branch `abos/p031-authorized-procurement-e2e-simulation` introduces a **single generic source-only composition** `src/economics/provider-procurement-execution.ts`, reusing existing P-025 read-only path receipt, P-030 account/unit/recurring quote/contingency scenario and atomic financial-effect prepare+dispatch claim, and P-010 explicit positive persisted tool-policy receipt bound to full operation and cryptographic scenario digest. Production adapter requires host-injected independently authenticated economics and provider dispatch, not model data/Budgets/Conway credits. NO default runtime wiring: AWS USD funding and contractual terms are not authenticated in LIVE; no payable provider dispatch was exercised.
+Simulated integration tests cover explicit positive P-010 rule, implicit default allow denial, wrong task/path, wrong account/currency/resource/terms, missing costs, deficit, expired funding, durable operation key replay/mismatch, provider usable-vs-financial-pending, rejected, response lost UNKNOWN and no duplicate, zero synthetic transaction settlement. Provision usable does NOT mean supplier bill settled. This is NOT a second policy authority or financial ledger.
+
+NEXT_ELIGIBLE_WORK: run exact source CI then integrate if green; audit/adapt provider account financing and contract source and capture actual P-010 issuer. Keep P-031 EN_EJECUCIÓN, P-005 E5/E6 LIVE UNKNOWN, no P-032 transition. Do not count synthetic source tests as LIVE spending authority.
