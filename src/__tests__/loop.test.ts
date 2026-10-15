@@ -22,8 +22,17 @@ import {
 } from "./mocks.js";
 import type { AbosDatabase, AgentTurn, AgentState } from "../types.js";
 
-// Agent-loop tests must stay deterministic and offline. The discover_agents
-// behavior under test here is loop classification, not the live ERC-8004 RPC.
+// Agent-loop tests must stay deterministic and offline. The agent refreshes
+// on-chain USDC while waking and on each turn; an unmocked RPC can hang long
+// enough to trip the 30s test timeout even though the exec/persistence path
+// itself has completed correctly. Preserve every other x402 implementation.
+vi.mock("../conway/x402.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../conway/x402.js")>()),
+  getUsdcBalance: vi.fn(async () => 0),
+}));
+
+// The discover_agents behavior under test here is loop classification,
+// not the live ERC-8004 RPC.
 vi.mock("../registry/discovery.js", () => ({
   discoverAgents: vi.fn(async () => [
     {
