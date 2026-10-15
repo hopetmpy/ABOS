@@ -102,7 +102,7 @@ describe("child economic semantics", () => {
       attributedRevenueEvidence: "Observed external USD revenue",
       observedExpenseCents: 120,
       observedExpenseUnit: "USD",
-      observedExpenseEvidence: "Observed external USD expense"
+      observedExpenseEvidence: "Observed external USD expense",
       evidence: ["Revenue externally attributed to child-econ-1."],
     });
 
@@ -120,7 +120,7 @@ describe("child economic semantics", () => {
       attributedRevenueEvidence: "Observed external USD revenue",
       observedExpenseCents: 120,
       observedExpenseUnit: "USD",
-      observedExpenseEvidence: "Observed external USD expense"
+      observedExpenseEvidence: "Observed external USD expense",
       capitalExposureCents: 600,
       capitalExposureUnit: "USD",
       capitalExposureEvidence: "Independent measured capital exposure",
@@ -138,7 +138,7 @@ describe("child economic semantics", () => {
       attributedRevenueEvidence: "Observed external USD revenue",
       observedExpenseCents: 120,
       observedExpenseUnit: "USD",
-      observedExpenseEvidence: "Observed external USD expense"
+      observedExpenseEvidence: "Observed external USD expense",
       capitalExposureCents: 500,
       capitalExposureUnit: "USD",
       capitalExposureEvidence: "Independent measured capital exposure",
