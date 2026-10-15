@@ -463,7 +463,9 @@ Reconciliation requires independently verified provider finality; this view is n
           return `Invalid tier. Valid amounts (USD): ${TOPUP_TIERS.join(", ")}`;
         }
 
-        if (ctx.identity.account.address.toLowerCase() !== ctx.identity.address.toLowerCase()) {
+        const signerAddress = ctx.identity.account?.address;
+        if (typeof signerAddress !== "string" ||
+            signerAddress.toLowerCase() !== ctx.identity.address.toLowerCase()) {
           throw new Error(
             "x402 signing wallet conflicts with the recorded credit recipient identity; purchase not dispatched",
           );

@@ -137,8 +137,21 @@ describe("P-030 x402 topup durable financial intents", () => {
       .find((tool) => tool.name === "topup_credits");
     expect(target).toBeDefined();
     await expect(target!.execute({amount_usd:5},{
-      db, config,identity:{...identity,address:"0xnot-the-signer"},
+      db, config,identity:{
+        ...identity,account:{...identity.account,address:identity.address},
+        address:"0xnot-the-signer",
+      },
       conway:new MockConwayClient(),inference:new MockInferenceClient(),
+    })).rejects.toThrow(/signing wallet conflicts/);
+    expect((db.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects").get() as {n:number}).n).toBe(0);
+  });
+
+  it("fails closed when the signing account is not initialized", async () => {
+    const db=mkdb(),identity=createTestIdentity(),config=createTestConfig();
+    const tool=createBuiltinTools(config.sandboxId).find(t=>t.name==="topup_credits");
+    await expect(tool!.execute({amount_usd:5},{
+      db,config,identity,conway:new MockConwayClient(),
+      inference:new MockInferenceClient(),
     })).rejects.toThrow(/signing wallet conflicts/);
     expect((db.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects").get() as {n:number}).n).toBe(0);
   });
