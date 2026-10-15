@@ -113,6 +113,18 @@ export class FinancialEffectIntentPendingError extends Error {
   }
 }
 
+/** One remote transfer identity cannot account for two different local intents. */
+export class FinancialEffectProviderIdentityConflictError extends Error {
+  readonly externalEffectOutcomeUnknown = true;
+  constructor(providerEffectId: string, competingOperationKey: string) {
+    super(
+      `Provider effect ${providerEffectId} already belongs to financial intent ${competingOperationKey}; ` +
+      "the same external receipt cannot settle a different local intent.",
+    );
+    this.name = "FinancialEffectProviderIdentityConflictError";
+  }
+}
+
 export class FinancialEffectReconciliationRequiredError extends Error {
   readonly operationKey: string;
   readonly externalEffectOutcomeUnknown = true;
@@ -164,6 +176,25 @@ function resolveProviderEffectId(
     throw new Error("Provider settlement identity conflicts with the durable financial effect");
   }
   return next ?? current;
+}
+
+function assertUniqueProviderEffectId(
+  db: Database.Database,
+  provider: string,
+  providerEffectId: string | null,
+  operationKey: string,
+): void {
+  if (providerEffectId === null) return;
+  const duplicate = db.prepare(
+    `SELECT operation_key FROM financial_effects
+     WHERE provider = ? AND provider_effect_id = ? AND operation_key != ?
+     LIMIT 1`,
+  ).get(provider, providerEffectId, operationKey) as { operation_key: string } | undefined;
+  if (duplicate) {
+    throw new FinancialEffectProviderIdentityConflictError(
+      providerEffectId, duplicate.operation_key,
+    );
+  }
 }
 
 function uniqueEvidence(values: readonly string[] | undefined): string[] {
@@ -454,6 +485,7 @@ export function recordFinancialEffectObservation(
   const lastError = normalizeOptionalText(observation.error);
 
   db.transaction(() => {
+    assertUniqueProviderEffectId(db, existing.provider, providerEffectId, key);
     db.prepare(
       `UPDATE financial_effects
        SET state = ?, provider_effect_id = ?, provider_status = ?,
@@ -504,6 +536,7 @@ export function settleFinancialEffect(
   const existing = getFinancialEffectByOperationKey(db, key);
   if (!existing) throw new Error(`Financial effect not found for operation key ${key}`);
   if (existing.state === "completed") {
+    resolveProviderEffectId(existing.providerEffectId, observation.providerEffectId);
     return { effect: existing, materialized: false };
   }
   if (existing.state === "rejected") {
@@ -529,6 +562,9 @@ export function settleFinancialEffect(
         transactionId = current.transactionId;
         return;
       }
+      // Check inside the SQLite write transaction, immediately before
+      // accounting. Provider ID reuse is not new provider finality.
+      assertUniqueProviderEffectId(db, current.provider, providerEffectId, key);
       transactionId = materialize(current);
       db.prepare(
         `UPDATE financial_effects
@@ -559,6 +595,10 @@ export function settleFinancialEffect(
       materialized: true,
     };
   } catch (cause) {
+    // A conflicting remote identity does not establish settlement at all.
+    // Preserve the previous unresolved state rather than falsely labelling
+    // this effect externally settled/reconciliation_required.
+    if (cause instanceof FinancialEffectProviderIdentityConflictError) throw cause;
     const error = cause instanceof Error ? cause.message : String(cause);
     const recoveryAt = new Date().toISOString();
     db.transaction(() => {

@@ -8,6 +8,7 @@ import { createTestDb } from "./mocks.js";
 import {
   FinancialEffectIdempotencyConflictError,
   FinancialEffectIntentPendingError,
+  FinancialEffectProviderIdentityConflictError,
   FinancialEffectReconciliationRequiredError,
   claimFinancialEffectDispatch,
   getCommittedFinancialEffectCents,
@@ -416,6 +417,52 @@ describe("P-030 financial effect authority", () => {
     expect(late.state).toBe("reconciliation_required");
     expect(late.lastError).toContain("ledger temporarily unavailable");
     expect(getCommittedFinancialEffectCents(database.raw)).toBe(180);
+  });
+
+  it("prevents one provider receipt from settling two independent intents", () => {
+    const database = db();
+    const make = (key: string, purpose: string) => ({
+      operationKey: key, effectKind: "credit_transfer",
+      amountCents: 200, recipient: "0xsame", provider: "conway",
+      request: { note: purpose },
+    });
+    prepareFinancialEffect(database.raw, make("invoice:one", "invoice-one"));
+    prepareFinancialEffect(database.raw, make("invoice:two", "invoice-two"));
+    claimFinancialEffectDispatch(database.raw, "invoice:one");
+    claimFinancialEffectDispatch(database.raw, "invoice:two");
+    recordFinancialEffectObservation(database.raw, "invoice:one", {
+      resolution: "pending", providerEffectId: "same-provider-receipt",
+      providerStatus: "submitted",
+    });
+    expect(() => recordFinancialEffectObservation(database.raw, "invoice:two", {
+      resolution: "pending", providerEffectId: "same-provider-receipt",
+      providerStatus: "submitted",
+    })).toThrow(FinancialEffectProviderIdentityConflictError);
+    expect(getFinancialEffectByOperationKey(database.raw, "invoice:two")?.state).toBe("dispatching");
+    let attemptedAccounting = 0;
+    expect(() => settleFinancialEffect(database.raw, "invoice:two", {
+      providerEffectId: "same-provider-receipt", providerStatus: "completed",
+    }, () => { attemptedAccounting++; return "should-not-materialize"; }))
+      .toThrow(FinancialEffectProviderIdentityConflictError);
+    expect(attemptedAccounting).toBe(0);
+    expect(getFinancialEffectByOperationKey(database.raw, "invoice:two")?.state).toBe("dispatching");
+    expect((database.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n).toBe(0);
+    // The first intent remains independently reconcilable with this receipt.
+    const first = settleFinancialEffect(database.raw, "invoice:one", {
+      providerEffectId: "same-provider-receipt", providerStatus: "completed",
+    }, () => {
+      database.insertTransaction({
+        id: "receipt-one-ledger", type: "transfer_out", amountCents: 200,
+        description: "First receipt only", timestamp: new Date().toISOString(),
+      });
+      return "receipt-one-ledger";
+    });
+    expect(first.effect.state).toBe("completed");
+    expect((database.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n).toBe(1);
+    expect(() => settleFinancialEffect(database.raw, "invoice:one", {
+      providerEffectId: "different-remote-receipt", providerStatus: "completed",
+    }, () => "replayed"))
+      .toThrow(/settlement identity conflicts/);
   });
 
   it("does not count rejected or completed effects as immobilized capital", () => {
