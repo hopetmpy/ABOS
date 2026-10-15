@@ -52,11 +52,6 @@ const defaultRunner: EnvironmentCommandRunner = (
 });
 
 /**
- * Attestation from a trusted P-010/P-025/P-030 authority, not caller/task
- * metadata or a provider IAM profile. The provider verifies the account,
- * scope and economic fields before any billable EC2 creation.
- */
-/**
  * Definite AWS economic rejection before any billable provider dispatch. The
  * P-018 lifecycle can therefore distinguish this from timeout-after-creation.
  */
@@ -68,6 +63,12 @@ export class AwsEc2ProcurementNotDispatchedError extends Error {
   }
 }
 
+/**
+ * Attestation from a trusted P-010/P-025/P-030 authority, not caller/task
+ * metadata or IAM profile. The provider verifies observed account, currency,
+ * exact total commitment and billing-terms fields before billable EC2 creation.
+ * The callback itself must verify canonical evidence before approving.
+ */
 export interface AwsEc2ProcurementDecision {
   allowed: boolean;
   policyDecisionId?: string | null;
