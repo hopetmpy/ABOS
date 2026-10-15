@@ -241,9 +241,9 @@ describe("P-030 credit effect execution and reconciliation", () => {
     expect(() => reconcileCreditEffect(db, { ...valid, providerEffectId: "different" }))
       .toThrow(/identity conflicts/);
     expect(() => reconcileCreditEffect(db, { ...valid, toAddress: "0xother" }))
-      .toThrow(/recipient conflicts/);
+      .toThrow(/observed matching recipient/);
     expect(() => reconcileCreditEffect(db, { ...valid, amountCents: 501 }))
-      .toThrow(/amount conflicts/);
+      .toThrow(/observed matching amount/);
     expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as any).n).toBe(0);
     expect(reconcileCreditEffect(db, valid).state).toBe("completed");
     expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as any).n).toBe(1);
