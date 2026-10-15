@@ -393,6 +393,37 @@ describe("orchestration/plan-mode", () => {
       expect(result.feedback).toContain("not Conway credit units or proof of credits received");
     });
 
+    it("surfaces unresolved generic USDC paid services without inventing financial settlement or human approval", async () => {
+      const result = await reviewPlan(makePlan(), {
+        ...autoConfig,
+        reviewContext: {
+          outstandingFinancialEffects: {
+            count: 0, pendingCreditCommitments: 0,
+            pendingUsdcTopups: 0, pendingUsdcOtherEffects: 1,
+            pendingUsdcCommitments: 75, unclassifiedPendingEffects: 0,
+          },
+        },
+      });
+      expect(result.approved).toBe(true);
+      expect(result.feedback).toContain("1 non-topup USDC payments remain unresolved");
+      expect(result.feedback).toContain("75 USDC cents (all categories)");
+      expect(result.feedback).toContain("not verified USDC settlement");
+      expect(result.feedback).not.toContain("awaiting human approval");
+
+      const unclear = await reviewPlan(makePlan(), {
+        ...autoConfig,
+        reviewContext: {
+          outstandingFinancialEffects: {
+            count: 0, pendingCreditCommitments: 0, pendingUsdcOtherEffects: 0,
+            pendingUsdcCommitments: 0, unclassifiedPendingEffects: 1,
+          },
+        },
+      });
+      expect(unclear.approved).toBe(false);
+      expect(unclear.feedback).toContain("disposition=unknown");
+      expect(unclear.feedback).toContain("unknown financial units");
+    });
+
     it("preserves UNKNOWN when a financially inconsistent exposure is injected", async () => {
       const result = await reviewPlan(makePlan(), {
         ...autoConfig,
