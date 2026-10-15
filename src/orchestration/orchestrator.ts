@@ -29,6 +29,7 @@ import {
 } from "./planner.js";
 import { reviewPlan } from "./plan-mode.js";
 import type { StrategicReviewContext } from "./strategic-review.js";
+import { getCommittedFinancialEffectCents, listUnresolvedFinancialEffects } from "../economics/financial-effects.js";
 import {
   loadPlanningSimulationEvidence,
   referencedSimulationEvidence,
@@ -823,11 +824,20 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       lesson: experiment.lesson,
     }));
 
+    // Existing financial-effect state is canonical evidence of credit exposure,
+    // not proof of balance, settlement or free capital. Read it before review
+    // without introducing a second treasury or authorization authority.
+    const unsettledEffects = listUnresolvedFinancialEffects(this.strategicParams.db);
+    const pendingCreditCommitments = getCommittedFinancialEffectCents(this.strategicParams.db);
     return {
       capabilityResolutions,
       environmentSnapshots,
       simulationEvidence,
       adaptiveContext: plannerContext.adaptiveContext,
+      outstandingFinancialEffects: {
+        count: unsettledEffects.length,
+        pendingCreditCommitments,
+      },
     };
   }
 
