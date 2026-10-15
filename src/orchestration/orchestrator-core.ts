@@ -60,15 +60,20 @@ const ORCHESTRATOR_STATE_KEY = "orchestrator.state";
 const ORCHESTRATOR_TODO_KEY = "orchestrator.todo_md";
 const DEFAULT_TASK_FUNDING_CENTS = 25;
 
-export function calculateTaskFundingCents(task: TaskNode, config: any): number {
-  const estimated = Math.max(0, task.metadata.estimatedCostCents);
-  const configuredDefault = Number(
+/**
+ * Credit-denominated transfer for child execution. task_graph.estimatedCostCents
+ * is local task_cost_cent: it is not an observed Conway credit requirement.
+ * Preserve the existing configurable credit funding baseline without converting
+ * a planning estimate into a financial transfer. Need-based top-ups require
+ * independently evidenced credit_cent terms through the canonical treasury path.
+ */
+export function calculateTaskFundingCents(_task: TaskNode, config: any): number {
+  const configuredCredits = Number(
     config?.defaultTaskFundingCents ?? DEFAULT_TASK_FUNDING_CENTS,
   );
-  return Math.max(
-    estimated,
-    Number.isFinite(configuredDefault) ? configuredDefault : 0,
-  );
+  return Number.isSafeInteger(configuredCredits) && configuredCredits >= 0
+    ? configuredCredits
+    : 0;
 }
 
 type ExecutionPhase =
