@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-030
 Active-Segment: continuity/C0026.md
-Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / DURABLE_RESERVE_SOURCE_a0fe3fa_E3_8_OF_8 / LIVE_UNVERIFIED
+Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / DURABLE_RESERVE_MIGRATION_SOURCE_c94b1ee_E3_8_OF_8 / LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,7 +15,7 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p030-family-economics-treasury
 Host-Head-At-Audit-Open: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
-Last-Reconciled-Host-Head: a0fe3fa14ef6e81cea7e89270e6ba49dd55b4a34
+Last-Reconciled-Host-Head: c94b1ee48f957870792eebef749b6aa1c1e9e43b
 Observed-Main-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-CI: 36220600132 — SUCCESS 8/8
@@ -243,3 +243,10 @@ La auditoría hasta DECISION_READY se conserva como historia en C0026; ya no des
 - **HARD still open:** ensure P-025's actual decision and P-023's prediction→observed economic outcome (including reserve use/release and recovery) are causally wired E2E, validate compatible/liquid reserve coverage against changing external obligations and test v22→v23 migration on persisted legacy state. External payment/provider finality and economic LIVE remain P-005, not a source PASS.
 
 NEXT_ELIGIBLE_WORK: re-audit the real P-025 decision→reserve allocation linkage and observed reserve outcome under P-023; attach meaningful evidence/decision ownership without another planner, policy, ledger or journal. P-030 remains `EN_EJECUCIÓN`; PR #75 remains DRAFT; no merge and no P-031.
+
+## P-030 — exact legacy-schema migration regression, 2026-10-15
+
+- Source commit `c94b1ee48f957870792eebef749b6aa1c1e9e43b` extends P-030 adversarial tests to reconstruct durable v22 state lacking the new reserve table, preserve an existing settled transaction, reopen through `createDatabase()`, migrate to schema v23 and allocate a reserve without losing accounting history.
+- EXACT SOURCE CI: push `38693684266` **SUCCESS 8/8**, PR `38693688137` **SUCCESS 8/8**, including Node22/24, Windows22/24, public distribution22/24, security and ProjectOps integrity. This is E3 of migration/source; it does **not** establish E5 external credit liquidity, provider authenticated finality or E6 actual profit/costs.
+- Internal reserve authority remains `treasury_reserve_allocations`, Evidence Fabric is causal correlation, `financial_effects` controls external intents and `transactions` owns realized accounting. No duplicate financial transfer, arbitrary approval gate, provider spend or merge.
+- NEXT_ELIGIBLE_WORK: P-030 P-025 real strategic decision provenance and P-023 economic decision→outcome loop, including reserve usage/release after observed economic outcomes, and actual reserve-capacity re-evaluation when provider status/obligations change. Keep P-005 E5/E6 independent; P-031 not opened; PR #75 still DRAFT.
