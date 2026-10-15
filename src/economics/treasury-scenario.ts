@@ -64,6 +64,16 @@ export function assessTreasuryScenario(
   const jointExposure = validCredits(input.jointRiskExposureCreditsCents, "jointRiskExposureCreditsCents");
   const jointEvidence = uniqueEvidence(input.jointRiskEvidence);
   const evidence = uniqueEvidence(input.opportunityEvidence);
+  const history = projection.historicalTaskCostCalibration;
+  if (history?.actualToEstimateRatio !== null &&
+      history?.actualToEstimateRatio !== undefined) {
+    evidence.push(
+      `Local task cost estimate→observed calibration: ${history.comparableSamples} comparable tasks; ` +
+      `actual/estimate=${history.actualToEstimateRatio.toFixed(3)}, ` +
+      `net deviation=${history.netDeviationTaskCostCents} task-cost cents. ` +
+      "Not interchangeable with Conway credit unit or independently verified business P&L.",
+    );
+  }
   const futureEvidence = uniqueEvidence(input.futureNeedEvidence);
   const conditions: string[] = [];
 

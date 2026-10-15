@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createTestDb } from "./mocks.js";
 import type { AbosDatabase } from "../types.js";
 import { getTreasuryProjection } from "../economics/treasury-projection.js";
+import { assessTreasuryScenario } from "../economics/treasury-scenario.js";
 import { prepareFinancialEffect, recordFinancialEffectObservation } from "../economics/financial-effects.js";
 let dbs: AbosDatabase[] = [];
 const db = () => { const d = createTestDb(); dbs.push(d); return d; };
@@ -97,6 +98,52 @@ describe("P-030 treasury projection", () => {
     expect(compatible.taskCommitmentCreditsCents).toBe(250);
     expect(compatible.freeCreditsCents).toBe(550);
     expect(compatible.projectedCreditShortfallCents).toBe(0);
+  });
+
+  it("calibrates task estimates against observed terminal costs without counting unknown defaults as zero", () => {
+    const d=db();
+    const now=new Date().toISOString();
+    d.raw.prepare("INSERT INTO goals (id,title,description,status,created_at) VALUES (?,?,?,?,?)")
+      .run("g-calibrate","Cost calibration","task evidence","active",now);
+    const insert=d.raw.prepare(
+      `INSERT INTO task_graph
+       (id,goal_id,title,description,status,assigned_to,agent_role,priority,
+        dependencies,estimated_cost_cents,actual_cost_cents,created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+    );
+    const task=(id:string,status:string,estimate:number,actual:number)=>
+      insert.run(id,"g-calibrate",id,"test",status,"0xchild","generalist",50,
+        "[]",estimate,actual,now);
+    task("observed-overrun","completed",100,200);
+    task("observed-under","failed",200,150);
+    task("unknown-zero-default","completed",100,0);
+    task("still-running","running",100,500);
+
+    const value=getTreasuryProjection(d,{
+      observedCreditsCents:1000,reservedCreditsCents:0,otherCommittedCreditsCents:0,
+    });
+    const h=value.historicalTaskCostCalibration;
+    expect(h.comparableSamples).toBe(2);
+    expect(h.estimatesAwaitingObservedCost).toBe(1);
+    expect(h.estimatedTaskCostCents).toBe(300);
+    expect(h.actualTaskCostCents).toBe(350);
+    expect(h.netDeviationTaskCostCents).toBe(50);
+    expect(h.actualToEstimateRatio).toBeCloseTo(350/300);
+    expect(h.unit).toBe("task_cost_cent");
+    // Still-running generic task cost cannot be silently converted into Conway credits.
+    expect(value.freeCreditsCents).toBeNull();
+    expect(value.limitations.join(" ")).toContain("missing measurements must not be treated as zero");
+
+    const projected=assessTreasuryScenario(value,{
+      proposalCreditsCents:100,
+      immediateNeedCreditsCents:100,
+      opportunityEvidence:["capacity requirement observed"],
+      alternatives:[{id:"defer",costCreditsCents:0,evidence:"delay cost observed"}],
+      risks:[{id:"incident",exposureCreditsCents:50,evidence:"scenario"}],
+    });
+    expect(projected.evidence.join(" ")).toContain("actual/estimate=1.167");
+    expect(projected.evidence.join(" ")).toContain("Not interchangeable with Conway credit unit");
+    expect(projected.status).toBe("needs_evidence");
   });
 
   it("rejects duplicate resource allocations rather than inflating investment", () => {

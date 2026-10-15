@@ -30,7 +30,22 @@ export interface TreasuryProjectionInput {
   resourceInvestment?: ResourceInvestmentObservation[];
 }
 
+export interface TaskCostCalibration {
+  /** Only terminal tasks with both a positive estimate and observed cost. */
+  comparableSamples: number;
+  /** Terminal estimates without measured actual costs are not zero-cost wins. */
+  estimatesAwaitingObservedCost: number;
+  estimatedTaskCostCents: number | null;
+  actualTaskCostCents: number | null;
+  netDeviationTaskCostCents: number | null;
+  actualToEstimateRatio: number | null;
+  authority: "local_task_graph";
+  /** No cross-unit conversion into Conway credits or external P&L. */
+  unit: "task_cost_cent";
+}
+
 export interface TreasuryProjection {
+  historicalTaskCostCalibration: TaskCostCalibration;
   observedCreditsCents: number | null;
   reservedCreditsCents: number | null;
   otherCommittedCreditsCents: number | null;
@@ -63,6 +78,33 @@ export function getTreasuryProjection(
     "SELECT COALESCE(SUM(estimated_cost_cents), 0) AS amount FROM task_graph WHERE status IN ('assigned', 'running')",
   ).get() as { amount: number };
   const activeTaskEstimatedCostCents = Math.max(0, Number(tasks?.amount ?? 0));
+  // 0 is the schema default for actual cost and is not enough to establish
+  // realized zero spending. Exclude those tasks from measured comparisons.
+  const history = db.raw.prepare(
+    `SELECT
+       COALESCE(SUM(CASE WHEN actual_cost_cents > 0 THEN 1 ELSE 0 END),0) AS comparable,
+       COALESCE(SUM(CASE WHEN actual_cost_cents = 0 THEN 1 ELSE 0 END),0) AS unobserved,
+       COALESCE(SUM(CASE WHEN actual_cost_cents > 0 THEN estimated_cost_cents ELSE 0 END),0) AS estimate,
+       COALESCE(SUM(CASE WHEN actual_cost_cents > 0 THEN actual_cost_cents ELSE 0 END),0) AS actual
+     FROM task_graph
+     WHERE status IN ('completed','failed','cancelled')
+       AND estimated_cost_cents > 0`,
+  ).get() as { comparable: number; unobserved: number; estimate: number; actual: number };
+  const comparable = Number(history.comparable);
+  const estimated = Number(history.estimate);
+  const realized = Number(history.actual);
+  const verifiedTotals = comparable > 0 && Number.isSafeInteger(estimated) &&
+    Number.isSafeInteger(realized) && estimated > 0;
+  const historicalTaskCostCalibration: TaskCostCalibration = {
+    comparableSamples: comparable,
+    estimatesAwaitingObservedCost: Number(history.unobserved),
+    estimatedTaskCostCents: verifiedTotals ? estimated : null,
+    actualTaskCostCents: verifiedTotals ? realized : null,
+    netDeviationTaskCostCents: verifiedTotals ? realized - estimated : null,
+    actualToEstimateRatio: verifiedTotals ? realized / estimated : null,
+    authority: "local_task_graph",
+    unit: "task_cost_cent",
+  };
   const taskCredits = activeTaskEstimatedCostCents === 0
     ? 0 : knownCents(input.taskCommitmentCreditsCents, "taskCommitmentCreditsCents");
   const pending = getCommittedFinancialEffectCents(db.raw);
@@ -94,7 +136,11 @@ export function getTreasuryProjection(
     "Credit liquidity and externally settled business P&L are different authorities.",
     "Task estimates are not converted to credit obligations without unit-compatible evidence.",
     "Resource valuations remain separate from actual invoice/ledger expense and revenue.",
+    "Task estimate→actual history is local task-cost evidence, not automatically Conway credit spending, verified invoices or cash P&L.",
   ];
+  if (historicalTaskCostCalibration.estimatesAwaitingObservedCost > 0) limitations.push(
+    "Some terminal task estimates have no observed actual cost; missing measurements must not be treated as zero deviations.",
+  );
   if (freeCreditsCents === null) limitations.push(
     "Free credits UNKNOWN until fresh balance, commitments, contingencies and reserves are observed.",
   );
@@ -105,6 +151,7 @@ export function getTreasuryProjection(
     "Non-cash investment (time, electricity, subscriptions, compute) has not been valued from evidence.",
   );
   return {
+    historicalTaskCostCalibration,
     observedCreditsCents: observed,
     reservedCreditsCents: reserved,
     otherCommittedCreditsCents: other,
