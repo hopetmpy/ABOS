@@ -155,6 +155,63 @@ describe("EnvironmentExecutionBridge", () => {
     expect(attempts).toEqual(["beta"]);
   });
 
+  it("passes only an explicit reviewed budget to the canonical selector", async () => {
+    const registry = new EnvironmentRegistry();
+    const candidate = provider("priced", 80);
+    candidate.estimate = async () => ({
+      estimatedCostCents: 80, costCoverage: "complete", costUnit: "usd_cent",
+    });
+    registry.register(candidate);
+    const executors = new EnvironmentTaskExecutorRegistry();
+    let dispatches = 0;
+    executors.register({
+      environmentId: "priced",
+      spawn: async () => {
+        dispatches += 1;
+        return { address: "priced://1", name: "priced", sandboxId: "1" };
+      },
+    });
+    const bridge = new EnvironmentExecutionBridge(new EnvironmentSelector(registry), executors);
+    const input = task("priced");
+    input.metadata.estimatedCostCents = 1; // task_cost_cent is not a purchase budget
+    await expect(bridge.spawn(input, { maxEstimatedCostCents: 50, maxEstimatedCostUnit: "usd_cent" }))
+      .rejects.toMatchObject({ operation: "selection" });
+    expect(dispatches).toBe(0);
+    await expect(bridge.spawn(input, { maxEstimatedCostCents: 80 }))
+      .rejects.toMatchObject({ operation: "selection" });
+    await expect(bridge.spawn(input, {
+      maxEstimatedCostCents: 80, maxEstimatedCostUnit: "credit_cent",
+    })).rejects.toMatchObject({ operation: "selection" });
+    expect(dispatches).toBe(0);
+    await bridge.spawn(input); // No silent limit derived from task metadata
+    expect(dispatches).toBe(1);
+    await bridge.spawn(input, { maxEstimatedCostCents: 80, maxEstimatedCostUnit: "usd_cent" });
+    expect(dispatches).toBe(2);
+  });
+
+  it("rejects incomplete provider estimates when an explicit budget reaches the bridge", async () => {
+    const registry = new EnvironmentRegistry();
+    const candidate = provider("partial", 5);
+    candidate.estimate = async () => ({
+      estimatedCostCents: 5, costCoverage: "partial", costUnit: "usd_cent",
+      evidence: ["Compute only; networking and storage unpriced"],
+    });
+    registry.register(candidate);
+    const executors = new EnvironmentTaskExecutorRegistry();
+    let dispatches = 0;
+    executors.register({
+      environmentId: "partial",
+      spawn: async () => {
+        dispatches += 1;
+        return { address: "partial://1", name: "partial", sandboxId: "1" };
+      },
+    });
+    const bridge = new EnvironmentExecutionBridge(new EnvironmentSelector(registry), executors);
+    await expect(bridge.spawn(task("partial"), { maxEstimatedCostCents: 10, maxEstimatedCostUnit: "usd_cent" }))
+      .rejects.toMatchObject({ operation: "selection" });
+    expect(dispatches).toBe(0);
+  });
+
   it("does not silently switch providers after a selected environment attempt fails", async () => {
     const environments = new EnvironmentRegistry();
     environments.register(provider("alpha", 0));

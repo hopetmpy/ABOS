@@ -306,6 +306,13 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
 
     return {
       estimatedCostCents,
+      // Pricing API amounts use USD. An externally injected hourly number
+      // without its own USD unit evidence must not acquire that unit by guess.
+      costUnit: estimatedCostCents !== null &&
+        (requirements.metadata?.hourlyCostCents == null ||
+          requirements.metadata?.hourlyCostUnit === "usd_cent")
+        ? "usd_cent"
+        : null,
       costCoverage: estimatedCostCents == null ? "unknown" : "partial",
       reusableResourceCount,
       evidence,

@@ -49,6 +49,24 @@ describe("ConwayEnvironmentProvider collect", () => {
     }
   });
 
+  it("keeps prorated Conway monthly pricing partial and its charged unit UNKNOWN", async () => {
+    const provider = new ConwayEnvironmentProvider({
+      getCreditsBalance: async () => 100,
+      getCreditsPricing: async () => [{
+        name: "monthly-tier", vcpu: 2, memoryMb: 4096,
+        diskGb: 50, monthlyCents: 3000,
+      }],
+    });
+    const estimate = await provider.estimate({
+      requiredCapabilities: [],
+      expectedDurationMs: 3_600_000,
+    });
+    expect(estimate.estimatedCostCents).toBe(5);
+    expect(estimate.costUnit).toBeNull();
+    expect(estimate.costCoverage).toBe("partial");
+    expect(estimate.evidence?.join(" ")).toContain("billing granularity");
+  });
+
   it("collects a child runtime artifact to the canonical parent workspace with matching SHA-256", async () => {
     const body = Buffer.from([1, 2, 3, 4, 5, 250]);
     const sha256 = createHash("sha256")

@@ -87,6 +87,8 @@ export interface EnvironmentRequirements {
   excludedEnvironmentIds?: string[];
   requiredPermissions?: string[];
   maxEstimatedCostCents?: number | null;
+  /** Unit required for source-attributed provider budgets; no implicit FX. */
+  maxEstimatedCostUnit?: string | null;
   expectedDurationMs?: number | null;
   region?: string | null;
   goalId?: string | null;
@@ -123,6 +125,8 @@ export type EnvironmentCostEstimateCoverage = string;
 
 export interface EnvironmentEstimate {
   estimatedCostCents?: number | null;
+  /** Provider-estimated cost unit (e.g. usd_cent); null means unverified. */
+  costUnit?: string | null;
   /**
    * Whether estimatedCostCents covers the cost authority relevant to an
    * explicit budget. "partial" evidence remains useful for ranking/telemetry
