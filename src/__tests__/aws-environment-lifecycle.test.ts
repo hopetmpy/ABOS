@@ -319,7 +319,23 @@ describe("AwsEnvironmentProvider lifecycle", () => {
 
     expect(estimate.reusableResourceCount).toBe(1);
     expect(estimate.estimatedCostCents).toBe(2);
+    expect(estimate.costUnit).toBe("usd_cent");
+    expect(estimate.costCoverage).toBe("partial");
     expect(estimate.metadata?.hourlyCostCents).toBeCloseTo(1.04, 6);
+
+    const injected = await provider.estimate({
+      requiredCapabilities: [],
+      expectedDurationMs: 3_600_000,
+      metadata: { hourlyCostCents: 1.5 },
+    });
+    expect(injected.estimatedCostCents).toBe(2);
+    expect(injected.costUnit).toBeNull();
+    const sourced = await provider.estimate({
+      requiredCapabilities: [],
+      expectedDurationMs: 3_600_000,
+      metadata: { hourlyCostCents: 1.5, hourlyCostUnit: "usd_cent" },
+    });
+    expect(sourced.costUnit).toBe("usd_cent");
   });
 
   it("materializes pending runtime artifacts through chunked SSM collection", async () => {
