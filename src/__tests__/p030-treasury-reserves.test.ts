@@ -507,3 +507,74 @@ describe("P-030 causal reserve-funded Conway credit effects", () => {
     expect((d.raw.prepare("SELECT count(*) AS n FROM transactions").get() as {n:number}).n).toBe(0);
   });
 });
+
+describe("P-030 ambiguous provider outcome and corrupt local settlement", () => {
+  it("retains unknown reserve-backed transfer in exactly one pending obligation and never dispatches replay", async () => {
+    const d=db(), conway=new MockConwayClient();
+    setTreasuryReserve(d,alloc("unknown-cap","reserve-unknown",300));
+    let attempts=0;
+    conway.transferCredits=async () => {
+      attempts++;
+      throw new Error("provider dropped response; financial outcome UNKNOWN");
+    };
+    const unknown=await executeCreditEffect({
+      db:d,conway,operationKey:"unknown-reserve-effect",kind:"credit_transfer",
+      toAddress:"0xrecipient",amountCents:200,note:"replacement",
+      reserveKey:"reserve-unknown",
+    });
+    expect(unknown.state).toBe("unknown");
+    expect(attempts).toBe(1);
+    expect(getPendingReserveCreditOverlap(d.raw)).toBe(200);
+    const report=getTreasuryProjection(d,{
+      observedCreditsCents:1000,otherCommittedCreditsCents:0,
+    });
+    expect(report.pendingTransferCreditsCents).toBe(200);
+    expect(report.pendingTransferWithinReservesCreditsCents).toBe(200);
+    expect(report.freeCreditsCents).toBe(700);
+    const replay=await executeCreditEffect({
+      db:d,conway,operationKey:"unknown-reserve-effect",kind:"credit_transfer",
+      toAddress:"0xrecipient",amountCents:200,note:"replacement",
+      reserveKey:"reserve-unknown",
+    });
+    expect(replay.id).toBe(unknown.id);
+    expect(replay.state).toBe("unknown");
+    expect(attempts).toBe(1);
+    expect(getTreasuryReserveLocalSettlement(d.raw).locallyReconciledCreditsCents).toBeNull();
+    expect((d.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as {n:number}).n).toBe(0);
+
+    // Reducing/releasing the reserve does not make unresolved provider credit free.
+    setTreasuryReserve(d,{
+      ...alloc("release-unknown-cap","reserve-unknown",0),
+      observedCreditsCents:null,balanceEvidence:null,
+      otherCommittedCreditsCents:null,
+    });
+    const afterRelease=getTreasuryProjection(d,{
+      observedCreditsCents:1000,otherCommittedCreditsCents:0,
+    });
+    expect(afterRelease.reservedCreditsCents).toBe(0);
+    expect(afterRelease.pendingTransferCreditsCents).toBe(200);
+    expect(afterRelease.pendingTransferWithinReservesCreditsCents).toBe(0);
+    expect(afterRelease.freeCreditsCents).toBe(800);
+  });
+
+  it("does not count a completed linked effect when settled transaction amount later disagrees", async () => {
+    const d=db(), conway=new MockConwayClient();
+    setTreasuryReserve(d,alloc("mismatch-cap","reserve-mismatch",300));
+    const completed=await executeCreditEffect({
+      db:d,conway,operationKey:"mismatch-reserve-effect",
+      kind:"credit_transfer",toAddress:"0xrecipient",amountCents:200,
+      note:"economic replacement",reserveKey:"reserve-mismatch",
+    });
+    expect(completed.state).toBe("completed");
+    expect(getTreasuryReserveLocalSettlement(d.raw).locallyReconciledCreditsCents).toBe(200);
+    d.raw.prepare("UPDATE transactions SET amount_cents = 201 WHERE id = ?")
+      .run(completed.transactionId);
+    const corrupted=getTreasuryReserveLocalSettlement(d.raw);
+    expect(corrupted.locallyReconciledCreditsCents).toBeNull();
+    expect(corrupted.unverifiableEffects).toBe(1);
+    const feedback=getTreasuryReserveLearning(d.raw);
+    expect(feedback.locallyReconciledReserveTransfersCreditsCents).toBeNull();
+    expect(feedback.observedReserveUseCreditsCents).toBeNull();
+    expect(feedback.limitations.join(" ")).toMatch(/inconsistent accounting/);
+  });
+});
