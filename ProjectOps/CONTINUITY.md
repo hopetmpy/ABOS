@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-030
 Active-Segment: continuity/C0026.md
-Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / CHILD_SAME_UNIT_ECONOMICS_SOURCE_013ec73_E3_8_OF_8 / LIVE_UNVERIFIED
+Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / SOURCE_DOD_REVIEWED_46b1c77_E3_PUSH_ATTEMPT2_8_OF_8_PR_8_OF_8 / LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,7 +15,7 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p030-family-economics-treasury
 Host-Head-At-Audit-Open: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
-Last-Reconciled-Host-Head: fecd1c886d384787284a29b3e46f9f6f1b2d79ca
+Last-Reconciled-Host-Head: 46b1c77ac1900e63c34720eab829552745a69b09
 Observed-Main-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-CI: 36220600132 — SUCCESS 8/8
@@ -342,3 +342,8 @@ NEXT_ELIGIBLE_WORK: source-audit legacy `transactions`/`spend_tracking` `amount_
 - P-030 remains EN_EJECUCIÓN / PR #75 DRAFT / E3_SOURCE. E5/E6 LIVE evidence under P-005 unverified, no `main` merge or P-031 and no real transfers. This documentary commit has distinct exact-head CI, pending independent verification.
 
 NEXT_ELIGIBLE_WORK: conduct focused P-030 Definition of Done matrix against existing `treasury-projection`, `treasury-scenario`, `treasury-reserves`, `financial-effects`, P-025/P-023 and policy tool boundaries, distinguishing source-complete claims from externally unverifiable E5/E6. If another source gap is proven implement minimal source correction with tests; otherwise document E3 source conclusion without pretending live profit, and preserve P-005 as the actual external witness. Do not duplicate money authorities.
+## P-030 — source DoD review handoff (2026-10-15)
+
+Source `46b1c77` push CI run `38763158493` attempt 2 SUCCESS 8/8 and PR run `38763169611` SUCCESS 8/8. Windows Node 22 first attempt failed transient local provider readiness; selective exact-SHA rerun passed without product changes, so P-016 NO_CHANGE. Source DoD coverage and E5/E6 separations are enumerated only in active `continuity/C0026.md` (single detailed matrix). PR #75 remains DRAFT and P-030 EN_EJECUCIÓN until an exact-head CI, integration and exact-main verification; no money or LIVE claims.
+
+NEXT_ELIGIBLE_WORK: follow C0026 source DoD integration boundary after exact documentary CI; keep P-005 LIVE unverified.
