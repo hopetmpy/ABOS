@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { PolicyEngine } from "../agent/policy-engine.js";
 import { AdaptiveStore } from "../intelligence/store.js";
+import { EnvironmentRegistry } from "../environments/registry.js";
+import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
+import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { createTestDb } from "./mocks.js";
 import { insertGoal, insertTask } from "../state/database.js";
 import {
@@ -265,6 +268,69 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
       expect(repeat.dispatched).toBe(false);
       expect(calls).toHaveLength(1);
       expect(repeat.financialEffect?.state).toBe("unknown");
+    } finally { db.close(); }
+  });
+
+  it("validates actual P-018 mock resource ownership and health before operational success", async () => {
+    const { db, scope } = setup();
+    try {
+      const quote = scenario();
+      const registry = new EnvironmentRegistry();
+      registry.register({
+        id: "aws", // Synthetic registered provider, never the real AWS CLI.
+        inspect: async () => ({
+          id: "aws", label: "Synthetic resource provider",
+          availability: "available", capabilities: [], constraints: [],
+          evidence: ["Fixture only"], observedAt: new Date().toISOString(),
+        }),
+        provision: async (request) => ({
+          externalId: "synthetic-provider-resource-001",
+          type: request.resourceType, status: "running",
+          providerState: "running", evidence: ["Synthetic provision completed."],
+        }),
+        health: async () => ({
+          healthy: true, status: "running", providerState: "running",
+          evidence: ["Independent P-018 health probe observes running capacity."],
+        }),
+      });
+      const resources = new EnvironmentResourceStore(db.raw);
+      const lifecycle = new EnvironmentLifecycleManager(registry, resources);
+      const calls: string[] = [];
+      const decisionId = policy(db, scope, quote);
+      const result = await executeReviewedProviderProcurement(db.raw, {
+        scope, policyDecisionId: decisionId,
+        dependencies: {
+          observeAuthenticatedEconomics: async () => quote,
+          dispatch: async (requestedScope) => {
+            calls.push("provider-provision");
+            await lifecycle.provision("aws", {
+              resourceId: requestedScope.resourceId,
+              resourceType: "simulated-worker",
+              requiredCapabilities: [], retentionPolicy: "ephemeral",
+              region: requestedScope.region,
+              goalId: requestedScope.goalId,
+              taskId: requestedScope.taskId,
+              pathId: requestedScope.pathId,
+            });
+            return { status: "usable", evidence: ["Supplier accepted synthetic capacity."] };
+          },
+          verifyResourceUsability: async (requestedScope) => {
+            const observed = await lifecycle.health(requestedScope.resourceId);
+            return {
+              usable: observed.status === "running" &&
+                observed.provider === requestedScope.provider &&
+                observed.externalId === "synthetic-provider-resource-001",
+              resourceId: observed.id,
+              evidence: ["P-018 registered ownership and independently probed running resource."],
+            };
+          },
+        },
+      });
+      expect(result.status).toBe("usable");
+      expect(result.financialEffect?.state).toBe("pending");
+      expect(resources.get(scope.resourceId)?.externalId).toBe("synthetic-provider-resource-001");
+      expect(calls).toEqual(["provider-provision"]);
+      expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n).toBe(0);
     } finally { db.close(); }
   });
 
