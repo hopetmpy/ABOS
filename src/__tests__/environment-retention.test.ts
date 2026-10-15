@@ -115,7 +115,7 @@ describe("EnvironmentRetentionCoordinator", () => {
         },
       }));
       const lifecycle = new EnvironmentLifecycleManager(registry, new EnvironmentResourceStore(db));
-      lifecycle.adopt({
+      lifecycle.resources.create({
         provider: "cloud", type: "compute", goalId: "g-uncertain",
         taskId: "t-uncertain", status: "unknown", retentionPolicy: "ephemeral",
         metadata: { provisionNeedsReconciliation: true },
