@@ -157,6 +157,25 @@ describe("P-030 treasury projection", () => {
     expect(projected.status).toBe("needs_evidence");
   });
 
+  it("does not convert corrupt active task-cost estimates into a fictitious zero", () => {
+    const d = db();
+    const now = new Date().toISOString();
+    d.raw.prepare("INSERT INTO goals (id, title, description, status, created_at) VALUES (?, ?, ?, ?, ?)")
+      .run("g-invalid-active", "Goal", "Corrupt cost", "active", now);
+    d.raw.prepare(
+      `INSERT INTO task_graph
+       (id, goal_id, title, description, status, assigned_to, agent_role,
+        priority, dependencies, estimated_cost_cents, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run("t-invalid-active", "g-invalid-active", "Task", "Bad estimate",
+      "assigned", "0xchild", "generalist", 50, "[]", -100, now);
+    expect(() => getTreasuryProjection(d, {
+      observedCreditsCents: 1000,
+      reservedCreditsCents: 0,
+      otherCommittedCreditsCents: 0,
+    })).toThrow(/exact nonnegative local task-cost cents/);
+  });
+
   it("refuses an inexact aggregate of individually valid treasury obligations", () => {
     const d = db();
     expect(() => getTreasuryProjection(d, {
