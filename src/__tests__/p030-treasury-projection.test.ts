@@ -34,6 +34,24 @@ describe("P-030 treasury projection", () => {
     expect(s.unresolvedFinancialEffects).toBe(1);
   });
 
+  it("reports a delayed refund without double-counting it as spendable credits", () => {
+    const d = db();
+    const s = getTreasuryProjection(d, {
+      observedCreditsCents: 1000,
+      reservedCreditsCents: 200,
+      otherCommittedCreditsCents: 100,
+      pendingRefundCreditsCents: 500,
+    });
+    expect(s.pendingRefundCreditsCents).toBe(500);
+    expect(s.freeCreditsCents).toBe(700);
+    expect(s.limitations.join(" ")).toMatch(/Pending refund is NOT liquid capital/);
+
+    const unknown = getTreasuryProjection(d, {
+      pendingRefundCreditsCents: 500,
+    });
+    expect(unknown.freeCreditsCents).toBeNull();
+  });
+
   it("keeps paid and imputed resources distinct without fabricating cash liquidity", () => {
     const s = getTreasuryProjection(db(), {
       resourceInvestment: [
