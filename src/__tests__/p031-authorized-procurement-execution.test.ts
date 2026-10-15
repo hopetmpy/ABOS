@@ -157,7 +157,7 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
       const secondPolicy = policy(db, equivalentWithNewKey, quote);
       await expect(executeReviewedProviderProcurement(db.raw, {
         scope: equivalentWithNewKey, policyDecisionId: secondPolicy, dependencies: deps,
-      })).rejects.toThrow("different operation key");
+      })).rejects.toThrow("overlaps unresolved intent");
       expect(calls).toHaveLength(1);
       expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n)
         .toBe(0);
