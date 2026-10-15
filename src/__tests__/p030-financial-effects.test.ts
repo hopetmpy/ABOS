@@ -164,7 +164,7 @@ describe("P-030 financial effect authority", () => {
     expect(second.created).toBe(true);
   });
 
-  it("materializes schema version 22 and the financial_effects authority", () => {
+  it("preserves financial_effects through v23 and its internal reserve migration", () => {
     const database = db();
     const version = database.raw
       .prepare("SELECT MAX(version) AS version FROM schema_version")
@@ -175,7 +175,7 @@ describe("P-030 financial effect authority", () => {
       )
       .get() as { name: string } | undefined;
 
-    expect(version.version).toBe(22);
+    expect(version.version).toBe(23);
     expect(table?.name).toBe("financial_effects");
   });
 

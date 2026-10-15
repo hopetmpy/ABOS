@@ -27,6 +27,7 @@ import { appendEvidenceEvent, correlationIdFor, currentEvidenceContext, latestEv
 import { executeCreditEffect } from "../economics/credit-transfer.js";
 import { executeCreditTopupEffect, listUnresolvedCreditTopups } from "../economics/credit-topup.js";
 import { getTreasuryProjection } from "../economics/treasury-projection.js";
+import { getTreasuryReserveSnapshot, setTreasuryReserve } from "../economics/treasury-reserves.js";
 import { claimFinancialEffectDispatch, getCommittedFinancialEffectCents, listUnresolvedFinancialEffects, prepareFinancialEffect, recordFinancialEffectObservation } from "../economics/financial-effects.js";
 import { assessTreasuryScenario } from "../economics/treasury-scenario.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
@@ -412,7 +413,7 @@ immobilized pending credits=${treasury.pendingTransferCreditsCents};
 unresolved x402 USDC topups=${pendingTopups.length}; committed USDC cents (NOT Conway credits)=${committedUsdcCents};
 unresolved effect keys=${sample.join("; ") || "none"}${pending.length > sample.length ? ` (+${pending.length - sample.length} more)` : ""};
 active task estimated cost=${treasury.activeTaskEstimatedCostCents} cents (unit reconciliation may be required);
-reserves/other obligations=UNKNOWN without observed evidence.
+reserved credits=${treasury.reservedCreditsCents ?? "UNKNOWN"} (${treasury.reserveSource}); other obligations=${treasury.otherCommittedCreditsCents ?? "UNKNOWN"}.
 Credit balance is not automatically free or distributable capital.
 Reconciliation requires independently verified provider finality; this view is not proof of settlement.`;
       },
@@ -1338,6 +1339,70 @@ Model: ${ctx.inference.getDefaultModel()}
           jointRiskEvidence: args.joint_risk_evidence as string[] | undefined,
         });
         return JSON.stringify({ projection, scenario, executionAuthorized: false });
+      },
+    },
+
+    // Internal credit earmark only. No Conway transfer, no provider payment,
+    // no inferred P-025 approval. Existing Policy owns this tool's invocation.
+    {
+      name: "set_treasury_reserve",
+      description: "Persist, revise or release an INTERNAL Conway credit contingency reserve (target=0 releases). Requires causal decision evidence. Never transfers, buys, settles or spends money.",
+      category: "financial",
+      riskLevel: "caution",
+      parameters: {
+        type: "object",
+        properties: {
+          reserve_key: { type: "string", description: "Stable identity of the reserve being changed" },
+          target_credits_cents: { type: "integer", description: "Absolute reserve target in Conway credit cents; zero releases" },
+          decision_evidence: { type: "string", description: "Relevant P-025 rationale and reviewed risk/alternatives evidence; caller assertion until verified" },
+          other_commitments_cents: { type: "integer", description: "Independently established Conway credit obligations, excluding external financial_effects and these reserves" },
+          task_commitments_credits_cents: { type: "integer", description: "Optional compatible Conway credit valuation of active tasks, not raw task_cost_cent" },
+        },
+        required: ["reserve_key", "target_credits_cents", "decision_evidence"],
+      },
+      execute: async (args, ctx) => {
+        const evidence = currentEvidenceContext();
+        const causalId = evidence?.toolCallId ?? evidence?.policyDecisionId;
+        if (!causalId) return "Blocked: reserve adjustment needs a durable policy/tool-call identity.";
+        const reserveKey = args.reserve_key as string;
+        const target = args.target_credits_cents as number;
+        if (!Number.isSafeInteger(target) || target < 0) {
+          return "Blocked: reserve target must be exact nonnegative Conway credit cents.";
+        }
+        const existing = getTreasuryReserveSnapshot(ctx.db.raw).allocations
+          .find(item => item.reserveKey === reserveKey?.trim());
+        const increasing = target > (existing?.targetCreditsCents ?? 0);
+        let observedCreditsCents: number | null = null;
+        if (increasing) {
+          try {
+            const observed = await ctx.conway.getCreditsBalance();
+            if (Number.isSafeInteger(observed) && observed >= 0) observedCreditsCents = observed;
+          } catch {
+            // Provider outage never becomes a fictitious balance.
+          }
+        }
+        const change = setTreasuryReserve(ctx.db, {
+          operationKey: `tool:treasury-reserve:${causalId}`,
+          reserveKey,
+          targetCreditsCents: target,
+          decisionId: evidence?.policyDecisionId ?? causalId,
+          decisionEvidence: args.decision_evidence as string,
+          observedCreditsCents,
+          balanceEvidence: observedCreditsCents === null ? null :
+            "ConwayClient.getCreditsBalance observed in current reserve-tool invocation; external verification not independently attested",
+          otherCommittedCreditsCents: args.other_commitments_cents as number | undefined,
+          taskCommitmentCreditsCents: args.task_commitments_credits_cents as number | undefined,
+        });
+        return JSON.stringify({
+          status: "internal_reserve_recorded",
+          operationKey: change.allocation.operationKey,
+          applied: change.applied,
+          reserveKey: change.allocation.reserveKey,
+          reservedCreditsCents: change.currentTotalCreditsCents,
+          unit: "credit_cent",
+          financialTransferExecuted: false,
+          providerSettlementVerified: false,
+        });
       },
     },
 

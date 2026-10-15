@@ -2,7 +2,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { AbosDatabase } from "../types.js";
+import type { AbosDatabase, ToolContext } from "../types.js";
+import { createTestConfig, createTestIdentity, MockConwayClient, MockInferenceClient } from "./mocks.js";
+import { createBuiltinTools } from "../agent/tools.js";
+import { runWithEvidenceContext } from "../observability/evidence.js";
 import { createDatabase } from "../state/database.js";
 import { createTestDb } from "./mocks.js";
 import { getTreasuryProjection } from "../economics/treasury-projection.js";
@@ -139,5 +142,63 @@ describe("P-030 durable internal reserve authority", () => {
     expect(projection.reservedCreditsCents).toBe(0);
     expect(projection.freeCreditsCents).toBeNull();
     expect(projection.reserveSource).toBe("durable");
+  });
+});
+
+describe("P-030 policy-catalog internal reserve action", () => {
+  it("can persist a real internal earmark from a protected tool call without moving credit", async () => {
+    const d = db();
+    const conway = new MockConwayClient();
+    conway.creditsCents = 1000;
+    const ctx: ToolContext = {
+      db: d, conway, identity: createTestIdentity(),
+      config: createTestConfig(), inference: new MockInferenceClient(),
+    };
+    const tools = createBuiltinTools(ctx.config.sandboxId);
+    const setTool = tools.find(tool => tool.name === "set_treasury_reserve");
+    const viewTool = tools.find(tool => tool.name === "check_credits");
+    expect(setTool?.riskLevel).toBe("caution");
+    expect(setTool).toBeDefined();
+    const argumentsForReserve = {
+      reserve_key: "provider-outage",
+      target_credits_cents: 250,
+      decision_evidence: "P025 review of provider outage alternatives",
+      other_commitments_cents: 100,
+    };
+    const once = await runWithEvidenceContext(
+      { correlationId: "p030-tool-test", toolCallId: "reserve-call-1", policyDecisionId: "policy-reserve-1" },
+      () => setTool!.execute(argumentsForReserve, ctx),
+    );
+    const replay = await runWithEvidenceContext(
+      { correlationId: "p030-tool-test", toolCallId: "reserve-call-1", policyDecisionId: "policy-reserve-1" },
+      () => setTool!.execute(argumentsForReserve, ctx),
+    );
+    expect(JSON.parse(once).applied).toBe(true);
+    expect(JSON.parse(replay).applied).toBe(false);
+    expect(getTreasuryReserveSnapshot(d.raw).totalCreditsCents).toBe(250);
+    const view = await viewTool!.execute({}, ctx);
+    expect(view).toContain("reserved credits=250 (durable)");
+    expect((d.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as {n:number}).n).toBe(0);
+  });
+
+  it("rejects an unauthenticated tool-call identity and an outage-backed increase", async () => {
+    const d = db();
+    const conway = new MockConwayClient();
+    const ctx: ToolContext = {
+      db:d, conway, identity:createTestIdentity(),
+      config:createTestConfig(), inference:new MockInferenceClient(),
+    };
+    const tool = createBuiltinTools(ctx.config.sandboxId).find(v=>v.name==="set_treasury_reserve")!;
+    const args = {
+      reserve_key:"emergency", target_credits_cents:100,
+      decision_evidence:"scenario evidence", other_commitments_cents:0,
+    };
+    expect(await tool.execute(args,ctx)).toMatch(/Blocked: reserve adjustment/);
+    conway.getCreditsBalance = async () => { throw new Error("provider offline"); };
+    await expect(runWithEvidenceContext(
+      {correlationId:"p030-outage",toolCallId:"reserve-call-2"},
+      ()=>tool.execute(args,ctx),
+    )).rejects.toThrow(/observed credit balance/);
+    expect(getTreasuryReserveSnapshot(d.raw).initialized).toBe(false);
   });
 });
