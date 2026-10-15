@@ -94,6 +94,31 @@ describe("P-030 financial effect authority", () => {
     expect(second.effect.operationKey).toBe("economic:second");
   });
 
+  it("persists equivalent-intent protection across database restart", () => {
+    const { database, dbPath } = createRestartableDb();
+    const terms = {
+      effectKind: "child_funding",
+      amountCents: 125,
+      recipient: "0xchild",
+      provider: "conway",
+      request: { note: "task-funding" },
+    };
+    prepareFinancialEffect(database.raw, { ...terms, operationKey: "task:initial" });
+    claimFinancialEffectDispatch(database.raw, "task:initial");
+    recordFinancialEffectObservation(database.raw, "task:initial", {
+      resolution: "pending", providerStatus: "processing",
+      providerEffectId: "provider-task-a",
+    });
+    database.close();
+    const reopened = createDatabase(dbPath);
+    openDatabases.push(reopened);
+    expect(() => prepareFinancialEffect(reopened.raw, {
+      ...terms, operationKey: "task:new-policy-decision",
+    })).toThrow(FinancialEffectIntentPendingError);
+    expect(getFinancialEffectByOperationKey(reopened.raw, "task:initial")?.state).toBe("pending");
+    expect(getFinancialEffectByOperationKey(reopened.raw, "task:new-policy-decision")).toBeUndefined();
+  });
+
   it("does not classify different economic purposes as the same intent", () => {
     const database = db();
     const base = {
