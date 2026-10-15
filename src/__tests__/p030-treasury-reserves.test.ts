@@ -8,8 +8,10 @@ import { createBuiltinTools } from "../agent/tools.js";
 import { runWithEvidenceContext } from "../observability/evidence.js";
 import { createDatabase } from "../state/database.js";
 import { createTestDb } from "./mocks.js";
+import { AdaptivePathEngine } from "../intelligence/adaptive-engine.js";
+import { getEvidenceByAuthority } from "../observability/evidence.js";
 import { getTreasuryProjection } from "../economics/treasury-projection.js";
-import { getTreasuryReserveSnapshot, setTreasuryReserve } from "../economics/treasury-reserves.js";
+import { getTreasuryReserveSnapshot, getTreasuryReserveLearning, setTreasuryReserve } from "../economics/treasury-reserves.js";
 import { prepareFinancialEffect } from "../economics/financial-effects.js";
 
 const open: AbosDatabase[] = [];
@@ -232,5 +234,89 @@ describe("P-030 persisted v22 upgrade", () => {
     expect(getTreasuryProjection(upgraded, {
       observedCreditsCents: 1000, otherCommittedCreditsCents: 100,
     }).freeCreditsCents).toBe(825);
+  });
+});
+
+describe("P-030 actual P-025 → P-023 prediction/outcome reuse", () => {
+  function reviewedPathFixture(d: AbosDatabase) {
+    const now = new Date().toISOString();
+    d.raw.prepare(
+      "INSERT INTO goals (id,title,description,status,created_at) VALUES (?,?,?,?,?)",
+    ).run("goal-reserve", "Economic objective", "Contingency", "active", now);
+    const candidate = {
+      goalId: "goal-reserve", taskId: "task-reserve",
+      hypothesis: "Contingency earmark protects this path",
+      strategy: "Evaluate provider alternatives then execute",
+      assumptions: ["Provider replacement is available"],
+      requiredCapabilities: [],
+      expectedOutcome: "Observed delivery with acceptable contingency",
+      sequence: ["Earmark", "Execute", "Observe"],
+      evidence: ["P025 independent planning factors"],
+    };
+    const engine = new AdaptivePathEngine(d.raw);
+    const selected = engine.selectCandidate(candidate, { availability: "observed" });
+    engine.store.bindTask({
+      taskId: "task-reserve", goalId: "goal-reserve", pathId: selected.path.id,
+    });
+    d.raw.prepare(
+      "INSERT OR REPLACE INTO kv (key,value,updated_at) VALUES (?,?,datetime('now'))",
+    ).run("orchestrator.review_feedback.goal-reserve",
+      `P025 reviewed alternatives and conditions ; materialized_path=${selected.path.id}`);
+    return { candidate, engine, path: selected.path };
+  }
+
+  it("links only materialized review decisions and later P-023 path resolution, not revenue", () => {
+    const d = db();
+    const { candidate, engine, path } = reviewedPathFixture(d);
+    runWithEvidenceContext(
+      { correlationId:"goal:goal-reserve", goalId:"goal-reserve", taskId:"task-reserve" },
+      () => setTreasuryReserve(d, alloc("review-1","provider-replacement",400)),
+    );
+    const events = getEvidenceByAuthority(d.raw, "treasury_reserve", "provider-replacement");
+    const reserved = events.find(x=>x.eventType==="treasury.reserve_increased")!;
+    expect((reserved.payload as any).reviewedStrategicPathId).toBe(path.id);
+    expect((reserved.provenance as any).reviewProvenance).toBe("materialized_p025_reviewed_path");
+    const before = getTreasuryReserveLearning(d.raw);
+    expect(before.reviewedPathLinked).toBe(1);
+    expect(before.awaitingOutcome).toBe(1);
+    expect(before.observedReserveUseCreditsCents).toBeNull();
+    engine.recordSuccess({
+      candidate, pathId:path.id, markPathSucceeded:true,
+      evidence:["terminal outcome observed by P023"], conditions:{availability:"observed"},
+    });
+    const after = getTreasuryReserveLearning(d.raw);
+    expect(after.confirmedStrategicOutcomes).toBe(1);
+    expect(after.awaitingOutcome).toBe(0);
+    expect(after.observedReserveUseCreditsCents).toBeNull();
+    expect((d.raw.prepare("SELECT count(*) AS n FROM transactions").get() as {n:number}).n).toBe(0);
+  });
+
+  it("does not invent a P-025 review from a caller assertion or backdate strategic outcomes", () => {
+    const d = db();
+    const { candidate, engine, path } = reviewedPathFixture(d);
+    // Removing the canonical review marker preserves UNKNOWN despite a selected path.
+    d.raw.prepare("DELETE FROM kv WHERE key = ?")
+      .run("orchestrator.review_feedback.goal-reserve");
+    runWithEvidenceContext(
+      {correlationId:"goal:goal-reserve",goalId:"goal-reserve",taskId:"task-reserve"},
+      ()=>setTreasuryReserve(d, alloc("unreviewed-1","unreviewed",50)),
+    );
+    const unreviewed = getTreasuryReserveLearning(d.raw);
+    expect(unreviewed.reviewProvenanceUnknown).toBe(1);
+    expect(unreviewed.confirmedStrategicOutcomes).toBe(0);
+    engine.recordSuccess({
+      candidate, pathId:path.id, markPathSucceeded:true,
+      evidence:["prior outcome"], conditions:{availability:"observed"},
+    });
+    d.raw.prepare(
+      "INSERT OR REPLACE INTO kv (key,value,updated_at) VALUES (?,?,datetime('now'))",
+    ).run("orchestrator.review_feedback.goal-reserve",
+      `Reviewed result ; materialized_path=${path.id}`);
+    runWithEvidenceContext(
+      {correlationId:"goal:goal-reserve",goalId:"goal-reserve",taskId:"task-reserve"},
+      ()=>setTreasuryReserve(d, alloc("reviewed-after-success","reserve-after",100)),
+    );
+    expect(getTreasuryReserveLearning(d.raw).confirmedStrategicOutcomes).toBe(0);
+    expect(getTreasuryReserveLearning(d.raw).awaitingOutcome).toBe(1);
   });
 });

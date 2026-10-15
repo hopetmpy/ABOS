@@ -148,7 +148,6 @@ export interface TreasuryReserveLearning {
  * provider settlement, actual contingency utilization or financial return.
  */
 export function getTreasuryReserveLearning(db: Database.Database): TreasuryReserveLearning {
-  const current = getTreasuryReserveSnapshot(db).allocations;
   const result: TreasuryReserveLearning = {
     reviewedPathLinked: 0,
     reviewProvenanceUnknown: 0,
@@ -163,6 +162,16 @@ export function getTreasuryReserveLearning(db: Database.Database): TreasuryReser
       "Actual risk utilization and provider finality remain UNKNOWN without same-unit economic settlement provenance.",
     ],
   };
+  // Raw-DB orchestration embeddings may not materialize P-030's treasury
+  // schema. Absence of that authority is unknown, not proof of zero reserves.
+  const present = db.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='treasury_reserve_allocations'",
+  ).get();
+  if (!present) {
+    result.limitations.push("Treasury reserve authority unavailable: allocation/outcome coverage UNKNOWN.");
+    return result;
+  }
+  const current = getTreasuryReserveSnapshot(db).allocations;
   for (const allocation of current) {
     const recorded = getEvidenceByAuthority(db, "treasury_reserve", allocation.reserveKey)
       .findLast(event => {
