@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createTestDb } from "./mocks.js";
 import type { AbosDatabase } from "../types.js";
-import { getTaskCostCalibration, getTreasuryProjection, describeTaskCostLearning } from "../economics/treasury-projection.js";
+import { getTaskCostCalibration, getTreasuryProjection, describeTaskCostLearning, getRecordedInferenceResources, describeRecordedInferenceResources } from "../economics/treasury-projection.js";
 import { buildPlannerContext } from "../orchestration/planner-context.js";
 import { buildPlannerPrompt } from "../orchestration/planner.js";
 import { assessTreasuryScenario } from "../economics/treasury-scenario.js";
@@ -260,5 +260,64 @@ describe("P-030 treasury projection", () => {
     const item = { allocationKey: "one", resource: "compute", currency: "USD",
       amountCents: 20, basis: "imputed_resource" as const, evidence: "host metering" };
     expect(() => getTreasuryProjection(d, { resourceInvestment: [item, item] })).toThrow(/Duplicate/);
+  });
+});
+
+describe("P-030 source-owned compute/time resource investment", () => {
+  it("preserves UNKNOWN when provider resource usage is absent", () => {
+    const d=db();
+    const report=getRecordedInferenceResources(d.raw);
+    expect(report.recordedCalls).toBe(0);
+    expect(report.recordedInputTokensLowerBound).toBeNull();
+    expect(report.pricedInferenceCostEstimateCents).toBeNull();
+    expect(report.actualPaidCostCents).toBeNull();
+    expect(describeRecordedInferenceResources(report)).toBeNull();
+  });
+
+  it("reports token and time lower bounds apart from external revenue, credits and cash expense", async () => {
+    const d=db();
+    const ins=d.raw.prepare(
+      `INSERT INTO inference_costs
+       (id,session_id,model,provider,input_tokens,output_tokens,cost_cents,latency_ms,tier,task_type)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    );
+    ins.run("inf-1","s","model","provider",100,50,0.25,120,"fast","agent_turn");
+    ins.run("inf-2","s","model","provider",0,0,0,0,"fast","agent_turn");
+    const resource=getRecordedInferenceResources(d.raw);
+    expect(resource.recordedCalls).toBe(2);
+    expect(resource.callsWithTokenEvidence).toBe(1);
+    expect(resource.callsWithoutTokenEvidence).toBe(1);
+    expect(resource.recordedInputTokensLowerBound).toBe(100);
+    expect(resource.recordedOutputTokensLowerBound).toBe(50);
+    expect(resource.recordedInferenceLatencyMsLowerBound).toBe(120);
+    expect(resource.pricedInferenceCostEstimateCents).toBe(0.25);
+    expect(resource.actualPaidCostCents).toBeNull();
+    expect(resource.electricityCostCents).toBeNull();
+    const treasury=getTreasuryProjection(d);
+    expect(treasury.recordedInferenceResources.recordedCalls).toBe(2);
+    expect(treasury.separatelyValuedInvestment).toBeNull();
+    expect(treasury.freeCreditsCents).toBeNull();
+    expect(treasury.limitations.join(" ")).toContain("lower bounds");
+    expect(describeRecordedInferenceResources(resource)).toContain("not paid invoices");
+    const planner=await buildPlannerContext({db:d.raw});
+    expect(planner.adaptiveContext).toContain("input tokens >=100");
+    expect((d.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as {n:number}).n).toBe(0);
+  });
+
+  it("excludes corrupt negative metrics instead of netting them against actual resource usage", () => {
+    const d=db();
+    const ins=d.raw.prepare(
+      `INSERT INTO inference_costs
+       (id,session_id,model,provider,input_tokens,output_tokens,cost_cents,latency_ms,tier,task_type)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    );
+    ins.run("inf-good","s","m","p",80,30,0.125,40,"fast","agent_turn");
+    ins.run("inf-bad","s","m","p",-200,600,0.2,60,"fast","agent_turn");
+    const result=getRecordedInferenceResources(d.raw);
+    expect(result.invalidMetricRows).toBe(1);
+    expect(result.recordedInputTokensLowerBound).toBe(80);
+    expect(result.recordedOutputTokensLowerBound).toBe(30);
+    expect(result.pricedInferenceCostEstimateCents).toBe(0.125);
+    expect(result.callsWithoutTokenEvidence).toBe(1);
   });
 });

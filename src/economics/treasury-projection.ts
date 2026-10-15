@@ -56,6 +56,7 @@ export interface TaskCostCalibration {
 
 export interface TreasuryProjection {
   historicalTaskCostCalibration: TaskCostCalibration;
+  recordedInferenceResources: RecordedInferenceResources;
   observedCreditsCents: number | null;
   reservedCreditsCents: number | null;
   reserveSource: "durable" | "caller_supplied" | "unknown";
@@ -76,6 +77,87 @@ function knownCents(value: number | null | undefined, label: string): number | n
   if (value === undefined || value === null) return null;
   if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${label} must be nonnegative integer cents`);
   return value;
+}
+
+
+/** Resource metering remains distinct from Conway liquidity and paid invoices.
+ * inference_costs rows are the existing inference authority; zero defaults
+ * do not prove that no tokens/time/money were invested.
+ */
+export interface RecordedInferenceResources {
+  authority: "inference_costs";
+  recordedCalls: number;
+  callsWithTokenEvidence: number;
+  callsWithoutTokenEvidence: number;
+  invalidMetricRows: number;
+  recordedInputTokensLowerBound: number | null;
+  recordedOutputTokensLowerBound: number | null;
+  recordedInferenceLatencyMsLowerBound: number | null;
+  pricedInferenceCostEstimateCents: number | null;
+  callsWithPricedEstimate: number;
+  actualPaidCostCents: null;
+  electricityCostCents: null;
+  humanTimeCostCents: null;
+}
+
+export function getRecordedInferenceResources(db: Database.Database): RecordedInferenceResources {
+  const rows = db.prepare(
+    "SELECT input_tokens, output_tokens, latency_ms, cost_cents FROM inference_costs",
+  ).all() as Array<{input_tokens:number;output_tokens:number;latency_ms:number;cost_cents:number}>;
+  let input = 0, output = 0, latency = 0, priced = 0;
+  let knownInput = false, knownOutput = false, knownLatency = false;
+  let callsWithTokenEvidence = 0, invalidMetricRows = 0, callsWithPricedEstimate = 0;
+  for (const row of rows) {
+    const metrics = [row.input_tokens, row.output_tokens, row.latency_ms];
+    const newInput = input + row.input_tokens;
+    const newOutput = output + row.output_tokens;
+    const newLatency = latency + row.latency_ms;
+    const newPrice = priced + row.cost_cents;
+    if (metrics.some(value => !Number.isSafeInteger(value) || value < 0) ||
+        [newInput,newOutput,newLatency].some(value => !Number.isSafeInteger(value) || value < 0) ||
+        !Number.isFinite(row.cost_cents) || row.cost_cents < 0 ||
+        !Number.isFinite(newPrice) || newPrice < 0) {
+      invalidMetricRows++;
+      continue;
+    }
+    input = newInput; output = newOutput; latency = newLatency;
+    if (row.input_tokens > 0) knownInput = true;
+    if (row.output_tokens > 0) knownOutput = true;
+    if (row.latency_ms > 0) knownLatency = true;
+    if (row.input_tokens > 0 || row.output_tokens > 0) callsWithTokenEvidence++;
+    if (row.cost_cents > 0) {
+      priced = newPrice;
+      callsWithPricedEstimate++;
+    }
+  }
+  return {
+    authority:"inference_costs",
+    recordedCalls:rows.length,
+    callsWithTokenEvidence,
+    callsWithoutTokenEvidence:rows.length-callsWithTokenEvidence,
+    invalidMetricRows,
+    recordedInputTokensLowerBound:knownInput ? input : null,
+    recordedOutputTokensLowerBound:knownOutput ? output : null,
+    recordedInferenceLatencyMsLowerBound:knownLatency ? latency : null,
+    pricedInferenceCostEstimateCents:callsWithPricedEstimate ? priced : null,
+    callsWithPricedEstimate,
+    actualPaidCostCents:null,
+    electricityCostCents:null,
+    humanTimeCostCents:null,
+  };
+}
+
+export function describeRecordedInferenceResources(report: RecordedInferenceResources): string | null {
+  if (report.recordedCalls === 0) return null;
+  return "P-030 inference resource investment from existing inference_costs: " +
+    `calls=${report.recordedCalls}, input tokens >=${report.recordedInputTokensLowerBound ?? "UNKNOWN"}, ` +
+    `output tokens >=${report.recordedOutputTokensLowerBound ?? "UNKNOWN"}, ` +
+    `inference latency >=${report.recordedInferenceLatencyMsLowerBound ?? "UNKNOWN"} ms, ` +
+    `model-registry priced estimate=${report.pricedInferenceCostEstimateCents ?? "UNKNOWN"} USD cents, ` +
+    `token usage UNKNOWN calls=${report.callsWithoutTokenEvidence}, ` +
+    `invalid samples=${report.invalidMetricRows}. ` +
+    "Tokens and time are investment even without liquid capital. Recorded metrics are lower bounds; " +
+    "registry pricing is not paid invoices, electricity, external expense or business P&L.";
 }
 
 /** Canonical read-only comparison from the task_graph SQLite owner. */
@@ -203,6 +285,7 @@ export function getTreasuryProjection(
     throw new Error("Active task estimates require exact nonnegative local task-cost cents");
   }
   const historicalTaskCostCalibration = getTaskCostCalibration(db.raw);
+  const recordedInferenceResources = getRecordedInferenceResources(db.raw);
   const taskCredits = activeTaskEstimatedCostCents === 0
     ? 0 : knownCents(input.taskCommitmentCreditsCents, "taskCommitmentCreditsCents");
   const pending = getCommittedFinancialEffectCents(db.raw);
@@ -242,6 +325,7 @@ export function getTreasuryProjection(
   }
   const limitations = [
     "Credit liquidity and externally settled business P&L are different authorities.",
+    "Recorded inference tokens/latency are investment even without cash, but price-registry estimates are not verified paid invoices.",
     "An unresolved Conway credit transfer bound to a durable reserve is counted within that same earmark, not twice.",
     "A caller-supplied reserve is not a persisted internal allocation; durable treasury records govern once initialized.",
     "Task estimates are not converted to credit obligations without unit-compatible evidence.",
@@ -264,10 +348,15 @@ export function getTreasuryProjection(
     "Pending refund is NOT liquid capital. It is excluded until confirmed in an observed provider balance.",
   );
   if (!input.resourceInvestment?.length) limitations.push(
-    "Non-cash investment (time, electricity, subscriptions, compute) has not been valued from evidence.",
+    "Non-cash investment (human time, electricity, subscriptions) is not monetarily valued from evidence; observed inference usage is reported separately.",
+  );
+  if (recordedInferenceResources.callsWithoutTokenEvidence > 0 ||
+      recordedInferenceResources.invalidMetricRows > 0) limitations.push(
+    "Missing or invalid inference telemetry makes resource totals lower bounds, not evidence of zero cost.",
   );
   return {
     historicalTaskCostCalibration,
+    recordedInferenceResources,
     observedCreditsCents: observed,
     reservedCreditsCents: reserved,
     reserveSource,

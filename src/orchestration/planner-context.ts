@@ -6,7 +6,7 @@ import type { PlannerContext, PlannerOutput } from "./planner.js";
 import type { FundingProtocol } from "./types.js";
 import type { AgentWorkspace } from "./workspace.js";
 import { getActiveGoals } from "../state/database.js";
-import { describeTaskCostLearning, getTaskCostCalibration } from "../economics/treasury-projection.js";
+import { describeTaskCostLearning, describeRecordedInferenceResources, getRecordedInferenceResources, getTaskCostCalibration } from "../economics/treasury-projection.js";
 import { describeTreasuryReserveLearning, getTreasuryReserveLearning } from "../economics/treasury-reserves.js";
 
 export interface PlannerContextOptions {
@@ -46,10 +46,11 @@ export async function buildPlannerContext(options: PlannerContextOptions): Promi
   const creditsCents = await resolveCreditsCents(options, cachedBalance?.creditsCents);
   const usdcBalance = resolveUsdcBalance(options, cachedBalance?.usdcBalance);
   const economicLearning = describeTaskCostLearning(getTaskCostCalibration(options.db));
+  const computeInvestment = describeRecordedInferenceResources(getRecordedInferenceResources(options.db));
   const reserveLearning = describeTreasuryReserveLearning(getTreasuryReserveLearning(options.db));
   // Join authoritative observed learning to existing adaptive context rather
   // than creating another planner/memory or decision authority.
-  const adaptiveContext = [options.adaptiveContext?.trim(), economicLearning, reserveLearning]
+  const adaptiveContext = [options.adaptiveContext?.trim(), economicLearning, reserveLearning, computeInvestment]
     .filter((item): item is string => Boolean(item))
     .join("\n\n") || undefined;
 
