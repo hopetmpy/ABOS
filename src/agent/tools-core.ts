@@ -1292,6 +1292,8 @@ Model: ${ctx.inference.getDefaultModel()}
               evidence: { type: "string" },
             }, required: ["id", "costCreditsCents", "evidence"],
           } },
+          joint_risk_exposure_credits_cents: { type: "integer" },
+          joint_risk_evidence: { type: "array", items: { type: "string" } },
           risks: { type: "array", items: {
             type: "object", properties: {
               id: { type: "string" }, exposureCreditsCents: { type: "integer" },
@@ -1326,6 +1328,8 @@ Model: ${ctx.inference.getDefaultModel()}
           futureNeedEvidence: args.future_need_evidence as string[] | undefined,
           alternatives: args.alternatives as Array<{ id: string; costCreditsCents: number; evidence: string }> | undefined,
           risks: args.risks as Array<{ id: string; exposureCreditsCents: number; evidence: string }> | undefined,
+          jointRiskExposureCreditsCents: args.joint_risk_exposure_credits_cents as number | undefined,
+          jointRiskEvidence: args.joint_risk_evidence as string[] | undefined,
         });
         return JSON.stringify({ projection, scenario, executionAuthorized: false });
       },

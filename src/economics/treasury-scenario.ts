@@ -19,6 +19,9 @@ export interface TreasuryScenarioInput {
   futureNeedEvidence?: string[];
   alternatives?: Array<{ id: string; costCreditsCents: number; evidence: string }>;
   risks?: TreasuryRiskScenario[];
+  /** Joint exposure, validated in the same credit unit rather than guessed. */
+  jointRiskExposureCreditsCents?: number | null;
+  jointRiskEvidence?: string[];
   expectedRevenueCreditsCents?: number | null;
   realizedAdvanceCreditsCents?: number | null;
   previousSpendCreditsCents?: number | null;
@@ -58,6 +61,8 @@ export function assessTreasuryScenario(
   const expectedRevenue = validCredits(input.expectedRevenueCreditsCents, "expectedRevenueCreditsCents");
   const advance = validCredits(input.realizedAdvanceCreditsCents, "realizedAdvanceCreditsCents");
   const previous = validCredits(input.previousSpendCreditsCents, "previousSpendCreditsCents");
+  const jointExposure = validCredits(input.jointRiskExposureCreditsCents, "jointRiskExposureCreditsCents");
+  const jointEvidence = uniqueEvidence(input.jointRiskEvidence);
   const evidence = uniqueEvidence(input.opportunityEvidence);
   const futureEvidence = uniqueEvidence(input.futureNeedEvidence);
   const conditions: string[] = [];
@@ -88,9 +93,20 @@ export function assessTreasuryScenario(
   // Independent failures can occur together; the largest single exposure alone
   // is not proof of sufficient aggregate reserve.
   if ((input.risks?.length ?? 0) > 1) {
-    conditions.push(
-      "Several downside events are specified but their overlap/correlation is UNKNOWN; obtain evidence before treating the largest one as total required reserve.",
-    );
+    if (jointExposure === null || jointEvidence.length === 0) {
+      conditions.push(
+        "Several downside events are specified but their overlap/correlation is UNKNOWN; supply independent evidence of joint exposure before sizing the reserve.",
+      );
+    } else if (jointExposure < (contingencyExposure ?? 0)) {
+      conditions.push(
+        "Supplied joint exposure cannot be lower than the largest individual downside unless offsetting coverage is independently reconciled.",
+      );
+    } else {
+      // Joint exposure replaces a single-risk proxy only with supplied
+      // evidence; it remains a scenario, not an executed or realized cost.
+      contingencyExposure = jointExposure;
+      evidence.push("Combined risk exposure " + jointExposure + " credit cents; evidence=" + jointEvidence.join(" | "));
+    }
   }
   if (contingencyExposure === null) {
     conditions.push("No evidence-based contingency scenarios were supplied; do not invent a universal reserve percentage.");

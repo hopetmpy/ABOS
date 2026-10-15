@@ -96,6 +96,24 @@ describe("P-030 evidence-based treasury scenarios", () => {
     expect(review.conditions.join(" ")).toMatch(/overlap\/correlation is UNKNOWN/);
   });
 
+  it("can evaluate several contingencies when documented joint downside is supplied", () => {
+    const db = newDb();
+    const scenario = assessTreasuryScenario(projection(db, 5_000, 1_800), {
+      proposalCreditsCents: 500, immediateNeedCreditsCents: 500,
+      opportunityEvidence: ["documented need"],
+      alternatives: supported.alternatives,
+      risks: [
+        { id: "provider-offline", exposureCreditsCents: 800, evidence: "provider incident history" },
+        { id: "refund-delayed", exposureCreditsCents: 700, evidence: "refund timing history" },
+      ],
+      jointRiskExposureCreditsCents: 1_400,
+      jointRiskEvidence: ["joint downside assessed for concurrent outage and delayed refund"],
+    });
+    expect(scenario.status).toBe("review_ready");
+    expect(scenario.contingencyExposureCents).toBe(1_400);
+    expect(scenario.evidence.join(" ")).toContain("Combined risk exposure");
+  });
+
   it("exposes scenario evidence through the protected catalog without making payments", async () => {
     const db = newDb();
     const conway = new MockConwayClient();
