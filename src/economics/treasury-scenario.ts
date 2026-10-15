@@ -195,7 +195,7 @@ export function assessTreasuryScenario(
   const reserveDisposition: TreasuryReserveRecommendation["disposition"] =
     freeAfter === null ? "unknown"
       : freeAfter < 0 ? "requires_alternative"
-      : extraReserve > 0 ? "can_earmark" : "covered";
+      : extraReserve !== null && extraReserve > 0 ? "can_earmark" : "covered";
   if (reserveDisposition === "requires_alternative") {
     conditions.push("Proposed spend plus scenario-based additional reserve exceeds free liquidity; examine alternatives or new observed funding.");
   }
