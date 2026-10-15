@@ -79,6 +79,70 @@ describe("environment_economic_evidence tool", () => {
   });
 });
 
+describe("P-031 environment_procurement_review", () => {
+  it("feeds observed account identity into P-030 but refuses to count provider budgets as cash", async () => {
+    const registry = new EnvironmentRegistry();
+    registry.register({
+      ...provider(), id: "aws",
+      observeEconomics: async () => ({
+        provider: "aws", status: "observed" as const,
+        accountId: "123456789012", observedAt: new Date().toISOString(),
+        budgets: [{ name: "Cash-looking budget", period: "MONTHLY",
+          budgetLimitUsdCents: 100_000, reportedSpendUsdCents: 10_000,
+          reportedSpendRaw: "100.00", evidence: ["Budget is only a spending threshold"] }],
+        spendableLiquidityUsdCents: null,
+        recurringCommitmentUsdCents: null,
+        procurementAuthority: "not_established" as const,
+        evidence: ["AWS account observed"],
+      }),
+    });
+    const tool = createEnvironmentTools(registry).find(
+      x => x.name === "environment_procurement_review",
+    )!;
+    const result = await tool.execute({
+      environment: "aws", unit: "usd_cent",
+      resource_need_evidence: ["Reviewed compute need."],
+      one_time_cents: 2000, recurring_cents_per_period: 1500,
+      periods: 3, other_charges_cents: 500,
+      billing_terms_evidence: ["Declared four-item quote."],
+      alternatives: [{ id: "reuse", projected_cost_cents: 3000,
+        unit: "usd_cent", evidence: "Owned compute may be reused." }],
+      additional_contingency_cents: 1000,
+      contingency_evidence: ["Measured provider recovery downside."],
+    }, {} as any);
+    expect(result).toContain('"accountId": "123456789012"');
+    expect(result).toContain('"totalProposedCommitmentCents": 7000');
+    expect(result).toContain('"status": "needs_evidence"');
+    expect(result).toContain('"freeBeforeProposalCents": null');
+    expect(result).toContain('"purchaseAuthorized": false');
+    expect(result).not.toContain('"freeBeforeProposalCents": 90000');
+  });
+
+  it("does not invent account scope for unsupported or unavailable observation", async () => {
+    const registry = new EnvironmentRegistry();
+    registry.register(provider());
+    registry.register({
+      ...provider(), id: "unknown",
+      observeEconomics: async () => ({
+        provider: "unknown", status: "unknown" as const,
+        accountId: null, observedAt: new Date().toISOString(),
+        budgets: [], spendableLiquidityUsdCents: null,
+        recurringCommitmentUsdCents: null,
+        procurementAuthority: "not_established" as const, evidence: [],
+      }),
+    });
+    const tool = createEnvironmentTools(registry).find(
+      x => x.name === "environment_procurement_review",
+    )!;
+    expect(await tool.execute({ environment: "mock", unit: "usd_cent" }, {} as any))
+      .toContain("UNAVAILABLE");
+    expect(await tool.execute({ environment: "unknown", unit: "usd_cent" }, {} as any))
+      .toContain("UNKNOWN");
+    expect(await tool.execute({ environment: "missing", unit: "usd_cent" }, {} as any))
+      .toContain("BLOCKED");
+  });
+});
+
 describe("environment_exec tool", () => {
   it("routes argv to the selected registered provider without shell interpolation", async () => {
     const registry = new EnvironmentRegistry();
