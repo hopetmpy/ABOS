@@ -148,6 +148,11 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
       expect(repeat.dispatched).toBe(false);
       expect(repeat.status).toBe("not_dispatched");
       expect(calls).toHaveLength(1);
+      await expect(executeReviewedProviderProcurement(db.raw, {
+        scope: { ...scope, resourceId: "resource-replay-other" },
+        policyDecisionId: decisionId, dependencies: deps,
+      })).rejects.toThrow("idempotency conflict");
+      expect(calls).toHaveLength(1);
       expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n)
         .toBe(0);
     } finally { db.close(); }
