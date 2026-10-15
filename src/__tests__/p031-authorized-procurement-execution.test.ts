@@ -159,6 +159,15 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
         scope: equivalentWithNewKey, policyDecisionId: secondPolicy, dependencies: deps,
       })).rejects.toThrow("overlaps unresolved intent");
       expect(calls).toHaveLength(1);
+      const repricedQuote = scenario();
+      repricedQuote.cost.oneTimeCents = 1250;
+      const repricedScope = { ...scope, operationKey: "provider-ec2-repriced-operation" };
+      const repricedDecision = policy(db, repricedScope, repricedQuote);
+      await expect(executeReviewedProviderProcurement(db.raw, {
+        scope: repricedScope, policyDecisionId: repricedDecision,
+        dependencies: adapters(repricedQuote, calls),
+      })).rejects.toThrow("overlaps unresolved intent");
+      expect(calls).toHaveLength(1);
       expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n)
         .toBe(0);
     } finally { db.close(); }
