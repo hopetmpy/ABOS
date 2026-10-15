@@ -25,6 +25,7 @@ import { createLogger } from "../observability/logger.js";
 import { appendEvidenceEvent, correlationIdFor, currentEvidenceContext, latestEvidenceByAuthority, runWithEvidenceContext } from "../observability/evidence.js";
 import { executeCreditEffect } from "../economics/credit-transfer.js";
 import { getTreasuryProjection } from "../economics/treasury-projection.js";
+import { assessTreasuryScenario } from "../economics/treasury-scenario.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
 import { toPosixShellPath } from "../platform/home.js";
 import { confinePathToSandbox } from "../platform/path-confinement.js";
@@ -1264,6 +1265,65 @@ Model: ${ctx.inference.getDefaultModel()}
     return `MCP server package installed and configuration saved: ${args.name}. Runtime execution is UNVERIFIED until protocol discovery/probe succeeds.`;
   },
 },
+
+    // Read-only economic review; P-025/Policy own any execution decision.
+    {
+      name: "assess_treasury_scenario",
+      description: "Analyze an economic proposal using observed credit liquidity, explicit reserve/commitment assumptions, evidence, alternatives and contingencies. Does NOT authorize a payment.",
+      category: "financial",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          proposal_credits_cents: { type: "integer" },
+          immediate_need_credits_cents: { type: "integer" },
+          future_need_credits_cents: { type: "integer" },
+          reserve_credits_cents: { type: "integer" },
+          other_commitments_cents: { type: "integer" },
+          task_commitments_credits_cents: { type: "integer" },
+          opportunity_evidence: { type: "array", items: { type: "string" } },
+          future_need_evidence: { type: "array", items: { type: "string" } },
+          alternatives: { type: "array", items: {
+            type: "object", properties: {
+              id: { type: "string" }, costCreditsCents: { type: "integer" },
+              evidence: { type: "string" },
+            }, required: ["id", "costCreditsCents", "evidence"],
+          } },
+          risks: { type: "array", items: {
+            type: "object", properties: {
+              id: { type: "string" }, exposureCreditsCents: { type: "integer" },
+              evidence: { type: "string" },
+            }, required: ["id", "exposureCreditsCents", "evidence"],
+          } },
+        },
+        required: ["proposal_credits_cents"],
+      },
+      execute: async (args, ctx) => {
+        let observedBalance: number | null = null;
+        try {
+          const balance = await ctx.conway.getCreditsBalance();
+          if (Number.isSafeInteger(balance) && balance >= 0) observedBalance = balance;
+        } catch {
+          // Provider unavailability means UNKNOWN, never 0.
+        }
+        const projection = getTreasuryProjection(ctx.db, {
+          observedCreditsCents: observedBalance,
+          reservedCreditsCents: args.reserve_credits_cents as number | undefined,
+          otherCommittedCreditsCents: args.other_commitments_cents as number | undefined,
+          taskCommitmentCreditsCents: args.task_commitments_credits_cents as number | undefined,
+        });
+        const scenario = assessTreasuryScenario(projection, {
+          proposalCreditsCents: args.proposal_credits_cents as number,
+          immediateNeedCreditsCents: args.immediate_need_credits_cents as number | undefined,
+          futureNeedCreditsCents: args.future_need_credits_cents as number | undefined,
+          opportunityEvidence: args.opportunity_evidence as string[] | undefined,
+          futureNeedEvidence: args.future_need_evidence as string[] | undefined,
+          alternatives: args.alternatives as Array<{ id: string; costCreditsCents: number; evidence: string }> | undefined,
+          risks: args.risks as Array<{ id: string; exposureCreditsCents: number; evidence: string }> | undefined,
+        });
+        return JSON.stringify({ projection, scenario, executionAuthorized: false });
+      },
+    },
 
     // ── Financial: Transfer Credits ──
     {
