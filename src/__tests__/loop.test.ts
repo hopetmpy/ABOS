@@ -64,7 +64,6 @@ describe("Agent Loop", () => {
       toolCallResponse([
         { name: "exec", arguments: { command: "echo hello" } },
       ]),
-      noToolResponse("Done."),
     ]);
 
     const turns: AgentTurn[] = [];
@@ -73,7 +72,7 @@ describe("Agent Loop", () => {
       policyEngine,
       spendTracker,
       identity,
-      config,
+      config: { ...config, maxTurnsPerCycle: 1 },
       db,
       conway,
       inference,
@@ -92,6 +91,15 @@ describe("Agent Loop", () => {
     // Verify conway.exec was called
     expect(conway.execCalls.length).toBeGreaterThanOrEqual(1);
     expect(conway.execCalls[0].command).toBe("echo hello");
+
+    // Verify the same tool effect is durable in SQLite after the sole cycle.
+    const stored = db.getRecentTurns(5);
+    const persistedExec = stored.find((turn) =>
+      turn.toolCalls.some((call) => call.name === "exec"),
+    );
+    expect(persistedExec).toBeDefined();
+    expect(persistedExec!.toolCalls[0].error).toBeUndefined();
+    expect(db.getAgentState()).toBe("sleeping");
   });
 
   it("forbidden patterns blocked", async () => {
