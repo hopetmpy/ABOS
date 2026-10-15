@@ -224,6 +224,33 @@ export interface EnvironmentReconcileResult {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * Read-only, provider-attributed economic observation for procurement planning.
+ * Budgets/observed spend are not cash balances, price coverage, recurring
+ * commitments, or P-010 spending authorization. Open-ended provider details
+ * belong in observations, never an implicit cross-currency conversion.
+ */
+export interface EnvironmentEconomicObservation {
+  provider: string;
+  status: "observed" | "partial" | "unknown";
+  accountId: string | null;
+  observedAt: string;
+  budgets: Array<{
+    name: string;
+    period: string | null;
+    budgetLimitUsdCents: number | null;
+    reportedSpendUsdCents: number | null;
+    /** AWS cost reporting may have finer precision than whole cents. */
+    reportedSpendRaw: string | null;
+    evidence: string[];
+  }>;
+  /** No budget value or observed account spend proves available cash. */
+  spendableLiquidityUsdCents: null;
+  recurringCommitmentUsdCents: null;
+  procurementAuthority: "not_established";
+  evidence: string[];
+}
+
 export interface EnvironmentProvider {
   readonly id: string;
 
@@ -234,6 +261,8 @@ export interface EnvironmentProvider {
   readonly operations?: readonly EnvironmentOperation[];
 
   inspect(): Promise<EnvironmentSnapshot>;
+  /** Optional explicit read-only provider economics; not a spend command. */
+  observeEconomics?(): Promise<EnvironmentEconomicObservation>;
   canSatisfy?(
     requirements: EnvironmentRequirements,
     snapshot?: EnvironmentSnapshot,
