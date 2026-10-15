@@ -91,6 +91,13 @@ export interface EnvironmentTaskSpawnOptions {
    */
   excludedResourceIds?: string[];
   /**
+   * Optional caller-supplied budget for the environment provider's own
+   * estimate unit. It must come from a reviewed procurement decision, never
+   * from task_graph's local estimatedCostCents (task_cost_cent).
+   * This selection screen is not proof of financial authorization.
+   */
+  maxEstimatedCostCents?: number | null;
+  /**
    * Derived continuation view for the same canonical Task. Executors may
    * consume it, but it does not become provider-owned state.
    */
@@ -178,6 +185,7 @@ export class EnvironmentExecutionBridge {
           : task.preferredEnvironment ?? null,
       excludedEnvironmentIds: options.excludedEnvironmentIds ?? [],
       expectedDurationMs: task.metadata.timeoutMs,
+      maxEstimatedCostCents: options.maxEstimatedCostCents ?? null,
       goalId: task.goalId,
       pathId: task.strategicPathId ?? null,
       taskId: task.id,
