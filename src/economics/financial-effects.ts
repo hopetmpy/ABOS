@@ -419,7 +419,10 @@ export function recordFinancialEffectObservation(
   }
   const existing = getFinancialEffectByOperationKey(db, key);
   if (!existing) throw new Error(`Financial effect not found for operation key ${key}`);
-  if (existing.state === "completed") return existing;
+  // Final rejection and externally-settled/local-reconciliation state must not
+  // be downgraded by a delayed ambiguous or intermediate provider callback.
+  if (existing.state === "completed" || existing.state === "rejected" ||
+      existing.state === "reconciliation_required") return existing;
 
   const nextState: FinancialEffectState =
     observation.resolution === "rejected"
