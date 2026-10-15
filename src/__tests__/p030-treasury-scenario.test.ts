@@ -90,6 +90,20 @@ describe("P-030 evidence-based treasury scenarios", () => {
     expect(underReserved.freeCreditsAfterCents).toBe(1300);
   });
 
+  it("does not hide pre-existing credit insolvency behind a clamped zero available balance", () => {
+    const d = newDb();
+    const insolvent = projection(d, 500, 600);
+    expect(insolvent.freeCreditsCents).toBe(0);
+    expect(insolvent.projectedCreditShortfallCents).toBe(100);
+    const scenario = assessTreasuryScenario(insolvent, {
+      proposalCreditsCents: 0, immediateNeedCreditsCents: 0,
+      ...supported,
+    });
+    expect(scenario.status).toBe("needs_evidence");
+    expect(scenario.conditions.join(" ")).toContain("already exceed the observed balance by 100 cents");
+    expect(scenario.reserveRecommendation.disposition).toBe("covered");
+  });
+
   it("keeps earmarked downside separate from spendable credit liquidity", () => {
     const d = newDb();
     const scenario = assessTreasuryScenario(projection(d, 1_000, 100), {

@@ -102,6 +102,13 @@ export function assessTreasuryScenario(
 
   if (evidence.length === 0) conditions.push("Benefit or obligation evidence is absent; a price or wallet balance does not prove value.");
   if (projection.freeCreditsCents === null) conditions.push("Free liquidity UNKNOWN; observed balance, reserve and compatible commitments are required.");
+  if (projection.projectedCreditShortfallCents !== null &&
+      projection.projectedCreditShortfallCents > 0) {
+    conditions.push(
+      `Existing known credit obligations already exceed the observed balance by ${projection.projectedCreditShortfallCents} cents; ` +
+      "the existing deficit must be reconciled before treating another commitment as funded.",
+    );
+  }
 
   if (immediate === null) {
     conditions.push("Immediate required capacity is unmeasured; cannot discriminate procurement size.");
