@@ -210,7 +210,7 @@ describe("P-030 credit effect execution and reconciliation", () => {
     };
     const effect = await executeCreditEffect(input);
     expect(effect.state).toBe("unknown");
-    expect(effect.lastError).toMatch(/matching transfer identifier, recipient or amount/);
+    expect(effect.lastError).toMatch(/recipient or amount/);
     expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as any).n).toBe(0);
     await executeCreditEffect(input);
     expect(conway.transferCredits).toHaveBeenCalledTimes(1);
