@@ -13,7 +13,12 @@ import {
   type ProviderProcurementScope,
   type ProviderProcurementExecutionDependencies,
 } from "../economics/provider-procurement-execution.js";
-import { getFinancialEffectByOperationKey } from "../economics/financial-effects.js";
+import {
+  getFinancialEffectByOperationKey,
+  getProviderFundingSnapshotExposure,
+  prepareFinancialEffect,
+  settleFinancialEffect,
+} from "../economics/financial-effects.js";
 import type { ProviderProcurementScenarioInput } from "../economics/treasury-scenario.js";
 import type { PolicyRequest, ToolContext } from "../types.js";
 
@@ -35,6 +40,7 @@ function scenario(): ProviderProcurementScenarioInput {
       basis: "externally_observed",
       observedAvailableCents: 10_000,
       evidence: ["Test-only authenticated USD funding source, never AWS LIVE."],
+      observedAt: "2026-10-01T00:00:00Z",
       validUntil: "2030-01-01T00:00:00Z",
     },
     reservedCents: 2000, existingCommitmentsCents: 1000,
@@ -121,7 +127,7 @@ function adapters(quote: ProviderProcurementScenarioInput, calls: string[],
       if (outcome === "throw") throw new Error("synthetic transport lost: secret not persisted");
       return {
         status: outcome,
-        providerEffectId: "mock-ec2-id",
+        providerEffectId: `mock-ec2-id-${scope.operationKey}`,
         providerStatus: "synthetic",
         evidence: ["Provider mock observed, no AWS command executed."],
       };
@@ -375,6 +381,126 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
         expect(result.financialEffect?.state).toBe("pending");
         expect(result.evidence.join(" ")).not.toContain("provider secret health endpoint");
         expect(calls).toHaveLength(1);
+      } finally { db.close(); }
+    }
+  });
+
+  it("holds successive separate-resource acquisitions against the same authenticated account funding snapshot", async () => {
+    const { db, scope } = setup();
+    try {
+      const quote = scenario();
+      const calls: string[] = [];
+      const scope2 = { ...scope, operationKey: "provider-ec2-2",
+        resourceId: "resource-002" };
+      const scope3 = { ...scope, operationKey: "provider-ec2-3",
+        resourceId: "resource-003" };
+      const firstPolicy = policy(db, scope, quote);
+      const secondPolicy = policy(db, scope2, quote);
+      const thirdPolicy = policy(db, scope3, quote);
+      const first = await executeReviewedProviderProcurement(db.raw, {
+        scope, policyDecisionId: firstPolicy, dependencies: adapters(quote, calls),
+      });
+      expect(first.status).toBe("usable");
+      expect(first.review?.freeAfterProposalAndContingencyCents).toBe(3000);
+      const second = await executeReviewedProviderProcurement(db.raw, {
+        scope: scope2, policyDecisionId: secondPolicy, dependencies: adapters(quote, calls),
+      });
+      expect(second.status).toBe("usable");
+      expect(second.review?.freeAfterProposalAndContingencyCents).toBe(0);
+      await expect(executeReviewedProviderProcurement(db.raw, {
+        scope: scope3, policyDecisionId: thirdPolicy, dependencies: adapters(quote, calls),
+      })).rejects.toThrow("insufficient after local commitments");
+      expect(getFinancialEffectByOperationKey(db.raw, scope3.operationKey)).toBeUndefined();
+      expect(calls).toHaveLength(2);
+      const exposure = getProviderFundingSnapshotExposure(db.raw, {
+        provider: "aws", providerAccountId: "123456789012",
+        unit: "usd_cent", fundingObservedAt: "2026-10-01T00:00:00Z",
+      });
+      expect(exposure.additionalHeldCents).toBe(6000);
+      expect(exposure.unresolvedCount).toBe(2);
+    } finally { db.close(); }
+  });
+
+  it("keeps post-snapshot settled obligations held until a newer authenticated balance is observed", async () => {
+    const { db, scope } = setup();
+    try {
+      const quote = scenario();
+      const settledKey = "previous-provider-payment";
+      prepareFinancialEffect(db.raw, {
+        operationKey: settledKey, effectKind: "provider_resource_procurement",
+        amountCents: 4000, unit: "usd_cent", provider: "aws",
+        request: { providerAccountId: scope.providerAccountId, resourceId: "older-resource" },
+      });
+      settleFinancialEffect(db.raw, settledKey, {
+        providerEffectId: "mock-provider-settlement",
+        providerStatus: "observed-settled",
+        evidence: ["Synthetic mock only: no actual supplier invoice."],
+      }, () => null);
+      const snapshot = getProviderFundingSnapshotExposure(db.raw, {
+        provider: scope.provider, providerAccountId: scope.providerAccountId,
+        unit: "usd_cent", fundingObservedAt: quote.financing.observedAt!,
+      });
+      expect(snapshot.completedAfterSnapshotCount).toBe(1);
+      expect(snapshot.additionalHeldCents).toBe(4000);
+      const calls: string[] = [];
+      const id = policy(db, scope, quote);
+      await expect(executeReviewedProviderProcurement(db.raw, {
+        scope, policyDecisionId: id, dependencies: adapters(quote, calls),
+      })).rejects.toThrow("insufficient after local commitments");
+      expect(calls).toEqual([]);
+    } finally { db.close(); }
+  });
+
+  it("holds unscoped provider obligations but excludes verified other-account/provider liabilities", async () => {
+    const { db, scope } = setup();
+    try {
+      const quote = scenario(), calls: string[] = [];
+      prepareFinancialEffect(db.raw, {
+        operationKey: "other-aws-account", effectKind: "provider_resource_procurement",
+        amountCents: 9000, unit: "usd_cent", provider: "aws",
+        request: { providerAccountId: "222222222222", resourceId: "unrelated" },
+      });
+      prepareFinancialEffect(db.raw, {
+        operationKey: "other-currency", effectKind: "provider_resource_procurement",
+        amountCents: 9000, unit: "credit_cent", provider: "aws",
+        request: { providerAccountId: scope.providerAccountId, resourceId: "conway-credit" },
+      });
+      const id = policy(db, scope, quote);
+      const result = await executeReviewedProviderProcurement(db.raw, {
+        scope, policyDecisionId: id, dependencies: adapters(quote, calls),
+      });
+      expect(result.status).toBe("usable");
+      expect(result.review?.freeAfterProposalAndContingencyCents).toBe(3000);
+      expect(calls).toHaveLength(1);
+      prepareFinancialEffect(db.raw, {
+        operationKey: "unknown-provider-account", effectKind: "provider_resource_procurement",
+        amountCents: 200, unit: "usd_cent", provider: "aws",
+        request: { resourceId: "unattributed" },
+      });
+      const scope2 = { ...scope, operationKey: "provider-ec2-next",
+        resourceId: "resource-next" };
+      const p2 = policy(db, scope2, quote);
+      await expect(executeReviewedProviderProcurement(db.raw, {
+        scope: scope2, policyDecisionId: p2, dependencies: adapters(quote, calls),
+      })).rejects.toThrow("unscoped financial obligations");
+      expect(calls).toHaveLength(1);
+    } finally { db.close(); }
+  });
+
+  it("rejects missing, invalid, future or stale funding timestamps before any durable purchase", async () => {
+    for (const observedAt of [null, "nonsense", "2031-01-01T00:00:00Z"]) {
+      const { db, scope } = setup();
+      try {
+        const quote = scenario(), calls: string[] = [];
+        quote.financing.observedAt = observedAt;
+        const id = policy(db, scope, quote);
+        await expect(executeReviewedProviderProcurement(db.raw, {
+          scope, policyDecisionId: id,
+          dependencies: adapters(quote, calls),
+        })).rejects.toThrow("P-030 provider scenario");
+        expect(calls).toEqual([]);
+        expect(getFinancialEffectByOperationKey(db.raw, scope.operationKey))
+          .toBeUndefined();
       } finally { db.close(); }
     }
   });

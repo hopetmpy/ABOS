@@ -730,6 +730,98 @@ export function getProviderAccountFinancialExposure(
 }
 
 /** Read-only aggregate for P-025 review, sourced from the sole financial intent owner. */
+/**
+ * Account-specific incremental exposure since one authenticated funding
+ * snapshot. This is deliberately conservative: unresolved local intents may
+ * not yet appear in AWS bills; completed intents created AFTER the snapshot
+ * may have spent its previously observed balance. They must both be held
+ * against that snapshot until an independently refreshed funding observation.
+ *
+ * Do not subtract unrelated providers/accounts/units. Missing account scope
+ * remains UNKNOWN, never zero, and no local record proves full provider bills.
+ */
+export interface ProviderFundingSnapshotExposure {
+  provider: string;
+  providerAccountId: string;
+  unit: string;
+  fundingObservedAt: string;
+  additionalHeldCents: number;
+  unresolvedCount: number;
+  completedAfterSnapshotCount: number;
+  /** Unresolved OR completed-since-snapshot effects without provider account. */
+  unscopedUnresolvedCount: number;
+  evidence: string[];
+}
+
+export function getProviderFundingSnapshotExposure(
+  db: Database.Database,
+  scope: {
+    provider: string;
+    providerAccountId: string;
+    unit: string;
+    fundingObservedAt: string;
+  },
+): ProviderFundingSnapshotExposure {
+  const provider = requireText(scope.provider, "provider");
+  const providerAccountId = requireText(scope.providerAccountId, "providerAccountId");
+  const unit = requireText(scope.unit, "unit");
+  const snapshotAt = Date.parse(scope.fundingObservedAt);
+  if (!Number.isFinite(snapshotAt)) {
+    throw new Error("Authenticated funding snapshot date must be an exact UTC ISO timestamp");
+  }
+  let held = 0n;
+  let unresolvedCount = 0;
+  let completedAfterSnapshotCount = 0;
+  let unscopedUnresolvedCount = 0;
+  const records = [
+    ...listUnresolvedFinancialEffects(db),
+    ...listFinancialEffectsByStates(db, ["completed"]),
+  ];
+  for (const effect of records) {
+    if (effect.provider !== provider || effect.unit !== unit) continue;
+    const account = typeof effect.request.providerAccountId === "string"
+      ? effect.request.providerAccountId.trim() : "";
+    if (!account) {
+      const createdAt = Date.parse(effect.createdAt);
+      if (!Number.isFinite(createdAt)) {
+        throw new Error("Unscoped financial intent time is UNKNOWN; account funding snapshot cannot be reconciled.");
+      }
+      if (effect.state !== "completed" || createdAt >= snapshotAt) {
+        // An unscoped completed charge AFTER the funding snapshot may also
+        // have consumed capital. It cannot safely be allocated to zero.
+        unscopedUnresolvedCount += 1;
+      }
+      continue;
+    }
+    if (account !== providerAccountId) continue;
+    if (effect.state === "completed") {
+      const createdAt = Date.parse(effect.createdAt);
+      if (!Number.isFinite(createdAt)) {
+        throw new Error("Completed financial intent has an unparseable funding observation timestamp");
+      }
+      if (createdAt < snapshotAt) continue;
+      completedAfterSnapshotCount += 1;
+    } else {
+      unresolvedCount += 1;
+    }
+    held += BigInt(effect.amountCents);
+    if (held > BigInt(Number.MAX_SAFE_INTEGER)) {
+      throw new Error("Provider-account snapshot exposure exceeds exact monetary precision");
+    }
+  }
+  return {
+    provider, providerAccountId, unit,
+    fundingObservedAt: scope.fundingObservedAt,
+    additionalHeldCents: Number(held),
+    unresolvedCount, completedAfterSnapshotCount, unscopedUnresolvedCount,
+    evidence: [
+      "Local P-030 unresolved intents and completed-after-snapshot intents are conservative holds against this source observation, NOT independently verified provider charges.",
+      "The trusted external funding snapshot must separately include all preexisting external recurring liabilities; local holds may overlap with externally reflected charges.",
+      "Unknown-account local obligations cannot be silently allocated, and no local ledger certifies complete provider balances or authorizations.",
+    ],
+  };
+}
+
 export interface StrategicFinancialExposure {
   count: number;
   pendingCreditCommitments: number;

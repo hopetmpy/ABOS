@@ -280,6 +280,8 @@ export interface ProviderProcurementScenarioInput {
     /** Only independently authenticated account funding is eligible for review. */
     basis: "externally_observed" | "budget_threshold" | "caller_estimate" | "unknown";
     evidence?: string[];
+    /** Time of the authenticated provider-account funding snapshot (UTC ISO). */
+    observedAt?: string | null;
     validUntil?: string | null;
   };
   existingCommitmentsCents: number | null;
@@ -388,10 +390,17 @@ export function assessProviderProcurementScenario(
   }
   const fundingValidUntil = input.financing.validUntil == null
     ? null : Date.parse(input.financing.validUntil);
+  const fundingObservedAt = input.financing.observedAt == null
+    ? null : Date.parse(input.financing.observedAt);
+  const fundingAgeUsable = fundingObservedAt !== null &&
+    Number.isFinite(fundingObservedAt) &&
+    fundingObservedAt <= now.getTime() &&
+    fundingValidUntil !== null && Number.isFinite(fundingValidUntil) &&
+    fundingObservedAt < fundingValidUntil;
   if (input.financing.basis !== "externally_observed" ||
       financingEvidence.length === 0 || available === null ||
-      fundingValidUntil === null || !Number.isFinite(fundingValidUntil) ||
-      fundingValidUntil <= now.getTime()) {
+      !fundingAgeUsable ||
+      fundingValidUntil! <= now.getTime()) {
     conditions.push("Fresh authenticated funding of this account in the SAME unit is UNKNOWN; a budget threshold or assertion is not cash.");
   } else {
     evidence.push(...financingEvidence.map(x => "Account funding source: " + x));
@@ -427,8 +436,7 @@ export function assessProviderProcurementScenario(
   const trustedFunding = input.financing.basis === "externally_observed" &&
     financingEvidence.length > 0 && input.financing.accountId === accountId &&
     input.financing.unit === unit && available !== null &&
-    fundingValidUntil !== null && Number.isFinite(fundingValidUntil) &&
-    fundingValidUntil > now.getTime();
+    fundingAgeUsable && fundingValidUntil! > now.getTime();
   const freeBefore = trustedFunding && committed !== null && reserved !== null
     ? available! - safeProviderTotal(committed, reserved) : null;
   const freeAfter = freeBefore !== null && total !== null && contingency !== null &&
