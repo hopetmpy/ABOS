@@ -235,9 +235,17 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
       );
     }
 
+    if (estimatedCostCents != null) {
+      evidence.push(
+        "Conway monthly tier was prorated for planning only; billing granularity, addons and actual charged units are unverified, so total cost coverage is partial.",
+      );
+    }
     return {
       estimatedCostCents,
-      costCoverage: estimatedCostCents == null ? "unknown" : "complete",
+      // Tier API exposes monthly_cents without attested cash-vs-credit unit.
+      // This is useful ranking evidence, not a complete monetary obligation.
+      costUnit: null,
+      costCoverage: estimatedCostCents == null ? "unknown" : "partial",
       reusableResourceCount,
       evidence,
       metadata,
