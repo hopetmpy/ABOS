@@ -97,12 +97,22 @@ describe("EnvironmentRetentionCoordinator", () => {
       insertGoal(db, "g-uncertain", "completed");
       insertTask(db, "t-uncertain", "g-uncertain", "completed");
       let destroys = 0;
+      let observed = false;
       const registry = new EnvironmentRegistry();
       registry.register(provider({
         reconcile: async (resource) => ({
-          resource, actualExists: null, action: "unknown", evidence: ["still uncertain"],
+          resource: {
+            ...resource, externalId: observed ? "vm-verified" : null,
+            status: observed ? "running" : "unknown",
+          },
+          actualExists: observed ? true : null,
+          action: observed ? "confirmed" : "unknown", evidence: ["observed"],
         }),
-        destroy: async () => { destroys += 1; return { status: "terminated" }; },
+        destroy: async (resource) => {
+          expect(resource.externalId).toBe("vm-verified");
+          destroys += 1;
+          return { status: "terminated" };
+        },
       }));
       const lifecycle = new EnvironmentLifecycleManager(registry, new EnvironmentResourceStore(db));
       lifecycle.adopt({
@@ -110,10 +120,16 @@ describe("EnvironmentRetentionCoordinator", () => {
         taskId: "t-uncertain", status: "unknown", retentionPolicy: "ephemeral",
         metadata: { provisionNeedsReconciliation: true },
       });
-      const outcome = await new EnvironmentRetentionCoordinator(db, registry, lifecycle).sweep();
+      const retention = new EnvironmentRetentionCoordinator(db, registry, lifecycle);
+      const outcome = await retention.sweep();
       expect(outcome.pendingObservation).toBe(1);
       expect(outcome.destroyAttempts).toBe(0);
       expect(destroys).toBe(0);
+      observed = true;
+      const settled = await retention.sweep();
+      expect(settled.destroyAttempts).toBe(1);
+      expect(settled.released).toBe(1);
+      expect(destroys).toBe(1);
     } finally { db.close(); }
   });
 
