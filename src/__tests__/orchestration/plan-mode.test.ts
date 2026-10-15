@@ -375,6 +375,24 @@ describe("orchestration/plan-mode", () => {
       expect(result.feedback).toContain("not free liquidity or realized spending");
     });
 
+    it("does not conflate pending USDC purchases with Conway credit commitments", async () => {
+      const result = await reviewPlan(makePlan(), {
+        ...autoConfig,
+        reviewContext: {
+          outstandingFinancialEffects: {
+            count: 1, pendingCreditCommitments: 300,
+            pendingUsdcTopups: 2, pendingUsdcCommitments: 3000,
+          },
+        },
+      });
+      expect(result.approved).toBe(true);
+      expect(result.feedback).toContain("1 unresolved intents");
+      expect(result.feedback).toContain("300 credit cents of exposure");
+      expect(result.feedback).toContain("2 pending USDC topups");
+      expect(result.feedback).toContain("3000 USDC cents committed");
+      expect(result.feedback).toContain("not Conway credit units or proof of credits received");
+    });
+
     it("preserves UNKNOWN when a financially inconsistent exposure is injected", async () => {
       const result = await reviewPlan(makePlan(), {
         ...autoConfig,

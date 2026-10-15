@@ -829,7 +829,12 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
     // not proof of balance, settlement or free capital. Read it before review
     // without introducing a second treasury or authorization authority.
     const unsettledEffects = listUnresolvedFinancialEffects(this.strategicParams.db);
+    const unsettledCreditEffects = unsettledEffects.filter((effect) => effect.unit === "credit_cent");
+    const pendingUsdcTopups = unsettledEffects.filter((effect) =>
+      effect.unit === "usdc_cent" && effect.effectKind === "x402_credit_topup",
+    );
     const pendingCreditCommitments = getCommittedFinancialEffectCents(this.strategicParams.db);
+    const pendingUsdcCommitments = getCommittedFinancialEffectCents(this.strategicParams.db, "usdc_cent");
     return {
       capabilityResolutions,
       environmentSnapshots,
@@ -837,8 +842,10 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
       adaptiveContext: plannerContext.adaptiveContext,
       taskCostCalibration: getTreasuryProjection(this.strategicParams.db).historicalTaskCostCalibration,
       outstandingFinancialEffects: {
-        count: unsettledEffects.length,
+        count: unsettledCreditEffects.length,
         pendingCreditCommitments,
+        pendingUsdcTopups: pendingUsdcTopups.length,
+        pendingUsdcCommitments,
       },
     };
   }

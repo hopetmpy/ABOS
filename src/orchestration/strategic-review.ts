@@ -36,8 +36,12 @@ export interface StrategicReviewContext {
   taskCostCalibration?: TaskCostCalibration;
   /** Source-owned unresolved credits; not provider settlement or free balance. */
   outstandingFinancialEffects?: {
+    /** Number of outstanding Conway credit-unit effects only. */
     count: number;
     pendingCreditCommitments: number;
+    /** Separate on-chain USD-cent commitments; never summed with credits. */
+    pendingUsdcTopups?: number;
+    pendingUsdcCommitments?: number;
   };
 }
 
@@ -402,9 +406,13 @@ export function assessStrategicPlan(
 
   if (context.outstandingFinancialEffects) {
     const pending = context.outstandingFinancialEffects;
+    const validUsdc = pending.pendingUsdcTopups === undefined ||
+      (Number.isSafeInteger(pending.pendingUsdcTopups) && pending.pendingUsdcTopups >= 0);
+    const validUsdcAmount = pending.pendingUsdcCommitments === undefined ||
+      (Number.isSafeInteger(pending.pendingUsdcCommitments) && pending.pendingUsdcCommitments >= 0);
     if (!Number.isSafeInteger(pending.count) || pending.count < 0 ||
         !Number.isSafeInteger(pending.pendingCreditCommitments) ||
-        pending.pendingCreditCommitments < 0) {
+        pending.pendingCreditCommitments < 0 || !validUsdc || !validUsdcAmount) {
       hasUnknown = true;
       conditions.push("Canonical financial-effect exposure is invalid; re-observe treasury.");
     } else if (pending.count > 0) {
@@ -414,6 +422,15 @@ export function assessStrategicPlan(
       );
       conditions.push(
         "Existing pending credit effects are committed capital, not free liquidity or realized spending.",
+      );
+    }
+    if (pending.pendingUsdcTopups && pending.pendingUsdcTopups > 0) {
+      evidence.push(
+        `Canonical x402 purchasing ledger: ${pending.pendingUsdcTopups} pending USDC topups ` +
+        `with ${pending.pendingUsdcCommitments ?? "UNKNOWN"} USDC cents committed.`,
+      );
+      conditions.push(
+        "USDC purchase commitments are not Conway credit units or proof of credits received.",
       );
     }
   }
