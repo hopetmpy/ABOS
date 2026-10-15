@@ -4,6 +4,10 @@ import type { EnvironmentRegistry } from "./registry.js";
 import type { EnvironmentSelector } from "./selector.js";
 import type { EnvironmentMobilityCoordinator } from "./mobility.js";
 import { capabilityStateOf } from "../capabilities/model.js";
+import {
+  assessProviderProcurementScenario,
+  type ProviderProcurementScenarioInput,
+} from "../economics/treasury-scenario.js";
 
 const MAX_PROVIDER_OUTPUT_CHARS = 64_000;
 
@@ -201,6 +205,105 @@ export function createEnvironmentTools(
         return sanitizeProviderOutput(JSON.stringify(result, null, 2));
       } catch {
         return `UNKNOWN: ${environment} economic observation failed; no account balance, budget or spending authority can be inferred.`;
+      }
+    },
+  });
+
+  tools.push({
+    name: "environment_procurement_review",
+    description:
+      "Review a proposed provider acquisition under P-030 with cost recurrence, contingency and alternatives. " +
+      "Provider economic observations are used for identity only; AWS budget limits are not financing. " +
+      "This is a read-only preliminary scenario, never permission to buy.",
+    category: "environment",
+    riskLevel: "safe",
+    parameters: {
+      type: "object",
+      properties: {
+        environment: { type: "string" },
+        unit: { type: "string", description: "Explicit currency unit (for example usd_cent)." },
+        resource_need_evidence: { type: "array", items: { type: "string" } },
+        one_time_cents: { type: ["number", "null"] },
+        recurring_cents_per_period: { type: ["number", "null"] },
+        periods: { type: ["number", "null"] },
+        other_charges_cents: { type: ["number", "null"] },
+        unpriced_components: { type: "array", items: { type: "string" } },
+        billing_terms_evidence: { type: "array", items: { type: "string" } },
+        alternatives: { type: "array", items: { type: "object" } },
+        no_alternative_evidence: { type: "array", items: { type: "string" } },
+        additional_contingency_cents: { type: ["number", "null"] },
+        contingency_evidence: { type: "array", items: { type: "string" } },
+      },
+      required: ["environment", "unit"],
+    },
+    execute: async (args) => {
+      const id = String(args.environment ?? "").trim();
+      if (!id) return "BLOCKED: environment is required.";
+      const provider = registry.get(id);
+      if (!provider) return `BLOCKED: unknown environment "${id}".`;
+      if (!provider.observeEconomics) {
+        return `UNAVAILABLE: ${id} has no source-backed account-economic adapter for this scenario.`;
+      }
+      const strings = (value: unknown): string[] => Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === "string")
+        : [];
+      const cents = (value: unknown): number | null =>
+        typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+          ? value : null;
+      try {
+        const observed = await provider.observeEconomics();
+        if (!observed.accountId) {
+          return `UNKNOWN: ${id} account identity is not observed; provider procurement scope cannot be reviewed.`;
+        }
+        // Caller-supplied model numbers never become independently observed
+        // financing. Even with Budgets present, UNKNOWN is correct.
+        const unit = String(args.unit ?? "").trim();
+        const rawAlternatives = Array.isArray(args.alternatives) ? args.alternatives : [];
+        const alternatives: NonNullable<ProviderProcurementScenarioInput["alternatives"]> =
+          rawAlternatives.filter((x): x is Record<string, unknown> =>
+            x !== null && typeof x === "object" && !Array.isArray(x),
+          ).map(x => ({
+            id: typeof x.id === "string" ? x.id : "",
+            projectedCostCents: cents(x.projected_cost_cents),
+            unit: typeof x.unit === "string" ? x.unit : "",
+            evidence: typeof x.evidence === "string" ? x.evidence : "",
+          }));
+        const review = assessProviderProcurementScenario({
+          provider: id,
+          accountId: observed.accountId,
+          unit,
+          resourceNeedEvidence: strings(args.resource_need_evidence),
+          alternatives,
+          noAlternativeEvidence: strings(args.no_alternative_evidence),
+          cost: {
+            oneTimeCents: cents(args.one_time_cents),
+            recurringCentsPerPeriod: cents(args.recurring_cents_per_period),
+            periods: cents(args.periods),
+            otherChargesCents: cents(args.other_charges_cents),
+            billingTermsEvidence: strings(args.billing_terms_evidence),
+            unpricedComponents: strings(args.unpriced_components),
+          },
+          financing: {
+            accountId: observed.accountId,
+            unit,
+            observedAvailableCents: null,
+            basis: "unknown",
+            evidence: [],
+          },
+          existingCommitmentsCents: null,
+          reservedCents: null,
+          additionalContingencyCents: cents(args.additional_contingency_cents),
+          contingencyEvidence: strings(args.contingency_evidence),
+        });
+        return sanitizeProviderOutput(JSON.stringify({
+          observationStatus: observed.status,
+          accountId: observed.accountId,
+          // No budget amount is allowed to flow as verified cash.
+          scenario: review,
+          purchaseAuthorized: false,
+        }, null, 2));
+      } catch {
+        return `UNKNOWN: ${id} provider treasury scenario observation or review failed; not an acquisition authorization.`;
       }
     },
   });
