@@ -164,6 +164,23 @@ export async function executeReviewedProviderProcurement(
   // later policy or consuming a second fresh account observation.
   const previous = getFinancialEffectByOperationKey(db, scope.operationKey);
   if (previous) {
+    const stored = previous.request;
+    const matches = previous.provider === scope.provider &&
+      previous.unit === scope.unit &&
+      previous.policyDecisionId === policyDecisionId &&
+      stored.providerAccountId === scope.providerAccountId &&
+      stored.operationKey === scope.operationKey &&
+      stored.operation === scope.operation &&
+      stored.resourceId === scope.resourceId &&
+      stored.goalId === scope.goalId &&
+      stored.taskId === scope.taskId &&
+      stored.pathId === scope.pathId &&
+      stored.region === scope.region &&
+      stored.resourceShape === scope.resourceShape &&
+      stored.externalId === (scope.externalId ?? null);
+    if (!matches) {
+      throw new Error("P-030 idempotency conflict: operation key already belongs to different provider/account/resource/policy economics.");
+    }
     return {
       status: "not_dispatched",
       dispatched: false,
