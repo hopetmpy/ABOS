@@ -6,6 +6,7 @@ import type { PlannerContext, PlannerOutput } from "./planner.js";
 import type { FundingProtocol } from "./types.js";
 import type { AgentWorkspace } from "./workspace.js";
 import { getActiveGoals } from "../state/database.js";
+import { describeTaskCostLearning, getTaskCostCalibration } from "../economics/treasury-projection.js";
 
 export interface PlannerContextOptions {
   db: Database;
@@ -43,6 +44,12 @@ export async function buildPlannerContext(options: PlannerContextOptions): Promi
   const cachedBalance = readCachedBalance(options.db);
   const creditsCents = await resolveCreditsCents(options, cachedBalance?.creditsCents);
   const usdcBalance = resolveUsdcBalance(options, cachedBalance?.usdcBalance);
+  const economicLearning = describeTaskCostLearning(getTaskCostCalibration(options.db));
+  // Join authoritative observed learning to existing adaptive context rather
+  // than creating another planner/memory or decision authority.
+  const adaptiveContext = [options.adaptiveContext?.trim(), economicLearning]
+    .filter((item): item is string => Boolean(item))
+    .join("\n\n") || undefined;
 
   return {
     creditsCents,
@@ -62,7 +69,7 @@ export async function buildPlannerContext(options: PlannerContextOptions): Promi
     busyAgents: clampCount(options.busyAgents),
     maxAgents: Math.max(1, clampCount(options.maxAgents, 1)),
     workspaceFiles: listWorkspaceFiles(options.workspace),
-    adaptiveContext: options.adaptiveContext,
+    adaptiveContext,
     environmentSnapshots: options.environmentSnapshots ?? [],
     capabilities: options.capabilities ?? [],
   };
