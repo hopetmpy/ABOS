@@ -6,21 +6,21 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / AWS_ACCOUNT_CREDIT_OBSERVATION_PR_CI_PENDING / LIVE_AWS_ISSUER_UNWIRED / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / CREDIT_ELIGIBILITY_P030_REVIEW_PR_CI_PENDING / LIVE_AWS_ISSUER_UNWIRED / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-aws-account-credit-evidence
+Current-Host-Branch: abos/p031-aws-credit-eligibility-review
 Host-Head-At-Audit-Open: 088de39896dcef837c7047c4c560e9cd0b7a29e8
 Last-Reconciled-Host-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
-Observed-Main-Head: 7b855bb1bd4ac1c10fd97525a031b8fe8790c319
-Last-Product-Head: 7b855bb1bd4ac1c10fd97525a031b8fe8790c319
-Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #97 38820503027 — SUCCESS 8/8 after isolated Windows24 rerun
+Observed-Main-Head: cd4ff5037011461bc61f60efdf2588a710209c2c
+Last-Product-Head: cd4ff5037011461bc61f60efdf2588a710209c2c
+Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #98 38821766242 — SUCCESS 8/8
 Last-Completed-Plan: P-030
-Last-Completed-Merge: 7b855bb1bd4ac1c10fd97525a031b8fe8790c319
+Last-Completed-Merge: cd4ff5037011461bc61f60efdf2588a710209c2c
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
@@ -500,3 +500,10 @@ NEXT_ELIGIBLE_WORK: run exact source CI then integrate if green; audit/adapt pro
 - Current source branch `abos/p031-aws-account-credit-evidence`: extend the **existing** optional `EnvironmentProvider.observeEconomics({includeProviderCredits:true})` read-only observation and generic `environment_economic_evidence` tool; AWS implementation calls STS then AWS Billing `get-credits --account-id <STS> --start-date <within-year> --no-payer-account-flag --region us-east-1` under explicit user/agent opt-in, alongside prior cost budgets. Account mismatched credits excluded, permission/unknown/malformed remains PARTIAL, decimal USD only when exact cents, expiry/status/product/purchase restrictions retained. Never aggregate conditional credits into `spendableLiquidityUsdCents` (stays null); `procurementAuthority=not_established` unchanged. No recurring polling or charge. Tests for default 2-read flow, opt-in scoped call, foreign-account rejection, disabled credits, fractional USD, non-USD, and API failure.
 - Public AWS API specification: `https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_billing_GetCredits.html`; CLI `https://docs.aws.amazon.com/cli/latest/reference/billing/get-credits.html`. Source CI PENDING.
 - Next: verify source CI, integrate if valid; then query LIVE only if account/permissions/terms user authorized and API actually available, determine whether credits match intended supplier costs, account and expiry, connect to existing P-030 same-unit financing with source-verified coverage and P-010 operation issuer. Without this, paid AWS dispatch remains UNAVAILABLE; P-005 E5/E6 UNKNOWN and P-031 EN_EJECUCIÓN, P-032 not started.
+
+## P-031 — PR #98 source CI and conditional credit fit into P-030 (2026-10-15)
+
+- PR #98 exact final source `8a14d3f4f6ef5bab820727b1fbabdfd16771d932`, run `38821766242` SUCCESS 8/8, squash merged `main cd4ff5037011461bc61f60efdf2588a710209c2c`. Exact post-merge main push CI not independently verified through PR-only API.
+- R2: reading provider-owned `billing get-credits` is not sufficient to know whether a named AWS credit applies to this EC2 purchase, interval and terms. AWS CreditData carries `startDate`, `endDate`, `creditStatus`, `applicableProductNames`, `purchaseTypeApplications`, and in-flight-adjusted estimated balance; purchase type null/omitted is documented as all types, explicit nonmatching restrictions exclude this purchase. Source docs `https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_billing_CreditData.html`.
+- Source branch `abos/p031-aws-credit-eligibility-review`: enhance existing AWS observation to preserve activation date and null-vs-explicit purchase type restriction; extend **existing P-030 treasury-scenario owner** with `assessConditionalProviderCreditFit`. Possible match requires ENABLED, precise positive USD observed AND estimated remaining, future quoted service window fully within known credit validity, exact service/purchase eligibility; disabled, expired, mismatched, exhausted = not applicable; missing, incomplete or partially overlapping coverage = unknown. Returns **potentially_applicable**, never guaranteed cash offset. No aggregation or discount of full supplier price; P-030 provider procurement review can optionally request extra provider credits and show per-credit fit candidates, retaining `purchaseAuthorized=false` and `freeBeforeProposalCents=null`. No production paid dispatch, bills or live account claims. Source tests for all restrictions, unknown cases and no gross-cost reduction; CI PENDING.
+- P-031 EN_EJECUCIÓN, P-005 E5/E6 LIVE unknown; P-010 issuer for account USD/eligible credits remains unwired, and actual AWS supplier invoice/eligibility must be independently checked before any purchase. P-032 not started.
