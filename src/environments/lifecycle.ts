@@ -76,6 +76,8 @@ export class EnvironmentLifecycleManager {
     this.resources.transition(owned.id, "provisioning", {
       operation: "provision",
       reason: "Provider provisioning started.",
+      // Persist uncertainty BEFORE dispatch: a process crash cannot reach catch.
+      metadata: { provisionNeedsReconciliation: true },
     });
 
     try {
@@ -97,16 +99,25 @@ export class EnvironmentLifecycleManager {
           credentialsReference: result.credentialsReference,
           providerState: result.providerState,
           evidence: result.evidence,
-          metadata: result.metadata,
+          metadata: {
+            ...result.metadata,
+            provisionNeedsReconciliation: false,
+          },
         },
         "provision",
         "Provider provisioning completed.",
       );
     } catch (error) {
-      this.resources.transition(resourceId, "failed", {
+      // The provider may have created a billable resource before a timeout,
+      // lost callback, or local persistence error. Never claim it failed.
+      const detail = error instanceof Error ? error.message : String(error);
+      this.resources.transition(resourceId, "unknown", {
         operation: "provision",
-        reason: error instanceof Error ? error.message : String(error),
-        evidence: [error instanceof Error ? error.message : String(error)],
+        reason: "Dispatched provisioning has no verified provider outcome.",
+        evidence: [
+          `Provisioning outcome UNKNOWN: ${detail}. The resource may exist and incur charges; reconcile before retry or cleanup.`,
+        ],
+        metadata: { provisionNeedsReconciliation: true },
       });
       throw error;
     }
@@ -314,6 +325,9 @@ export class EnvironmentLifecycleManager {
           metadata: {
             lastReconcileAction: result.action,
             actualExists: result.actualExists,
+            ...(result.actualExists === true && reconciled.externalId
+              ? { provisionNeedsReconciliation: false }
+              : {}),
           },
         },
         "reconcile",

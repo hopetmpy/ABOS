@@ -79,6 +79,7 @@ describe("Environment Execution & Lifecycle v2", () => {
       expect(resource.externalId).toMatch(/^ext-/);
       expect(resource.status).toBe("ready");
       expect(resource.estimatedCostCents).toBe(25);
+      expect(resource.metadata.provisionNeedsReconciliation).toBe(false);
 
       const events = store.listEvents(resource.id);
       expect(events.map((event) => event.operation)).toEqual([
@@ -101,6 +102,42 @@ describe("Environment Execution & Lifecycle v2", () => {
     } finally {
       db.close();
     }
+  });
+
+  it("keeps ambiguous provider provisioning unknown", async () => {
+    const db = createDb();
+    try {
+      const registry = new EnvironmentRegistry();
+      let dispatches = 0;
+      registry.register({
+        id: "uncertain", inspect: async () => ({
+          id: "uncertain", label: "Uncertain", availability: "available",
+          capabilities: [], evidence: [], constraints: [], observedAt: new Date().toISOString(),
+        }),
+        provision: async () => { dispatches += 1; throw new Error("provider timeout"); },
+        reconcile: async (resource) => ({
+          resource: { ...resource, externalId: "recovered-id", status: "running" },
+          actualExists: true, action: "observed", evidence: ["provider confirmed identity"],
+        }),
+      });
+      const life = new EnvironmentLifecycleManager(registry, new EnvironmentResourceStore(db));
+      await expect(life.provision("uncertain", {
+        resourceId: "r-unknown", resourceType: "compute", retentionPolicy: "ephemeral",
+        requiredCapabilities: [],
+      })).rejects.toThrow("provider timeout");
+      expect(life.resources.get("r-unknown")?.status).toBe("unknown");
+      expect(life.resources.get("r-unknown")?.metadata.provisionNeedsReconciliation).toBe(true);
+      await expect(life.provision("uncertain", {
+        resourceId: "r-unknown", resourceType: "compute",
+        retentionPolicy: "ephemeral", requiredCapabilities: [],
+      })).rejects.toThrow();
+      expect(dispatches).toBe(1);
+      const restarted = new EnvironmentLifecycleManager(registry, new EnvironmentResourceStore(db));
+      const recovered = await restarted.reconcile("r-unknown");
+      expect(recovered.status).toBe("running");
+      expect(recovered.externalId).toBe("recovered-id");
+      expect(recovered.metadata.provisionNeedsReconciliation).toBe(false);
+    } finally { db.close(); }
   });
 
   it("reports unsupported provider operation as unavailable, not impossible", async () => {

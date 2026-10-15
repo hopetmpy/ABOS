@@ -91,6 +91,51 @@ function provider(
 }
 
 describe("EnvironmentRetentionCoordinator", () => {
+  it("defers cleanup when an uncertain provision has no observed external identity", async () => {
+    const db = createDb();
+    try {
+      insertGoal(db, "g-uncertain", "completed");
+      insertTask(db, "t-uncertain", "g-uncertain", "completed");
+      let destroys = 0;
+      let observed = false;
+      const registry = new EnvironmentRegistry();
+      registry.register(provider({
+        reconcile: async (resource) => ({
+          resource: {
+            ...resource, externalId: observed ? "vm-verified" : null,
+            status: observed ? "running" : "unknown",
+          },
+          actualExists: observed ? true : null,
+          action: observed ? "confirmed" : "unknown", evidence: ["observed"],
+        }),
+        destroy: async (resource) => {
+          expect(resource.externalId).toBe("vm-verified");
+          destroys += 1;
+          return { status: "terminated" };
+        },
+      }));
+      const lifecycle = new EnvironmentLifecycleManager(registry, new EnvironmentResourceStore(db));
+      lifecycle.resources.create({
+        provider: "cloud", type: "compute", goalId: "g-uncertain",
+        taskId: "t-uncertain", status: "unknown", retentionPolicy: "ephemeral",
+        metadata: { provisionNeedsReconciliation: true, artifactCollectionState: "pending", remoteArtifacts: ["/tmp/uncollected.log"] },
+      });
+      const retention = new EnvironmentRetentionCoordinator(db, registry, lifecycle);
+      const outcome = await retention.sweep();
+      expect(outcome.pendingObservation).toBe(1);
+      expect(outcome.artifactHolds).toBe(0);
+      expect(outcome.destroyAttempts).toBe(0);
+      expect(destroys).toBe(0);
+      observed = true;
+      const prior = lifecycle.resources.list()[0]!;
+      lifecycle.resources.applyMutation(prior.id, { metadata: { artifactCollectionState: "collected" } });
+      const settled = await retention.sweep();
+      expect(settled.destroyAttempts).toBe(1);
+      expect(settled.released).toBe(1);
+      expect(destroys).toBe(1);
+    } finally { db.close(); }
+  });
+
   it("releases until_goal_complete resources only after the owning Goal settles", async () => {
     const db = createDb();
     try {
