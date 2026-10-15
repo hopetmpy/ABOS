@@ -75,7 +75,16 @@ describe("P-030 financial effect authority", () => {
     // requested identical later transfer.
     settleFinancialEffect(database.raw, "economic:first",
       { providerStatus: "completed", evidence: ["provider verified finality"] },
-      () => "existing-record",
+      () => {
+        database.insertTransaction({
+          id: "txn-economic-first",
+          type: "transfer_out",
+          amountCents: 375,
+          description: "Verified provider settlement for the first operation",
+          timestamp: new Date().toISOString(),
+        });
+        return "txn-economic-first";
+      },
     );
     const second = prepareFinancialEffect(database.raw, {
       ...input,
