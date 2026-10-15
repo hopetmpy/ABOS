@@ -6,6 +6,7 @@ import type { EnvironmentMobilityCoordinator } from "./mobility.js";
 import { capabilityStateOf } from "../capabilities/model.js";
 import {
   assessProviderProcurementScenario,
+  assessConditionalProviderCreditFit,
   type ProviderProcurementScenarioInput,
 } from "../economics/treasury-scenario.js";
 
@@ -243,6 +244,11 @@ export function createEnvironmentTools(
         environment: { type: "string" },
         unit: { type: "string", description: "Explicit currency unit (for example usd_cent)." },
         task_id: { type: "string", description: "Optional canonical task ID whose reviewed P-025 path must be independently checked." },
+        include_provider_credits: { type: "boolean", description: "Explicit additional provider billing read; never financing or authorization." },
+        service_name: { type: "string", description: "Exact provider service label for conditional credit comparison." },
+        purchase_type: { type: "string", description: "Exact supplier purchase type, not a general category guess." },
+        service_start_at: { type: "string", description: "Future ISO date when the quoted service begins." },
+        service_end_at: { type: "string", description: "ISO date when this quoted commitment ends." },
         resource_need_evidence: { type: "array", items: { type: "string" } },
         one_time_cents: { type: ["number", "null"] },
         recurring_cents_per_period: { type: ["number", "null"] },
@@ -272,7 +278,9 @@ export function createEnvironmentTools(
         typeof value === "number" && Number.isSafeInteger(value) && value >= 0
           ? value : null;
       try {
-        const observed = await provider.observeEconomics();
+        const observed = await provider.observeEconomics({
+          includeProviderCredits: args.include_provider_credits === true,
+        });
         if (!observed.accountId) {
           return `UNKNOWN: ${id} account identity is not observed; provider procurement scope cannot be reviewed.`;
         }
@@ -342,6 +350,17 @@ export function createEnvironmentTools(
           // Only local P-030 durable outstanding intents are attributed to
           // this provider/account. Not all supplier contracts/invoices.
           locallyRecordedPendingObligations: locallyRecorded,
+          conditionalCreditFits: args.include_provider_credits === true
+            ? (observed.providerCredits ?? []).map(credit =>
+                assessConditionalProviderCreditFit(credit, {
+                  serviceName: String(args.service_name ?? ""),
+                  purchaseType: String(args.purchase_type ?? ""),
+                  serviceStartAt: String(args.service_start_at ?? ""),
+                  serviceEndAt: String(args.service_end_at ?? ""),
+                }),
+              )
+            : null,
+          conditionalCreditLimitation: "Candidate restrictions are review evidence only; no credit balance reduces quote, creates USD cash, proves account-specific eligibility or authorizes a purchase.",
           // No budget amount or local pending aggregate becomes free cash.
           scenario: review,
           purchaseAuthorized: false,
