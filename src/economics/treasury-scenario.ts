@@ -139,7 +139,8 @@ export function assessTreasuryScenario(
     if (!risk.id.trim() || !risk.evidence.trim()) throw new Error("Each contingency requires a risk ID and evidence.");
     if (seen.has(risk.id)) throw new Error("Duplicate risk scenario");
     seen.add(risk.id);
-    const exposure = validCredits(risk.exposureCreditsCents, "risk exposure")!;
+    const exposure = validCredits(risk.exposureCreditsCents, "risk exposure");
+    if (exposure === null) throw new Error("Each contingency requires a measured risk exposure");
     contingencyExposure = Math.max(contingencyExposure ?? 0, exposure);
     evidence.push("Contingency " + risk.id + ": " + exposure + " cents; source=" + risk.evidence);
   }
@@ -176,7 +177,10 @@ export function assessTreasuryScenario(
     ? null : Math.max(0, reserveTarget - projection.reservedCreditsCents);
 
   for (const alternative of input.alternatives ?? []) {
-    validCredits(alternative.costCreditsCents, "alternative cost");
+    if (validCredits(alternative.costCreditsCents, "alternative cost") === null) {
+      conditions.push("Alternative cost is UNKNOWN; cannot compare procurement liquidity.");
+      continue;
+    }
     if (!alternative.id.trim() || !alternative.evidence.trim()) {
       conditions.push("An alternative lacks discriminating price, reliability or switching evidence.");
     } else {

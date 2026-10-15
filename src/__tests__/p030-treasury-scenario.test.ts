@@ -90,6 +90,24 @@ describe("P-030 evidence-based treasury scenarios", () => {
     expect(underReserved.freeCreditsAfterCents).toBe(1300);
   });
 
+  it("does not convert null risk exposure or alternative price into a zero-cost contingency", () => {
+    const d = newDb();
+    expect(() => assessTreasuryScenario(projection(d, 500, 0), {
+      proposalCreditsCents: 100, immediateNeedCreditsCents: 100,
+      opportunityEvidence: ["order"], alternatives: supported.alternatives,
+      risks: [{ id: "unknown-loss", exposureCreditsCents: null as unknown as number, evidence: "incident without monetary estimate" }],
+    })).toThrow(/measured risk exposure/);
+    const review = assessTreasuryScenario(projection(d, 500, 0), {
+      proposalCreditsCents: 100, immediateNeedCreditsCents: 100,
+      opportunityEvidence: ["order"],
+      alternatives: [{ id: "unknown-price", costCreditsCents: null as unknown as number, evidence: "no quote available" }],
+      risks: supported.risks,
+    });
+    expect(review.status).toBe("needs_evidence");
+    expect(review.conditions.join(" ")).toContain("Alternative cost is UNKNOWN");
+    expect(review.evidence.join(" ")).not.toContain("Alternative unknown-price: null cents");
+  });
+
   it("does not hide pre-existing credit insolvency behind a clamped zero available balance", () => {
     const d = newDb();
     const insolvent = projection(d, 500, 600);
