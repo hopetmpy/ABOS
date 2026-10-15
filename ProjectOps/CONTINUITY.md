@@ -129,7 +129,7 @@ Decision gate registrado en `continuity/C0026.md` por commit `9ac10272bcbd6b661d
 
 Plan P-030: blueprint vigente. La auditoría resolvió su arquitectura de implementación sin cambiar objetivo, alcance ni dependencias; no se requiere reescribir el blueprint antes de source.
 
-NEXT_ELIGIBLE_WORK: continuar P-030 desde el checkpoint source d737eb2df9852b1aded5f8aa1dfb4da9dc553354; comprobar CI exact-head, reconciliar findings de test/adversarial, cerrar deduplicación de intents equivalentes con operation keys nuevas, remediar los seis avisos de dependencias, y terminar la integración del juicio treasury/recovery. No fusionar mientras CI no sea 8/8 y la auditoría de autoridad financiera conserve riesgos HARD.
+NEXT_ELIGIBLE_WORK: P-030 abierto en PR #75 DRAFT. Resolver gaps de treasury-policy/procurement y autenticación de settlement, mantener el juicio económico en P-025, verificar CI exact final del HEAD, reconciliar PR y merge sólo tras criterios DoD y validación; P-005 LIVE sigue no verificado.
 
 ## P-030 — checkpoint de implementación 2026-10-14
 
@@ -144,3 +144,15 @@ La auditoría hasta DECISION_READY se conserva como historia en C0026; ya no des
 - HARD pendiente: fresh logical operation key puede reproducir un intent económico equivalente no terminal; no declarar idempotencia entre claves distintas. Intento de corrección no incorporado.
 - Bloqueo de CI: `pnpm audit` encontró 6 avisos (4 HIGH, 2 CRITICAL), entre ellos `simple-git`, `@modelcontextprotocol/client`, `source-map-js`, y `@simple-git/argv-parser`. Remediación de dependencias y lockfile aún pendiente.
 - LIVE Conway transfer/settlement, costos físicos, entradas de negocio e ingresos realizados permanecen NO VERIFICADOS. P-030 sigue EN_EJECUCIÓN; P-031/P-039/P-033 no se adelantan.
+
+## P-030 — checkpoint de reanudación 2026-10-14 (posterior al anterior)
+
+- Branch `abos/p030-family-economics-treasury`; latest source head antes de este checkpoint: `c364fa7cea52db4d7e14a91ead2125f3d7ffda30`.
+- PR #75: `https://github.com/hopetmpy/ABOS/pull/75` — DRAFT, no fusionada. `main` observado `d14f04b9fdea98eecd9d8e772b223b55d1fcf010`.
+- Idempotencia: `FinancialEffectIntentPendingError` impide nuevo intent equivalente no terminal bajo otra operation key; tests de restart, distinto propósito, settlement posterior y provider ID consistente. El effect está protegido por su DB/Policy; no se inventa confirmación económica.
+- Security: `package.json` y frozen `pnpm-lock.yaml` actualizados con `@modelcontextprotocol/client/server@2.2.0`, `simple-git@4.0.2`, `source-map-js@1.2.2`, `@simple-git/argv-parser@2.0.1`. Lock regenerado vía GitHub Actions y workflow puntual de escritura eliminado. Auditoría ya verde en CI.
+- CI exacto `dd27cfaf9948d68926a44188dffb9bb2625073fd` run `38657441443`: 8/8 SUCCESS, incluidos security audit, build/test Node22/24, Windows, public distribution e integridad. Run exacto `f3596d7de51d986a43e9ffc2e59bee09c2498c94` `38657723164`: 8/8 SUCCESS. No extrapolar CI antiguo al último HEAD.
+- Visibilidad: `check_credits` ahora expone observación de saldo, efectos pendientes y capital libre UNKNOWN en ausencia de reservas/commitments; `system-prompt` dejó de afirmar criterios obsoletos de 20% de buffer, auto-aprobación por umbral y saldo 0==dead. Tests de status y moneda actualizados.
+- Juicio: `src/economics/treasury-scenario.ts` y `assess_treasury_scenario` son read-only, Evidence/Policy/P-025 owner de autorización; expresan reserva dependiente de escenarios, alternativas, necesidad inmediata/futura, projected vs realized y anomalía de gasto sin bloquear porcentajes excepcionales por defecto. No trasladar status `review_ready` a autorización automática.
+- Aún NO demostrado: settlement LIVE, autenticación de eventos de proveedor más allá del recibo suministrado por el caller, medición física de recursos aportados, USDC/onchain cross-unit liquidity, política adaptativa E2E que gobierne todos los side effects. No declarar el P-030 HECHO.
+- Último HEAD source `c364fa7cea52db4d7e14a91ead2125f3d7ffda30` pendiente de CI exacto al registrar este checkpoint. Próximo paso: verificar CI del commit de checkpoint; después cerrar gaps demostrados sin crear treasury paralela y preparar review PR. **No merge** ni transferencias reales ahora.
