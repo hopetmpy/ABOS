@@ -39,8 +39,8 @@ Master-Transformation-Plan: P-007
 | P-027 | Implementar Opportunity Discovery y economic experimentation abiertos | HECHO | PR #70 integrado; `main fdb7b9d9ab4b05430a40e6a7e6c3982fc4b39572` revalidado por CI `36199901975` SUCCESS 8/8 | plan/P-027.md |
 | P-028 | Implementar delegation por competencia, evidencia y coste | HECHO | PR #71 integrado; `main 803802f68cc3c1b7c1bd8d850768ca924a18aca2` revalidado por CI `36206237455` SUCCESS 8/8 | plan/P-028.md |
 | P-029 | Hacer real child bootstrap, Constitution gate y Family Knowledge Fabric | HECHO | PR #74 integrado; `main d14f04b9fdea98eecd9d8e772b223b55d1fcf010` revalidado por CI `36220600132` SUCCESS 8/8 | plan/P-029.md |
-| P-030 | Construir Family Economics y Treasury causal | EN_EJECUCIÓN | P-003 + P-009 + P-010 + P-013 + P-027 + P-029 HECHO; estado vivo en CONTINUITY/C0026 | plan/P-030.md |
-| P-031 | Habilitar autonomous resource acquisition y reinvestment bajo autoridad | PLANIFICADO | P-010 + P-017 + P-018 + P-026 + P-027 + P-030 | plan/P-031.md |
+| P-030 | Construir Family Economics y Treasury causal | HECHO | PR #75 integrado; `main 2fd877667b493ba5cea967092d79abed41787e70` revalidado por CI `38766126322` SUCCESS 8/8, E3; E5/E6 LIVE siguen P-005 | plan/P-030.md |
+| P-031 | Habilitar autonomous resource acquisition y reinvestment bajo autoridad | EN_EJECUCIÓN | Dependencias P-010/P-017/P-018/P-026/P-027/P-030 HECHO; `AUDIT_OPEN` en CONTINUITY/C0027 | plan/P-031.md |
 | P-032 | Evolucionar Soul y Self-Model semántico sin rigidizar identidad | PLANIFICADO | P-020 + P-022 + P-023 + P-029 | plan/P-032.md |
 | P-033 | Integrar End-to-End Autonomous Runtime como una sola trayectoria | PLANIFICADO | P-008..P-032 + gaps reconciliados P-037..P-039 según rutas ejercitadas | plan/P-033.md |
 | P-034 | Ejecutar fault injection, recovery y sustained-operation campaign | PLANIFICADO | P-011 + P-012 + P-013 + P-033 | plan/P-034.md |
@@ -83,7 +83,7 @@ Cada bloque puede poseer componentes especializados, pero debe conservar una aut
 1. **P-006 — HECHO**: security-audit restaurado sin debilitar gate e integrado en `main` por PR #32.
 2. **P-003 — HECHO**: child capital semantics reconciliadas por PR #33, integradas y revalidadas en `main`.
 
-La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth, P-009 Authority/Provenance, P-010 Policy/Authorization, P-011 Lifecycle/Recovery, P-012 transactional self-modification y P-013 observability/evidence están HECHO con evidencia E3 exacta. P-014..P-029 también están integradas y revalidadas; la intervención activa P-030 se resuelve desde CONTINUITY.
+La deuda heredada de Ola 0 está cerrada; P-008 Runtime Truth, P-009 Authority/Provenance, P-010 Policy/Authorization, P-011 Lifecycle/Recovery, P-012 transactional self-modification y P-013 observability/evidence están HECHO con evidencia E3 exacta. P-014..P-030 también están integradas y revalidadas; la intervención activa P-031 se resuelve desde CONTINUITY.
 
 ### Ola 1 — verdad, autoridad y recovery
 
