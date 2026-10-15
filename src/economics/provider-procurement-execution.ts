@@ -46,9 +46,17 @@ export interface ProviderProcurementScope {
 }
 
 export interface ProviderProcurementDispatchOutcome {
+  /** "usable" from the supplier is a claim until independently verified. */
   status: "usable" | "pending" | "rejected" | "unknown";
   providerEffectId?: string | null;
   providerStatus?: string | null;
+  evidence: string[];
+}
+
+export interface ProviderResourceUsabilityObservation {
+  usable: boolean;
+  /** Verified owner identity, never trust a supplier's response alone. */
+  resourceId: string;
   evidence: string[];
 }
 
@@ -70,6 +78,15 @@ export interface ProviderProcurementExecutionDependencies {
     scope: Readonly<ProviderProcurementScope>,
     authorized: Readonly<{ policyDecisionId: string; amountCents: number; unit: string }>,
   ) => Promise<ProviderProcurementDispatchOutcome>;
+  /**
+   * Read-only independent P-018 resource check following provider dispatch.
+   * This is intentionally separate from supplier acceptance and invoicing.
+   * No verifier means resource usability UNKNOWN, not purchased-and-usable.
+   */
+  verifyResourceUsability?: (
+    scope: Readonly<ProviderProcurementScope>,
+    providerOutcome: Readonly<ProviderProcurementDispatchOutcome>,
+  ) => Promise<ProviderResourceUsabilityObservation>;
 }
 
 /** Bind the complete economic scenario to a P-010 scope, not just price. */
@@ -266,27 +283,62 @@ export async function executeReviewedProviderProcurement(
     const outcome = await dependencies.dispatch(scope, {
       policyDecisionId, amountCents: amount, unit: scope.unit,
     });
-    const resolution = outcome.status === "rejected" ? "rejected"
-      : outcome.status === "unknown" ? "unknown" : "pending";
+    let verifiedStatus = outcome.status;
+    const resourceEvidence: string[] = [];
+    if (outcome.status === "usable") {
+      // A provider's success receipt may precede DNS, bootstrap, database
+      // migrations or readiness. Only a separate read-only observation can
+      // establish that the intended resource is actually usable.
+      if (!dependencies.verifyResourceUsability) {
+        verifiedStatus = "pending";
+        resourceEvidence.push(
+          "P-018 independent resource usability verification UNAVAILABLE; provider acceptance alone is not readiness.",
+        );
+      } else {
+        try {
+          const check = await dependencies.verifyResourceUsability(scope, outcome);
+          if (check.usable === true &&
+              check.resourceId === scope.resourceId &&
+              check.evidence.some(x => typeof x === "string" && x.trim())) {
+            resourceEvidence.push(...check.evidence);
+          } else {
+            verifiedStatus = "pending";
+            resourceEvidence.push(
+              "P-018 verification did not confirm usable matching resource; provisioning remains pending.",
+            );
+          }
+        } catch {
+          verifiedStatus = "pending";
+          resourceEvidence.push(
+            "P-018 independent resource check unavailable; resource readiness UNKNOWN, no secret provider error persisted.",
+          );
+        }
+      }
+    }
+    const resolution = verifiedStatus === "rejected" ? "rejected"
+      : verifiedStatus === "unknown" ? "unknown" : "pending";
     const effect = recordFinancialEffectObservation(db, scope.operationKey, {
       resolution,
       providerEffectId: outcome.providerEffectId,
       providerStatus: outcome.providerStatus,
-      evidence: outcome.evidence,
+      evidence: [...outcome.evidence, ...resourceEvidence],
     });
     recordPolicyExecutionOutcome(db, policyDecisionId,
-      outcome.status === "usable" ? "succeeded"
-        : outcome.status === "rejected" ? "failed"
-          : outcome.status === "unknown" ? "unknown" : "running", {
-        operationKey: scope.operationKey, providerOutcome: outcome.status,
+      verifiedStatus === "usable" ? "succeeded"
+        : verifiedStatus === "rejected" ? "failed"
+          : verifiedStatus === "unknown" ? "unknown" : "running", {
+        operationKey: scope.operationKey,
+        providerOutcome: outcome.status,
+        verifiedResourceOutcome: verifiedStatus,
         financialEffectId: effect.id,
       });
     return {
-      status: outcome.status,
+      status: verifiedStatus,
       dispatched: true, financialEffect: effect, review,
       evidence: [
         ...outcome.evidence,
-        "Provider resource outcome is separate from financial settlement; invoice/actual charge NOT claimed.",
+        ...resourceEvidence,
+        "Supplier acceptance, verified resource usability and actual financial settlement are separate observations.",
       ],
     };
   } catch {
