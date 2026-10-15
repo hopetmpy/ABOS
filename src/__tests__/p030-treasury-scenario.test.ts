@@ -30,7 +30,7 @@ describe("P-030 evidence-based treasury scenarios", () => {
     });
     expect(v.status).toBe("review_ready");
     expect(v.freeCreditsAfterCents).toBe(0);
-    expect(v.limitations.join(" ")).toMatch(/not.*authorization/i);
+    expect(v.limitations.join(" ")).toMatch(/nor transfer authorization/i);
   });
 
   it("does not infer bulk procurement from having a high balance", () => {
