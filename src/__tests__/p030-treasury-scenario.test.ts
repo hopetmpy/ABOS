@@ -119,7 +119,7 @@ describe("P-030 evidence-based treasury scenarios", () => {
     });
     expect(scenario.status).toBe("needs_evidence");
     expect(scenario.conditions.join(" ")).toContain("already exceed the observed balance by 100 cents");
-    expect(scenario.reserveRecommendation.disposition).toBe("covered");
+    expect(scenario.reserveRecommendation.disposition).toBe("requires_alternative");
   });
 
   it("keeps earmarked downside separate from spendable credit liquidity", () => {
