@@ -29,7 +29,7 @@ import {
 } from "./planner.js";
 import { reviewPlan } from "./plan-mode.js";
 import type { StrategicReviewContext } from "./strategic-review.js";
-import { getCommittedFinancialEffectCents, listUnresolvedFinancialEffects } from "../economics/financial-effects.js";
+import { getStrategicFinancialExposure } from "../economics/financial-effects.js";
 import { getTaskCostCalibration } from "../economics/treasury-projection.js";
 import {
   loadPlanningSimulationEvidence,
@@ -828,25 +828,14 @@ export class Orchestrator extends ExecutionCoreOrchestrator {
     // Existing financial-effect state is canonical evidence of credit exposure,
     // not proof of balance, settlement or free capital. Read it before review
     // without introducing a second treasury or authorization authority.
-    const unsettledEffects = listUnresolvedFinancialEffects(this.strategicParams.db);
-    const unsettledCreditEffects = unsettledEffects.filter((effect) => effect.unit === "credit_cent");
-    const pendingUsdcTopups = unsettledEffects.filter((effect) =>
-      effect.unit === "usdc_cent" && effect.effectKind === "x402_credit_topup",
-    );
-    const pendingCreditCommitments = getCommittedFinancialEffectCents(this.strategicParams.db);
-    const pendingUsdcCommitments = getCommittedFinancialEffectCents(this.strategicParams.db, "usdc_cent");
+    const outstandingFinancialEffects = getStrategicFinancialExposure(this.strategicParams.db);
     return {
       capabilityResolutions,
       environmentSnapshots,
       simulationEvidence,
       adaptiveContext: plannerContext.adaptiveContext,
       taskCostCalibration: getTaskCostCalibration(this.strategicParams.db),
-      outstandingFinancialEffects: {
-        count: unsettledCreditEffects.length,
-        pendingCreditCommitments,
-        pendingUsdcTopups: pendingUsdcTopups.length,
-        pendingUsdcCommitments,
-      },
+      outstandingFinancialEffects,
     };
   }
 
