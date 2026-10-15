@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-030
 Active-Segment: continuity/C0026.md
-Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / CHILD_ECONOMIC_UNKNOWN_SOURCE_570609e_E3_8_OF_8 / LIVE_UNVERIFIED
+Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / CHILD_SAME_UNIT_ECONOMICS_SOURCE_013ec73_E3_8_OF_8 / LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,7 +15,7 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p030-family-economics-treasury
 Host-Head-At-Audit-Open: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
-Last-Reconciled-Host-Head: 570609ed7e43073f5adeaeeef4878d54dbaba163
+Last-Reconciled-Host-Head: 013ec7305507bf3eab289d2f256338eb7e665815
 Observed-Main-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-CI: 36220600132 — SUCCESS 8/8
@@ -323,3 +323,13 @@ NEXT_ELIGIBLE_WORK: compare current P-030 DoD against `financial_effects`, `tran
 - Branch `abos/p030-family-economics-treasury`, PR #75 still DRAFT, `main d14f04b9...` unchanged. P-030 stays EN_EJECUCIÓN; no P-031 or merge. E3 success cannot establish E5 authenticated financial outcome or E6 realized economic profitability. Exact CI of this documentary HEAD is a distinct check, not inferred from prior successful runs.
 
 NEXT_ELIGIBLE_WORK: audit if `child-economics.ts` treats local `task_cost_cent` and externally attributed revenue/exposure in demonstrably compatible monetary units; cross-check P-030 DoD with `transactions`, `financial_effects`, treasury reserve/scenario, and P-023/P-025. Implement only source-backed gaps and otherwise preserve UNKNOWN / NO_CHANGE. Real authenticated provider balances, settlements, realized revenue and profitability remain P-005 LIVE evidence boundaries.
+
+## P-030 — same-unit child accounting source, no duplicated authority (2026-10-15)
+
+- Scope audit before edits: active PR #75 remains the sole open PR on `abos/p030-family-economics-treasury`; historical `abos/worker-cost-units-v1`, child-financial-observation and old treasury branches are September source, not a newer current P-030 integration. Reused `child-economics`, `heartbeat`, `transactions`, `financial_effects`, `treasury-projection`, and P-003 financial distinctions. No schema, second ledger, second planner or new financial authority.
+- Source 83e89d248082a539b7b337725413b7b0f53c6c9a: `child-economics.ts` no longer subtracts `task_graph.actual_cost_cents` / local `task_cost_cent` from unspecified attributed revenue cents. Existing reported local task cost/commitment remains available but separately labeled. Monetary net and profitability require separately supplied revenue and expense with matching explicit units and source evidence; contribution is still a caller-supplied projection until external provider/ledger validation. `colony_financial_report` now labels `taskExecutionCostUnit=task_cost_cent` and its local unverified authority. Regression tests added.
+- Source 33cdd811e4f54512838718e464751c79eddd92a9: retained independently sourced same-unit monetary expense when local task cost measurements are incomplete; repaired contradictory limitation wording with regression. Source 7aec35c82a704df95193316dcb755be66267111d additionally requires source evidence for an explicit same-unit capital-exposure denominator before any ROI; mismatched currencies, local task cost units, absent expense sources or missing capital evidence stay UNKNOWN.
+- Source 013ec7305507bf3eab289d2f256338eb7e665815 fixed three commas in the newly authored fixtures after exact predecessor CI exposed a Vitest parse failure; no economic logic changed. Exact source push CI 38761924259 SUCCESS 8/8 and PR CI 38761935935 SUCCESS 8/8 (Linux/Windows Node 22/24, distro, security and integrity). Intermediate canceled/failed runs do NOT count as PASS and are superseded by this exact successful HEAD.
+- P-030 remains EN_EJECUCIÓN / PR75_DRAFT / E3_SOURCE. E5 independently authenticated financial settlement, real revenue/profit and physical allocation still UNVERIFIED (P-005). No external transfer/credit purchase, no merge/main change, P-031 not opened. This documentary checkpoint's own CI must be checked independently.
+
+NEXT_ELIGIBLE_WORK: source-audit legacy `transactions`/`spend_tracking` `amount_cents` unqualified unit (including `inference`, `tool_use`, child funding, and credit purchase) versus `knownOperatingCostCents` report semantics. Do not invent FX conversion or duplicate accounting authority. Decide minimum compatible provenance/UNKNOWN change or NO_CHANGE after auditing producers and consumers. Reassess P-030 DoD and external E5/E6 limits before merge; do not open P-031.
