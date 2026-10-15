@@ -6,21 +6,21 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / P018_RESOURCE_USABILITY_SOURCE_CI_PENDING / LIVE_AWS_ISSUER_UNWIRED / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / AWS_ACCOUNT_CREDIT_OBSERVATION_PR_CI_PENDING / LIVE_AWS_ISSUER_UNWIRED / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-resource-usability-verification
+Current-Host-Branch: abos/p031-aws-account-credit-evidence
 Host-Head-At-Audit-Open: 088de39896dcef837c7047c4c560e9cd0b7a29e8
 Last-Reconciled-Host-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
-Observed-Main-Head: ec8797d6718710ca5a04a7505101fb44283bfebf
-Last-Product-Head: ec8797d6718710ca5a04a7505101fb44283bfebf
-Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #96 38819826025 — SUCCESS 8/8
+Observed-Main-Head: 7b855bb1bd4ac1c10fd97525a031b8fe8790c319
+Last-Product-Head: 7b855bb1bd4ac1c10fd97525a031b8fe8790c319
+Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #97 38820503027 — SUCCESS 8/8 after isolated Windows24 rerun
 Last-Completed-Plan: P-030
-Last-Completed-Merge: ec8797d6718710ca5a04a7505101fb44283bfebf
+Last-Completed-Merge: 7b855bb1bd4ac1c10fd97525a031b8fe8790c319
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
@@ -492,3 +492,11 @@ NEXT_ELIGIBLE_WORK: run exact source CI then integrate if green; audit/adapt pro
 - Source `src/economics/provider-procurement-execution.ts` now composes existing P-025 actual task-path materialization, P-030 source-reviewed account-unit cost/recurrence/contingency scenario and durable financial-effect dispatch claim, and P-010 persisted exact-policy dangerous-tool permit with explicitly positive rule. An implicit no-rule policy default ALLOW is not accepted. Previously prepared or dispatched pending effects may not be sent twice with another key or drifted supplier quote. No source-valid verified AWS account USD funding/contract source; default LIVE production wiring remains intentionally absent. No real external charges or P-005 E5/E6 material proof.
 - New hard R2: the simulated provider could claim `usable` from an accepted purchase without checking P-018 actual resource ownership/health. Branch `abos/p031-resource-usability-verification` extends **the same existing procurement owner** with an optional independent read-only `verifyResourceUsability` callback; a supplier-accepted outcome is only marked usable if an independent P-018 observation verifies the exact owned resource ID, positive health and nonempty observation evidence. Missing/failing/mismatched verifier downgrades resource status to `pending`, not paid, failed or usable, and does not retry external dispatch. P-030 financial effect remains pending until distinct verified supplier settlement. Adversarial tests cover no verifier, other resource ID, false health, missing evidence, thrown probe and a positive real P-018 lifecycle mock provision→health with financial pending and no ledger transfer. This source branch CI is pending.
 - P-031 remains EN_EJECUCIÓN. Next source frontier: external provider account financing/billing verification with P-010 mandate issuer and production wiring; provider operation idempotency and settlement/retirement diagnostics. Never infer source test money = LIVE AWS liquidity; P-032 not started.
+
+## P-031 — PR #97 verified usable synthetic resource and optional AWS provider credit observation (2026-10-15)
+
+- PR #97 final exact branch `435c3fd49e151cf8f52feec11e1b4a578d69c482`, run `38820503027`: first attempt Windows Node24 P-016 local Git Bash+PowerShell bootstrap probe failed while all other 7 jobs including P-031 tests passed. Retried **only** failed Windows24 job using GitHub Actions; P-016 and portability passed, final run SUCCESS **8/8**, merged `main 7b855bb1bd4ac1c10fd97525a031b8fe8790c319`. Post-squash main CI not independently observed. P-031 now requires independent P-018 exact resource health before a supplier accepted capacity is treated functional; outstanding financial intent stays pending independently. No LIVE AWS charge.
+- R2 new valid account-financing candidate: AWS Billing **GetCredits** API documents account-owned promotional/other credits, their remaining USD string, in-flight estimated amount, eligibility by service and purchase type, enabled status, expiry, and sharing. A credit is **not** unrestricted USD cash or P-010 permission; it may have restrictions and balances/expenses not yet settled. No actual provider credit/source was queried LIVE.
+- Current source branch `abos/p031-aws-account-credit-evidence`: extend the **existing** optional `EnvironmentProvider.observeEconomics({includeProviderCredits:true})` read-only observation and generic `environment_economic_evidence` tool; AWS implementation calls STS then AWS Billing `get-credits --account-id <STS> --start-date <within-year> --no-payer-account-flag --region us-east-1` under explicit user/agent opt-in, alongside prior cost budgets. Account mismatched credits excluded, permission/unknown/malformed remains PARTIAL, decimal USD only when exact cents, expiry/status/product/purchase restrictions retained. Never aggregate conditional credits into `spendableLiquidityUsdCents` (stays null); `procurementAuthority=not_established` unchanged. No recurring polling or charge. Tests for default 2-read flow, opt-in scoped call, foreign-account rejection, disabled credits, fractional USD, non-USD, and API failure.
+- Public AWS API specification: `https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_billing_GetCredits.html`; CLI `https://docs.aws.amazon.com/cli/latest/reference/billing/get-credits.html`. Source CI PENDING.
+- Next: verify source CI, integrate if valid; then query LIVE only if account/permissions/terms user authorized and API actually available, determine whether credits match intended supplier costs, account and expiry, connect to existing P-030 same-unit financing with source-verified coverage and P-010 operation issuer. Without this, paid AWS dispatch remains UNAVAILABLE; P-005 E5/E6 UNKNOWN and P-031 EN_EJECUCIÓN, P-032 not started.
