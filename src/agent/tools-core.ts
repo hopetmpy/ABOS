@@ -24,6 +24,7 @@ import { sanitizeToolResult, sanitizeInput } from "./injection-defense.js";
 import { createLogger } from "../observability/logger.js";
 import { appendEvidenceEvent, correlationIdFor, currentEvidenceContext, latestEvidenceByAuthority, runWithEvidenceContext } from "../observability/evidence.js";
 import { executeCreditEffect } from "../economics/credit-transfer.js";
+import { getTreasuryProjection } from "../economics/treasury-projection.js";
 import { RUNTIME_ROOT } from "../runtime-root.js";
 import { toPosixShellPath } from "../platform/home.js";
 import { confinePathToSandbox } from "../platform/path-confinement.js";
@@ -380,7 +381,16 @@ export function createBuiltinTools(sandboxId: string): AbosTool[] {
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
         const balance = await ctx.conway.getCreditsBalance();
-        return `Credit balance: $${(balance / 100).toFixed(2)} (${balance} cents)`;
+        const treasury = getTreasuryProjection(ctx.db, {
+          observedCreditsCents: Number.isSafeInteger(balance) && balance >= 0 ? balance : null,
+        });
+        return `Credit balance: ${(balance / 100).toFixed(2)} (${balance} cents)
+Treasury: free credits=${treasury.freeCreditsCents ?? "UNKNOWN"};
+pending financial effects=${treasury.unresolvedFinancialEffects};
+immobilized pending credits=${treasury.pendingTransferCreditsCents};
+active task estimated cost=${treasury.activeTaskEstimatedCostCents} cents (unit reconciliation may be required);
+reserves/other obligations=UNKNOWN without observed evidence.
+Credit balance is not automatically free or distributable capital.`;
       },
     },
     {
