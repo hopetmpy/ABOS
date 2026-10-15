@@ -155,6 +155,17 @@ function normalizeAmount(value: number): number {
   return value;
 }
 
+function resolveProviderEffectId(
+  current: string | null,
+  observed: string | null | undefined,
+): string | null {
+  const next = normalizeOptionalText(observed);
+  if (current !== null && next !== null && next !== current) {
+    throw new Error("Provider settlement identity conflicts with the durable financial effect");
+  }
+  return next ?? current;
+}
+
 function uniqueEvidence(values: readonly string[] | undefined): string[] {
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];
 }
@@ -435,8 +446,9 @@ export function recordFinancialEffectObservation(
     ...existing.evidence,
     ...(observation.evidence ?? []),
   ]);
-  const providerEffectId =
-    normalizeOptionalText(observation.providerEffectId) ?? existing.providerEffectId;
+  const providerEffectId = resolveProviderEffectId(
+    existing.providerEffectId, observation.providerEffectId,
+  );
   const providerStatus =
     normalizeOptionalText(observation.providerStatus) ?? existing.providerStatus;
   const lastError = normalizeOptionalText(observation.error);
@@ -498,8 +510,9 @@ export function settleFinancialEffect(
     throw new Error(`Rejected financial effect ${key} cannot be settled without new evidence/intent`);
   }
 
-  const providerEffectId =
-    normalizeOptionalText(observation.providerEffectId) ?? existing.providerEffectId;
+  const providerEffectId = resolveProviderEffectId(
+    existing.providerEffectId, observation.providerEffectId,
+  );
   const providerStatus =
     normalizeOptionalText(observation.providerStatus) ?? existing.providerStatus;
   const mergedEvidence = uniqueEvidence([
