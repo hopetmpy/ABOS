@@ -333,7 +333,13 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
 
   const getCreditsBalance = async (): Promise<number> => {
     const result = await request("GET", "/v1/credits/balance");
-    return result.balance_cents ?? result.credits_cents ?? 0;
+    const observed = result?.balance_cents ?? result?.credits_cents;
+    if (!Number.isSafeInteger(observed)) {
+      throw new Error(
+        "Conway credit balance was not a valid observed integer; UNKNOWN must not become zero.",
+      );
+    }
+    return observed;
   };
 
   const getCreditsPricing = async (): Promise<PricingTier[]> => {
