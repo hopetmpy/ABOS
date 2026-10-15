@@ -179,6 +179,15 @@ describe("EnvironmentExecutionBridge", () => {
     expect(dispatches).toBe(0);
     await expect(bridge.spawn(input, { maxEstimatedCostCents: 80 }))
       .rejects.toMatchObject({ operation: "selection" });
+    // A unit-only budget must not silently become an unbudgeted dispatch.
+    for (const incomplete of [
+      { maxEstimatedCostUnit: "usd_cent" },
+      { maxEstimatedCostCents: null, maxEstimatedCostUnit: "usd_cent" },
+      { maxEstimatedCostUnit: "" },
+    ]) {
+      await expect(bridge.spawn(input, incomplete))
+        .rejects.toMatchObject({ operation: "selection" });
+    }
     await expect(bridge.spawn(input, {
       maxEstimatedCostCents: 80, maxEstimatedCostUnit: "credit_cent",
     })).rejects.toMatchObject({ operation: "selection" });

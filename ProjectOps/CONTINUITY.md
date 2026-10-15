@@ -6,18 +6,18 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / DECISION_READY / STRATEGIC_REVIEW_RECOVERY_PR_PENDING_CI_PENDING / P030_E3_MAIN_GREEN / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / DECISION_READY / BUDGET_PAIR_PR81_DRAFT_CI_PENDING / PR80_MAIN_CI_UNVERIFIED / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-plan-review-recovery
+Current-Host-Branch: abos/p031-budget-pair-integrity
 Host-Head-At-Audit-Open: 088de39896dcef837c7047c4c560e9cd0b7a29e8
 Last-Reconciled-Host-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
-Observed-Main-Head: b1fdc3af6b7c96c0d5082677b1eb2b4497677cf2
-Last-Product-Head: b1fdc3af6b7c96c0d5082677b1eb2b4497677cf2
+Observed-Main-Head: 55703c08391309f5381bf7a54758f5a804840ba0
+Last-Product-Head: 55703c08391309f5381bf7a54758f5a804840ba0
 Last-Product-CI: 38777851448 — SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: b1fdc3af6b7c96c0d5082677b1eb2b4497677cf2
@@ -365,3 +365,11 @@ PR #78 merged into main `710fa0d61983a462450bde7994a5018c2172e6e4`, exact-main C
 ## P-031 — plan review recovery on resume (2026-10-15)
 
 PR #79 is integrated as `main b1fdc3af6b7c96c0d5082677b1eb2b4497677cf2` with exact-main CI `38777851448` SUCCESS 8/8. Current source branch `abos/p031-plan-review-recovery` corrects the existing `Orchestrator` when persisted plans disappear or cannot be parsed in `plan_review`: never transition to `executing` without P-025 review evidence; preserve goal and replan. Regression source is committed but exact-head CI is pending. See C0027 for precise scope and next P-031 economic procurement boundary. No new wallet or money ledger, no LIVE purchases.
+
+## P-031 — PR #80 merge + budget-pair correction (2026-10-15)
+
+PR #80 `abos/p031-plan-review-recovery` merged to `main 55703c08391309f5381bf7a54758f5a804840ba0`; exact source PR CI `38779525118` SUCCESS 8/8. Exact merged-main CI **NOT YET VERIFIED** at this checkpoint; previous `Last-Product-CI: 38777851448` refers only to pre-PR80 main `b1fdc3af`, not the new HEAD. Do not promote this merge to E3_MAIN_GREEN until its own jobs are observed.
+
+P-031 next source R1 found partial explicit budget intent: unit without amount silently became unbudgeted selector input. PR #81 `abos/p031-budget-pair-integrity` contains the minimum correction + regression in existing bridge/tests; CI on exact final PR head PENDING. C0027 is the sole detailed active continuity. No LIVE provisioning/purchases or financial finality proved; P-005 E5/E6 remains UNKNOWN.
+
+NEXT_ELIGIBLE_WORK: verify PR #81 exact CI, integrate if eligible, validate exact merged-main and continue source P-031 economic authorization wiring on existing P-025/P-030/P-010 authority.

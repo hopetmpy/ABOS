@@ -176,10 +176,14 @@ export class EnvironmentExecutionBridge {
     task: TaskNode,
     options: EnvironmentTaskSpawnOptions = {},
   ): Promise<EnvironmentTaskExecutionResult> {
-    if (options.maxEstimatedCostCents != null &&
+    // An incomplete explicit budget must never degrade into unbudgeted dispatch.
+    // A unit without an amount is as ambiguous as an amount without a unit.
+    if ((options.maxEstimatedCostCents == null &&
+        options.maxEstimatedCostUnit != null) ||
+        (options.maxEstimatedCostCents != null &&
         (!Number.isSafeInteger(options.maxEstimatedCostCents) ||
           options.maxEstimatedCostCents < 0 ||
-          !options.maxEstimatedCostUnit?.trim())) {
+          !options.maxEstimatedCostUnit?.trim()))) {
       throw new EnvironmentTaskExecutionError(
         null,
         "Explicit provider budget requires a nonnegative integer amount and its independently sourced cost unit; local task_cost_cent is not monetary authority.",
