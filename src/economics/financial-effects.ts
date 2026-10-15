@@ -676,5 +676,11 @@ export function getCommittedFinancialEffectCents(
      FROM financial_effects
      WHERE unit = ? AND state IN (${placeholders})`,
   ).get(unit, ...NON_TERMINAL_STATES) as { total: number } | undefined;
-  return Math.max(0, Number(row?.total ?? 0));
+  const total = Number(row?.total ?? 0);
+  // An individually valid effect can still overflow JS's exact integer range
+  // when aggregated. Never round or clamp immobilized money into a false sum.
+  if (!Number.isSafeInteger(total) || total < 0) {
+    throw new Error("Committed financial effects exceed exact nonnegative safe integer credit-unit accounting");
+  }
+  return total;
 }
