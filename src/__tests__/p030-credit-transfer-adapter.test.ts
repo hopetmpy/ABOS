@@ -28,17 +28,20 @@ describe("P-030 credit effect execution and reconciliation", () => {
     expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as any).n).toBe(0);
     expect(() => reconcileCreditEffect(db, {
       operationKey: "credit:one", resolution: "settled",
+      providerEffectId: "remote-1",
       providerStatus: "submitted", evidence: ["unsettled provider event"],
     })).toThrow(/final provider settlement status/);
     const completed = reconcileCreditEffect(db, {
       operationKey: "credit:one", resolution: "settled",
       providerEffectId: "remote-1", providerStatus: "completed",
+      toAddress: "0xrecipient", amountCents: 250,
       evidence: ["independent final provider event"],
     });
     expect(completed.state).toBe("completed");
     expect(reconcileCreditEffect(db, {
       operationKey: "credit:one", resolution: "settled",
       providerEffectId: "remote-1", providerStatus: "completed",
+      toAddress: "0xrecipient", amountCents: 250,
       evidence: ["replayed provider event"],
     }).state).toBe("completed");
     expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as any).n).toBe(1);
@@ -56,7 +59,9 @@ describe("P-030 credit effect execution and reconciliation", () => {
     expect(conway.transferCredits).toHaveBeenCalledTimes(1);
     expect(reconcileCreditEffect(db, {
       operationKey: "credit:lost", resolution: "settled",
-      providerStatus: "settled", evidence: ["external verified transfer receipt"],
+      providerEffectId: "remote-lost-reconciled",
+      providerStatus: "settled", toAddress: "0xrecipient", amountCents: 400,
+      evidence: ["external verified transfer receipt"],
     }).state).toBe("completed");
     expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as any).n).toBe(1);
   });
@@ -81,6 +86,7 @@ describe("P-030 credit effect execution and reconciliation", () => {
     const receipt = {
       operationKey: "fund:child", resolution: "settled" as const,
       providerEffectId: "remote-child", providerStatus: "completed",
+      toAddress: "0xchild", amountCents: 550,
       evidence: ["settlement callback authenticated by provider"],
     };
     expect(reconcileCreditEffect(db, receipt).state).toBe("completed");
@@ -89,6 +95,54 @@ describe("P-030 credit effect execution and reconciliation", () => {
     const row = db.raw.prepare("SELECT type FROM transactions LIMIT 1").get() as any;
     expect(row.type).toBe("capital_allocation");
     expect(conway.transferCredits).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not materialize a final-looking transfer response without a provider receipt ID", async () => {
+    const db = createDb();
+    const conway = { transferCredits: vi.fn().mockResolvedValue({
+      transferId: "", status: "completed",
+      toAddress: "0xrecipient", amountCents: 200,
+    }) } as any;
+    const input = {
+      db, conway, operationKey: "missing-receipt", kind: "credit_transfer" as const,
+      toAddress: "0xrecipient", amountCents: 200, note: "test",
+    };
+    const outcome = await executeCreditEffect(input);
+    expect(outcome.state).toBe("unknown");
+    expect(outcome.lastError).toMatch(/identifier/);
+    expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as any).n).toBe(0);
+    await executeCreditEffect(input);
+    expect(conway.transferCredits).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses unrelated or incomplete injected final provider receipts", async () => {
+    const db = createDb();
+    const conway = { transferCredits: vi.fn().mockResolvedValue({
+      transferId: "remote-correlated", status: "processing",
+      toAddress: "0xrecipient", amountCents: 500,
+    }) } as any;
+    const input = {
+      db, conway, operationKey: "verified-terms", kind: "credit_transfer" as const,
+      toAddress: "0xrecipient", amountCents: 500, note: "test",
+    };
+    expect((await executeCreditEffect(input)).state).toBe("pending");
+    const valid = {
+      operationKey: input.operationKey, resolution: "settled" as const,
+      providerStatus: "completed", providerEffectId: "remote-correlated",
+      toAddress: "0xrecipient", amountCents: 500,
+      evidence: ["signed provider response observed externally"],
+    };
+    expect(() => reconcileCreditEffect(db, { ...valid, providerEffectId: "" }))
+      .toThrow(/transfer identifier/);
+    expect(() => reconcileCreditEffect(db, { ...valid, providerEffectId: "different" }))
+      .toThrow(/identity conflicts/);
+    expect(() => reconcileCreditEffect(db, { ...valid, toAddress: "0xother" }))
+      .toThrow(/recipient conflicts/);
+    expect(() => reconcileCreditEffect(db, { ...valid, amountCents: 501 }))
+      .toThrow(/amount conflicts/);
+    expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as any).n).toBe(0);
+    expect(reconcileCreditEffect(db, valid).state).toBe("completed");
+    expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as any).n).toBe(1);
   });
 
   it("refuses externally inconsistent recipient or amount observations", async () => {

@@ -67,6 +67,15 @@ export async function executeCreditEffect(input: CreditEffectRequest): Promise<F
     });
   }
   const disposition = classifyCreditTransferStatus(transfer.status);
+  if (disposition === "settled" && !transfer.transferId?.trim()) {
+    // A status string without a provider effect identifier cannot be tied
+    // unambiguously to this intended transfer. Keep the effect unresolved.
+    return recordFinancialEffectObservation(input.db.raw, claim.effect.operationKey, {
+      ...common,
+      resolution: "unknown",
+      error: "Final provider response lacks a transfer identifier; independent reconciliation required",
+    });
+  }
   if (disposition !== "settled") {
     return recordFinancialEffectObservation(input.db.raw, claim.effect.operationKey, {
       ...common, resolution: disposition,
@@ -80,6 +89,8 @@ export async function executeCreditEffect(input: CreditEffectRequest): Promise<F
     providerStatus: transfer.status,
     balanceAfterCents: transfer.balanceAfterCents,
     evidence: ["Conway final settlement response"],
+    toAddress: transfer.toAddress,
+    amountCents: transfer.amountCents,
   }, input.spendTracker);
 }
 
@@ -96,6 +107,9 @@ export function reconcileCreditEffect(
     providerEffectId?: string | null;
     providerStatus?: string | null;
     balanceAfterCents?: number | null;
+    /** Provider-observed terms, not assertions inferred from our request. */
+    toAddress?: string | null;
+    amountCents?: number | null;
     evidence: string[];
   },
   spendTracker?: SpendTrackerInterface,
@@ -117,6 +131,18 @@ export function reconcileCreditEffect(
   }
   if (classifyCreditTransferStatus(observation.providerStatus) !== "settled") {
     throw new Error("A final provider settlement status is required before materialization");
+  }
+  if (!observation.providerEffectId?.trim()) {
+    throw new Error("Independent settlement requires an explicit provider transfer identifier");
+  }
+  if (observation.toAddress !== undefined &&
+      (typeof observation.toAddress !== "string" ||
+       observation.toAddress.trim().toLowerCase() !== effect.recipient?.toLowerCase())) {
+    throw new Error("Provider settlement recipient conflicts with durable financial intent");
+  }
+  if (observation.amountCents !== undefined &&
+      (observation.amountCents !== effect.amountCents)) {
+    throw new Error("Provider settlement amount conflicts with durable financial intent");
   }
   if (effect.effectKind !== "child_funding" && effect.effectKind !== "credit_transfer") {
     throw new Error("Reconciliation effect kind is not a Conway credit transfer");
