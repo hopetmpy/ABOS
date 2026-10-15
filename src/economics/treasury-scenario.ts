@@ -4,6 +4,7 @@
  * manufacture observed revenue, financing, reserves or probability estimates.
  */
 import type { TreasuryProjection } from "./treasury-projection.js";
+import type { EnvironmentEconomicObservation } from "../environments/types.js";
 
 export interface TreasuryRiskScenario {
   id: string;
@@ -456,4 +457,102 @@ export function assessProviderProcurementScenario(
       "Non-cash inputs (tokens, subscriptions, power, network) count as investment but cannot silently fund a bill in another unit.",
     ],
   };
+}
+
+/**
+ * Read-only P-030 credit fit: a conditional AWS credit is investment/economic
+ * capacity, not universal money. Never move this result into free cash,
+ * reduce total quote, issue a P-010 mandate or recognize a supplier invoice.
+ */
+export interface ConditionalProviderCreditFit {
+  creditId: string | null;
+  status: "potentially_applicable" | "not_applicable" | "unknown";
+  observedCreditRemainingUsdCents: number | null;
+  potentialCashOffsetUsdCents: null;
+  evidence: string[];
+}
+export function assessConditionalProviderCreditFit(
+  credit: NonNullable<EnvironmentEconomicObservation["providerCredits"]>[number],
+  request: {
+    serviceName: string;
+    purchaseType: string;
+    serviceStartAt: string;
+    serviceEndAt: string;
+  },
+  now = new Date(),
+): ConditionalProviderCreditFit {
+  const evidence = [
+    "Conditional provider credit only; not a verified offset, cash liquidity, final bill or P-010 purchase authority.",
+  ];
+  const result = (
+    status: ConditionalProviderCreditFit["status"],
+  ): ConditionalProviderCreditFit => ({
+    creditId: credit.creditId,
+    status,
+    observedCreditRemainingUsdCents: credit.remainingUsdCents,
+    potentialCashOffsetUsdCents: null,
+    evidence,
+  });
+  if (credit.status === "DISABLED") {
+    evidence.push("Provider credit is disabled.");
+    return result("not_applicable");
+  }
+  if (credit.status !== "ENABLED") {
+    evidence.push("Enabled billing status is UNKNOWN.");
+    return result("unknown");
+  }
+  if (credit.remainingUsdCents === 0 ||
+      credit.estimatedRemainingUsdCents === 0) {
+    evidence.push("Provider-reported credit balance is exhausted or projected to be exhausted.");
+    return result("not_applicable");
+  }
+  if (credit.remainingUsdCents === null ||
+      credit.remainingUsdCents < 0 ||
+      credit.estimatedRemainingUsdCents === null ||
+      credit.estimatedRemainingUsdCents < 0) {
+    evidence.push("Exact USD remaining or in-flight-adjusted credit capacity is UNKNOWN.");
+    return result("unknown");
+  }
+  const start = Date.parse(request.serviceStartAt);
+  const end = Date.parse(request.serviceEndAt);
+  const creditStart = credit.startsAt ? Date.parse(credit.startsAt) : NaN;
+  const creditEnd = credit.expiresAt ? Date.parse(credit.expiresAt) : NaN;
+  if (![start, end, creditStart, creditEnd, now.getTime()].every(Number.isFinite) ||
+      end < start || start < now.getTime()) {
+    evidence.push("Provider credit validity or requested future billing interval is UNKNOWN/invalid.");
+    return result("unknown");
+  }
+  if (creditEnd <= now.getTime() ||
+      creditEnd < start ||
+      creditStart > end) {
+    evidence.push("Credit expired or starts after the requested billing interval.");
+    return result("not_applicable");
+  }
+  if (creditStart > start || creditEnd < end) {
+    evidence.push("Credit does not cover the entire requested interval; partial coverage needs supplier billing assessment.");
+    return result("unknown");
+  }
+  const service = request.serviceName.trim().toLowerCase();
+  if (!service || credit.applicableProductNames.length === 0) {
+    evidence.push("Service eligibility cannot be established from the returned product labels.");
+    return result("unknown");
+  }
+  if (!credit.applicableProductNames.some(x => x.trim().toLowerCase() === service)) {
+    evidence.push("Requested service does not match the provider's explicit applicable product labels.");
+    return result("not_applicable");
+  }
+  const purchaseType = request.purchaseType.trim().toLowerCase();
+  if (!purchaseType) {
+    evidence.push("Purchase type is UNKNOWN.");
+    return result("unknown");
+  }
+  if (credit.purchaseTypeApplications !== null &&
+      !credit.purchaseTypeApplications.some(x => x.trim().toLowerCase() === purchaseType)) {
+    evidence.push("Purchase type is not covered by explicit credit purchase-type restrictions.");
+    return result("not_applicable");
+  }
+  evidence.push(
+    "Reported credit may be eligible for this exact service/purchase/period; account sharing, in-flight charges, order-level discounts and contractual provider settlement still need independent verification.",
+  );
+  return result("potentially_applicable");
 }
