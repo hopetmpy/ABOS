@@ -10,12 +10,21 @@ export interface ChildEconomicObservation {
   observedBalanceCents?: number | null;
   /** Revenue that can be causally attributed to this child, in cents. */
   attributedRevenueCents?: number | null;
+  /** Explicit monetary unit of the attributed revenue, not task_cost_cent. */
+  attributedRevenueUnit?: string | null;
+  /** Causal source assertion; a text label alone is not provider verification. */
+  attributedRevenueEvidence?: string | null;
+  /** Separately observed expense in a monetary unit, never local task cost. */
+  observedExpenseCents?: number | null;
+  observedExpenseUnit?: string | null;
+  observedExpenseEvidence?: string | null;
   /**
    * Capital exposure used as the denominator for ROI. Do not substitute
    * cumulative funding for exposure: funding is an allocation flow, not a
    * measured average capital-at-risk balance.
    */
   capitalExposureCents?: number | null;
+  capitalExposureUnit?: string | null;
   evidence?: string[];
 }
 
@@ -51,10 +60,14 @@ export interface ChildEconomicSnapshot {
 
   /** Null until a real revenue attribution source exists. */
   attributedRevenueCents: number | null;
+  /** Separately sourced monetary expense, not task_graph task_cost_cent. */
+  observedExpenseCents: number | null;
+  /** Exact unit of a calculated contribution, or null if not comparable. */
+  netContributionUnit: string | null;
 
   /**
-   * Revenue minus realized task execution cost. Null when revenue is unknown.
-   * Funding is intentionally not subtracted as an expense.
+   * Same-unit monetary revenue minus separately observed monetary expense.
+   * Not external verified profit without later provider/ledger reconciliation.
    */
   netContributionCents: number | null;
 
@@ -100,27 +113,32 @@ export function getChildEconomicSnapshot(
     observation.capitalExposureCents,
   );
 
-  // The task_graph schema defaults actual_cost_cents to zero. Such a row
-  // is not proof of a free task: its cost is UNKNOWN, not observed zero.
-  // Likewise malformed/negative terminal task costs may not become savings.
-  const candidateNet = attributedRevenueCents === null || tasks.unobservedTerminalCosts > 0
-    ? null : attributedRevenueCents - tasks.realizedCostCents;
+  // task_graph costs are LOCAL task_cost_cent even if positive. Do not
+  // subtract them from attributed revenue or claim external business profit.
+  const observedExpenseCents = normalizeOptionalCents(observation.observedExpenseCents);
+  const revenueUnit = normalizeMonetaryUnit(observation.attributedRevenueUnit);
+  const expenseUnit = normalizeMonetaryUnit(observation.observedExpenseUnit);
+  const exposureUnit = normalizeMonetaryUnit(observation.capitalExposureUnit);
+  const revenueEvidence = observation.attributedRevenueEvidence?.trim();
+  const expenseEvidence = observation.observedExpenseEvidence?.trim();
+  const comparable = attributedRevenueCents !== null && observedExpenseCents !== null &&
+    revenueUnit !== null && revenueUnit === expenseUnit &&
+    Boolean(revenueEvidence) && Boolean(expenseEvidence);
+  const candidateNet = comparable ? attributedRevenueCents! - observedExpenseCents! : null;
   const netContributionCents = candidateNet !== null && Number.isSafeInteger(candidateNet)
     ? candidateNet : null;
-
+  const netContributionUnit = netContributionCents === null ? null : revenueUnit;
   const profitability = classifyProfitability(netContributionCents);
-
-  const roi =
-    netContributionCents !== null &&
-    capitalExposureCents !== null &&
-    capitalExposureCents > 0
-      ? netContributionCents / capitalExposureCents
-      : null;
+  const roi = netContributionCents !== null && capitalExposureCents !== null &&
+    capitalExposureCents > 0 && exposureUnit === netContributionUnit
+      ? netContributionCents / capitalExposureCents : null;
 
   const evidence = [
     `Parent ledger tracked funding: ${child.fundedAmountCents} cents.`,
-    `Task graph realized attributable cost: ${tasks.realizedCostCents} cents.`,
-    `Task graph active estimated commitment: ${tasks.activeCommitmentCents} cents.`,
+    `Task graph booked positive terminal cost: ${tasks.realizedCostCents} task_cost_cent (LOCAL, not monetary paid expense).`,
+    `Task graph active estimated commitment: ${tasks.activeCommitmentCents} task_cost_cent.`,
+    ...(revenueEvidence ? [`Attributed revenue source asserted: ${revenueEvidence}`] : []),
+    ...(expenseEvidence ? [`Observed monetary expense source asserted: ${expenseEvidence}`] : []),
     ...(observation.evidence ?? []),
   ];
 
@@ -145,6 +163,16 @@ export function getChildEconomicSnapshot(
     );
   }
 
+  if (!comparable) {
+    limitations.push("Net contribution/profitability UNKNOWN: attributed revenue and independently observed expense require matching explicit monetary units and distinct source evidence; local task_cost_cent cannot be subtracted as money.");
+  } else {
+    limitations.push("Same-unit contribution uses caller-supplied monetary observations, not independently verified external business P&L.");
+  }
+  if (capitalExposureCents !== null && netContributionCents !== null &&
+      exposureUnit !== netContributionUnit) {
+    limitations.push("ROI UNKNOWN: capital exposure is not stated in the same monetary unit as net contribution.");
+  }
+
   if (capitalExposureCents === null) {
     limitations.push(
       "Capital exposure is unknown; ROI must remain unknown even when revenue is supplied.",
@@ -167,6 +195,8 @@ export function getChildEconomicSnapshot(
     failedTasks: tasks.failedTasks,
     activeTasks: tasks.activeTasks,
     attributedRevenueCents,
+    observedExpenseCents,
+    netContributionUnit,
     netContributionCents,
     roi,
     profitability,
@@ -242,6 +272,13 @@ function normalizeOptionalCents(value: number | null | undefined): number | null
   // valid balance/revenue/exposure, and could manufacture P&L or ROI.
   if (!Number.isSafeInteger(value) || value! < 0) return null;
   return value!;
+}
+
+function normalizeMonetaryUnit(value: string | null | undefined): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const unit = value.trim().toUpperCase();
+  // A local task_cost_cent is not an external monetary currency.
+  return unit === "TASK_COST_CENT" ? null : unit;
 }
 
 function classifyProfitability(

@@ -189,6 +189,8 @@ describe("P-003 child capital integration", () => {
     expect(report.unclassifiedTransferOutCents).toBe(100);
     expect(report.creditPurchaseCents).toBe(500);
     expect(report.knownOperatingCostCents).toBe(35);
+    expect(report.taskExecutionCostUnit).toBe("task_cost_cent");
+    expect(report.taskExecutionCostAuthority).toBe("local_task_graph_unverified");
     expect(report.fundingRequestCents).toBe(999);
     expect(report.capitalAllocatedCents).toBe(400);
     expect(report.capitalReturnedCents).toBe(150);
