@@ -1284,6 +1284,7 @@ Model: ${ctx.inference.getDefaultModel()}
           immediate_need_credits_cents: { type: "integer" },
           future_need_credits_cents: { type: "integer" },
           reserve_credits_cents: { type: "integer" },
+          pending_refund_credits_cents: { type: "integer", description: "Pending refund claim; NOT spendable until provider balance confirms receipt" },
           other_commitments_cents: { type: "integer" },
           task_commitments_credits_cents: { type: "integer" },
           opportunity_evidence: { type: "array", items: { type: "string" } },
@@ -1317,6 +1318,7 @@ Model: ${ctx.inference.getDefaultModel()}
         const projection = getTreasuryProjection(ctx.db, {
           observedCreditsCents: observedBalance,
           reservedCreditsCents: args.reserve_credits_cents as number | undefined,
+          pendingRefundCreditsCents: args.pending_refund_credits_cents as number | undefined,
           otherCommittedCreditsCents: args.other_commitments_cents as number | undefined,
           taskCommitmentCreditsCents: args.task_commitments_credits_cents as number | undefined,
         });
