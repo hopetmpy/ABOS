@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-030
 Active-Segment: continuity/C0026.md
-Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / SOURCE_PARTIAL / PR75_DRAFT / EXACT_HEAD_CI_PENDING / PROVIDER_VERIFICATION_UNPROVEN
+Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / CODE_5d64fea_CI_GREEN_8_OF_8 / LIVE_FINALITY_UNPROVEN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -15,7 +15,7 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p030-family-economics-treasury
 Host-Head-At-Audit-Open: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
-Last-Reconciled-Host-Head: 333d00db1ea71ddc3cabc5e992549e3c44ec1c13
+Last-Reconciled-Host-Head: 5d64fead2a50500023fd95692f450fed8306d770
 Observed-Main-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-CI: 36220600132 — SUCCESS 8/8
@@ -129,7 +129,7 @@ Decision gate registrado en `continuity/C0026.md` por commit `9ac10272bcbd6b661d
 
 Plan P-030: blueprint vigente. La auditoría resolvió su arquitectura de implementación sin cambiar objetivo, alcance ni dependencias; no se requiere reescribir el blueprint antes de source.
 
-NEXT_ELIGIBLE_WORK: finalizar validación exact-head P-030 PR #75 (incluyendo child identity/reconciliation y UNKNOWN credit balance), corregir solo regresiones evidenciadas; preservar autenticación finality/provider como frontera externa P-005 y completar DoD antes de merge. No declarar HECHO prematuramente.
+NEXT_ELIGIBLE_WORK: P-030 PR #75 DRAFT with code HEAD 5d64fea push+PR CI 8/8; complete P-030 causal decision/outcome adaptation and real provider finality authority evidence when available, adversarially validate; do not merge or advance P-031 until DoD.
 
 ## P-030 — checkpoint de implementación 2026-10-14
 
@@ -186,3 +186,14 @@ La auditoría hasta DECISION_READY se conserva como historia en C0026; ya no des
 - Fixtures del `SimpleFundingProtocol` adaptadas a provider response final con transferId y datos de destinatario/importe explícitos, en vez de aceptar `status: completed` sin correlación.
 - Escenarios adversariales añadidos: child ID/recipient contradictorios antes de dispatch y child address cambiado antes del settlement. Tests/CI exactos pendientes en el momento de esta nota.
 - Próximo gate: obtener CI 8/8 final de branch+PR para HEAD exacto posterior a este checkpoint, revisar P-030 DoD; autenticación real de provider settlement y LIVE todavía NO VERIFICADOS / P-005.
+
+## P-030 — checkpoint exact-CI 2026-10-14 (receipt/financial identity)
+
+- Verified baseline HEAD `5d64fead2a50500023fd95692f450fed8306d770` in `abos/p030-family-economics-treasury`, PR #75 DRAFT. **Exact HEAD GitHub Actions push `38666450671` SUCCESS 8/8 and PR `38666455791` SUCCESS 8/8** (Node22/24 tests, Windows22/24, distribution22/24, security audit, rebrand). Main not merged; no LIVE dispatch.
+- Failed previous HEAD `0c44759` push `38664323122` / PR `38664329464` at one outdated assertion (`recipient conflicts`) while 6/8 jobs passed. `f7828c9` restored expected mismatch wording; both Node and Windows finished green at the later HEAD.
+- `3b5d832`: `ConwayClient.transferCredits` preserves missing provider-echo recipient/amount as unavailable; `CreditTransferResult` fields optional; `executeCreditEffect` treats incomplete terminal response as UNKNOWN, preserving no-redispach/zero-ledger invariants. New HTTP wire tests + adversarial adapter tests.
+- `cff5015`: corrected two valid negative-path assertions on incomplete vs contradictory provider responses (no change to settlement authorization semantics).
+- `5d64fea`: canonical `financial_effects` refuses reused provider transfer ID across two different economic intents, within SQLite transaction before either observation save or accounting materialization. A conflict does not assert external settlement; conflicting provider ID replay against completed intent is rejected. Regression added.
+- Public Conway terminal docs confirm `credits_balance` and `credits_history`; no provider-authenticated transferId-specific finality/replay contract was established for the legacy credits transfer path. **Post-dispatch LIVE authoritative verification remains UNPROVEN, owned by P-005 / provider**, not a reason to fabricate paid status. No provider credentials/funds were used.
+- Source P-030 still **EN_EJECUCIÓN / PR75_DRAFT**: scenario reviews are evidence-oriented and optional in strategic review; end-to-end economic prediction-to-outcome calibration, dynamic reserve policy and source-backed financial decision authority still require explicit DoD examination. No automatic approval or P-031 start.
+- NEXT_ELIGIBLE_WORK: investigate remaining P-030 decision/outcome integration and scenario evidence, verify receipts/funding bypass surfaces and live authority only when externally available; avoid CI churn, preserve existing 8/8 exact-head evidence, do not merge before full DoD.
