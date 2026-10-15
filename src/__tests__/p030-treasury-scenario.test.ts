@@ -293,6 +293,20 @@ describe("P-030 evidence-based treasury scenarios", () => {
       freeAfterProposalAndReserveCents: 1750, disposition: "can_earmark",
     });
     expect(dynamicallyReserved.executionAuthorized).toBe(false);
+    const delayedRefund = JSON.parse(await tool!.execute({
+      proposal_credits_cents: 100,
+      immediate_need_credits_cents: 100,
+      reserve_credits_cents: 100,
+      pending_refund_credits_cents: 800,
+      other_commitments_cents: 0,
+      opportunity_evidence: ["documented replacement requirement"],
+      alternatives: supported.alternatives,
+      risks: [{ id: "refund-delayed", exposureCreditsCents: 150, evidence: "provider refund timeline" }],
+    }, context));
+    expect(delayedRefund.projection.pendingRefundCreditsCents).toBe(800);
+    expect(delayedRefund.projection.freeCreditsCents).toBe(1900);
+    expect(delayedRefund.scenario.reserveRecommendation.freeAfterProposalAndReserveCents).toBe(1750);
+    expect(delayedRefund.projection.limitations.join(" ")).toContain("Pending refund is NOT liquid capital");
     expect(transfer).not.toHaveBeenCalled();
     expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n).toBe(0);
   });
