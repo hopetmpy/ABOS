@@ -271,6 +271,20 @@ describe("P-025/P-026 strategic classification boundary", () => {
     expect(feedback).toContain("task_graph local task-cost authority");
     expect(feedback).not.toContain("awaiting human approval");
     expect(inference.chat).not.toHaveBeenCalled();
+
+    // Fix the substantive plan defect. Past overrun evidence remains available
+    // to P-025, but must not become creator approval or a hard spending cap.
+    const corrected = { ...plan, estimatedTotalCostCents: 1200 };
+    db.prepare("UPDATE kv SET value = ? WHERE key = ?")
+      .run(JSON.stringify(corrected), `orchestrator.plan.${goalId}`);
+    db.prepare("UPDATE kv SET value = ? WHERE key = 'orchestrator.state'")
+      .run(JSON.stringify({
+        phase: "plan_review", goalId, replanCount: 0,
+        failedTaskId: null, failedError: null,
+      }));
+    const accepted = await makeOrchestrator(db, inference).tick();
+    expect(accepted.phase).toBe("executing");
+    expect(inference.chat).not.toHaveBeenCalled();
   });
 
 });
