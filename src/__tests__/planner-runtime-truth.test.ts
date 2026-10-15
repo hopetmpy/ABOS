@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildPlannerPrompt } from "../orchestration/planner.js";
 import { buildPlannerContext } from "../orchestration/planner-context.js";
 import { Orchestrator } from "../orchestration/orchestrator-core.js";
+import { insertGoal, insertTask } from "../state/database.js";
 import { createTestDb } from "./mocks.js";
 
 function context() {
