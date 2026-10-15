@@ -97,6 +97,8 @@ export interface EnvironmentTaskSpawnOptions {
    * This selection screen is not proof of financial authorization.
    */
   maxEstimatedCostCents?: number | null;
+  /** Unit from the same procurement evidence as the explicit budget. */
+  maxEstimatedCostUnit?: string | null;
   /**
    * Derived continuation view for the same canonical Task. Executors may
    * consume it, but it does not become provider-owned state.
@@ -174,6 +176,17 @@ export class EnvironmentExecutionBridge {
     task: TaskNode,
     options: EnvironmentTaskSpawnOptions = {},
   ): Promise<EnvironmentTaskExecutionResult> {
+    if (options.maxEstimatedCostCents != null &&
+        (!Number.isSafeInteger(options.maxEstimatedCostCents) ||
+          options.maxEstimatedCostCents < 0 ||
+          !options.maxEstimatedCostUnit?.trim())) {
+      throw new EnvironmentTaskExecutionError(
+        null,
+        "Explicit provider budget requires a nonnegative integer amount and its independently sourced cost unit; local task_cost_cent is not monetary authority.",
+        ["No provider action was dispatched without comparable budget unit evidence."],
+        "selection",
+      );
+    }
     const selection = await this.selector.select({
       // Task capabilities belong to the executor/tool plane, not necessarily to
       // the infrastructure provider itself. They remain available to adapters
@@ -186,6 +199,7 @@ export class EnvironmentExecutionBridge {
       excludedEnvironmentIds: options.excludedEnvironmentIds ?? [],
       expectedDurationMs: task.metadata.timeoutMs,
       maxEstimatedCostCents: options.maxEstimatedCostCents ?? null,
+      maxEstimatedCostUnit: options.maxEstimatedCostUnit ?? null,
       goalId: task.goalId,
       pathId: task.strategicPathId ?? null,
       taskId: task.id,
