@@ -393,6 +393,8 @@ describe("AwsEnvironmentProvider lifecycle", () => {
       ["ec2", "--region", "us-east-1", "run-instances"],
       ["ec2", "request-spot-instances"],
       ["ec2", "start-instances"],
+      ["ec2", "--region", "us-east-1", "modify-instance-attribute"],
+      ["ec2", "modify-instance-credit-specification"],
     ]) {
       await expect(provider.execute(args)).rejects.toThrow(
         "tracked lifecycle and economic authority",
@@ -774,6 +776,9 @@ describe("AwsEnvironmentProvider lifecycle", () => {
     const runner: EnvironmentCommandRunner = async (_command, args) => {
       calls.push(args);
 
+      if (args[0] === "sts" && args[1] === "get-caller-identity") {
+        return ok(JSON.stringify({ Account: "123456789012" }));
+      }
       if (args[0] === "ec2" && args[1] === "describe-instances") {
         return ok(JSON.stringify({
           InstanceId: "i-1234567890",
@@ -803,6 +808,21 @@ describe("AwsEnvironmentProvider lifecycle", () => {
     const provider = new AwsEnvironmentProvider({
       runner,
       defaultRegion: "us-east-1",
+      authorizeBillableMutation: ({ operation, accountId, resource: target,
+        instanceId, region, targetInstanceType }) => ({
+        allowed: true,
+        policyDecisionId: "source-test-resize-scope",
+        providerAccountId: accountId,
+        authorizedResourceId: target.id,
+        authorizedExternalId: instanceId,
+        authorizedOperation: operation,
+        authorizedRegion: region,
+        authorizedInstanceType: targetInstanceType,
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        totalCommitmentCents: 250,
+        unit: "usd_cent",
+        billingTermsEvidence: ["Source-only test fixture: independently attested cost and contingency."],
+      }),
     });
 
     const resized = await provider.resize(resource(), {
@@ -811,6 +831,10 @@ describe("AwsEnvironmentProvider lifecycle", () => {
 
     expect(resized.status).toBe("running");
     expect(resized.metadata?.instanceType).toBe("t3.small");
+    expect(resized.metadata?.lastEconomicMutationDecisionId)
+      .toBe("source-test-resize-scope");
+    expect(resized.metadata?.lastEconomicMutationOperation).toBe("resize");
+    expect(resized.metadata?.lastEconomicMutationIsSettledInvoice).toBe(false);
     expect(
       calls.some(
         (args) =>
