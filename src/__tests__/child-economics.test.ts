@@ -123,6 +123,7 @@ describe("child economic semantics", () => {
       observedExpenseEvidence: "Observed external USD expense"
       capitalExposureCents: 600,
       capitalExposureUnit: "USD",
+      capitalExposureEvidence: "Independent measured capital exposure",
     });
 
     expect(snapshot.netContributionCents).toBe(180);
@@ -140,6 +141,7 @@ describe("child economic semantics", () => {
       observedExpenseEvidence: "Observed external USD expense"
       capitalExposureCents: 500,
       capitalExposureUnit: "USD",
+      capitalExposureEvidence: "Independent measured capital exposure",
     });
 
     expect(snapshot.netContributionCents).toBe(-70);
@@ -278,6 +280,24 @@ describe("child economic semantics", () => {
     expect(mismatchROI.netContributionCents).toBe(180);
     expect(mismatchROI.netContributionUnit).toBe("USD");
     expect(mismatchROI.roi).toBeNull();
+  });
+
+  it("requires capital exposure source evidence before ROI is calculated even with matching currency", () => {
+    const data={
+      attributedRevenueCents:300,attributedRevenueUnit:"USD",
+      attributedRevenueEvidence:"provider attributed revenue",
+      observedExpenseCents:120,observedExpenseUnit:"USD",
+      observedExpenseEvidence:"provider expense",
+      capitalExposureCents:600,capitalExposureUnit:"USD",
+    };
+    const lacking=getChildEconomicSnapshot(db,address,data);
+    expect(lacking.netContributionCents).toBe(180);
+    expect(lacking.roi).toBeNull();
+    expect(lacking.limitations.join(" ")).toContain("capital exposure lacks independent causal source evidence");
+    const sourced=getChildEconomicSnapshot(db,address,{
+      ...data,capitalExposureEvidence:"Independent capital at risk ledger",
+    });
+    expect(sourced.roi).toBeCloseTo(0.3);
   });
 
   it("states the attribution limitation instead of fabricating failed-task ownership", () => {

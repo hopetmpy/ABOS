@@ -25,6 +25,7 @@ export interface ChildEconomicObservation {
    */
   capitalExposureCents?: number | null;
   capitalExposureUnit?: string | null;
+  capitalExposureEvidence?: string | null;
   evidence?: string[];
 }
 
@@ -121,6 +122,7 @@ export function getChildEconomicSnapshot(
   const exposureUnit = normalizeMonetaryUnit(observation.capitalExposureUnit);
   const revenueEvidence = observation.attributedRevenueEvidence?.trim();
   const expenseEvidence = observation.observedExpenseEvidence?.trim();
+  const exposureEvidence = observation.capitalExposureEvidence?.trim();
   const comparable = attributedRevenueCents !== null && observedExpenseCents !== null &&
     revenueUnit !== null && revenueUnit === expenseUnit &&
     Boolean(revenueEvidence) && Boolean(expenseEvidence);
@@ -130,7 +132,8 @@ export function getChildEconomicSnapshot(
   const netContributionUnit = netContributionCents === null ? null : revenueUnit;
   const profitability = classifyProfitability(netContributionCents);
   const roi = netContributionCents !== null && capitalExposureCents !== null &&
-    capitalExposureCents > 0 && exposureUnit === netContributionUnit
+    capitalExposureCents > 0 && exposureUnit === netContributionUnit &&
+    Boolean(exposureEvidence)
       ? netContributionCents / capitalExposureCents : null;
 
   const evidence = [
@@ -139,6 +142,7 @@ export function getChildEconomicSnapshot(
     `Task graph active estimated commitment: ${tasks.activeCommitmentCents} task_cost_cent.`,
     ...(revenueEvidence ? [`Attributed revenue source asserted: ${revenueEvidence}`] : []),
     ...(expenseEvidence ? [`Observed monetary expense source asserted: ${expenseEvidence}`] : []),
+    ...(exposureEvidence ? [`Capital exposure source asserted: ${exposureEvidence}`] : []),
     ...(observation.evidence ?? []),
   ];
 
@@ -167,6 +171,10 @@ export function getChildEconomicSnapshot(
     limitations.push("Net contribution/profitability UNKNOWN: attributed revenue and independently observed expense require matching explicit monetary units and distinct source evidence; local task_cost_cent cannot be subtracted as money.");
   } else {
     limitations.push("Same-unit contribution uses caller-supplied monetary observations, not independently verified external business P&L.");
+  }
+  if (capitalExposureCents !== null && netContributionCents !== null &&
+      exposureUnit === netContributionUnit && !exposureEvidence) {
+    limitations.push("ROI UNKNOWN: capital exposure lacks independent causal source evidence.");
   }
   if (capitalExposureCents !== null && netContributionCents !== null &&
       exposureUnit !== netContributionUnit) {
