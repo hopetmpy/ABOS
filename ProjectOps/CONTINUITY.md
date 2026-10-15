@@ -6,21 +6,21 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / REVIEWED_STRATEGIC_PATH_SOURCE_PR_CI_PENDING / AWS_ACCOUNT_FINANCING_NOT_ATTESTED / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / STRATEGIC_TREASURY_LINK_INTEGRATED / P010_PROVIDER_MANDATE_UNWIRED / AWS_ACCOUNT_FINANCING_NOT_ATTESTED / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-reviewed-path-provenance
+Current-Host-Branch: abos/p031-reviewed-route-checkpoint
 Host-Head-At-Audit-Open: 088de39896dcef837c7047c4c560e9cd0b7a29e8
 Last-Reconciled-Host-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
-Observed-Main-Head: efbeb4af409c8d5ebc45230d80c61242a0bf933c
-Last-Product-Head: efbeb4af409c8d5ebc45230d80c61242a0bf933c
-Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #88 38811059560 — SUCCESS 8/8
+Observed-Main-Head: bb25d0082c0292159292f2b70ed31910185d1f31
+Last-Product-Head: bb25d0082c0292159292f2b70ed31910185d1f31
+Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #89 38812117388 — SUCCESS 8/8
 Last-Completed-Plan: P-030
-Last-Completed-Merge: efbeb4af409c8d5ebc45230d80c61242a0bf933c
+Last-Completed-Merge: bb25d0082c0292159292f2b70ed31910185d1f31
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
@@ -431,3 +431,11 @@ PR #88 source `9bb12d5010ab43564e3dd93b9ad171460c8a3f68`, exact-head CI `3881105
 R2 audit showed `AdaptiveStore.setPathStatus('selected')` is a generic path state, not alone evidence of P-025 reviewed planning. `Orchestrator` persists an exact review receipt in `kv orchestrator.review_feedback.{goalId}` containing `materialized_path={pathId}`, and links tasks through `adaptive_task_bindings`. Branch `abos/p031-reviewed-path-provenance` now introduces a read-only P-025 provenance check in the existing Orchestrator owner. It matches goal/task binding, selected/executing path and exact trailing materialized receipt for active task. The existing P-030 `environment_procurement_review` tool optionally accepts task ID and obtains canonical receipt through runtime-injected callback; model-claimed paths cannot fabricate approval, missing/stale/cancelled task receipts remain explicitly unverified. Even with valid P-025 review, `purchaseAuthorized=false` because P-010 authority and verified provider financing are separately required. New source regressions written; exact PR CI PENDING. No external purchase.
 
 Remaining gap: trustworthy provider funding + full recurring obligation evidence under actual account, then P-010 scoped policy authority, P-030 review and P-031 idempotent provider dispatch. Avoid creating a second ledger/policy engine or treating `review_ready` as external money authority. P-031 remains EN_EJECUCIÓN, P-005 LIVE E5/E6 UNKNOWN.
+
+## P-031 — PR #89 verified and integrated, next actual P-010 USD mandate (2026-10-15)
+
+PR #89 exact source `fe567f9569960f5570a416787a6816f605d76531` passed CI run `38812117388` SUCCESS 8/8 (Node 22/24 test, Windows 22/24, security, integrity, public distribution 22/24); squash merged to `main bb25d0082c0292159292f2b70ed31910185d1f31` and confirmed live through Git connector. The source PR workflow is **not** evidence of an independently completed `main` push workflow at the squash SHA (GitHub connector only surfaces PR-triggered runs). Do not upgrade E3_MAIN_GREEN absent that check.
+
+P-031 now has: observed provider account/Budgets evidence (PR #86); exact account/resource/shape/region/expiry EC2 dispatch boundary (PR #87); same-unit P-030 upfront+recurring+ancillary cost/finance/contingency/alternatives review that cannot treat budgets or Conway credits as AWS cash (PR #88); canonical P-025 reviewed task/path receipt integrated into the provider economic review tool (PR #89). This **does not** establish an AWS account-specific P-010 monetary authorization or externally attested USD liquidity; production `AwsEnvironmentProvider.authorizeNewProvision` is still unwired. No real AWS provisioning, transfers, invoices, provider fees or E5/E6 success were generated. Unit/identity invariants stand.
+
+CURRENT ELIGIBLE NEXT: inspect actual P-010 policy decision issuer/scope/claim/replay rules; identify independently authenticated source of AWS provider-account financing and recurring supplier commitments (not STS, IAM, Budgets, Conway credit or unaudited model assertion); only then connect an operation-keyed, recoverable P-031 purchase mandate through P-030 scenario, P-010 decision and P-018 provider callback. Autonomous when authority exists, no arbitrary creator approval threshold or second ledger. If financing/billing is unavailable, keep AWS paid dispatch UNAVAILABLE and continue other independent P-031 resource reuse/renew/retire work rather than fabricate an approval or close P-031.
