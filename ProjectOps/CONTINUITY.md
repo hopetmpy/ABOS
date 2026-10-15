@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-030
 Active-Segment: continuity/C0026.md
-Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / COGNITIVE_ECONOMIC_SOURCE_3b390b6_CI_8_OF_8 / LIVE_FINALITY_UNPROVEN
+Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / USDC_UNKNOWN_SOURCE_15d45e2_CI_8_OF_8 / LIVE_FINALITY_UNPROVEN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -129,7 +129,7 @@ Decision gate registrado en `continuity/C0026.md` por commit `9ac10272bcbd6b661d
 
 Plan P-030: blueprint vigente. La auditoría resolvió su arquitectura de implementación sin cambiar objetivo, alcance ni dependencias; no se requiere reescribir el blueprint antes de source.
 
-NEXT_ELIGIBLE_WORK: P-030 source 3b390b69 E3 CI push 38684898226 SUCCESS 8/8, PR 38684893362 SUCCESS 8/8. Continue adaptive reserve/contingency decisions with grounded same-unit external commitments and P-023/P-025 outcome learning. Validate exact HEAD after docs; do not merge P-030 or start P-031 until DoD; E5/E6 external money P-005 unverified.
+NEXT_ELIGIBLE_WORK: P-030 PR #75 DRAFT; source HEAD 15d45e24 CI push 38685293689 SUCCESS 8/8 + PR 38685289941 SUCCESS 8/8. Finish P-030 adaptive reserve/contingency decisions and economic prediction→outcome proof in compatible units; no default human approval. P-005 owns external LIVE finality/revenue. Verify checkpoint HEAD before any merge.
 
 ## P-030 — checkpoint de implementación 2026-10-14
 
@@ -218,3 +218,9 @@ La auditoría hasta DECISION_READY se conserva como historia en C0026; ya no des
 - `task_graph` measured estimate→actual deviations now feed the canonical planner adaptive context, preserving UNKNOWN defaults and separating `task_cost_cent` from credit/USDC/P&L. Both core and strategic reviewers use the same task cost owner and its recorded history; no mandatory cost percentage or approval introduced.
 - `financial_effects` pending USDC topups and generic service payments, credit obligations, and unclassified units are projected for canonical strategic review, not treated as liquid credit or paid expense. Both `orchestrator-core.ts` and the actual primary `orchestrator.ts` wiring were reconciled. Test-fixture evidence DDL and primary-path regression failure corrected on source prior to 8/8.
 - Remaining within P-030: evidence-backed dynamic reserve/contingency execution policy (not just reports), economic decision→outcome with authentic source and causal alternative review, and P-030 DoD integration. LIVE settlement/real revenues/cost metering remain unverified and P-005-owned.
+
+### P-030 — USDC UNKNOWN vs zero reconciled (2026-10-14)
+
+- Source `15d45e243c85735b329cf5c9fce23dd3f7b4dde0`, following economic learning checkpoint, exact CI push `38685293689` SUCCESS 8/8, PR `38685289941` SUCCESS 8/8.
+- `src/orchestration/planner-context.ts`, `planner.ts` and primary+legacy orchestrators no longer turn absent USDC observation into zero; null/UNKNOWN remains separate from explicit observed 0 or valid cached USDC observation. Negative or invalid USDC values no longer fabricate a balance. New `planner-runtime-truth` tests verify the distinction.
+- No new manual payment authorization, no wallet use, no movement of external cash, no transfer settlement or verified income. PR #75 remains DRAFT; P-030 remains EN_EJECUCIÓN, not merged; next dynamic economic reserve/contingency policy and E5/E6 evidence remain pending.
