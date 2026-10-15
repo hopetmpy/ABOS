@@ -15,7 +15,7 @@ ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
 Current-Host-Branch: abos/p030-family-economics-treasury
 Host-Head-At-Audit-Open: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
-Last-Reconciled-Host-Head: 149f364b5d935098262ad021dd6b3679558db12c
+Last-Reconciled-Host-Head: 333d00db1ea71ddc3cabc5e992549e3c44ec1c13
 Observed-Main-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-Head: d14f04b9fdea98eecd9d8e772b223b55d1fcf010
 Last-Product-CI: 36220600132 — SUCCESS 8/8
@@ -129,7 +129,7 @@ Decision gate registrado en `continuity/C0026.md` por commit `9ac10272bcbd6b661d
 
 Plan P-030: blueprint vigente. La auditoría resolvió su arquitectura de implementación sin cambiar objetivo, alcance ni dependencias; no se requiere reescribir el blueprint antes de source.
 
-NEXT_ELIGIBLE_WORK: P-030 PR #75 DRAFT; verify 8/8 push+PR exact HEAD and reconcile any genuine CI regression. External provider settlement provenance remains a HARD boundary; do not invent a credits-transfer lookup or claim LIVE. Continue P-030 adaptive reserve/decision/outcome DoD and source work independently when eligible; only merge when evidenced criteria are met.
+NEXT_ELIGIBLE_WORK: finalizar validación exact-head P-030 PR #75 (incluyendo child identity/reconciliation y UNKNOWN credit balance), corregir solo regresiones evidenciadas; preservar autenticación finality/provider como frontera externa P-005 y completar DoD antes de merge. No declarar HECHO prematuramente.
 
 ## P-030 — checkpoint de implementación 2026-10-14
 
@@ -178,3 +178,11 @@ La auditoría hasta DECISION_READY se conserva como historia en C0026; ya no des
 - `149f364`: `check_credits` mantiene vista read-only de intents pendientes y capital comprometido cuando balance provider es unavailable; reporta UNKNOWN y no inventa recepción o gasto.
 - LIMITACIÓN MATERIAL: documentación pública Conway muestra `credits_balance` y `credits_history` pero no demuestra aquí una API `GET transferId` específica con contrato, autenticación y finality verificable. El método de reconciliación manual de receipt aún depende de una observación que el caller dice haber verificado. No afirmar E4/LIVE autenticado ni cerrar esta frontera sin evidencia/material provider P-005.
 - `HEAD 149f364b5d935098262ad021dd6b3679558db12c` al registrar checkpoint estaba pendiente de CI exact-head. **No elevar a HECHO**, no merge, no transferencias LIVE ni ingresos inventados. Validar primero latest exact source+document commit; si faltan condiciones DoD seguir P-030.
+
+### Complemento P-030 — seguridad de identidad de capital familiar
+
+- Source `333d00db1ea71ddc3cabc5e992549e3c44ec1c13` (branch `abos/p030-family-economics-treasury`), PR #75 sigue DRAFT y `main` no fusionado.
+- `333d00d`: pre-dispatch child funding ahora exige que el child registrado coincida con la wallet destinataria; settlement verifica otra vez el child registrado antes de materializar capital en el ledger. Cambio de address intermedio genera `reconciliation_required`, sin segunda transferencia ni `capital_allocation` incorrecta.
+- Fixtures del `SimpleFundingProtocol` adaptadas a provider response final con transferId y datos de destinatario/importe explícitos, en vez de aceptar `status: completed` sin correlación.
+- Escenarios adversariales añadidos: child ID/recipient contradictorios antes de dispatch y child address cambiado antes del settlement. Tests/CI exactos pendientes en el momento de esta nota.
+- Próximo gate: obtener CI 8/8 final de branch+PR para HEAD exacto posterior a este checkpoint, revisar P-030 DoD; autenticación real de provider settlement y LIVE todavía NO VERIFICADOS / P-005.
