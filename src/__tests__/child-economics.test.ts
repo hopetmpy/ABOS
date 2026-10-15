@@ -139,6 +139,35 @@ describe("child economic semantics", () => {
     expect(snapshot.observedBalanceCents).toBe(240);
   });
 
+  it("keeps invalid externally asserted monetary observations UNKNOWN instead of inventing zero or P&L", () => {
+    for (const invalid of [-1, -0.5, 0.75, 1.1, Number.MAX_SAFE_INTEGER + 1, Infinity, NaN]) {
+      const snapshot = getChildEconomicSnapshot(db, address, {
+        observedBalanceCents: invalid,
+        attributedRevenueCents: invalid,
+        capitalExposureCents: invalid,
+        evidence: ["Untrusted malformed amount, not independently reconciled"],
+      });
+      expect(snapshot.observedBalanceCents).toBeNull();
+      expect(snapshot.attributedRevenueCents).toBeNull();
+      expect(snapshot.netContributionCents).toBeNull();
+      expect(snapshot.roi).toBeNull();
+      expect(snapshot.profitability).toBe("unknown");
+    }
+  });
+
+  it("preserves a genuine observed zero without treating missing revenue as measured zero", () => {
+    const snapshot = getChildEconomicSnapshot(db, address, {
+      observedBalanceCents: 0,
+      attributedRevenueCents: 0,
+      capitalExposureCents: 0,
+    });
+    expect(snapshot.observedBalanceCents).toBe(0);
+    expect(snapshot.attributedRevenueCents).toBe(0);
+    expect(snapshot.netContributionCents).toBe(-120);
+    expect(snapshot.profitability).toBe("unprofitable");
+    expect(snapshot.roi).toBeNull();
+  });
+
   it("states the attribution limitation instead of fabricating failed-task ownership", () => {
     const snapshot = getChildEconomicSnapshot(db, address);
     expect(snapshot.limitations.join(" ")).toContain(

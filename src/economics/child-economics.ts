@@ -220,9 +220,11 @@ function aggregateTaskEconomics(
 }
 
 function normalizeOptionalCents(value: number | null | undefined): number | null {
-  if (value === null || value === undefined) return null;
-  if (!Number.isFinite(value)) return null;
-  return Math.max(0, Math.floor(value));
+  // External economic observations are measured integer cents or UNKNOWN.
+  // Clamping negative amounts or flooring fractions to zero would invent a
+  // valid balance/revenue/exposure, and could manufacture P&L or ROI.
+  if (!Number.isSafeInteger(value) || value! < 0) return null;
+  return value!;
 }
 
 function classifyProfitability(
