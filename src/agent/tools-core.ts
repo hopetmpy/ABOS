@@ -24,6 +24,7 @@ import { sanitizeToolResult, sanitizeInput } from "./injection-defense.js";
 import { createLogger } from "../observability/logger.js";
 import { appendEvidenceEvent, correlationIdFor, currentEvidenceContext, latestEvidenceByAuthority, runWithEvidenceContext } from "../observability/evidence.js";
 import { executeCreditEffect } from "../economics/credit-transfer.js";
+import { executeCreditTopupEffect, listUnresolvedCreditTopups } from "../economics/credit-topup.js";
 import { getTreasuryProjection } from "../economics/treasury-projection.js";
 import { listUnresolvedFinancialEffects } from "../economics/financial-effects.js";
 import { assessTreasuryScenario } from "../economics/treasury-scenario.js";
@@ -458,78 +459,47 @@ Reconciliation requires independently verified provider finality; this view is n
           return `Invalid tier. Valid amounts (USD): ${TOPUP_TIERS.join(", ")}`;
         }
 
-        // Check USDC balance first (EVM-only path after Solana guard above)
-        const { getUsdcBalance } = await import("../conway/x402.js");
-        const usdcBalance = await getUsdcBalance(ctx.identity.address, "eip155:8453");
-        if (usdcBalance < amountUsd) {
-          return `Insufficient USDC. Balance: $${usdcBalance.toFixed(2)}, requested: $${amountUsd}. Choose a smaller tier or wait for funding.`;
-        }
-
-        const result = await topupCredits(
-          ctx.config.conwayApiUrl,
-          ctx.identity.account,
-          amountUsd,
-        );
-
-        if (!result.success) {
-          return `Credit topup failed: ${result.error}`;
-        }
-
-        // The external purchase has succeeded. Preserve the exact x402
-        // observation separately from any cent-denominated local projection.
-        try {
-          const { ulid } = await import("ulid");
-          const transactionId = ulid();
-          const paymentAtomic = result.payment
-            ? BigInt(result.payment.amountMicroUsdc)
-            : null;
-          const exactWholeCents = paymentAtomic !== null && paymentAtomic % 10_000n === 0n
-            ? Number(paymentAtomic / 10_000n)
-            : undefined;
-          ctx.db.insertTransaction({
-            id: transactionId,
-            type: "credit_purchase",
-            amountCents: exactWholeCents,
-            balanceAfterCents: undefined,
-            description: `x402 credit topup requested tier: $${amountUsd} USD`,
-            timestamp: new Date().toISOString(),
-          });
-          const evidence = currentEvidenceContext();
-          if (evidence && result.payment) {
-            const transactionEvent = latestEvidenceByAuthority(
-              ctx.db.raw,
-              "financial_transaction",
-              transactionId,
-            );
-            appendEvidenceEvent(ctx.db.raw, {
-              correlationId: evidence.correlationId,
-              causationId: transactionEvent?.id ?? evidence.causationId ?? null,
-              eventType: "economic.x402_payment_observed",
-              domain: "economic",
-              authorityType: "financial_transaction",
-              authorityId: transactionId,
-              goalId: evidence.goalId ?? null,
-              taskId: evidence.taskId ?? null,
-              turnId: evidence.turnId ?? null,
-              toolCallId: evidence.toolCallId ?? null,
-              epistemicStatus: "observation",
-              payload: {
-                amountMicroUsdc: result.payment.amountMicroUsdc,
-                amountUnit: "micro-USDC",
-                policyAmountCents: result.payment.policyAmountCents,
-                policyUnit: "cent",
-                policyRounding: "ceil",
-              },
-              provenance: { source: "x402" },
-            });
-          }
-        } catch (error) {
+        const existing = listUnresolvedCreditTopups(ctx.db, ctx.identity.address);
+        if (existing.length > 0) {
           throw new ExternalEffectOutcomeUnknownError(
-            `Credit topup completed externally but local accounting failed: ${error instanceof Error ? error.message : String(error)}`,
+            `Prior x402 topup ${existing[0].operationKey} is ${existing[0].state}; ` +
+            "reconcile its payment and credited balance before purchasing again.",
           );
         }
 
-        return `Credit topup successful: +$${amountUsd} (${amountUsd * 100} cents) credits purchased via x402. Check your new balance with check_credits.`;
+        // USDC balance is on-chain observed input, not Conway credit liquidity.
+        const { getUsdcBalance } = await import("../conway/x402.js");
+        const usdcBalance = await getUsdcBalance(ctx.identity.address, "eip155:8453");
+        if (!Number.isFinite(usdcBalance) || usdcBalance < amountUsd) {
+          return "Insufficient or UNKNOWN USDC; no x402 purchase dispatched.";
+        }
+
+        const effect = await executeCreditTopupEffect({
+          db: ctx.db,
+          walletAddress: ctx.identity.address,
+          amountUsd,
+          policyDecisionId: currentEvidenceContext()?.policyDecisionId ?? null,
+          operationKey: currentEvidenceContext()?.policyDecisionId
+            ? `topup:${currentEvidenceContext()!.policyDecisionId}`
+            : undefined,
+          executePayment: () => topupCredits(
+            ctx.config.conwayApiUrl,
+            ctx.identity.account,
+            amountUsd,
+          ),
+        });
+        if (effect.state === "rejected") {
+          throw new Error(
+            `x402 topup was rejected before signed payment: ${effect.lastError ?? "unknown cause"}`,
+          );
+        }
+        // Accepted HTTP responses are not final provider credit observations.
+        // Policy persists UNKNOWN and autonomous recovery will never redispatch
+        // an unresolved paid intent. No credit_purchase ledger is fabricated.
+        throw new ExternalEffectOutcomeUnknownError(
+          `x402 topup ${effect.operationKey} is ${effect.state}; ` +
+          "payment finality and Conway credits are not yet independently verified.",
+        );
       },
     },
     {

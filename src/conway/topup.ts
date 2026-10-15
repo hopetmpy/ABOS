@@ -235,11 +235,16 @@ export async function topupCredits(
     throw error;
   }
 
-  const creditsCentsAdded = typeof result.response === "object"
-    ? result.response?.credits_cents ?? result.response?.amount_cents ?? amountUsd * 100
-    : amountUsd * 100;
+  const reportedCredits = typeof result.response === "object"
+    ? result.response?.credits_cents ?? result.response?.amount_cents
+    : undefined;
+  const creditsCentsAdded = Number.isSafeInteger(reportedCredits) && reportedCredits >= 0
+    ? reportedCredits as number : undefined;
 
-  logger.info(`Credit topup successful: $${amountUsd} USD → ${creditsCentsAdded} credits cents`);
+  logger.info(
+    `Credit topup HTTP accepted: $${amountUsd} USD tier; ` +
+    `credits reported=${creditsCentsAdded ?? "UNKNOWN"} (not verified settlement)`,
+  );
 
   return {
     success: true,

@@ -17,6 +17,7 @@ import {
   type AutonomousTopupPlan,
 } from "../conway/topup.js";
 import { getUsdcBalanceDetailed } from "../conway/x402.js";
+import { listUnresolvedCreditTopups } from "../economics/credit-topup.js";
 
 export type AutonomousTopupExecutionStatus =
   | "executed"
@@ -120,6 +121,16 @@ export async function executeAutonomousTopup(
   } = options;
 
   const chainType = config.chainType || identity.chainType || "evm";
+  const unsettledTopups = listUnresolvedCreditTopups(db, identity.address);
+  if (unsettledTopups.length > 0) {
+    return {
+      status: "unresolved_previous_effect",
+      plan: unavailablePlan(chainType),
+      evidence: [
+        `Prior x402 purchase ${unsettledTopups[0].operationKey} remains ${unsettledTopups[0].state}; no automatic redispatch.`,
+      ],
+    };
+  }
   const unresolved = getUnresolvedPreviousEffect(db);
   if (unresolved) {
     return {

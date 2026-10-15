@@ -385,6 +385,22 @@ export function prepareFinancialEffect(
     if (overlapping) {
       throw new FinancialEffectIntentPendingError(operationKey, overlapping.operation_key);
     }
+    // A credit topup is a wallet-level purchasing decision: two different
+    // tiers or plan keys cannot concurrently spend toward an unknown credit
+    // balance. Keep the unit USDC separate from Conway credit commitments.
+    if (effectKind === "x402_credit_topup") {
+      const outstanding = db.prepare(
+        `SELECT operation_key FROM financial_effects
+         WHERE effect_kind = 'x402_credit_topup' AND provider = ?
+           AND unit = ? AND LOWER(recipient) = LOWER(?)
+           AND state IN ('prepared', 'dispatching', 'pending',
+                         'unknown', 'reconciliation_required')
+         ORDER BY created_at ASC LIMIT 1`,
+      ).get(provider, unit, recipient) as { operation_key: string } | undefined;
+      if (outstanding) {
+        throw new FinancialEffectIntentPendingError(operationKey, outstanding.operation_key);
+      }
+    }
     db.prepare(
       `INSERT INTO financial_effects (
         id, operation_key, effect_kind, fingerprint, amount_cents, unit,
