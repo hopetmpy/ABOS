@@ -1276,6 +1276,9 @@ Model: ${ctx.inference.getDefaultModel()}
         type: "object",
         properties: {
           proposal_credits_cents: { type: "integer" },
+          expected_revenue_credits_cents: { type: "integer" },
+          realized_advance_credits_cents: { type: "integer" },
+          previous_spend_credits_cents: { type: "integer" },
           immediate_need_credits_cents: { type: "integer" },
           future_need_credits_cents: { type: "integer" },
           reserve_credits_cents: { type: "integer" },
@@ -1314,6 +1317,9 @@ Model: ${ctx.inference.getDefaultModel()}
         });
         const scenario = assessTreasuryScenario(projection, {
           proposalCreditsCents: args.proposal_credits_cents as number,
+          expectedRevenueCreditsCents: args.expected_revenue_credits_cents as number | undefined,
+          realizedAdvanceCreditsCents: args.realized_advance_credits_cents as number | undefined,
+          previousSpendCreditsCents: args.previous_spend_credits_cents as number | undefined,
           immediateNeedCreditsCents: args.immediate_need_credits_cents as number | undefined,
           futureNeedCreditsCents: args.future_need_credits_cents as number | undefined,
           opportunityEvidence: args.opportunity_evidence as string[] | undefined,

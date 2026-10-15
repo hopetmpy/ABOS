@@ -85,6 +85,13 @@ export function assessTreasuryScenario(
     contingencyExposure = Math.max(contingencyExposure ?? 0, exposure);
     evidence.push("Contingency " + risk.id + ": " + exposure + " cents; source=" + risk.evidence);
   }
+  // Independent failures can occur together; the largest single exposure alone
+  // is not proof of sufficient aggregate reserve.
+  if ((input.risks?.length ?? 0) > 1) {
+    conditions.push(
+      "Several downside events are specified but their overlap/correlation is UNKNOWN; obtain evidence before treating the largest one as total required reserve.",
+    );
+  }
   if (contingencyExposure === null) {
     conditions.push("No evidence-based contingency scenarios were supplied; do not invent a universal reserve percentage.");
   } else if (projection.reservedCreditsCents === null) {
