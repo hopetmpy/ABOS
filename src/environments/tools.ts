@@ -59,6 +59,16 @@ export interface EnvironmentToolingOptions {
   getReviewedTaskPath?: (taskId: string) => {
     goalId: string; pathId: string; evidence: string[];
   } | null;
+  /** Canonical P-030 read of known local pending provider obligations. */
+  getProviderAccountFinancialExposure?: (
+    providerId: string, providerAccountId: string, unit: string,
+  ) => {
+    recordedPendingCount: number;
+    recordedPendingCents: number;
+    unscopedPendingCount: number;
+    scopeCoverage: "scoped_records" | "unscoped_records_present";
+    limitations: string[];
+  };
 }
 
 export function createEnvironmentTools(
@@ -278,6 +288,9 @@ export function createEnvironmentTools(
             unit: typeof x.unit === "string" ? x.unit : "",
             evidence: typeof x.evidence === "string" ? x.evidence : "",
           }));
+        const locallyRecorded = options.getProviderAccountFinancialExposure
+          ? options.getProviderAccountFinancialExposure(id, observed.accountId, unit)
+          : null;
         const review = assessProviderProcurementScenario({
           provider: id,
           accountId: observed.accountId,
@@ -320,7 +333,10 @@ export function createEnvironmentTools(
             : !pathReceipt
               ? "P-025 reviewed binding for this exact task is unverified or stale."
               : "P-025 path provenance observed, not a purchase permit.",
-          // No budget amount is allowed to flow as verified cash.
+          // Only local P-030 durable outstanding intents are attributed to
+          // this provider/account. Not all supplier contracts/invoices.
+          locallyRecordedPendingObligations: locallyRecorded,
+          // No budget amount or local pending aggregate becomes free cash.
           scenario: review,
           purchaseAuthorized: false,
         }, null, 2));
