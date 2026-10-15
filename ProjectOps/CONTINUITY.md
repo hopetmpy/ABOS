@@ -6,21 +6,21 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / P010_P025_P030_PROCUREMENT_SOURCE_SIMULATION_PR_CI_PENDING / LIVE_AWS_ISSUER_UNWIRED / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / P018_RESOURCE_USABILITY_SOURCE_CI_PENDING / LIVE_AWS_ISSUER_UNWIRED / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-authorized-procurement-e2e-simulation
+Current-Host-Branch: abos/p031-resource-usability-verification
 Host-Head-At-Audit-Open: 088de39896dcef837c7047c4c560e9cd0b7a29e8
 Last-Reconciled-Host-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
-Observed-Main-Head: 14f7e4446b7c5bc78504d880951d20cc065d1bcd
-Last-Product-Head: 14f7e4446b7c5bc78504d880951d20cc065d1bcd
-Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #95 38816875676 — SUCCESS 8/8
+Observed-Main-Head: ec8797d6718710ca5a04a7505101fb44283bfebf
+Last-Product-Head: ec8797d6718710ca5a04a7505101fb44283bfebf
+Last-Product-CI: MAIN_SHA_NOT_INDEPENDENTLY_VERIFIED; source PR #96 38819826025 — SUCCESS 8/8
 Last-Completed-Plan: P-030
-Last-Completed-Merge: 14f7e4446b7c5bc78504d880951d20cc065d1bcd
+Last-Completed-Merge: ec8797d6718710ca5a04a7505101fb44283bfebf
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
@@ -485,3 +485,10 @@ Root R2: prior P-031 work provided independent P-025 reviewed path receipts, P-0
 Simulated integration tests cover explicit positive P-010 rule, implicit default allow denial, wrong task/path, wrong account/currency/resource/terms, missing costs, deficit, expired funding, durable operation key replay/mismatch, provider usable-vs-financial-pending, rejected, response lost UNKNOWN and no duplicate, zero synthetic transaction settlement. Provision usable does NOT mean supplier bill settled. This is NOT a second policy authority or financial ledger.
 
 NEXT_ELIGIBLE_WORK: run exact source CI then integrate if green; audit/adapt provider account financing and contract source and capture actual P-010 issuer. Keep P-031 EN_EJECUCIÓN, P-005 E5/E6 LIVE UNKNOWN, no P-032 transition. Do not count synthetic source tests as LIVE spending authority.
+
+## P-031 — source-simulated P-025/P-030/P-010 procurement and P-018 readiness gate (2026-10-15)
+
+- PR #96 final source `6ca260832644bca669fd2b1dfd6c91ba3321c1b1`, exact source CI run `38819826025` COMPLETE/SUCCESS 8/8, squash merged `main ec8797d6718710ca5a04a7505101fb44283bfebf`. An independent exact-main CI run has not been verified.
+- Source `src/economics/provider-procurement-execution.ts` now composes existing P-025 actual task-path materialization, P-030 source-reviewed account-unit cost/recurrence/contingency scenario and durable financial-effect dispatch claim, and P-010 persisted exact-policy dangerous-tool permit with explicitly positive rule. An implicit no-rule policy default ALLOW is not accepted. Previously prepared or dispatched pending effects may not be sent twice with another key or drifted supplier quote. No source-valid verified AWS account USD funding/contract source; default LIVE production wiring remains intentionally absent. No real external charges or P-005 E5/E6 material proof.
+- New hard R2: the simulated provider could claim `usable` from an accepted purchase without checking P-018 actual resource ownership/health. Branch `abos/p031-resource-usability-verification` extends **the same existing procurement owner** with an optional independent read-only `verifyResourceUsability` callback; a supplier-accepted outcome is only marked usable if an independent P-018 observation verifies the exact owned resource ID, positive health and nonempty observation evidence. Missing/failing/mismatched verifier downgrades resource status to `pending`, not paid, failed or usable, and does not retry external dispatch. P-030 financial effect remains pending until distinct verified supplier settlement. Adversarial tests cover no verifier, other resource ID, false health, missing evidence, thrown probe and a positive real P-018 lifecycle mock provision→health with financial pending and no ledger transfer. This source branch CI is pending.
+- P-031 remains EN_EJECUCIÓN. Next source frontier: external provider account financing/billing verification with P-010 mandate issuer and production wiring; provider operation idempotency and settlement/retirement diagnostics. Never infer source test money = LIVE AWS liquidity; P-032 not started.
