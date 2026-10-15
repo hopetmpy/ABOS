@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-030
 Active-Segment: continuity/C0026.md
-Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / FINANCIAL_INTEGRITY_SOURCE_ae3cd7e / CI_PENDING / LIVE_FINALITY_UNPROVEN
+Active-Intervention: P030_FAMILY_ECONOMICS_TREASURY — EN_EJECUCIÓN / PR75_DRAFT / FINANCIAL_INTEGRITY_SOURCE_00b926b_CI_8_OF_8 / LIVE_FINALITY_UNPROVEN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -129,7 +129,7 @@ Decision gate registrado en `continuity/C0026.md` por commit `9ac10272bcbd6b661d
 
 Plan P-030: blueprint vigente. La auditoría resolvió su arquitectura de implementación sin cambiar objetivo, alcance ni dependencias; no se requiere reescribir el blueprint antes de source.
 
-NEXT_ELIGIBLE_WORK: P-030 PR #75 DRAFT, source HEAD ae3cd7e + ProjectOps recovery checkpoint in C0026; verify exact current branch/PR CI, fix real regressions, continue evidence-backed adaptive reserve and economic prediction→outcome integration with P-023/P-025. Provider settlement and LIVE remain P-005. No merge or P-031 before DoD.
+NEXT_ELIGIBLE_WORK: P-030 PR #75 DRAFT; source+ProjectOps HEAD 00b926b CI 8/8 on push and PR. Continue evidence-based adaptive reserves/contingency and prediction→observed-outcome economic review under P-023/P-025, review DoD before merge. LIVE settlement P-005; no P-031 yet.
 
 ## P-030 — checkpoint de implementación 2026-10-14
 
@@ -202,4 +202,4 @@ La auditoría hasta DECISION_READY se conserva como historia en C0026; ya no des
 
 - Último source confirmado por Git y registrado en `continuity/C0026.md`: `ae3cd7e5dbc44d0e1685b815bb85d39a7e126bcc` en `abos/p030-family-economics-treasury`, PR #75 DRAFT. Es posterior al último head reconciliado con CI `67e39c9`.
 - Cambios: revisión de surplus sobre demanda futura y evidencia de bundle, protección de sumas enteras de compromisos/reservas y rechazo de estimaciones activas negativas. Tests escritos; ejecución CI exacta pendiente de lectura. El checkpoint C0026 tiene el detalle causal y recovery.
-- Estado: `EN_EJECUCIÓN / SOURCE_DELTA / CI_PENDING / LIVE_UNVERIFIED`. P-030 no se declara HECHO, P-031 no iniciado, fondos/pagos LIVE no ejecutados.
+- Estado tras exact CI de `00b926b6`: `EN_EJECUCIÓN / SOURCE_DELTA_CI_GREEN_8_OF_8 / LIVE_UNVERIFIED`. Runs push `38676148422` y PR `38676142963`: SUCCESS 8/8. Este checkpoint documental posterior requiere su propia verificación exact-HEAD. P-030 no se declara HECHO, P-031 no iniciado, fondos/pagos LIVE no ejecutados.
