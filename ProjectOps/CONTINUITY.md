@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / PR104_SOURCE_E3_GREEN / STRATEGIC_ROUTE_RECHECK_PENDING_CI / LIVE_AWS_ISSUER_UNWIRED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / PR104_PR105_MAIN_E3_GREEN / LIVE_AWS_ISSUER_UNWIRED / P005_E5E6_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-atomic-reviewed-route-recheck
-Host-Head-At-Audit-Open: acda23d34143167d5c222d1e6ca9b19e6f15d7bb
-Last-Reconciled-Host-Head: acda23d34143167d5c222d1e6ca9b19e6f15d7bb
-Observed-Main-Head: acda23d34143167d5c222d1e6ca9b19e6f15d7bb
-Last-Product-Head: acda23d34143167d5c222d1e6ca9b19e6f15d7bb
-Last-Product-CI: PR #104 source 38828680615 SUCCESS 8/8; exact main acda23d3 push 38828983152 pending
+Current-Host-Branch: abos/p031-concurrent-claims-main-checkpoint
+Host-Head-At-Audit-Open: 5a63bcc04a396387ec6e5b12c5d7430dfc8b4f99
+Last-Reconciled-Host-Head: 5a63bcc04a396387ec6e5b12c5d7430dfc8b4f99
+Observed-Main-Head: 5a63bcc04a396387ec6e5b12c5d7430dfc8b4f99
+Last-Product-Head: 5a63bcc04a396387ec6e5b12c5d7430dfc8b4f99
+Last-Product-CI: exact main 5a63bcc0 push 38829419527 — COMPLETE SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 24432e3d0474969333ef2d149bd0ff2b5c83c135
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
@@ -558,4 +558,14 @@ NEXT_ELIGIBLE_WORK: audit independent account financing/supplier-term and P-010 
 - P-031 remains EN_EJECUCIÓN; real-account AWS funds, supplier quotes/contracts and actual invoice+retirement financial cleanup are still LIVE UNKNOWN; P-005 E5/E6 unverified. Do not mistake synthetic tests for external payment proof. P-032 not started.
 
 NEXT_ELIGIBLE_WORK: run exact branch CI on coherent fix, attack consumer regressions; merge only on PASS and verify exact main, reconcile recovery. Then follow independently demonstrable supplier economics / invoice and provider-neutral nonbillable reuse as authorized; do not create a false AWS finance issuer.
+
+## P-031 — concurrent resource + strategic route execution defenses integrated (2026-10-15/16)
+
+- PR #104 exact source `9937eab5ad7d4554776c5d1b691d92a3e3bae6bc`: PR CI `38828680615` COMPLETE/SUCCESS 8/8, integrated `main acda23d34143167d5c222d1e6ca9b19e6f15d7bb`, exact-main push `38828983152` COMPLETE/SUCCESS 8/8. Same resource/provider/account/unit/operation unresolved procurement is now rechecked AFTER asynchronous economic observation INSIDE the original P-030 SQLite account-funding+financial-effect claim transaction. Divergent quotes, distinct operation keys and sufficient funds no longer enable concurrent duplicate supplier dispatch. Synthetic barrier regression requires one provider dispatch and one P-030 intent; this is source/CI evidence, not LIVE monetary E5/E6.
+- PR #105 exact source `18bd07c0f33242b0e207377b8e47362cc263d4d7`: PR CI `38829168483` COMPLETE/SUCCESS 8/8, integrated `main 5a63bcc04a396387ec6e5b12c5d7430dfc8b4f99`, exact-main push `38829419527` COMPLETE/SUCCESS 8/8. P-025 canonical reviewed-route receipt is now rechecked against task/goal/path within the SAME acquisition transaction: an asynchronously cancelled task, withdrawn materialized receipt, or retired path cannot acquire resources using stale initial review evidence. Its regression requires no dispatched provider effect, no financial-effect record, no P-010 running transition.
+- Attack family closed at E3 for concurrent resource and strategic route TOCTOU; P-030 same-account funding holds and P-010 exact monetary policy receipt remain the existing authorities. No second ledger, planner, global price ceiling, blanket creator approval or provider-lock architecture added. No real AWS monetary action performed. Normal legitimate distinct-resource procurement remains eligible.
+- Follow-up source audit: default AWS STS/Budgets/GetCredits remains read-only; it identifies account/budget/restricted credits but not verified spendable USD liquidity, provider contractual complete invoice cost or durable P-010 account monetary issuer. Default paid AWS callbacks and trusted `observeAuthenticatedEconomics` remain unwired; P-005 E5/E6 LIVE UNKNOWN. P-018 retention already manages nonbillable lifecycle; do not duplicate it.
+- P-031 `EN_EJECUCIÓN`, P-032 `PLANIFICADO`. Reconcile this verified source work without promoting it to autonomous paid deployment or business income.
+
+NEXT_ELIGIBLE_WORK: obtain or build independently authenticated provider account funding + recurring supplier terms + exact persistent account-specific monetary issuer when corresponding real authority exists; after external operation, verify invoice attribution, settlement and retention billing cleanup separately. Meanwhile follow P-031 provider-neutral reuse/retire and nonbillable tests where material; preserve UNKNOWN instead of manufacturing finance or duplicating P-030/P-018 owners.
 
