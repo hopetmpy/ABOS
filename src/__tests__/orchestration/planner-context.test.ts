@@ -66,4 +66,34 @@ describe("P-031 planner canonical P-018 owned resource evidence", () => {
       db.close();
     }
   });
+  it("prioritizes resources owned by the active Goal when bounded context omits other records", async () => {
+    const db = createTestDb();
+    try {
+      const goal = createGoal(db.raw, "Target Goal", "Check scope ordering.");
+      const other = createGoal(db.raw, "Other Goal", "Unrelated work.");
+      const inventory = new EnvironmentResourceStore(db.raw);
+      for (let index = 0; index < 105; index += 1) {
+        inventory.create({
+          provider: "mock", externalId: `unrelated-${index}`, type: "vm",
+          status: "ready", goalId: other.id, capabilities: ["compute"],
+        });
+      }
+      const target = inventory.create({
+        provider: "mock", externalId: "target", type: "vm",
+        status: "running", goalId: goal.id, capabilities: ["compute"],
+      });
+      const context = await buildPlannerContext({ db: db.raw, goalId: goal.id });
+      expect(context.ownedResources?.total).toBe(106);
+      expect(context.ownedResources?.resources).toHaveLength(100);
+      expect(context.ownedResources?.resources[0]).toMatchObject({
+        id: target.id, goalId: goal.id,
+      });
+      expect(context.ownedResources?.limitations.join(" ")).toContain(
+        "enumerate remaining P-018 inventory",
+      );
+    } finally {
+      db.close();
+    }
+  });
+
 });
