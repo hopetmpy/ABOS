@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0028.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / SOURCE_CI_GREEN_UTILIZATION_LIVE_PENDING / P005_LIVE_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / GOAL_INVENTORY_E3_MERGED_MAIN_CI_PENDING / P005_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-main-observation-checkpoint
-Host-Head-At-Audit-Open: 4728d16fb3c6cfd88feae5a39939323d40bc1dbb
-Last-Reconciled-Host-Head: 4728d16fb3c6cfd88feae5a39939323d40bc1dbb
-Observed-Main-Head: 4728d16fb3c6cfd88feae5a39939323d40bc1dbb
-Last-Product-Head: 4728d16fb3c6cfd88feae5a39939323d40bc1dbb
-Last-Product-CI: exact main 4728d16f push 38846857695 — COMPLETE SUCCESS 8/8
+Current-Host-Branch: abos/p031-integrated-journey-checkpoint
+Host-Head-At-Audit-Open: ddb732c0dcea4fd1657a136a4fb39cbd01d318bb
+Last-Reconciled-Host-Head: ddb732c0dcea4fd1657a136a4fb39cbd01d318bb
+Observed-Main-Head: ddb732c0dcea4fd1657a136a4fb39cbd01d318bb
+Last-Product-Head: ddb732c0dcea4fd1657a136a4fb39cbd01d318bb
+Last-Product-CI: exact main ddb732c0 push 38852341977 — PENDING (PR121/122 exact-main passed 8/8)
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
 Last-Completed-CI: 38766126322 — SUCCESS 8/8
@@ -700,3 +700,12 @@ NEXT_ELIGIBLE_WORK: investigate source-backed goal/task requirements to derive c
 - PR #119 `main 4728d16fb3c6cfd88feae5a39939323d40bc1dbb`, exact-main `38846857695` 8/8: stale CPU percentage/timestamp cleared if EC2 disappears, including canonical P-018 SQLite health persistence; no second scheduler, new ledger, auto-resize or paid mutation.
 - These are E3 source/integration gates with simulated provider responses only: actual CloudWatch metric retrieval, quantitative application workload utilization, full supplier billing terms, account cash authority, AWS billable operation, invoice/refund/cancellation settlement, realized income or economic ROI **NOT VERIFIED** (P-005 E5/E6 UNKNOWN). The next source frontier is connecting appropriately observed task demand/load and resource sizing/timing/retirement decisions to existing P-025/P-018/P-030 owners without treating CPU alone as purchasing authority. Where live provider/account evidence is inaccessible, keep that route UNKNOWN and continue independent work. P-032 remains PLANIFICADO.
 - This branch `abos/p031-main-observation-checkpoint` updates canonical recovery only; no product source change. Documentation PR exact CI still to validate after creation. NEXT_ELIGIBLE_WORK: verify this reconciliation PR with full CI and integrate on PASS; then audit additional P-031 sizing/retirement/actual-cost integration only for proven deltas.
+
+### P-031 — Integrated Goal/resource compatibility and E3 simulated decision journey (2026-10-16)
+
+- Verified prior exact-main checkpoint: PR #120 merged `main ff2857c18a9778804384dc3f230102c7d12bb5d8` and push `38847681631` completed SUCCESS **8/8**, replacing the stale earlier PR #119 HEAD in CONTINUITY. No open P-032 work.
+- PR #121 source `4ca2988750cdf336ec2734a0cc59e92a62ee7720`, push `38849824520` and PR `38849828254` both SUCCESS **8/8**; merged `main ded7c40c04c4924c9c46d2cd7a5c55d3b7b66a6b`; exact-main push `38851523935` SUCCESS **8/8**. R1 source cause: EC2 executor could ignore P-025 Task-specific capabilities and explicit instance type during P-018 owned VM reuse. Existing `findReusableCandidates` now filters optional exact shape; selector and mobility carry requested shape, AWS executor verifies special Task capabilities before new billable EC2 provisioning and rechecks capabilities/shape after health. No new purchasing/financial authority. Generic missing owned spare != impossible.
+- PR #122 source `81c78f381b585c078f155ec064deb9c4ce578bfb`, push `38851600098` and PR `38851613903` SUCCESS **8/8**; merged `main fa9c322c6939726f5517b96c00fdeef282b489b4`; exact-main push `38851900368` SUCCESS **8/8**. Existing P-025 `buildPlannerContext` and `buildPlannerPrompt` now receive a bounded (100-row) canonical P-018 owned-resource view, including Goal/Task ownership, capability labels, shape/status, and optional source-attributed CPU time. Actual Goal ID is passed by Orchestrator. Bounded overflow/UNKNOWN is explicit; no credentials or provider money claims included; tests guard owner prioritization, overflow, missing-table UNKNOWN, and secret minimization. Read-only inventory is not fresh health or legal/financial authority.
+- PR #123 source `95eb81e79d4cc891b235118e9583bec2bcdef24b`, push `38852023486` and PR `38852074497` SUCCESS **8/8**; merged `main ddb732c0dcea4fd1657a136a4fb39cbd01d318bb`. Synthetic integrated E3 test `p031-resource-decision-journey.test.ts` exercises Goal creation -> contextual P-018 owned inventory -> P-025 planner prompt -> P-018-backed EnvironmentSelector reuse/shape/missing backup -> P-030 treasury review that preserves UNKNOWN cost/funding and does not authorize spending. This does NOT demonstrate a real LLM delivering a SaaS, external AWS infrastructure, a paid subscription, invoice, sustained business operation, or realized revenue. Exact-main `38852341977` is PENDING at this checkpoint.
+- Product code/CI and simulated scenarios are E3, not P-005 E5/E6. Actual supplier account balances/terms, resource demand and quantitative capacity, real supplier purchases/cancellations/refunds, realized fees/revenue, net profit, and sustained autonomous recovery remain UNKNOWN. The timing of buying/retiring still requires source-specific need dates, provider lead time and obligation evidence. P-031 EN_EJECUCIÓN; P-032 PLANIFICADO. No duplicate inventory, new system-wide capability denylist, new treasury, default human threshold or real buy performed.
+- NEXT_ELIGIBLE_WORK: verify exact merged-main CI `38852341977`; reconcile its result in this branch. Complete documentation PR exact source/main CI and integrate; keep P-031 active. Independently audit downstream real task resource size/demand/need-time binding to existing P-018/P-025/P-030 (not to Task timeout or raw CPU alone) before any capacity/money decision. P-005 E5/E6 requires authenticated external LIVE evidence when available.
