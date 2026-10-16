@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / FULL_RESOURCE_CYCLE_SOURCE_PENDING_CI / LIVE_AWS_ISSUER_UNWIRED / P005_E5E6_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / PR107_RESOURCE_CYCLE_MAIN_E3_GREEN / LIVE_AWS_ISSUER_UNWIRED / P005_E5E6_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-full-resource-lifecycle-e2e
-Host-Head-At-Audit-Open: ebaaa005ff425e5920b776083560be1cc5387988
-Last-Reconciled-Host-Head: ebaaa005ff425e5920b776083560be1cc5387988
-Observed-Main-Head: ebaaa005ff425e5920b776083560be1cc5387988
-Last-Product-Head: ebaaa005ff425e5920b776083560be1cc5387988
-Last-Product-CI: exact main ebaaa005 push 38830053687 — COMPLETE SUCCESS 8/8; current source branch CI PENDING
+Current-Host-Branch: abos/p031-resource-cycle-main-checkpoint
+Host-Head-At-Audit-Open: be80ccdab6cf8a0a4c551156bba85d650dce3851
+Last-Reconciled-Host-Head: be80ccdab6cf8a0a4c551156bba85d650dce3851
+Observed-Main-Head: be80ccdab6cf8a0a4c551156bba85d650dce3851
+Last-Product-Head: be80ccdab6cf8a0a4c551156bba85d650dce3851
+Last-Product-CI: exact main be80ccda push 38831762602 — COMPLETE SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 24432e3d0474969333ef2d149bd0ff2b5c83c135
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
@@ -578,4 +578,14 @@ NEXT_ELIGIBLE_WORK: obtain or build independently authenticated provider account
 - Source tests and GitHub CI still **PENDING**, do not claim PASS or integration until final exact-head evidence. Money source AWS STS/Budgets/credits remains read-only without authenticated spendable balance, all-in contract and P-010 issuer; actual supplier invoice, revenue, profit and paid AWS execution remain UNKNOWN. P-031 EN_EJECUCIÓN and P-032 PLANIFICADO.
 
 NEXT_ELIGIBLE_WORK: open PR and validate complete Node22/24, Windows, security, integrity and public distribution CI; correct causal failures if needed, integrate, verify exact main and preserve recovery. Resume independently verifiable economic issuer/supplier quote or nonbillable provider-neutral resource operations without inventing LIVE financing.
+
+## P-031 — PR #107 full simulated resource lifecycle integrated and main verified (2026-10-15/16)
+
+- Exact source final HEAD `6807a026f2d96ff33ab326b6c046d6a8ea3ca573`, PR workflow `38831461478` COMPLETE/SUCCESS **8/8** (Node 22/24 build+test, Windows 22/24 regressions, security, distribution 22/24, rebrand/project integrity). PR #107 SQUASH MERGED `main be80ccdab6cf8a0a4c551156bba85d650dce3851`; independently checked exact-main push workflow `38831762602` COMPLETE/SUCCESS **8/8**. This proves source and CI E3, not live AWS/provider charges.
+- Source-only end-to-end regression composes existing P-025 reviewed task path, P-010 exact allowed policy decision, P-030 treasury/financial effect, P-018 owned resource provisioning and independent health, Task completion, artifact hold/suspend/collection, provider-neutral retention/destroy and repeat-call behavior. Tests assert terminated resource does NOT settle an account invoice, create a refund or free the P-030 pending capital hold; no actual AWS account or supplier API invoked.
+- Additional P-018 corrective regression: trusted positive `externalEffectNotDispatched=true` from provisioning preflight now leaves durable `provisionExternalEffectNotDispatched=true`; only a FAILED identity-less resource with that evidence and no reconciliation requirement is retired LOCALLY without sending `destroy` against a nonexistent resource. UNKNOWN dispatch and real provider-owned resources keep reconciliation/destroy gates. No provider limitation was hard-coded.
+- Original source CI `38831290618` found a test-only wrong replay expectation: a completed Task correctly invalidates its P-025 reviewed path, so a replay after Task completion fails strategic authorization before idempotency. Source test fixed `170378caa4b8205db012fc608f9a1e654edaabab`: test idempotent replay while still active and explicit P-025 rejection after completion. The corrected final-head 8/8 CI validates the restored behavior; no P-025 or P-010 policy was weakened.
+- Independent audit of `EnvironmentSelector` and its regressions: provider-neutral inventory `reuseEvaluator`, capability proof, cost coverage and candidate selection already exist; NO_CHANGE to avoid duplicating a P-018 authority. P-031 remains `EN_EJECUCIÓN`; real provider liquidity, service billing terms, P-010 monetary issuer, external invoice/revenue/refund and LIVE economics E5/E6 are still unknown/not wired. P-032 remains PLANIFICADO.
+
+NEXT_ELIGIBLE_WORK: audit trusted independently authenticated account funding, service-specific costs and real P-010 operation issuer for eligible supplier/provider accounts, or provider-neutral nonbillable resource reuse and measured utilization where materially untested. Do not invent money from AWS budget limits or conditional credits, and do not conflate provider resource deletion with cancellation of AWS ancillary charges. On new findings, continue P-031 from Git/HEAD, not stale historical checkpoints.
 
