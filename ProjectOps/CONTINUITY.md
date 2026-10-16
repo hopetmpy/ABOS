@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0028.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / RESOURCE_FINANCIAL_PROVENANCE_E3_MAIN_GREEN / P005_LIVE_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / QUANTITATIVE_CAPACITY_AND_QUOTED_NEED_TIME_E3_MAIN_GREEN / P005_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-financial-provenance-checkpoint
-Host-Head-At-Audit-Open: 9b0e5da63670dfcfe0e8c463f8b30da9dbc7336f
-Last-Reconciled-Host-Head: 9b0e5da63670dfcfe0e8c463f8b30da9dbc7336f
-Observed-Main-Head: 9b0e5da63670dfcfe0e8c463f8b30da9dbc7336f
-Last-Product-Head: 9b0e5da63670dfcfe0e8c463f8b30da9dbc7336f
-Last-Product-CI: exact main 9b0e5da push 38857206528 — COMPLETE SUCCESS 8/8
+Current-Host-Branch: abos/p031-quantitative-timing-capacity-checkpoint
+Host-Head-At-Audit-Open: 38638eb2ded83bef7e2e2f6399aa4b86af54b9fe
+Last-Reconciled-Host-Head: 38638eb2ded83bef7e2e2f6399aa4b86af54b9fe
+Observed-Main-Head: 38638eb2ded83bef7e2e2f6399aa4b86af54b9fe
+Last-Product-Head: 38638eb2ded83bef7e2e2f6399aa4b86af54b9fe
+Last-Product-CI: exact main 38638eb2 push 38921445725 — COMPLETE SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
 Last-Completed-CI: 38766126322 — SUCCESS 8/8
@@ -725,3 +725,12 @@ NEXT_ELIGIBLE_WORK: investigate source-backed goal/task requirements to derive c
 - R1 source rate provenance: AWS pricing estimate already returned `costUnit:null` for an injected rate without monetary unit, but `AwsEnvironmentProvider.health` accumulated `hourlyCostCents` as cents even without demonstrated USD source; `AwsEc2TaskExecutor.spawn` also persisted an untyped numeric `selectionEstimateCents` in P-018 resource state. PR #128 source `4812d35ed753c64d8b5ad2d36f81a22d7cb5543a`, push `38856878431` and PR `38856884062` SUCCESS 8/8, merged `main 9b0e5da63670dfcfe0e8c463f8b30da9dbc7336f`. Existing AWS provider now tags USD rate evidence when from AWS Pricing or explicitly typed caller input; preserves rate unit in resource lifecycle; rejects/clears untyped USD accrued estimates and suppresses untyped amount when persisting P-018 selected cost. Regression covers API/injected rates, AWS health, executor provenance. This corrects source inference only, NOT actual provider invoice or externally validated funding.
 - Exact merged-main CI `38857206528` independently COMPLETE/SUCCESS 8/8. Resource retention `src/environments/retention.ts` was audited NO_CHANGE: existing owner already guards Task/Goal release, artifact collection, pending external deletion reconciliation and explicitly denies supplier billing/refund settlement claims; avoid a second retirement scheduler/ledger.
 - P-031 EN_EJECUCIÓN. P-032 PLANIFICADO. Real resource demand/utilization at application capacity, independent earliest need date/provider lead time, USD supplier terms/recurring bills, authenticated account funding, actual EC2 purchases, cancellation settlement and measured ROI/profit remain unverified under P-005 E5/E6. NEXT_ELIGIBLE_WORK: integrate this checkpoint on full exact PR/branch/main CI; pursue measurable need/load/pricing/retirement evidence only where actually available; no changes to authority or new provider payment without verified external permission.
+
+### P-031 — Goal-owned quantitative capacity, provider timing and AWS capacity source evidence (2026-10-16)
+
+- Current baseline after PR #129: exact main `7e267a5f4d9686b886af905906bbfb000d9c644e`, CI `38857815875` COMPLETE/SUCCESS **8/8**; PR #129 merged, no open prior PRs. P-031 was EN_EJECUCIÓN, P-032 remains PLANIFICADO.
+- R1 P-018 inventory audit: capability and EC2 size label did not prove quantitative resource fit. PR #130 source `de157590f8ff760dd4560d949c5f907d9296789b`, source push `38917777106` and PR `38917786737` SUCCESS 8/8, merged `main 8bdcd61809c625e653b0bcf55d761aaeafa03923`, exact-main `38918345146` SUCCESS 8/8. Extended existing P-018 `findReusableCandidates` with open per-resource `minimumCapacity` unit-keyed numeric requirements; invalid/unknown/undersized capacity cannot count as reusable, no silent aggregation across VMs. Routed through `environment_select`, P-018 mobility and AWS EC2 Task executor, with post-health compatibility recheck. Existing P-025 planner sees bounded numeric inventory only. Integrated SQLite + synthetic SaaS burst tests, unknown/missing metrics and negative demand. First source test had duplicate `const larger`, fixed and revalidated. No new inventory, purchase scheduler or ledger.
+- R1 P-031 timing audit: `startupLatencyMs` is not provider acquisition lead time, Task timeout is not resource required date. PR #131 source `1de804d034611cda9924c9081b0240c97799dd2a`, PR `38918974207` and push `38918899865` SUCCESS 8/8, merged `main 733f253bbb4ee599d223d3f42ab0253454b57d8b`, exact-main `38919480563` and `38919547766` SUCCESS 8/8. Existing provider-neutral `EnvironmentSelector` now accepts explicit ISO with timezone `neededByAt`; provider quote must source `provisioningLeadTimeMs`, `provisioningLeadTimeObservedAt`, `provisioningLeadTimeSource` to produce read-only quoted-window-open/elapsed evidence. Missing quote is UNKNOWN; this never schedules/authorizes acquisition or declares objective impossible. Synthetic deferred, overdue, invalid timestamp and no-source tests.
+- R1 supporting AWS provider source: P-018 numeric demand remains unprovable without capacity evidence. PR #132 source `248c31f062f6565954f50faed5ed4b17e1fa0559`, source push `38920493427` and PR `38920498976` both SUCCESS **8/8 after attempt 2**. Initial push distribution Node22 lost installer TLS connection (`UND_ERR_SOCKET`); PR Node24 one unrelated existing environment registry test timed out at 30s; re-ran only failed jobs without product changes. MERGED `main 38638eb2ded83bef7e2e2f6399aa4b86af54b9fe`. Opt-in OFF-by-default read-only `ec2 describe-instance-types` from observed EC2 InstanceType records `capacity:{vCpuCount,memoryMiB}`, provenance/status/time. Missing/denied/mismatch/vanished EC2 results reset stale capacity to UNKNOWN; healthy independent of optional read. P-025 planner presents bounded numeric capacity and provenance with freshness unverified; no inference of workload available capacity, EBS or actual utilization. SQLite/synthetic AWS tests pass. Actual AWS LIVE API and CloudWatch reading NOT executed.
+- Exact merged-main CI `38921445725` independently COMPLETE/SUCCESS **8/8**; source CI E3 only does not establish real provider capacity usage, customer workload, supplier lead times/fees, an invoice, active account liquid funds, KYC/terms, authority or actual profit. P-005 E5/E6 UNKNOWN. P-031 EN_EJECUCIÓN; P-032 PLANIFICADO. No AWS purchase/provision/resize or autonomous financial side-effect executed.
+- NEXT_ELIGIBLE_WORK: run exact branch + PR CI for this checkpoint and merge documentation, check final main. Source next inside P-031: objective-conditioned real demand trends and resources' earliest-need/lead-time provenance; compare owned vs build/burst/defer and recurring commitments using P-025/P-018/P-030 without inventing LIVE external money or capacity. P-018 retention owner already handles release/reconcile; do not duplicate.
