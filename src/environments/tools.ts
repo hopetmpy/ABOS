@@ -415,6 +415,10 @@ export function createEnvironmentTools(
             type: ["string", "null"],
             description: "Optional provider region preference/requirement.",
           },
+          minimum_capacity: {
+            type: "object",
+            description: "Open-ended numeric minimum requirements for ONE resource. Keys must include units, e.g. cpuCores, memoryMb, diskGb. Only P-018-recorded numeric capacity counts as compatible owned spare; do not infer from instance type or CPU utilization.",
+          },
           metadata: {
             type: "object",
             description:
@@ -432,6 +436,7 @@ export function createEnvironmentTools(
           maxEstimatedCostUnit: nullableString(args.max_estimated_cost_unit),
           expectedDurationMs: nullableNumber(args.expected_duration_ms),
           region: nullableString(args.region),
+          minimumCapacity: objectValue(args.minimum_capacity) as Record<string, number>,
           metadata: objectValue(args.metadata),
         }, options.lifecycle?.resources?.findReusableCandidates
           ? (environmentId, requirements) =>
@@ -445,6 +450,7 @@ export function createEnvironmentTools(
                 requiredInstanceType:
                   typeof requirements.metadata?.instanceType === "string"
                     ? requirements.metadata.instanceType : null,
+                minimumCapacity: requirements.minimumCapacity,
               }).length
           : undefined);
 
