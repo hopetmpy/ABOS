@@ -433,7 +433,17 @@ export function createEnvironmentTools(
           expectedDurationMs: nullableNumber(args.expected_duration_ms),
           region: nullableString(args.region),
           metadata: objectValue(args.metadata),
-        });
+        }, options.lifecycle?.resources?.findReusableCandidates
+          ? (environmentId, requirements) =>
+              // Read-only P-018 source. This observation ranks potential
+              // existing owned spare capacity; fresh health, execution
+              // suitability and purchasing authority still require proof.
+              options.lifecycle!.resources.findReusableCandidates({
+                provider: environmentId,
+                requiredCapabilities: requirements.requiredCapabilities,
+                region: requirements.region,
+              }).length
+          : undefined);
 
         return JSON.stringify({
           selected: result.selected
