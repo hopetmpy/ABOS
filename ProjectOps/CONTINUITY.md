@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0028.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / SOURCE_QUOTED_TIMING_AND_GENERIC_TASK_BRIDGE_E3_MAIN_GREEN / P005_LIVE_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / DURABLE_TASK_RESOURCE_NEED_E3_MAIN_GREEN / P005_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-timing-bridge-provenance-checkpoint
+Current-Host-Branch: abos/p031-resource-need-main-checkpoint
 Host-Head-At-Audit-Open: 042f9d4d9339936c3eb700b1afc26f7a8dc4b308
-Last-Reconciled-Host-Head: 042f9d4d9339936c3eb700b1afc26f7a8dc4b308
-Observed-Main-Head: 042f9d4d9339936c3eb700b1afc26f7a8dc4b308
-Last-Product-Head: 042f9d4d9339936c3eb700b1afc26f7a8dc4b308
-Last-Product-CI: exact main 042f9d4d push 38924156441 attempt 2 — COMPLETE SUCCESS 8/8 (attempt 1 7/8 timeout)
+Last-Reconciled-Host-Head: 96fff2b4da5de1ca488b45432e4ae0fda6683a43
+Observed-Main-Head: 96fff2b4da5de1ca488b45432e4ae0fda6683a43
+Last-Product-Head: 96fff2b4da5de1ca488b45432e4ae0fda6683a43
+Last-Product-CI: exact main 96fff2b4da5de1ca488b45432e4ae0fda6683a43 push 38937201030 — COMPLETE SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
 Last-Completed-CI: 38766126322 — SUCCESS 8/8
@@ -742,3 +742,12 @@ NEXT_ELIGIBLE_WORK: investigate source-backed goal/task requirements to derive c
 - CAUSAL_EXPANSION source: generic P-018 `EnvironmentExecutionBridge.spawn` still fed `Task.metadata.timeoutMs` into provider `expectedDurationMs` (billing/use estimate) despite prior AWS/mobility fixes; counted canonical spare without caller's exact shape/quantitative requirement; persisted `candidate.estimate.estimatedCostCents` as canonical USD-looking P-018 cents without verifying `costUnit`. PR #135 source `5fd3b983e694a6998577c029e1cdd8ec236db85c`, push `38923587527` and PR `38923593616` both SUCCESS 8/8; merged `main 042f9d4d9339936c3eb700b1afc26f7a8dc4b308`. Existing generic bridge uses explicit positive integer `options.metadata.expectedResourceDurationMs` or UNKNOWN, passes separate `neededByAt`/quantitative sizing into existing selector/P-018 spare lookup, and only persists `estimatedCostCents` for sourced `usd_cent`; rejects malformed explicit resource duration/date before dispatch. Executor, policy and P-030 remain independent. Direct synthetic regression verifies both known/unknown monetary units, Task timeout separation, sized reuse filter and fail-closed date inputs.
 - Merged-main source `042f9d4d...` push CI `38924156441`: attempt 1 had 7/8 PASS and existing unrelated `environment-registry.test.ts` test `selects environments by capability instead of provider-specific branching` timed out at 30 s on Node22 during full-suite load; Node24 and Windows22/24 succeeded. Same-SHA **rerun only failed job** attempt 2 COMPLETE/SUCCESS 8/8 without code changes. Never classify attempt1 as green; final main code E3 verified only.
 - Audit/NO_CHANGE: P-018 retirement/reconciliation already owned; P-025 planner model emits open-world capability needs but the canonical planned Task/TaskGraph binding lacks a persisted typed `minimumCapacity`/`neededByAt` resource-demand contract. Generic bridge accepts these as caller-provided options but that alone does not prove automatic end-to-end planner materialization. NEXT_ELIGIBLE_WORK: inspect and prove Goal → P-025 selected task → durable binding → P-018/P-031 selection need/sizing propagation without duplicating planner, task graph, financial authority or inventing demand. P-005 LIVE E5/E6 resource load, supplier lead time, invoice, credit, payments, income/ROI remain UNKNOWN; no billable procurement performed. P-031 EN_EJECUCIÓN and P-032 PLANIFICADO.
+
+
+### P-031 — Goal-selected Task resource demand reaches durable execution (2026-10-16)
+
+- Baseline main `c53679c4638f3113acc4147ab6cea1a869ff8f26`. Independent audit followed AGENTS → CONTINUITY C0028 → PLAN/P-031 and producers/consumers: `PlannedTask` and `TaskGraph` carried capabilities/environment/Task timeout but not a durable typed resource demand, while P-018 selector and P-031 execution bridge already supported contextual capacity, explicit needed-by date and independent use period. This is an E3 integration gap, not proof of lost runtime autonomy.
+- PR #137 https://github.com/hopetmpy/ABOS/pull/137 implements optional open-world `TaskResourceNeed` (basis claim, metric-keyed minimumCapacity, timezone-explicit neededByAt, expectedResourceDurationMs) from validated P-025 planner output through existing `task_graph.resource_need` schema v24, TaskGraph hydration, Orchestrator selected tasks and provider-neutral Mobility → EnvironmentExecutionBridge. All unknown/legacy needs stay unknown. Task `timeoutMs` and local `task_cost_cent` never become provider rental duration or monetary spending authority; no new scheduler, selector, treasury, ledger or provider catalog.
+- Regression/tests: planner valid/invalid needs, canonical SQLite Task resource persistence, forwarding to existing bridge with unknown legacy fallback, schema v24 upgrade and sparse legacy DB compatibility. First PR intermediate CI failed for schema snapshot drift and v23-only test assumptions; fixes were made on the same PR, and latest exact PR HEAD `b2d911400c859aab3eb659dd9f734b4df547b4ce` received source push `38936528186` SUCCESS 8/8 and PR `38936798921` SUCCESS 8/8. Squash merged main `96fff2b4da5de1ca488b45432e4ae0fda6683a43`; exact main push `38937201030` COMPLETE/SUCCESS 8/8 across Linux Node22/24, Windows Node22/24, security, public distribution, rebrand/integrity.
+- Evidence scope E3 SOURCE/CI only. Planned `basis` is a claimed planning source, NOT provider-confirmed capacity/utilization/terms, account funding, P-010 consent, E5 external billable operation, E6 settlement/revenue/ROI. P-005 remains UNKNOWN; no real provider purchase or settlement made.
+- P-031 EN_EJECUCIÓN and P-032 PLANIFICADO. NEXT_ELIGIBLE_WORK: audit Goal → selected P-025 Task → P-018/P-031 decision with a representative mixed-service dependency and independent observed demand/lead-time/retirement unit evidence; verify plan/dispatch does not infer supplier terms or free funds from claimed Task sizing. Reuse P-017/P-018/P-025/P-030/P-010 authorities. External LIVE financing, purchase, invoice, retirement/refund and outcomes under P-005 only when actual authorized evidence is available.
