@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / PR102_SOURCE_AND_MAIN_E3_GREEN / LIVE_AWS_ISSUER_UNWIRED / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / CONCURRENT_REPRICED_RESOURCE_INTENT_SOURCE_PENDING_CI / LIVE_AWS_ISSUER_UNWIRED / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-settlement-time-main-reconciliation
-Host-Head-At-Audit-Open: ba2a1d9995d4e913d937d800ef2628a594ae5dbe
-Last-Reconciled-Host-Head: ba2a1d9995d4e913d937d800ef2628a594ae5dbe
-Observed-Main-Head: ba2a1d9995d4e913d937d800ef2628a594ae5dbe
-Last-Product-Head: ba2a1d9995d4e913d937d800ef2628a594ae5dbe
-Last-Product-CI: exact main ba2a1d99 push 38827144249 — SUCCESS 8/8
+Current-Host-Branch: abos/p031-atomic-overlap-after-economics
+Host-Head-At-Audit-Open: e826828d2e9a58b826a53b4a54819ac32342180a
+Last-Reconciled-Host-Head: e826828d2e9a58b826a53b4a54819ac32342180a
+Observed-Main-Head: e826828d2e9a58b826a53b4a54819ac32342180a
+Last-Product-Head: e826828d2e9a58b826a53b4a54819ac32342180a
+Last-Product-CI: exact main e826828d push 38827766548 — SUCCESS 8/8; current branch CI PENDING
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 24432e3d0474969333ef2d149bd0ff2b5c83c135
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
@@ -539,4 +539,13 @@ Baseline `main c2c9d505` independently push-tested by CI `38824960720` SUCCESS 8
 - P-031 stays `EN_EJECUCIÓN` because real supplier funding, account-scoped recurring quote/contract, P-010 exact durable mandate producer, provider settlement/invoice attribution and retirement billing cleanup are not yet E5/E6 verified. P-032 remains PLANIFICADO. No AWS purchase or transfer was performed.
 
 NEXT_ELIGIBLE_WORK: audit independent account financing/supplier-term and P-010 mandate sources actually available before introducing any live adapter; otherwise continue P-031 independently executable nonbillable reuse/retire/economic observation. Evidence on source CI cannot stand in for provider cash, contract, invoice or real business value.
+
+## P-031 — atomic same-resource protection after async provider economics (2026-10-15/16)
+
+- Verified GitHub base `main e826828d2e9a58b826a53b4a54819ac32342180a`, exact push CI `38827766548` COMPLETE/SUCCESS 8/8. P-031 remains EN_EJECUCIÓN; C0027 is the live segment.
+- R2 source finding: `executeReviewedProviderProcurement` previously checked outstanding same resource+provider+account+operation BEFORE awaiting `observeAuthenticatedEconomics`. Two concurrent resource requests could both pass with no journal intent, then return with distinct quotes (different `economicScenarioHash`/fingerprint), both affordable, and both acquire the SAME resource. P-030 fingerprint protection catches identical requests only; the same-account funding hold only prevents insufficient aggregate capital. Neither closes same-resource overlap when both requests are separately funded.
+- Decision CORRECT/REUSE: move the existing narrow overlap check into the existing SQLite funding-recheck + financial-effect prepare/claim transaction; execute it AFTER economic observation, BEFORE creating intent or external supplier dispatch. No new global mutex/ledger/rule; same-resource unresolved UNKNOWN/PENDING still blocks later repriced attempts; independently scoped different resources remain permitted; replay with the same operation key stays governed by P-030 idempotency.
+- Source branch `abos/p031-atomic-overlap-after-economics`; code commit `d1c81525748bf9eac55dde42681d353a53b96dc2`; test commit `8388e5a6052b7717c44a76ec6f4032b04f1e13f5`. Adversarial deterministic concurrency test forces both provider-economic observers to overlap with 2 distinct policy receipts/operation keys and divergent quotes, enough capital for either/both, then requires EXACTLY one dispatch, one durable P-030 provider intent, one overlapping rejection and zero claimed settlement.
+- Source branch CI NOT YET VERIFIED at checkpoint. AWS budget/credit observations remain read-only, real account liquidity/P-010 account issuer/provider invoice coverage and LIVE spending unverified (P-005 E5/E6 UNKNOWN). Do not create a fake funding provider or declare P-031 HECHO.
+- NEXT_ELIGIBLE_WORK: open PR, run exact final HEAD Node22/24+Windows+security+distribution CI; correct causal failures and merge only on verified evidence, then exact-main CI and lightweight recovery. Continue independent P-031 source work or real authenticated external economics only if evidence+authorization actually become available.
 
