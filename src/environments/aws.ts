@@ -146,6 +146,12 @@ export interface AwsEnvironmentProviderOptions {
   managedTagKey?: string;
   managedTagValue?: string;
   commandTimeoutMs?: number;
+  /**
+   * Explicit read-only CloudWatch CPU measurement during EC2 health checks.
+   * Disabled by default: AWS metric API access may be chargeable/unauthorized.
+   * It never changes capacity, authorizes spend, or claims total utilization.
+   */
+  observeCloudWatchCpuUtilization?: boolean;
   ssmReadyAttempts?: number;
   ssmReadyIntervalMs?: number;
   artifactMaxBytes?: number;
@@ -951,10 +957,8 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
 
   async health(resource: EnvironmentResource): Promise<EnvironmentHealthResult> {
     const instanceId = requireInstanceId(resource);
-    const observed = await this.describeInstance(
-      instanceId,
-      resource.region ?? await this.resolveRegion(),
-    );
+    const region = resource.region ?? await this.resolveRegion();
+    const observed = await this.describeInstance(instanceId, region);
 
     if (!observed.instance) {
       return {
@@ -1008,6 +1012,23 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
 
     const cost = observeComputeEstimate(resource, state, new Date());
     if (cost.evidence) evidence.push(cost.evidence);
+    let utilizationMetadata: Record<string, unknown> = {};
+    if (this.options.observeCloudWatchCpuUtilization === true) {
+      if (state === "running") {
+        const cpu = await this.observeCloudWatchCpuUtilization(
+          instanceId, region, new Date(),
+        );
+        utilizationMetadata = cpu.metadata;
+        evidence.push(cpu.evidence);
+      } else {
+        utilizationMetadata = {
+          cpuUtilizationAveragePct: null,
+          cpuUtilizationObservedAt: null,
+          cpuUtilizationMetricStatus: "unknown",
+        };
+        evidence.push("AWS CPU utilization UNKNOWN: instance is not running; no measured idle CPU inferred.");
+      }
+    }
 
     return {
       healthy,
@@ -1020,6 +1041,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       metadata: {
         ...observationMetadata(observed.instance),
         ...cost.metadata,
+        ...utilizationMetadata,
         ssmPingStatus: ssm?.PingStatus ?? null,
         ssmAgentVersion: ssm?.AgentVersion ?? null,
         ssmPlatformType: ssm?.PlatformType ?? null,
@@ -2055,6 +2077,70 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     throw new Error(
       `AWS EC2 instance ${instanceId} did not become SSM Online after ${attempts} observation(s): ${lastObservation}`,
     );
+  }
+
+  /**
+   * Optional read-only utilization observation in the existing P-018 health
+   * channel. No datapoint, invalid data, future/stale time, denied permissions
+   * or provider errors are UNKNOWN, never zero utilization or free capacity.
+   */
+  private async observeCloudWatchCpuUtilization(
+    instanceId: string,
+    region: string | null,
+    now: Date,
+  ): Promise<{ metadata: Record<string, unknown>; evidence: string }> {
+    const unknown = (reason: string) => ({
+      metadata: {
+        cpuUtilizationAveragePct: null,
+        cpuUtilizationObservedAt: null,
+        cpuUtilizationMetricStatus: "unknown",
+      } as Record<string, unknown>,
+      evidence: `AWS CloudWatch CPU utilization UNKNOWN: ${reason}. No size/retirement decision inferred.`,
+    });
+    const start = now.getTime() - 15 * 60_000;
+    let result: CommandResult;
+    try {
+      result = await this.runAws([
+        "cloudwatch", "get-metric-statistics",
+        "--namespace", "AWS/EC2",
+        "--metric-name", "CPUUtilization",
+        "--dimensions", `Name=InstanceId,Value=${instanceId}`,
+        "--start-time", new Date(start).toISOString(),
+        "--end-time", now.toISOString(),
+        "--period", "300",
+        "--statistics", "Average",
+        "--output", "json",
+        ...regionArgs(region),
+      ]);
+    } catch {
+      return unknown("metric query unavailable");
+    }
+    if (result.exitCode !== 0) return unknown("metric query denied or unavailable");
+    const response = parseJson<{
+      Datapoints?: Array<{ Timestamp?: unknown; Average?: unknown }>;
+    }>(result.stdout);
+    if (!Array.isArray(response?.Datapoints)) return unknown("no valid provider datapoint list");
+    const valid = response.Datapoints.flatMap((point) => {
+      const observedAt = typeof point.Timestamp === "string"
+        ? Date.parse(point.Timestamp) : Number.NaN;
+      const average = point.Average;
+      if (!Number.isFinite(observedAt) || observedAt < start ||
+          observedAt > now.getTime() || typeof average !== "number" ||
+          !Number.isFinite(average) || average < 0 || average > 100) return [];
+      return [{ observedAt, average }];
+    }).sort((a, b) => b.observedAt - a.observedAt);
+    const latest = valid[0];
+    if (!latest) return unknown("no recent valid CPU measurement");
+    const observedAt = new Date(latest.observedAt).toISOString();
+    return {
+      metadata: {
+        cpuUtilizationAveragePct: latest.average,
+        cpuUtilizationObservedAt: observedAt,
+        cpuUtilizationMetricStatus: "observed",
+        cpuUtilizationMetricSource: "aws_cloudwatch_AWS/EC2_CPUUtilization_Average",
+      },
+      evidence: `AWS CloudWatch measured CPUUtilization Average=${latest.average}% observedAt=${observedAt}; CPU alone is not total capacity or invoice evidence.`,
+    };
   }
 
   private async describeSsmInstance(

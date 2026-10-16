@@ -857,6 +857,76 @@ describe("AwsEnvironmentProvider lifecycle", () => {
     expect(health.metadata?.ssmPingStatus).toBe("Online");
   });
 
+  it("observes recent CloudWatch CPU as opt-in measured utilization, not total capacity", async () => {
+    const calls: string[][] = [];
+    const observedAt = new Date(Date.now() - 4 * 60_000).toISOString();
+    const runner: EnvironmentCommandRunner = async (_command, args) => {
+      calls.push(args);
+      if (args[0] === "ec2" && args[1] === "describe-instances") {
+        return ok(JSON.stringify({
+          InstanceId: "i-1234567890", State: { Name: "running" },
+        }));
+      }
+      if (args[0] === "ssm" && args[1] === "describe-instance-information") {
+        return ok(JSON.stringify({ PingStatus: "Online" }));
+      }
+      if (args[0] === "cloudwatch" && args[1] === "get-metric-statistics") {
+        expect(args).toContain("AWS/EC2");
+        expect(args).toContain("CPUUtilization");
+        expect(args).toContain("Name=InstanceId,Value=i-1234567890");
+        return ok(JSON.stringify({
+          Datapoints: [
+            { Timestamp: observedAt, Average: 27.5 },
+            { Timestamp: new Date(Date.now() - 8 * 60_000).toISOString(), Average: 64 },
+          ],
+        }));
+      }
+      throw new Error(`unexpected aws call: ${args.join(" ")}`);
+    };
+    const provider = new AwsEnvironmentProvider({
+      runner, defaultRegion: "us-east-1", observeCloudWatchCpuUtilization: true,
+    });
+    const health = await provider.health(resource());
+    expect(health.healthy).toBe(true);
+    expect(health.status).toBe("running");
+    expect(health.metadata?.cpuUtilizationAveragePct).toBe(27.5);
+    expect(health.metadata?.cpuUtilizationObservedAt).toBe(observedAt);
+    expect(health.metadata?.cpuUtilizationMetricStatus).toBe("observed");
+    expect(health.evidence.join(" ")).toContain("CPU alone is not total capacity or invoice evidence");
+    expect(calls.filter(args => args[0] === "cloudwatch")).toHaveLength(1);
+  });
+
+  it("keeps utilization UNKNOWN without altering healthy EC2 state when CloudWatch is denied or unmeasured", async () => {
+    for (const mode of ["denied", "no_valid_measurement"] as const) {
+      const runner: EnvironmentCommandRunner = async (_command, args) => {
+        if (args[0] === "ec2" && args[1] === "describe-instances") {
+          return ok(JSON.stringify({
+            InstanceId: "i-1234567890", State: { Name: "running" },
+          }));
+        }
+        if (args[0] === "ssm" && args[1] === "describe-instance-information") {
+          return ok(JSON.stringify({ PingStatus: "Online" }));
+        }
+        if (args[0] === "cloudwatch" && args[1] === "get-metric-statistics") {
+          return mode === "denied"
+            ? { stdout: "", stderr: "AccessDenied", exitCode: 254 }
+            : ok(JSON.stringify({ Datapoints: [{ Timestamp: new Date(Date.now() - 60_000).toISOString(), Average: 120 }] }));
+        }
+        throw new Error(`unexpected aws call: ${args.join(" ")}`);
+      };
+      const provider = new AwsEnvironmentProvider({
+        runner, defaultRegion: "us-east-1", observeCloudWatchCpuUtilization: true,
+      });
+      const health = await provider.health(resource());
+      expect(health.healthy).toBe(true);
+      expect(health.status).toBe("running");
+      expect(health.metadata?.cpuUtilizationAveragePct).toBeNull();
+      expect(health.metadata?.cpuUtilizationObservedAt).toBeNull();
+      expect(health.metadata?.cpuUtilizationMetricStatus).toBe("unknown");
+      expect(health.evidence.join(" ")).toContain("CPU utilization UNKNOWN");
+    }
+  });
+
   it("preserves running state while resizing an EC2 executor", async () => {
     const calls: string[][] = [];
     const runner: EnvironmentCommandRunner = async (_command, args) => {
