@@ -302,11 +302,11 @@ describe("buildPlannerPrompt", () => {
 
   it("keeps the planner's own output example parseable and valid for a single task", () => {
     const prompt = buildPlannerPrompt(context);
-    const fence = "```json\\n";
+    const fence = "```json\n";
     const begin = prompt.indexOf(fence);
     expect(begin).toBeGreaterThanOrEqual(0);
     const from = begin + fence.length;
-    const end = prompt.indexOf("\\n```", from);
+    const end = prompt.indexOf("\n```", from);
     expect(end).toBeGreaterThan(from);
     const example = JSON.parse(prompt.slice(from, end));
     expect(() => validatePlannerOutput(example)).not.toThrow();
