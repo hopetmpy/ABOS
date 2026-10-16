@@ -153,6 +153,18 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
     validUntil: "2030-01-01T00:00:00Z",
     evidence: ["Synthetic independent source confirms exact shape and capacity."],
   });
+  const priceCoveredUsage = (scope: ProviderProcurementScope, quote: ProviderProcurementScenarioInput) => {
+    quote.cost.usageCoverage = {
+      resourceId: scope.resourceId,
+      resourceShape: scope.resourceShape,
+      coveredDurationMs: 7_200_000,
+      pricedBillingPeriods: quote.cost.periods!,
+      source: "synthetic-authenticated-supplier-billing-quote",
+      observedAt: "2026-10-01T00:00:00Z",
+      validUntil: "2030-01-01T00:00:00Z",
+      evidence: ["Synthetic complete quote covers the Task's two-hour use period."],
+    };
+  };
   const setNeed = (db: ReturnType<typeof createTestDb>, scope: ProviderProcurementScope) =>
     db.raw.prepare("UPDATE task_graph SET resource_need = ? WHERE id = ?")
       .run(JSON.stringify(sizedNeed), scope.taskId);
@@ -162,6 +174,7 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
     try {
       setNeed(db, scope);
       const quote = scenario(), calls: string[] = [];
+      priceCoveredUsage(scope, quote);
       const policyDecisionId = policy(db, scope, quote);
       const deps = {
         ...adapters(quote, calls),
@@ -182,6 +195,7 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
       try {
         setNeed(db, scope);
         const quote = scenario(), calls: string[] = [];
+        priceCoveredUsage(scope, quote);
         const policyDecisionId = policy(db, scope, quote);
         const badFit = fit(scope);
         if (damage === "undersized") badFit.minimumCompatibleCapacity.memoryMb = 4096;
@@ -203,11 +217,66 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
     }
   });
 
+  it("never charges for a shorter, stale, mismatched or unknown supplier billing interval", async () => {
+    for (const mode of [
+      "missing", "too_short", "wrong_resource", "wrong_shape",
+      "mismatched_periods", "expired", "no_source",
+    ] as const) {
+      const { db, scope } = setup();
+      try {
+        setNeed(db, scope);
+        const quote = scenario(), calls: string[] = [];
+        priceCoveredUsage(scope, quote);
+        const coverage = quote.cost.usageCoverage!;
+        if (mode === "missing") quote.cost.usageCoverage = null;
+        if (mode === "too_short") coverage.coveredDurationMs = 3_600_000;
+        if (mode === "wrong_resource") coverage.resourceId = "wrong-resource";
+        if (mode === "wrong_shape") coverage.resourceShape = "different-instance";
+        if (mode === "mismatched_periods") coverage.pricedBillingPeriods = 1;
+        if (mode === "expired") coverage.validUntil = "2026-10-02T00:00:00Z";
+        if (mode === "no_source") coverage.source = "";
+        const policyDecisionId = policy(db, scope, quote);
+        await expect(executeReviewedProviderProcurement(db.raw, {
+          scope, policyDecisionId,
+          now: new Date("2026-10-15T00:00:00Z"),
+          dependencies: {
+            ...adapters(quote, calls),
+            observeAuthenticatedResourceFit: async () => fit(scope),
+          },
+        })).rejects.toThrow(/resource usage billing coverage/);
+        expect(calls).toEqual([]);
+        expect(getFinancialEffectByOperationKey(db.raw, scope.operationKey)).toBeUndefined();
+      } finally { db.close(); }
+    }
+  });
+
+  it("accepts longer supplier-priced use without applying an artificial duration ceiling", async () => {
+    const { db, scope } = setup();
+    try {
+      setNeed(db, scope);
+      const quote = scenario(), calls: string[] = [];
+      priceCoveredUsage(scope, quote);
+      quote.cost.usageCoverage!.coveredDurationMs = 86_400_000;
+      const policyDecisionId = policy(db, scope, quote);
+      const result = await executeReviewedProviderProcurement(db.raw, {
+        scope, policyDecisionId, now: new Date("2026-10-15T00:00:00Z"),
+        dependencies: {
+          ...adapters(quote, calls),
+          observeAuthenticatedResourceFit: async () => fit(scope),
+        },
+      });
+      expect(result.dispatched).toBe(true);
+      expect(result.financialEffect?.evidence.join(" ")).toContain("quoted resource usage coverage");
+      expect(calls).toHaveLength(1);
+    } finally { db.close(); }
+  });
+
   it("rechecks resource need after async verification before claiming any financial effect", async () => {
     const { db, scope } = setup();
     try {
       setNeed(db, scope);
       const quote = scenario(), calls: string[] = [];
+      priceCoveredUsage(scope, quote);
       const policyDecisionId = policy(db, scope, quote);
       await expect(executeReviewedProviderProcurement(db.raw, {
         scope, policyDecisionId, now: new Date("2026-10-15T00:00:00Z"),
