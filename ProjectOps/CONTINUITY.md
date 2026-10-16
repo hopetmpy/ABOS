@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0028.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / RECURRING_TERM_SOURCE_PENDING_CI / P005_E5E6_LIVE_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / RECURRING_TERM_MAIN_E3_GREEN / P005_E5E6_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-positive-recurring-term-coverage
-Host-Head-At-Audit-Open: 9a6c22d265e3a8ba8e322480ac7c06b11cecca95
-Last-Reconciled-Host-Head: 9a6c22d265e3a8ba8e322480ac7c06b11cecca95
-Observed-Main-Head: 9a6c22d265e3a8ba8e322480ac7c06b11cecca95
-Last-Product-Head: 9a6c22d265e3a8ba8e322480ac7c06b11cecca95
-Last-Product-CI: exact main 9a6c22d2 push 38838474178 — COMPLETE SUCCESS 8/8; current source CI PENDING
+Current-Host-Branch: abos/p031-recurring-term-main-checkpoint
+Host-Head-At-Audit-Open: 8586fa7ba32b65e6e89cf2531fee74778114bf89
+Last-Reconciled-Host-Head: 8586fa7ba32b65e6e89cf2531fee74778114bf89
+Observed-Main-Head: 8586fa7ba32b65e6e89cf2531fee74778114bf89
+Last-Product-Head: 8586fa7ba32b65e6e89cf2531fee74778114bf89
+Last-Product-CI: exact main 8586fa7b push 38839938045 — COMPLETE SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 24432e3d0474969333ef2d149bd0ff2b5c83c135
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
@@ -647,4 +647,14 @@ NEXT_ELIGIBLE_WORK: inspect and, where authenticated evidence exists, connect ac
 - Decision CORRECT in the EXISTING P-030 scenario authority, not another treasury/policy: when a quote carries positive recurring charge with zero documented periods, mark term coverage incomplete, `totalProposedCommitmentCents=null`, downstream `freeAfterProposalAndContingencyCents=null` and status needs_evidence. A legitimate one-time/no-recurring quote (`recurringCentsPerPeriod=0`, `periods=0`) remains reviewable; no arbitrary minimum subscription imposed. Unknown periods and unknown ancillary costs keep earlier separate blockers.
 - Branch `abos/p031-positive-recurring-term-coverage`; production `src/economics/treasury-scenario.ts`; direct regressions `src/__tests__/provider-procurement-scenario.test.ts` and consumer dispatch rejection `src/__tests__/p031-authorized-procurement-execution.test.ts`. Commits source `1eef704fd8b18c065c45a1eb4060d235861535d0`, tests `3509ed5fb0b773ce806047ef31a8aecbbf12b1ba`, `58fb6d935d07f22ba4a99eefbc768a04ba309def`. CI NOT YET VERIFIED; no LIVE provider purchase/settlement.
 - NEXT_ELIGIBLE_WORK: PR exact-head Node22/24 + Windows22/24 + security+integrity+distribution CI, correct causal regressions, merge only on 8/8 and verify exact-main; then inspect evidenced demand timing/sizing and actual provider invoice/finance inputs without manufacturing facts. P-005 E5/E6 UNKNOWN and P-032 untouched.
+
+### P-031 — Verified recurring-term fix integrated on exact main (2026-10-16)
+
+- PR #114 final source HEAD `183b366fd8be86326974778499b14f394a041a9f`, PR CI `38839641851` COMPLETE/SUCCESS 8/8, SQUASH merged `main 8586fa7ba32b65e6e89cf2531fee74778114bf89`, exact-main push `38839938045` COMPLETE/SUCCESS **8/8**. GitHub branch SHA, workflow SHA and PR merge SHA all matched independently.
+- Existing P-030 provider scenario now keeps `totalProposedCommitmentCents=null` and `freeAfterProposalAndContingencyCents=null` for positive recurring supplier charge with zero contracted billing periods, preserving `needs_evidence`; P-031 procurement cannot dispatch or prepare an underquoted financial effect. Genuine one-off quotes with `periods=0, recurring=0` remain assessable; no default fixed financial threshold or extra review machinery.
+- Direct regressions in `provider-procurement-scenario.test.ts` and `p031-authorized-procurement-execution.test.ts` passed both Node22/24 and Windows22/24. These prove source behavior only, NOT real AWS invoice, quote source authenticity or account financing.
+- Independent source audit (NO_CHANGE): P-030 existing `assessTreasuryScenario` and regression suite already cover measured immediate versus evidenced future need, unsupported oversizing, bundle savings, credit-specific downside/reserve and accounting separation; do not duplicate a sizing treasury. P-018 resource health captures provider-observed resource status, but available source does not demonstrate quantitative utilization telemetry for a live billable resource. Neither `expectedDurationMs` nor an unspecified provider quote can be silently treated as an absolute provisioning deadline.
+- P-031 EN_EJECUCIÓN; P-032 PLANIFICADO; P-005 E5/E6 UNKNOWN. No provider paid operation executed. Funding authority, real account-specific bill/terms, utilization measurements and external settlement/cancellation remain explicit unverified frontiers.
+
+NEXT_ELIGIBLE_WORK: investigate source-backed goal/task requirements to derive contextual dependent resource needs using P-025/P-017 existing owners and independently measured resource utilization/defer/buy-now evidence without inventing measurements; when actual account-authorized external funding/contract access exists, connect to P-010/P-030 and verify invoice+retirement. Continue P-031 rather than declaring HECHO or opening P-032.
 
