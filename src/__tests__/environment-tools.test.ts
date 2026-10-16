@@ -54,6 +54,12 @@ describe("P-031 source-owned resource sizing in environment_select", () => {
       const lifecycle = { resources: inventory } as unknown as EnvironmentLifecycleManager;
       const select = createEnvironmentTools(registry, { selector, lifecycle })
         .find(tool => tool.name === "environment_select")!;
+      expect(JSON.stringify(select.parameters)).toContain(
+        "not a Task execution timeout",
+      );
+      expect(JSON.stringify(select.parameters)).toContain(
+        "does not authorize purchase",
+      );
       const large = JSON.parse(await select.execute({
         required_capabilities: [], metadata: { instanceType: "large" },
       }, {} as any));
