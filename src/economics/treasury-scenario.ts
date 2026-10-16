@@ -335,7 +335,7 @@ export function assessQuotedResourceUsageCoverage(
     const validUntil = Date.parse(quote.validUntil);
     const explicit = (value: string) =>
       typeof value === "string" &&
-      /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(value);
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value);
     if (quote.resourceId !== input.resourceId ||
         quote.resourceShape !== input.resourceShape) {
       conditions.push("Supplier usage quote belongs to another resource or shape.");
