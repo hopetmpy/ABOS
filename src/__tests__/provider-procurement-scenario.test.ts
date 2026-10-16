@@ -84,6 +84,19 @@ describe("P-031 provider procurement scenario in P-030 treasury", () => {
 
     auto.cost.lifecycleTerms!.additionalExitChargeCents = null;
     expect(assessProviderProcurementScenario(auto).totalProposedCommitmentCents).toBeNull();
+
+    // A free introductory billing period cannot erase an explicitly quoted
+    // paid renewal that becomes binding after the promotional period.
+    const promotional = scenario();
+    promotional.cost.recurringCentsPerPeriod = 0;
+    promotional.cost.lifecycleTerms!.renewal = "automatic";
+    promotional.cost.lifecycleTerms!.cancellationRouteEvidence = [
+      "Synthetic cancellation route available before the first paid renewal.",
+    ];
+    promotional.cost.lifecycleTerms!.additionalCommittedRenewalCents = 1500;
+    const promotionalReview = assessProviderProcurementScenario(promotional);
+    expect(promotionalReview.status).toBe("review_ready");
+    expect(promotionalReview.totalProposedCommitmentCents).toBe(5500);
   });
 
   it("never turns an AWS budget threshold or an asserted number into actual liquidity", () => {

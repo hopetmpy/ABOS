@@ -487,7 +487,10 @@ export function assessProviderProcurementScenario(
     ? validProviderCents(lifecycle.additionalExitChargeCents, "contract exit charge") : null;
   const lifecycleEvidence = uniqueEvidence(lifecycle?.evidence);
   const cancellationEvidence = uniqueEvidence(lifecycle?.cancellationRouteEvidence);
-  const recurringLifecycleRequired = recurring !== null && recurring > 0;
+  // A zero-priced introductory period may still carry an explicit binding
+  // paid renewal or exit charge. If lifecycle terms are quoted, price their
+  // exposure even when the currently billed recurring rate is zero.
+  const recurringLifecycleRequired = (recurring !== null && recurring > 0) || lifecycle != null;
   const lifecycleComplete = !recurringLifecycleRequired || (!!lifecycle &&
     ["none", "manual", "automatic"].includes(lifecycle.renewal) &&
     !!lifecycle.source?.trim() && lifecycleEvidence.length > 0 &&
