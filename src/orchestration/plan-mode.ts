@@ -273,7 +273,7 @@ export async function reviewPlan(
   const feedback: string[] = [summarizeStrategicReview(assessment)];
   if (plan.estimatedTotalCostCents > normalized.autoBudgetThreshold) {
     feedback.push(
-      `legacy_scrutiny_marker_exceeded=${plan.estimatedTotalCostCents}c>${normalized.autoBudgetThreshold}c; this marker does not decide approval`,
+      `legacy_scrutiny_marker_exceeded=${plan.estimatedTotalCostCents} task_cost_cent>${normalized.autoBudgetThreshold} task_cost_cent; this marker does not decide approval or authorize supplier spending`,
     );
   }
 
@@ -547,7 +547,7 @@ function formatTools(tools: string[]): string {
 function renderPlanMarkdown(goalId: string, version: number, plan: PlannerOutput): string {
   const lines: string[] = [];
   lines.push(`# Plan: ${goalId} (v${version})`);
-  lines.push(`Status: DRAFT | Estimated Cost: ${plan.estimatedTotalCostCents} cents | Estimated Time: ${plan.estimatedTimeMinutes} min`);
+  lines.push(`Status: DRAFT | Estimated Local Task Cost: ${plan.estimatedTotalCostCents} task_cost_cent (NOT provider cash or spend authorization) | Estimated Time: ${plan.estimatedTimeMinutes} min`);
   lines.push("");
   lines.push("## Strategy");
   lines.push(plan.strategy.trim().length > 0 ? plan.strategy.trim() : "No strategy provided.");
@@ -563,7 +563,7 @@ function renderPlanMarkdown(goalId: string, version: number, plan: PlannerOutput
     for (let index = 0; index < plan.tasks.length; index += 1) {
       const task = plan.tasks[index];
       lines.push(
-        `${index + 1}. [ ] ${task.title} — role: ${task.agentRole}, deps: ${task.dependencies.join(",") || "none"}, cost: ${task.estimatedCostCents}c, timeout: ${task.timeoutMs}ms`,
+        `${index + 1}. [ ] ${task.title} — role: ${task.agentRole}, deps: ${task.dependencies.join(",") || "none"}, local task cost: ${task.estimatedCostCents} task_cost_cent, timeout: ${task.timeoutMs}ms`,
       );
       lines.push(`   ${task.description}`);
     }
