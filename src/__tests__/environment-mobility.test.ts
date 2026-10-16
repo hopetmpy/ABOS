@@ -559,6 +559,17 @@ describe("Environment mobility", () => {
         "path-mobility-1",
       )!;
       expect(active.status).toBe("source_failed");
+      // A failed Task's watchdog is durable execution context, never
+      // an inferred supplier billing/usage duration in persisted migration.
+      expect(active.requirements).toMatchObject({
+        expectedDurationMs: null,
+        taskExecutionTimeoutMs: 60_000,
+        requiredCapabilities: ["compute"],
+      });
+      expect(migrations.get(active.id)?.requirements).toMatchObject({
+        expectedDurationMs: null,
+        taskExecutionTimeoutMs: 60_000,
+      });
       expect(active.metadata.failedResourceIds).toEqual([failed.id]);
       expect(active.metadata.providerFailureEnvironments).toEqual([]);
       expect(

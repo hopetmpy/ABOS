@@ -862,8 +862,10 @@ function taskRequirements(task: TaskNode): Record<string, unknown> {
       task.requiredCapabilities ?? [],
     preferredEnvironment:
       task.preferredEnvironment ?? null,
-    expectedDurationMs:
-      task.metadata.timeoutMs,
+    // The Task watchdog is not the expected provider billing/runtime period.
+    // An actual resource-duration estimate requires independent source evidence.
+    expectedDurationMs: null,
+    taskExecutionTimeoutMs: task.metadata.timeoutMs,
     goalId: task.goalId,
     pathId:
       task.strategicPathId ?? null,
