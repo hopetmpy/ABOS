@@ -84,7 +84,7 @@ describe("P-031 source-backed resource outcome → strategic planning (read-only
       const inventory = new EnvironmentResourceStore(db.raw);
       inventory.create({
         id: "vm-unresolved", provider: "synthetic-cloud", externalId: "unknown",
-        type: "compute", goalId: "goal-a", taskId: "task-absent", status: "degraded",
+        type: "compute", goalId: "goal-a", taskId: "task-foreign", status: "degraded",
         metadata: {
           cpuUtilizationAveragePct: 0,
           cpuUtilizationMetricStatus: "observed",
@@ -97,7 +97,7 @@ describe("P-031 source-backed resource outcome → strategic planning (read-only
       });
       const context = await buildPlannerContext({ db: db.raw, goalId: "goal-a" });
       const learned = context.adaptiveContext ?? "";
-      expect(learned).toContain("linkedTask=task-absent taskStatus=UNKNOWN");
+      expect(learned).toContain("linkedTask=task-foreign taskStatus=UNKNOWN");
       expect(learned).toContain("lastCpu=UNKNOWN");
       expect(learned).toContain("localTaskObservedCost=UNKNOWN task_cost_cent");
       expect(learned).toContain("unresolvedLocalProviderIntents=0");
