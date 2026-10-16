@@ -91,6 +91,52 @@ function provider(
 }
 
 describe("EnvironmentRetentionCoordinator", () => {
+  it("retires a positively never-dispatched failed provision locally without a provider destroy", async () => {
+    const db = createDb();
+    try {
+      insertGoal(db, "goal-no-dispatch");
+      insertTask(db, "task-no-dispatch", "goal-no-dispatch", "pending");
+      let destroyCalls = 0;
+      const registry = new EnvironmentRegistry();
+      registry.register(provider({
+        provision: async () => {
+          throw Object.assign(new Error("test-only economic preflight refused"), {
+            externalEffectNotDispatched: true,
+          });
+        },
+        destroy: async () => {
+          destroyCalls++;
+          throw new Error("No remote resource exists; destroy must not be called.");
+        },
+      }));
+      const lifecycle = new EnvironmentLifecycleManager(registry, new EnvironmentResourceStore(db));
+      await expect(lifecycle.provision("cloud", {
+        resourceId: "never-provisioned", resourceType: "compute",
+        goalId: "goal-no-dispatch", taskId: "task-no-dispatch",
+        requiredCapabilities: [], retentionPolicy: "ephemeral",
+      })).rejects.toThrow("test-only economic preflight refused");
+      const denied = lifecycle.resources.get("never-provisioned");
+      expect(denied).toMatchObject({
+        status: "failed", externalId: null,
+        metadata: {
+          provisionNeedsReconciliation: false,
+          provisionExternalEffectNotDispatched: true,
+        },
+      });
+      const retention = new EnvironmentRetentionCoordinator(db, registry, lifecycle);
+      const result = await retention.sweep();
+      expect(result.released).toBe(1);
+      expect(result.destroyAttempts).toBe(0);
+      expect(destroyCalls).toBe(0);
+      expect(lifecycle.resources.get("never-provisioned")).toMatchObject({
+        status: "terminated", metadata: { retentionReleaseState: "released" },
+      });
+      expect((await retention.sweep()).releaseEligible).toBe(0);
+      expect(destroyCalls).toBe(0);
+    } finally { db.close(); }
+  });
+
+
   it("defers cleanup when an uncertain provision has no observed external identity", async () => {
     const db = createDb();
     try {
