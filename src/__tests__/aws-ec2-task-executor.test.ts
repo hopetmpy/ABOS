@@ -423,6 +423,32 @@ describe("AwsEc2TaskExecutor", () => {
     expect(owned.provisionCalls).toBe(0);
   });
 
+  it("revalidates capabilities after health invalidates formerly compatible owned EC2", async () => {
+    const owned = lifecycleStub([resource({
+      taskId: null,
+      capabilities: ["linux", "ssm", "compute", "database"],
+    })]);
+    (owned.lifecycle.resources as any).findReusableCandidates = () => owned.resources;
+    let observed = 0;
+    (owned.lifecycle as any).health = async (id: string) => {
+      observed += 1;
+      const target = owned.resources.find(value => value.id === id)!;
+      target.capabilities = ["linux", "ssm", "compute"];
+      return target;
+    };
+    const provider = new AwsEnvironmentProvider({
+      runner: async () => { throw new Error("No provider call expected"); },
+    });
+    const executor = new AwsEc2TaskExecutor({
+      provider, lifecycle: owned.lifecycle,
+      identity: {} as any, config: {} as any,
+    });
+    const dbTask = { ...task(), requiredCapabilities: ["shell", "database"] };
+    await expect(executor.spawn(dbTask)).rejects.toThrow("IAM instance profile");
+    expect(observed).toBe(1);
+    expect(owned.provisionCalls).toBe(0);
+  });
+
   it("keeps an unproven EC2 candidate ephemeral and marks failed bootstrap for cleanup", async () => {
     const runner: EnvironmentCommandRunner = async (_command, args) => {
       if (args[0] === "ec2" && args[1] === "describe-instances") {
