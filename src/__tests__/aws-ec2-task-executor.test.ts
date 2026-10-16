@@ -268,7 +268,7 @@ describe("AwsEc2TaskExecutor", () => {
       defaultRegion: "us-east-1",
       defaultIamInstanceProfile: "ABOS-SSM",
     });
-    const { lifecycle, mutations } = lifecycleStub();
+    const { lifecycle, mutations, provisionInputs } = lifecycleStub();
     const executor = new AwsEc2TaskExecutor({
       provider,
       lifecycle,
@@ -318,6 +318,38 @@ describe("AwsEc2TaskExecutor", () => {
     expect(
       mutations.some((entry) => entry.operation === "executor_ready"),
     ).toBe(true);
+    // A Task timeout of 60 seconds cannot establish AWS billing lifetime.
+    expect(provisionInputs[0]).toMatchObject({
+      expectedDurationMs: null,
+    });
+    expect(JSON.stringify(provisionInputs[0])).toContain(
+      "supplier runtime duration UNKNOWN",
+    );
+
+    // An independently supplied resource-duration estimate can be used
+    // without reinterpreting the Task execution timeout.
+    const explicit = lifecycleStub();
+    const configured = new AwsEc2TaskExecutor({
+      provider, lifecycle: explicit.lifecycle,
+      identity: {} as any, config: {} as any,
+      resourceMetadata: { expectedResourceDurationMs: 540_000 },
+    });
+    await configured.spawn(task());
+    expect(explicit.provisionInputs[0]).toMatchObject({
+      expectedDurationMs: 540_000,
+    });
+    expect(JSON.stringify(explicit.provisionInputs[0])).toContain(
+      "explicit resourceMetadata.expectedResourceDurationMs=540000",
+    );
+    const wrongType = new AwsEc2TaskExecutor({
+      provider, lifecycle: explicit.lifecycle,
+      identity: {} as any, config: {} as any,
+      resourceMetadata: { expectedResourceDurationMs: "60000" },
+    });
+    await expect(wrongType.spawn(task())).rejects.toThrow(
+      "expectedResourceDurationMs must be an explicit positive safe integer",
+    );
+    expect(explicit.provisionCalls).toBe(1);
   });
 
   it("honors canonical P-018 spare capacity and will not hijack an active Task's running EC2", async () => {
