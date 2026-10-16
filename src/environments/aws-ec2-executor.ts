@@ -780,6 +780,18 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
 
       const observed = await this.options.lifecycle.health(current.id);
       if (["ready", "running"].includes(observed.status)) {
+        // Capabilities can be invalidated by reconciliation/recovery after
+        // inventory enumeration. Preserve Task requirements across that window.
+        const freshCapabilities = new Set(observed.capabilities.map(value =>
+          value.trim().toLowerCase()));
+        const stillSatisfiesTask = requiredCapabilities.every(value => {
+          const requirement = value.trim().toLowerCase();
+          if (!requirement) return true;
+          return requirement === "shell"
+            ? freshCapabilities.has("linux") && freshCapabilities.has("ssm")
+            : freshCapabilities.has(requirement);
+        });
+        if (!stillSatisfiesTask) continue;
         // A provider health check may reveal an instance shape change since
         // inventory discovery. Never bind a resource after a mismatched resize.
         const requestedInstanceType =
