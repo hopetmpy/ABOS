@@ -26,6 +26,25 @@ export class EnvironmentOperationUnavailableError extends Error {
 }
 
 /**
+ * Forget current capacity and utilization claims after a shape-changing or
+ * uncertain remote mutation. Historical readings remain in resource events;
+ * additive resource metadata must not present them as measurements of the
+ * current provider instance. The next observed health may repopulate them.
+ */
+function invalidatedCapacityEvidence(): Record<string, unknown> {
+  return {
+    capacity: null,
+    capacityMetricStatus: "unknown",
+    capacityObservedAt: null,
+    capacitySource: null,
+    cpuUtilizationAveragePct: null,
+    cpuUtilizationObservedAt: null,
+    cpuUtilizationMetricStatus: "unknown",
+    cpuUtilizationMetricSource: null,
+  };
+}
+
+/**
  * Provider-neutral lifecycle coordinator.
  *
  * Ownership is persisted before provisioning begins so interrupted operations
@@ -304,8 +323,10 @@ export class EnvironmentLifecycleManager {
     } catch (error) {
       return this.resources.recordHealth(resourceId, {
         status: "unknown",
+        metadata: invalidatedCapacityEvidence(),
         evidence: [
           `health operation failed: ${error instanceof Error ? error.message : String(error)}`,
+          "Previously observed capacity/utilization is stale after failed health observation; no new measurement inferred.",
         ],
       });
     }
@@ -322,14 +343,25 @@ export class EnvironmentLifecycleManager {
           ? result.resource
           : { ...result.resource, id: resource.id };
 
+      const oldShape = typeof resource.metadata.instanceType === "string"
+        ? resource.metadata.instanceType : null;
+      const newShape = typeof (result.metadata?.instanceType ?? reconciled.metadata.instanceType) === "string"
+        ? String(result.metadata?.instanceType ?? reconciled.metadata.instanceType) : null;
+      const changedShape = !!oldShape && !!newShape && oldShape !== newShape;
       this.resources.upsert({
         ...reconciled,
         updatedAt: new Date().toISOString(),
-        evidence: mergeUnique(resource.evidence, result.evidence ?? []),
+        evidence: mergeUnique(resource.evidence, [
+          ...(result.evidence ?? []),
+          ...(changedShape ? [
+            "Provider shape changed during reconciliation; previous capacity and utilization measurements require fresh observation.",
+          ] : []),
+        ]),
         metadata: {
           ...resource.metadata,
           ...reconciled.metadata,
           ...(result.metadata ?? {}),
+          ...(changedShape ? invalidatedCapacityEvidence() : {}),
           lastReconcileAction: result.action,
           actualExists: result.actualExists,
         },
@@ -415,6 +447,24 @@ export class EnvironmentLifecycleManager {
       );
     }
     const provider = this.requireOperation(resource.provider, operation);
+    const economicMutation = ["resize", "resume", "recover"].includes(operation);
+    const changesShape = operation === "resize";
+
+    // Crash- and concurrency-safe: claim uncertain provider mutation BEFORE
+    // awaiting the adapter. Otherwise another Task can reuse an in-flight
+    // resize or independently dispatch an overlapping paid mutation.
+    if (economicMutation) {
+      resource = this.resources.applyMutation(resourceId, {
+        metadata: {
+          ...(changesShape ? invalidatedCapacityEvidence() : {}),
+          mutationNeedsReconciliation: true,
+          mutationUncertainOperation: operation,
+        },
+        evidence: [
+          `${operation} entered external observation/dispatch; resource is not spare until its provider outcome is reconciled.`,
+        ],
+      }, operation, "Billable capacity mutation entered; reconciliation required until observed completion.");
+    }
 
     if (enteringStatus) {
       resource = this.resources.transition(resourceId, enteringStatus, {
@@ -425,14 +475,34 @@ export class EnvironmentLifecycleManager {
 
     try {
       const result = await invoke(provider, resource);
+      const observedStatus = result.status ?? defaultSuccessStatus ?? resource.status;
+      const mutationResolved = ["ready", "running", "suspended", "terminated"].includes(observedStatus);
       return this.resources.applyMutation(
         resourceId,
         {
-          status: result.status ?? defaultSuccessStatus ?? resource.status,
+          status: observedStatus,
           actualCostCents: result.actualCostCents,
           providerState: result.providerState,
-          evidence: result.evidence,
-          metadata: result.metadata,
+          evidence: [
+            ...(result.evidence ?? []),
+            ...(economicMutation && !mutationResolved
+              ? [`${operation} callback did not verify a stable resource state; reconcile before a new paid mutation.`]
+              : []),
+          ],
+          metadata: {
+            // A concurrent health observation may have repopulated pre-resize
+            // capacity while the adapter was still pending. Invalidate again
+            // at completion; only explicit post-mutation observations in the
+            // provider result can replace that old measurement.
+            ...(changesShape ? invalidatedCapacityEvidence() : {}),
+            ...(result.metadata ?? {}),
+            // The lifecycle, not the provider metadata bag, owns the durable
+            // reconciliation marker; a callback cannot override it.
+            ...(economicMutation ? {
+              mutationNeedsReconciliation: !mutationResolved,
+              mutationUncertainOperation: mutationResolved ? null : operation,
+            } : {}),
+          },
         },
         operation,
         `${operation} completed.`,
@@ -449,6 +519,17 @@ export class EnvironmentLifecycleManager {
           {
             status: prior.status,
             providerState: prior.providerState,
+            metadata: {
+              ...(economicMutation ? {
+                mutationNeedsReconciliation: prior.metadata.mutationNeedsReconciliation ?? false,
+                mutationUncertainOperation: prior.metadata.mutationUncertainOperation ?? null,
+              } : {}),
+              ...(changesShape ? Object.fromEntries(
+                Object.keys(invalidatedCapacityEvidence()).map(key =>
+                  [key, prior.metadata[key] ?? null],
+                ),
+              ) : {}),
+            },
             evidence: [
               `${operation} not dispatched: ${error instanceof Error ? error.message : String(error)}`,
             ],

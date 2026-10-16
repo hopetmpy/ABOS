@@ -57,6 +57,18 @@ export class EnvironmentRetentionCoordinator {
       if (!decision.release) continue;
       result.releaseEligible += 1;
 
+      // A paid resize/resume/recover can still be in flight, or its callback
+      // may have been lost. Do not overlap a destructive release with this
+      // unresolved provider mutation. This is a per-resource observation hold,
+      // not a global ban on cleanup or an invented cancellation/refund.
+      if (initial.metadata.mutationNeedsReconciliation === true) {
+        result.pendingObservation += 1;
+        result.evidence.push(
+          `Resource ${initial.id} has an unresolved provider mutation; retention cannot assume its current size/state or dispatch concurrent destroy.`,
+        );
+        continue;
+      }
+
       // P-018 recorded positive evidence that provider preflight rejected
       // provisioning BEFORE any external operation. The local resource has
       // nothing to destroy, and dispatching provider.destroy without an
