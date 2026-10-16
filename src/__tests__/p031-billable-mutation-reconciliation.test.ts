@@ -187,6 +187,29 @@ describe("P-031 ambiguous billable provider mutation lifecycle", () => {
     } finally { db.close(); }
   });
 
+  it("does not let an inconclusive provider callback erase the lifecycle reconciliation marker", async () => {
+    const db = createTestDb();
+    try {
+      const resources = createOwned(db);
+      const registry = new EnvironmentRegistry();
+      registry.register({
+        id: "controlled", inspect: inspection,
+        resize: async () => ({
+          status: "unknown",
+          metadata: { mutationNeedsReconciliation: false,
+            mutationUncertainOperation: null },
+        }),
+      });
+      const lifecycle = new EnvironmentLifecycleManager(registry, resources);
+      const uncertain = await lifecycle.resize("vm-1", { instanceType: "other" });
+      expect(uncertain.status).toBe("unknown");
+      expect(uncertain.metadata.mutationNeedsReconciliation).toBe(true);
+      expect(uncertain.metadata.mutationUncertainOperation).toBe("resize");
+      await expect(lifecycle.resize("vm-1", { instanceType: "other" }))
+        .rejects.toThrow("Reconcile provider state");
+    } finally { db.close(); }
+  });
+
   it("marks timeout-after-possible-start UNKNOWN, blocks retry, then reopens after observed provider reconciliation", async () => {
     const db = createTestDb();
     try {
