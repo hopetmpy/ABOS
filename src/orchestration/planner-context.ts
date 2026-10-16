@@ -306,7 +306,9 @@ function describeResourceOutcomeLinks(db: Database, goalId?: string): string | n
           effect.request.resourceId === resource.id
         ).length);
     const metadata = resource.metadata;
-    const cpu = metadata.cpuUtilizationMetricStatus === "observed" &&
+    const cpu = goalId && resource.goalId !== goalId
+      ? "UNKNOWN (latest CPU belongs to another current Goal; historical time alignment absent)"
+      : metadata.cpuUtilizationMetricStatus === "observed" &&
       typeof metadata.cpuUtilizationAveragePct === "number" &&
       Number.isFinite(metadata.cpuUtilizationAveragePct) &&
       metadata.cpuUtilizationAveragePct >= 0 && metadata.cpuUtilizationAveragePct <= 100 &&
@@ -355,7 +357,7 @@ function describeResourceOutcomeLinks(db: Database, goalId?: string): string | n
       `lastCpu=${cpu}; localTaskEstimate=${localEstimate} task_cost_cent; ` +
       `localTaskObservedCost=${localActual} task_cost_cent; ` +
       `unresolvedLocalProviderIntents=${outstanding}; supplierFinalBilling=UNKNOWN; ` +
-      `historicalAssignments=${history === null ? "UNKNOWN" : historicalLines.length} ` +
+      `historicalAssignments=${history === null || history.observations.length === 0 ? "UNKNOWN" : historicalLines.length} ` +
       `reassignmentAfterScopedGoal=${detachedOrReassigned}` +
       (historicalLines.length ? "\n  " + historicalLines.join("\n  ") : "") +
       (history && (history.incomplete || assignments.length > historicalLines.length)
