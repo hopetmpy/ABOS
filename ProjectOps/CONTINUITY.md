@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / CONCURRENT_REPRICED_RESOURCE_INTENT_SOURCE_PENDING_CI / LIVE_AWS_ISSUER_UNWIRED / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / PR104_SOURCE_E3_GREEN / STRATEGIC_ROUTE_RECHECK_PENDING_CI / LIVE_AWS_ISSUER_UNWIRED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-atomic-overlap-after-economics
-Host-Head-At-Audit-Open: e826828d2e9a58b826a53b4a54819ac32342180a
-Last-Reconciled-Host-Head: e826828d2e9a58b826a53b4a54819ac32342180a
-Observed-Main-Head: e826828d2e9a58b826a53b4a54819ac32342180a
-Last-Product-Head: e826828d2e9a58b826a53b4a54819ac32342180a
-Last-Product-CI: exact main e826828d push 38827766548 — SUCCESS 8/8; current branch CI PENDING
+Current-Host-Branch: abos/p031-atomic-reviewed-route-recheck
+Host-Head-At-Audit-Open: acda23d34143167d5c222d1e6ca9b19e6f15d7bb
+Last-Reconciled-Host-Head: acda23d34143167d5c222d1e6ca9b19e6f15d7bb
+Observed-Main-Head: acda23d34143167d5c222d1e6ca9b19e6f15d7bb
+Last-Product-Head: acda23d34143167d5c222d1e6ca9b19e6f15d7bb
+Last-Product-CI: PR #104 source 38828680615 SUCCESS 8/8; exact main acda23d3 push 38828983152 pending
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 24432e3d0474969333ef2d149bd0ff2b5c83c135
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
@@ -548,4 +548,14 @@ NEXT_ELIGIBLE_WORK: audit independent account financing/supplier-term and P-010 
 - Source branch `abos/p031-atomic-overlap-after-economics`; code commit `d1c81525748bf9eac55dde42681d353a53b96dc2`; test commit `8388e5a6052b7717c44a76ec6f4032b04f1e13f5`. Adversarial deterministic concurrency test forces both provider-economic observers to overlap with 2 distinct policy receipts/operation keys and divergent quotes, enough capital for either/both, then requires EXACTLY one dispatch, one durable P-030 provider intent, one overlapping rejection and zero claimed settlement.
 - Source branch CI NOT YET VERIFIED at checkpoint. AWS budget/credit observations remain read-only, real account liquidity/P-010 account issuer/provider invoice coverage and LIVE spending unverified (P-005 E5/E6 UNKNOWN). Do not create a fake funding provider or declare P-031 HECHO.
 - NEXT_ELIGIBLE_WORK: open PR, run exact final HEAD Node22/24+Windows+security+distribution CI; correct causal failures and merge only on verified evidence, then exact-main CI and lightweight recovery. Continue independent P-031 source work or real authenticated external economics only if evidence+authorization actually become available.
+
+## P-031 — P-025 strategic-review authority rechecked after async economics (2026-10-15/16)
+
+- Code baseline GitHub `main acda23d34143167d5c222d1e6ca9b19e6f15d7bb`; PR #104 source head `9937eab5ad7d4554776c5d1b691d92a3e3bae6bc` exact PR CI `38828680615` SUCCESS 8/8, merged PR #104 on main. Exact-main push CI `38828983152` was RUNNING at branch creation; do not claim final status until observed independently.
+- New R2 source finding: `executeReviewedProviderProcurement` obtained `getReviewedTaskPathReceipt` BEFORE awaiting `observeAuthenticatedEconomics`. While the account source is queried, Orchestrator can cancel the task, withdraw the materialized review, or retire/rebind the path. The source previously used old strategic evidence to allow financial intent and supplier dispatch despite withdrawn P-025 route. P-010 exact monetary receipt is already checked after the await; do not duplicate it.
+- CORRECT/REUSE `getReviewedTaskPathReceipt` inside the same P-030 SQLite funds + effect claim transaction. Require exact task/goal/path matching and current materialized review; persist fresh strategic evidence, not the pre-await receipt. Keep early preflight to avoid unnecessary provider calls when the route is already invalid. No new scheduler, planner, policy, gateway, second authority or monetary operation.
+- Branch `abos/p031-atomic-reviewed-route-recheck`, code commit `276fd0f0a70dbb728d5c34d1e1c56c4c1d9c5e16`, adversarial test commit `b79cc2562b1c7eba2602e0d324dd147eb20f2284`. New scenario mutates task state, canonical materialized review and selected adaptive path during the economics await, then requires zero provider dispatch, zero P-030 effect and no P-010 running marker. CI for THIS branch pending.
+- P-031 remains EN_EJECUCIÓN; real-account AWS funds, supplier quotes/contracts and actual invoice+retirement financial cleanup are still LIVE UNKNOWN; P-005 E5/E6 unverified. Do not mistake synthetic tests for external payment proof. P-032 not started.
+
+NEXT_ELIGIBLE_WORK: run exact branch CI on coherent fix, attack consumer regressions; merge only on PASS and verify exact main, reconcile recovery. Then follow independently demonstrable supplier economics / invoice and provider-neutral nonbillable reuse as authorized; do not create a false AWS finance issuer.
 
