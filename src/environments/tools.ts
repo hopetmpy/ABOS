@@ -604,6 +604,10 @@ export function createEnvironmentTools(
             max_estimated_cost_cents: {
               type: ["number", "null"],
             },
+            max_estimated_cost_unit: {
+              type: ["string", "null"],
+              description: "Exact unit supplied with an explicit provider budget amount.",
+            },
             expected_duration_ms: {
               type: ["number", "null"],
             },
@@ -654,6 +658,8 @@ export function createEnvironmentTools(
                 nullableString(args.preferred_environment),
               maxEstimatedCostCents:
                 nullableNumber(args.max_estimated_cost_cents),
+              maxEstimatedCostUnit:
+                nullableString(args.max_estimated_cost_unit),
               expectedDurationMs:
                 nullableNumber(args.expected_duration_ms),
               region: nullableString(args.region),
@@ -704,6 +710,7 @@ function summarizeCandidate(candidate: {
   operations: string[];
   estimate: {
     estimatedCostCents?: number | null;
+    costUnit?: string | null;
     costCoverage?: string;
     startupLatencyMs?: number | null;
     expectedExecutionMs?: number | null;
@@ -722,6 +729,7 @@ function summarizeCandidate(candidate: {
     availability: candidate.snapshot.availability,
     operations: candidate.operations,
     estimatedCostCents: candidate.estimate.estimatedCostCents ?? null,
+    costUnit: candidate.estimate.costUnit ?? null,
     costCoverage: candidate.estimate.costCoverage ?? "unknown",
     startupLatencyMs: candidate.estimate.startupLatencyMs ?? null,
     expectedExecutionMs: candidate.estimate.expectedExecutionMs ?? null,
