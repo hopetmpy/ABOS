@@ -222,7 +222,10 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
       goalId: task.goalId,
       pathId: task.strategicPathId ?? null,
       taskId: task.id,
-      selectionEstimateCents: estimate.estimatedCostCents ?? null,
+      // P-018 stores a numeric estimate but has no adjacent monetary-unit
+      // column. Do not persist an ambiguous supplier-money amount as cents.
+      selectionEstimateCents: estimate.costUnit === "usd_cent"
+        ? estimate.estimatedCostCents ?? null : null,
       selectionEvidence: [
         ...(estimate.evidence ?? []),
         resourceDurationMs === null
