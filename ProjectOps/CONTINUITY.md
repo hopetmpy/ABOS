@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / PR109_PR110_MAIN_E3_GREEN / MOBILITY_OWNED_REUSE_PENDING_CI / P005_E5E6_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / PR109_TO_PR111_SOURCE_INTEGRATED / PUBLIC_INVENTORY_EVIDENCE_SOURCE_PENDING_CI / P005_E5E6_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-mobility-owned-reuse-evidence
-Host-Head-At-Audit-Open: 1c26e760ed802dc855b104f5157e09f554437582
-Last-Reconciled-Host-Head: 1c26e760ed802dc855b104f5157e09f554437582
-Observed-Main-Head: 1c26e760ed802dc855b104f5157e09f554437582
-Last-Product-Head: 1c26e760ed802dc855b104f5157e09f554437582
-Last-Product-CI: exact main 1c26e760 push 38835984164 — COMPLETE SUCCESS 8/8; mobility source CI PENDING
+Current-Host-Branch: abos/p031-public-environment-owned-reuse
+Host-Head-At-Audit-Open: 619919f9569884e7415ac55d701418407f4ae7d9
+Last-Reconciled-Host-Head: 619919f9569884e7415ac55d701418407f4ae7d9
+Observed-Main-Head: 619919f9569884e7415ac55d701418407f4ae7d9
+Last-Product-Head: 619919f9569884e7415ac55d701418407f4ae7d9
+Last-Product-CI: PR111 source 38836314691 — COMPLETE SUCCESS 8/8; exact main 619919f9 push 38836552665 pending
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 24432e3d0474969333ef2d149bd0ff2b5c83c135
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
@@ -619,4 +619,13 @@ NEXT_ELIGIBLE_WORK: run source PR CI Node22/24+Windows/security/distribution, co
 - P-031 remains EN_EJECUCIÓN, P-032 PLANIFICADO. Real supplier funding, billable terms, issuer and settlement/invoice validation remain UNKNOWN/not wired. No external charge or payment attempted.
 
 NEXT_ELIGIBLE_WORK: open PR for this coherent source+test, run 8/8 exact-head CI, fix causal test failures, merge and validate exact main. Continue further material P-031 gaps only where evidence supports them; keep P-005 external financial execution separate.
+
+## P-031 — agent-facing selection own-inventory evidence after mobility integration (2026-10-15/16)
+
+- PR #111 exact source `f01cf079f3399fe1a5ec76f8588d59d1ef2d8362` PR CI `38836314691` COMPLETE/SUCCESS 8/8; squash integrated `main 619919f9569884e7415ac55d701418407f4ae7d9`. Exact-main push workflow `38836552665` was RUNNING at audit of next independent unit; do not promote it to PASS until verified. Source P-031 mobility plan now uses P-018 spare target count and excludes the source; synthetic test never mutates provider resources.
+- R1 sibling-source audit: agent-facing public `environment_select` also invoked the same existing `EnvironmentSelector` without the P-018 owned resource evaluator. Public discovery could therefore rank otherwise identical new-provider alternatives above owned spare resources even though Task Execution Bridge and Mobility did consider the actual inventory. This is not a need for another selector, planner or ledger.
+- Branch `abos/p031-public-environment-owned-reuse`: extend ONLY `createEnvironmentTools`'s `environment_select` invocation to pass existing P-018 canonical `EnvironmentResourceStore.findReusableCandidates` read-only when lifecycle is available. Preserve optional lifecycle-less discovery, typed budgets, policy/availability, never treat reuse candidate as verified executable or supplier spending authority. Source `src/environments/tools.ts`, test `src/__tests__/environment-tooling-v2.test.ts`. Synthetic test deliberately gives vendor A 900 reported spare units but P-018 only 1 ABOS-owned spare resource on provider Z, asserting public selection chooses Z without provisioning/destroying anything.
+- Exact branch CI pending. No LIVE AWS account cash, provider contract/terms, invoice settlement, profit, refund or acquisition authority evidenced; P-005 E5/E6 remains UNKNOWN; P-031 `EN_EJECUCIÓN`, P-032 `PLANIFICADO`.
+
+NEXT_ELIGIBLE_WORK: validate PR/source CI, fix causal regressions, merge and exact-main CI, then reconcile active recovery without claiming P-031 complete. Subsequent material frontier is authenticated supplier/account economics, P-010 account issuer, provider invoice/retirement billing or other P-031 independent evidence-driven sizing/timing.
 
