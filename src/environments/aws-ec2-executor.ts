@@ -87,6 +87,18 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
       spawnOptions.excludedResourceIds ?? [],
       task.requiredCapabilities ?? [],
     );
+    const unprovenNewCapabilities =
+      unverifiableNewEc2ExecutorCapabilities(task.requiredCapabilities ?? []);
+    if (reusable.length === 0 && unprovenNewCapabilities.length > 0) {
+      return {
+        executable: false,
+        evidence: [
+          ...snapshot.evidence,
+          `No currently owned EC2 executor verifies Task capabilities: ${unprovenNewCapabilities.join(", ")}.`,
+          "A new Linux+SSM executor cannot claim these additional capabilities from an IAM profile or a generic EC2 quote. Probe another executor/provider/shape before billable provisioning; goal feasibility remains UNKNOWN.",
+        ],
+      };
+    }
     const instanceProfile =
       this.options.provider.getConfiguredIamInstanceProfile(
         this.options.resourceMetadata,
@@ -151,6 +163,13 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
       };
     }
 
+    const unprovenNewCapabilities =
+      unverifiableNewEc2ExecutorCapabilities(task.requiredCapabilities ?? []);
+    if (unprovenNewCapabilities.length > 0) {
+      throw new Error(
+        `New AWS Linux+SSM executor has no verified execution support for Task capabilities: ${unprovenNewCapabilities.join(", ")}. Probe an appropriate executor or provider before billable provisioning; this is not proof of objective impossibility.`,
+      );
+    }
     const instanceProfile =
       this.options.provider.getConfiguredIamInstanceProfile(
         this.options.resourceMetadata,
@@ -805,6 +824,20 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
     }
     return null;
   }
+}
+
+// Narrow proof for this specific Linux+SSM executor, NOT a general ABOS
+// capability allowlist. Other resources may provide additional capabilities
+// when observed via P-018 inventory and checked again at Task binding.
+const BASE_EC2_SSM_TASK_CAPABILITIES = new Set([
+  "shell", "remote compute", "virtual machine", "linux", "ec2",
+  "ssm", "task executor",
+]);
+
+function unverifiableNewEc2ExecutorCapabilities(required: string[]): string[] {
+  return [...new Set(required.map(value => value.trim().toLowerCase())
+    .filter(value => value.length > 0 &&
+      !BASE_EC2_SSM_TASK_CAPABILITIES.has(value)))];
 }
 
 function resolveRuntimeGitRef(): string {
