@@ -108,6 +108,38 @@ describe("P-031 source-owned resource sizing in environment_select", () => {
   });
 });
 
+describe("P-031 environment_select supplier timing evidence", () => {
+  it("exposes quoted timing separately from provider startup and money authorization", async () => {
+    const registry = new EnvironmentRegistry();
+    registry.register({
+      ...provider(),
+      estimate: async () => ({
+        startupLatencyMs: 500,
+        metadata: {
+          provisioningLeadTimeMs: 3_600_000,
+          provisioningLeadTimeObservedAt: new Date().toISOString(),
+          provisioningLeadTimeSource: "fixture-quote",
+        },
+      }),
+    });
+    const tool = createEnvironmentTools(registry, {
+      selector: new EnvironmentSelector(registry),
+    }).find(x => x.name === "environment_select")!;
+    const future = new Date(Date.now() + 86_400_000).toISOString();
+    const result = JSON.parse(await tool.execute({
+      required_capabilities: [], needed_by_at: future,
+    }, {} as any));
+    expect(result.selected?.provisioningTiming).toMatchObject({
+      status: "quoted_window_open",
+      neededByAt: future,
+      quoteSource: "fixture-quote",
+    });
+    expect(result.selected?.provisioningTiming.latestQuotedStartAt).not.toBeNull();
+    expect(JSON.stringify(result.selected?.evidence)).toContain("NOT procurement permission");
+    expect(JSON.stringify(tool.parameters)).toContain("needed_by_at");
+  });
+});
+
 describe("P-031 provider selection budget unit contract", () => {
   it("exposes exact cost unit and cannot silently compare an untyped amount", async () => {
     const registry = new EnvironmentRegistry();

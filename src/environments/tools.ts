@@ -415,6 +415,10 @@ export function createEnvironmentTools(
             type: ["string", "null"],
             description: "Optional provider region preference/requirement.",
           },
+          needed_by_at: {
+            type: ["string", "null"],
+            description: "Optional ISO 8601 resource-needed instant with timezone. A source-attributed provider provisioning lead-time quote may produce a tentative latest start; quote does NOT authorize or schedule a purchase.",
+          },
           minimum_capacity: {
             type: "object",
             description: "Open-ended numeric minimum requirements for ONE resource. Keys must include units, e.g. cpuCores, memoryMb, diskGb. Only P-018-recorded numeric capacity counts as compatible owned spare; do not infer from instance type or CPU utilization.",
@@ -437,6 +441,7 @@ export function createEnvironmentTools(
           expectedDurationMs: nullableNumber(args.expected_duration_ms),
           region: nullableString(args.region),
           minimumCapacity: objectValue(args.minimum_capacity) as Record<string, number>,
+          neededByAt: nullableString(args.needed_by_at),
           metadata: objectValue(args.metadata),
         }, options.lifecycle?.resources?.findReusableCandidates
           ? (environmentId, requirements) =>
@@ -727,6 +732,15 @@ function summarizeCandidate(candidate: {
   executionEligible: boolean;
   snapshot: { availability: string };
   operations: string[];
+  provisioningTiming?: {
+    status: "unknown" | "quoted_window_open" | "quoted_window_elapsed";
+    neededByAt: string;
+    quotedProvisioningLeadTimeMs: number | null;
+    quoteObservedAt: string | null;
+    quoteSource: string | null;
+    latestQuotedStartAt: string | null;
+    evidence: string[];
+  };
   estimate: {
     estimatedCostCents?: number | null;
     costUnit?: string | null;
@@ -754,6 +768,7 @@ function summarizeCandidate(candidate: {
     expectedExecutionMs: candidate.estimate.expectedExecutionMs ?? null,
     reliability: candidate.estimate.reliability ?? null,
     reusableResourceCount: candidate.estimate.reusableResourceCount ?? null,
+    provisioningTiming: candidate.provisioningTiming ?? null,
     missingCapabilities: candidate.missingCapabilities,
     missingOperations: candidate.missingOperations,
     blockers: candidate.blockers,
