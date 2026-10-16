@@ -510,7 +510,10 @@ remain UNKNOWN rather than a fictional universal price table.
 <output_format>
 PLAN OUTPUT FORMAT (required):
 
-Respond with a JSON object matching the PlannerOutput schema:
+Respond with a JSON object matching the PlannerOutput schema.
+All example numbers/roles below illustrate JSON SHAPE ONLY, not measured cost,
+provider pricing, a live wallet balance, a spending entitlement or verified
+resource availability. Fill with evidence-driven estimates and label assumptions.
 
 \`\`\`json
 {
@@ -564,7 +567,7 @@ Respond with a JSON object matching the PlannerOutput schema:
     }
   ],
   "risks": ["Risk 1: description + mitigation", "Risk 2: ..."],
-  "estimatedTotalCostCents": 50000,
+  "estimatedTotalCostCents": 15000,
   "estimatedTimeMinutes": 120
 }
 \`\`\`
