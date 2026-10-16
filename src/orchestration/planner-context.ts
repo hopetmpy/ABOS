@@ -141,6 +141,16 @@ function summarizeOwnedResourceInventory(
         instanceType: shape,
         recordedCapacity: capacity,
         capacityMetricsOmitted,
+        capacityEvidence: {
+          status: metadata.capacityMetricStatus === "observed" ? "observed" : "unknown",
+          observedAt: typeof metadata.capacityObservedAt === "string" &&
+            Number.isFinite(Date.parse(metadata.capacityObservedAt))
+              ? metadata.capacityObservedAt : null,
+          source: typeof metadata.capacitySource === "string" &&
+            metadata.capacitySource.length <= 128
+              ? metadata.capacitySource : null,
+          freshnessVerified: false,
+        },
         lastHealthCheck: resource.lastHealthCheck,
         cpuMeasurement: cpu,
       };

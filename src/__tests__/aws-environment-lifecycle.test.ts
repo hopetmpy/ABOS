@@ -896,6 +896,143 @@ describe("AwsEnvironmentProvider lifecycle", () => {
     expect(health.metadata?.ssmPingStatus).toBe("Online");
   });
 
+  it("observes opt-in AWS vCPU and MiB shape through P-018 without inferring workload utilization", async () => {
+    const calls: string[][] = [];
+    const runner: EnvironmentCommandRunner = async (_command, args) => {
+      calls.push(args);
+      if (args[0] === "ec2" && args[1] === "describe-instances") {
+        return ok(JSON.stringify({
+          InstanceId: "i-1234567890", InstanceType: "t3.medium",
+          State: { Name: "running" },
+        }));
+      }
+      if (args[0] === "ssm") return ok("null");
+      if (args[0] === "ec2" && args[1] === "describe-instance-types") {
+        expect(args).toContain("t3.medium");
+        return ok(JSON.stringify({
+          InstanceTypes: [{
+            InstanceType: "t3.medium",
+            VCpuInfo: { DefaultVCpus: 2 },
+            MemoryInfo: { SizeInMiB: 4096 },
+          }],
+        }));
+      }
+      throw new Error(`unexpected AWS call ${args.join(" ")}`);
+    };
+    const db = createTestDb();
+    try {
+      const registry = new EnvironmentRegistry();
+      registry.register(new AwsEnvironmentProvider({
+        runner, defaultRegion: "us-east-1", observeEc2InstanceCapacity: true,
+      }));
+      const store = new EnvironmentResourceStore(db.raw);
+      const owned = store.create({
+        provider: "aws", externalId: "i-1234567890",
+        type: "aws-ec2-instance", region: "us-east-1",
+        status: "running", capabilities: ["linux", "compute"],
+        metadata: { instanceId: "i-1234567890" },
+      });
+      const lifecycle = new EnvironmentLifecycleManager(registry, store);
+      const health = await lifecycle.health(owned.id);
+      expect(health.metadata.capacity).toEqual({ vCpuCount: 2, memoryMiB: 4096 });
+      expect(health.metadata.capacityMetricStatus).toBe("observed");
+      expect(health.metadata.capacitySource).toBe("aws:ec2:describe-instance-types");
+      expect(store.findReusableCandidates({
+        provider: "aws", requiredCapabilities: ["compute"],
+        minimumCapacity: { vCpuCount: 2, memoryMiB: 4096 },
+      }).map(x => x.id)).toEqual([owned.id]);
+      expect(store.findReusableCandidates({
+        provider: "aws", minimumCapacity: { vCpuCount: 4 },
+      })).toEqual([]);
+      expect(calls.filter(x => x[0] === "ec2" && x[1] === "describe-instance-types")).toHaveLength(1);
+      expect(calls.some(x => x[0] === "cloudwatch")).toBe(false);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("does not retain nominal AWS capacity on denied, mismatched or vanished instance observations", async () => {
+    for (const mode of ["denied", "mismatched", "vanished"] as const) {
+      const calls: string[][] = [];
+      const runner: EnvironmentCommandRunner = async (_command, args) => {
+        calls.push(args);
+        if (args[0] === "ec2" && args[1] === "describe-instances") {
+          return ok(mode === "vanished" ? "null" : JSON.stringify({
+            InstanceId: "i-1234567890", InstanceType: "t3.medium",
+            State: { Name: "running" },
+          }));
+        }
+        if (args[0] === "ssm") return ok("null");
+        if (args[0] === "ec2" && args[1] === "describe-instance-types") {
+          if (mode === "denied") {
+            return { stdout: "", stderr: "AccessDenied", exitCode: 254 };
+          }
+          return ok(JSON.stringify({
+            InstanceTypes: [{
+              InstanceType: "wrong.instance", VCpuInfo: { DefaultVCpus: 64 },
+              MemoryInfo: { SizeInMiB: 262144 },
+            }],
+          }));
+        }
+        throw new Error(`unexpected AWS call ${args.join(" ")}`);
+      };
+      const db = createTestDb();
+      try {
+        const registry = new EnvironmentRegistry();
+        registry.register(new AwsEnvironmentProvider({
+          runner, defaultRegion: "us-east-1", observeEc2InstanceCapacity: true,
+        }));
+        const store = new EnvironmentResourceStore(db.raw);
+        const owned = store.create({
+          provider: "aws", externalId: "i-1234567890",
+          type: "aws-ec2-instance", region: "us-east-1",
+          status: "running", capabilities: ["compute"],
+          metadata: {
+            instanceId: "i-1234567890",
+            capacity: { vCpuCount: 32, memoryMiB: 65536 },
+            capacityMetricStatus: "observed",
+          },
+        });
+        const after = await new EnvironmentLifecycleManager(registry, store).health(owned.id);
+        expect(after.metadata.capacity).toBeNull();
+        expect(after.metadata.capacityMetricStatus).toBe("unknown");
+        expect(store.get(owned.id)?.metadata.capacity).toBeNull();
+        expect(store.findReusableCandidates({
+          provider: "aws", minimumCapacity: { vCpuCount: 2 },
+        })).toEqual([]);
+        if (mode === "vanished") {
+          expect(calls.some(x => x[1] === "describe-instance-types")).toBe(false);
+        }
+      } finally {
+        db.close();
+      }
+    }
+  });
+
+  it("never performs extra instance-type reads without explicit observation opt-in", async () => {
+    const calls: string[][] = [];
+    const provider = new AwsEnvironmentProvider({
+      defaultRegion: "us-east-1",
+      runner: async (_command, args) => {
+        calls.push(args);
+        if (args[0] === "ec2" && args[1] === "describe-instances") {
+          return ok(JSON.stringify({
+            InstanceId: "i-1234567890", InstanceType: "t3.medium",
+            State: { Name: "running" },
+          }));
+        }
+        // The baseline fixture is an SSM-required executor; keep that
+        // independent readiness contract true when asserting API opt-out.
+        if (args[0] === "ssm") return ok(JSON.stringify({ PingStatus: "Online" }));
+        throw new Error(`unexpected AWS call ${args.join(" ")}`);
+      },
+    });
+    const health = await provider.health(resource());
+    expect(health.healthy).toBe(true);
+    expect(health.metadata?.capacity).toBeUndefined();
+    expect(calls.some(x => x[1] === "describe-instance-types")).toBe(false);
+  });
+
   it("observes recent CloudWatch CPU as opt-in measured utilization, not total capacity", async () => {
     const calls: string[][] = [];
     const observedAt = new Date(Date.now() - 4 * 60_000).toISOString();

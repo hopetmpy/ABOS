@@ -152,6 +152,10 @@ export interface AwsEnvironmentProviderOptions {
    * It never changes capacity, authorizes spend, or claims total utilization.
    */
   observeCloudWatchCpuUtilization?: boolean;
+  /** Opt-in read-only EC2 DescribeInstanceTypes CPU/memory shape. Disabled by
+   * default: API may be unavailable, metered or not authorized. This records
+   * static nominal instance capacity, never utilization or spare capacity. */
+  observeEc2InstanceCapacity?: boolean;
   ssmReadyAttempts?: number;
   ssmReadyIntervalMs?: number;
   artifactMaxBytes?: number;
@@ -973,6 +977,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       // P-018's additive metadata persistence would keep stale CPU load and
       // make it appear current after provider disappearance/recovery.
       const cpuUnavailable = this.options.observeCloudWatchCpuUtilization === true;
+      const capacityUnavailable = this.options.observeEc2InstanceCapacity === true;
       return {
         healthy: false,
         status: resource.status === "terminating" || resource.status === "terminated"
@@ -985,12 +990,23 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
           ...(cpuUnavailable
             ? ["AWS CPU utilization UNKNOWN: EC2 instance unavailable; previous measurement is stale."]
             : []),
+          ...(capacityUnavailable
+            ? ["AWS nominal EC2 capacity UNKNOWN: EC2 not observed; stale nominal vCPU/memory cannot be reused as a measurement."]
+            : []),
         ],
-        ...(cpuUnavailable
+        ...(cpuUnavailable || capacityUnavailable
           ? { metadata: {
-              cpuUtilizationAveragePct: null,
-              cpuUtilizationObservedAt: null,
-              cpuUtilizationMetricStatus: "unknown",
+              ...(cpuUnavailable ? {
+                cpuUtilizationAveragePct: null,
+                cpuUtilizationObservedAt: null,
+                cpuUtilizationMetricStatus: "unknown",
+              } : {}),
+              ...(capacityUnavailable ? {
+                capacity: null,
+                capacityMetricStatus: "unknown",
+                capacityObservedAt: null,
+                capacitySource: null,
+              } : {}),
             } }
           : {}),
       };
@@ -1052,6 +1068,15 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       }
     }
 
+    let capacityMetadata: Record<string, unknown> = {};
+    if (this.options.observeEc2InstanceCapacity === true) {
+      const capacity = await this.observeNominalInstanceCapacity(
+        observed.instance.InstanceType ?? null, region, new Date(),
+      );
+      capacityMetadata = capacity.metadata;
+      evidence.push(capacity.evidence);
+    }
+
     return {
       healthy,
       status:
@@ -1064,6 +1089,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         ...observationMetadata(observed.instance),
         ...cost.metadata,
         ...utilizationMetadata,
+        ...capacityMetadata,
         ssmPingStatus: ssm?.PingStatus ?? null,
         ssmAgentVersion: ssm?.AgentVersion ?? null,
         ssmPlatformType: ssm?.PlatformType ?? null,
@@ -2106,6 +2132,59 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
    * channel. No datapoint, invalid data, future/stale time, denied permissions
    * or provider errors are UNKNOWN, never zero utilization or free capacity.
    */
+  /** Static nominal EC2 shape, sourced only from read-only DescribeInstanceTypes.
+   * Does not claim usable workload throughput, available capacity, full
+   * resources (e.g. EBS volumes) or actual AWS supplier costs. */
+  private async observeNominalInstanceCapacity(
+    instanceType: string | null,
+    region: string | null,
+    observedAt: Date,
+  ): Promise<{ metadata: Record<string, unknown>; evidence: string }> {
+    const unknown = (why: string) => ({
+      metadata: {
+        capacity: null, capacityMetricStatus: "unknown",
+        capacityObservedAt: null, capacitySource: null,
+      } as Record<string, unknown>,
+      evidence: `AWS nominal EC2 capacity UNKNOWN: ${why}; no vCPU/memory or spare-capacity claim inferred.`,
+    });
+    if (!instanceType?.trim()) return unknown("instance type not observed");
+    let result: CommandResult;
+    try {
+      result = await this.runAws([
+        "ec2", "describe-instance-types",
+        "--instance-types", instanceType,
+        "--output", "json",
+        ...regionArgs(region),
+      ]);
+    } catch (error) {
+      return unknown(errorMessage(error));
+    }
+    if (result.exitCode !== 0) return unknown(errorMessage(new Error(result.stderr || result.stdout)));
+    const parsed = parseJson<{
+      InstanceTypes?: Array<{
+        InstanceType?: string;
+        VCpuInfo?: { DefaultVCpus?: number };
+        MemoryInfo?: { SizeInMiB?: number };
+      }>;
+    }>(result.stdout);
+    const entry = parsed?.InstanceTypes?.find(x => x.InstanceType === instanceType);
+    const vcpu = entry?.VCpuInfo?.DefaultVCpus;
+    const memory = entry?.MemoryInfo?.SizeInMiB;
+    if (!Number.isSafeInteger(vcpu) || !Number.isSafeInteger(memory) ||
+        (vcpu ?? 0) <= 0 || (memory ?? 0) <= 0) {
+      return unknown("provider returned missing/invalid matched instance type capacity");
+    }
+    return {
+      metadata: {
+        capacity: { vCpuCount: vcpu, memoryMiB: memory },
+        capacityMetricStatus: "observed",
+        capacityObservedAt: observedAt.toISOString(),
+        capacitySource: "aws:ec2:describe-instance-types",
+      },
+      evidence: `AWS nominal instance type=${instanceType} capacity observed: vCpuCount=${vcpu}, memoryMiB=${memory}; provider shape only, not proof of free workload capacity or purchase authority.`,
+    };
+  }
+
   private async observeCloudWatchCpuUtilization(
     instanceId: string,
     region: string | null,
