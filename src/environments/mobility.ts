@@ -102,7 +102,17 @@ export class EnvironmentMobilityCoordinator {
         mobilitySourceResourceId: source.id,
         mobilityExcludedResourceIds: excludedResourceIds,
       },
-    });
+    }, (environmentId, targetRequirements) =>
+      // This is read-only P-018 owned spare-capacity evidence for planning,
+      // NOT proof of fresh health, target suitability or buying authority.
+      // Never count the source being retired as a reusable target.
+      this.lifecycle.resources.findReusableCandidates({
+        provider: environmentId,
+        requiredCapabilities: targetRequirements.requiredCapabilities,
+        region: targetRequirements.region,
+        excludedResourceIds,
+      }).length,
+    );
 
     const selected = selection.selected;
     const updated = this.store.transition(
