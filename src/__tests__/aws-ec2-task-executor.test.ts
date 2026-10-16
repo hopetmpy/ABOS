@@ -332,15 +332,38 @@ describe("AwsEc2TaskExecutor", () => {
     const configured = new AwsEc2TaskExecutor({
       provider, lifecycle: explicit.lifecycle,
       identity: {} as any, config: {} as any,
-      resourceMetadata: { expectedResourceDurationMs: 540_000 },
+      resourceMetadata: {
+        expectedResourceDurationMs: 540_000,
+        hourlyCostCents: 1.5,
+        // No source monetary unit: even a numeric Task cost cannot be a
+        // persisted USD supplier-money estimate in P-018.
+      },
     });
     await configured.spawn(task());
     expect(explicit.provisionInputs[0]).toMatchObject({
       expectedDurationMs: 540_000,
+      selectionEstimateCents: null,
+      metadata: { hourlyCostCents: 1.5, hourlyCostUnit: null },
     });
     expect(JSON.stringify(explicit.provisionInputs[0])).toContain(
       "explicit resourceMetadata.expectedResourceDurationMs=540000",
     );
+    const sourced = lifecycleStub();
+    const sourcedExecutor = new AwsEc2TaskExecutor({
+      provider, lifecycle: sourced.lifecycle,
+      identity: {} as any, config: {} as any,
+      resourceMetadata: {
+        expectedResourceDurationMs: 540_000,
+        hourlyCostCents: 1.5, hourlyCostUnit: "usd_cent",
+      },
+    });
+    await sourcedExecutor.spawn(task());
+    expect(sourced.provisionInputs[0]).toMatchObject({
+      expectedDurationMs: 540_000,
+      selectionEstimateCents: 1,
+      metadata: { hourlyCostCents: 1.5, hourlyCostUnit: "usd_cent" },
+    });
+
     const invalid = lifecycleStub();
     const wrongType = new AwsEc2TaskExecutor({
       provider, lifecycle: invalid.lifecycle,
