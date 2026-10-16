@@ -70,6 +70,12 @@ describe("P-031 ambiguous billable provider mutation lifecycle", () => {
       expect(resources.findReusableCandidates({ provider: "controlled" })).toEqual([]);
       await expect(lifecycle.resize("vm-1", { instanceType: "small" }))
         .rejects.toThrow("Reconcile provider state");
+      // A parallel health read cannot certify the final size before the
+      // pending provider resize completes. Its temporary measurement must
+      // be invalidated when the mutation returns.
+      await lifecycle.health("vm-1");
+      expect(resources.get("vm-1")?.metadata.capacity).toEqual({ cpuCores: 2, memoryMb: 2048 });
+      expect(resources.findReusableCandidates({ provider: "controlled" })).toEqual([]);
       release();
       const resized = await pending;
       expect(dispatches).toBe(1);
