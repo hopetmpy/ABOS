@@ -90,6 +90,63 @@ describe("P-031 provision timing from source-attributed provider quotes", () => 
     expect(immediate.selected?.executionEligible).toBe(true);
   });
 
+  it("ranks evidenced on-time resource paths above unknown and late quotes without forbidding discovery", async () => {
+    const registry = new EnvironmentRegistry();
+    const observedAt = new Date().toISOString();
+    const make = (id: string, cost: number, leadDays: number | null): EnvironmentProvider => ({
+      ...provider({ id, capabilities: ["compute"], cost }),
+      estimate: async () => ({
+        estimatedCostCents: cost,
+        costUnit: "usd_cent",
+        costCoverage: "complete",
+        metadata: leadDays === null ? {} : {
+          provisioningLeadTimeMs: leadDays * DAY,
+          provisioningLeadTimeObservedAt: observedAt,
+          provisioningLeadTimeSource: "scenario-supplier-quote",
+        },
+      }),
+    });
+    registry.register(make("cheap-but-late", 1, 14));
+    registry.register(make("unknown-lead", 2, null));
+    registry.register(make("timely-with-quote", 100, 2));
+
+    const selector = new EnvironmentSelector(registry);
+    const neededByAt = new Date(Date.now() + 7 * DAY).toISOString();
+    const timed = await selector.select({
+      requiredCapabilities: ["compute"],
+      neededByAt,
+      preferredEnvironment: "cheap-but-late",
+    });
+    expect(timed.candidates.map(x => x.environmentId)).toEqual([
+      "timely-with-quote", "unknown-lead", "cheap-but-late",
+    ]);
+    expect(timed.selected?.environmentId).toBe("timely-with-quote");
+    expect(timed.selected?.provisioningTiming?.status).toBe("quoted_window_open");
+    expect(timed.candidates[1]?.provisioningTiming?.status).toBe("unknown");
+    expect(timed.candidates[2]?.provisioningTiming?.status).toBe("quoted_window_elapsed");
+    expect(timed.candidates[2]?.executionEligible).toBe(true);
+    expect(timed.selected?.evidence.join(" ")).toContain("NOT procurement permission");
+
+    // Without an evidenced, explicit resource need date, do not silently
+    // elevate old timing estimates above the objective's own preference.
+    const untimed = await selector.select({
+      requiredCapabilities: ["compute"],
+      preferredEnvironment: "cheap-but-late",
+    });
+    expect(untimed.selected?.environmentId).toBe("cheap-but-late");
+
+    const unknownOrLate = new EnvironmentRegistry();
+    unknownOrLate.register(make("cheap-but-late", 1, 14));
+    unknownOrLate.register(make("unknown-lead", 2, null));
+    const exploratory = await new EnvironmentSelector(unknownOrLate).select({
+      requiredCapabilities: ["compute"], neededByAt,
+    });
+    expect(exploratory.selected?.environmentId).toBe("unknown-lead");
+    // An unknown supplier lead time is an opportunity to probe, NOT a
+    // guaranteed ability to meet the deadline or authority to buy.
+    expect(exploratory.candidates.map(x => x.executionEligible)).toEqual([true, true]);
+  });
+
   it("preserves unknown when only startup latency, stale-free provenance missing, or invalid need date exists", async () => {
     const registry = new EnvironmentRegistry();
     registry.register({
