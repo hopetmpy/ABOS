@@ -29,6 +29,43 @@ function createDb() {
 }
 
 describe("Environment Execution & Lifecycle v2", () => {
+  it("matches source-owned spare resources by Task capability and explicit instance shape", () => {
+    const db = createDb();
+    try {
+      const inventory = new EnvironmentResourceStore(db);
+      const old = inventory.create({
+        provider: "provider-open", externalId: "vm-old", type: "vm",
+        status: "running", region: "region-a", capabilities: ["linux", "compute"],
+        metadata: { instanceType: "small" },
+      });
+      const matching = inventory.create({
+        provider: "provider-open", externalId: "vm-match", type: "vm",
+        status: "ready", region: "region-a", capabilities: ["linux", "compute"],
+        metadata: { instanceType: "large" },
+      });
+      inventory.create({
+        provider: "provider-open", externalId: "vm-unknown", type: "vm",
+        status: "ready", region: "region-a", capabilities: ["linux", "compute"],
+      });
+      const filter = {
+        provider: "provider-open", region: "region-a",
+        requiredCapabilities: ["compute"], requiredInstanceType: "large",
+      };
+      expect(inventory.findReusableCandidates(filter).map(x => x.id)).toEqual([matching.id]);
+      expect(inventory.findReusableCandidates({
+        ...filter, requiredCapabilities: ["compute", "gpu"],
+      })).toEqual([]);
+      expect(inventory.findReusableCandidates({
+        ...filter, requiredInstanceType: "small",
+      }).map(x => x.id)).toEqual([old.id]);
+      expect(inventory.findReusableCandidates({
+        provider: "provider-open", region: "region-a",
+        requiredCapabilities: ["compute"],
+      })).toHaveLength(3);
+    } finally {
+      db.close();
+    }
+  });
   it("persists ownership before provisioning and records lifecycle evidence", async () => {
     const db = createDb();
     try {

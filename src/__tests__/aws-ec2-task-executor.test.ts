@@ -353,6 +353,102 @@ describe("AwsEc2TaskExecutor", () => {
     expect(owned.provisionCalls).toBe(0);
   });
 
+  it("does not reuse a healthy owned EC2 when the Task needs an unproven capability", async () => {
+    const calls: string[][] = [];
+    const runner: EnvironmentCommandRunner = async (_command, args) => {
+      calls.push(args);
+      if (args[0] === "--version") return { exitCode: 0, stdout: "aws-cli/2.test", stderr: "" };
+      if (args[0] === "sts") return { exitCode: 0, stdout: JSON.stringify({ Account: "123456789012" }), stderr: "" };
+      if (args[0] === "configure") return { exitCode: 0, stdout: "us-east-1", stderr: "" };
+      throw new Error(`unexpected AWS call: ${args.join(" ")}`);
+    };
+    const provider = new AwsEnvironmentProvider({ runner, defaultRegion: "us-east-1" });
+    const existing = lifecycleStub([resource({
+      taskId: null,
+      capabilities: ["remote compute", "linux", "ssm"],
+    })]);
+    let receivedRequirements: unknown;
+    (existing.lifecycle.resources as any).findReusableCandidates = (input: any) => {
+      receivedRequirements = input.requiredCapabilities;
+      return existing.resources;
+    };
+    const executor = new AwsEc2TaskExecutor({
+      provider, lifecycle: existing.lifecycle,
+      identity: {} as any, config: {} as any,
+    });
+    const gpuTask = { ...task(), requiredCapabilities: ["shell", "gpu"] };
+    const assessment = await executor.assess(gpuTask);
+    expect(receivedRequirements).toEqual(["gpu"]);
+    expect(assessment.executable).toBe(false);
+    await expect(executor.spawn(gpuTask)).rejects.toThrow("no verified execution support");
+    expect(existing.provisionCalls).toBe(0);
+    expect(calls.some(args => args[0] === "ec2" && args[1] === "run-instances")).toBe(false);
+
+    // The same owned Linux+SSM resource can serve a shell-only Task: no
+    // artificial denylist or new provider purchase is needed.
+    const shellOnly = await executor.assess(task());
+    expect(shellOnly.executable).toBe(true);
+    const reused = await executor.spawn(task());
+    expect(reused.metadata?.reusedResourceId).toBe("resource-aws-1");
+    expect(existing.provisionCalls).toBe(0);
+  });
+
+  it("does not count mismatched or unknown EC2 shape as reusable capacity", async () => {
+    const runner: EnvironmentCommandRunner = async (_command, args) => {
+      if (args[0] === "--version") return { exitCode: 0, stdout: "aws-cli/2.test", stderr: "" };
+      if (args[0] === "sts") return { exitCode: 0, stdout: JSON.stringify({ Account: "123456789012" }), stderr: "" };
+      if (args[0] === "configure") return { exitCode: 0, stdout: "us-east-1", stderr: "" };
+      throw new Error(`unexpected AWS call: ${args.join(" ")}`);
+    };
+    const provider = new AwsEnvironmentProvider({ runner, defaultRegion: "us-east-1" });
+    const owned = lifecycleStub([resource({ taskId: null, metadata: {
+      executorKind: "aws-ec2-ssm", executorAddress: "aws://ec2/i-new",
+      instanceType: "t3.micro",
+    } })]);
+    (owned.lifecycle.resources as any).findReusableCandidates = () => owned.resources;
+    const executor = new AwsEc2TaskExecutor({
+      provider, lifecycle: owned.lifecycle,
+      identity: {} as any, config: {} as any,
+      resourceMetadata: { instanceType: "t3.large" },
+    });
+    expect((await executor.assess(task())).executable).toBe(false);
+    await expect(executor.spawn(task())).rejects.toThrow("IAM instance profile");
+    expect(owned.provisionCalls).toBe(0);
+    owned.resources[0]!.metadata.instanceType = null;
+    expect((await executor.assess(task())).executable).toBe(false);
+    owned.resources[0]!.metadata.instanceType = "t3.large";
+    expect((await executor.assess(task())).executable).toBe(true);
+    const reused = await executor.spawn(task());
+    expect(reused.metadata?.reusedResourceId).toBe("resource-aws-1");
+    expect(owned.provisionCalls).toBe(0);
+  });
+
+  it("revalidates capabilities after health invalidates formerly compatible owned EC2", async () => {
+    const owned = lifecycleStub([resource({
+      taskId: null,
+      capabilities: ["linux", "ssm", "compute", "database"],
+    })]);
+    (owned.lifecycle.resources as any).findReusableCandidates = () => owned.resources;
+    let observed = 0;
+    (owned.lifecycle as any).health = async (id: string) => {
+      observed += 1;
+      const target = owned.resources.find(value => value.id === id)!;
+      target.capabilities = ["linux", "ssm", "compute"];
+      return target;
+    };
+    const provider = new AwsEnvironmentProvider({
+      runner: async () => { throw new Error("No provider call expected"); },
+    });
+    const executor = new AwsEc2TaskExecutor({
+      provider, lifecycle: owned.lifecycle,
+      identity: {} as any, config: {} as any,
+    });
+    const dbTask = { ...task(), requiredCapabilities: ["shell", "database"] };
+    await expect(executor.spawn(dbTask)).rejects.toThrow("no verified execution support");
+    expect(observed).toBe(1);
+    expect(owned.provisionCalls).toBe(0);
+  });
+
   it("keeps an unproven EC2 candidate ephemeral and marks failed bootstrap for cleanup", async () => {
     const runner: EnvironmentCommandRunner = async (_command, args) => {
       if (args[0] === "ec2" && args[1] === "describe-instances") {

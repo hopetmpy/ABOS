@@ -110,6 +110,9 @@ export class EnvironmentMobilityCoordinator {
         provider: environmentId,
         requiredCapabilities: targetRequirements.requiredCapabilities,
         region: targetRequirements.region,
+        requiredInstanceType:
+          typeof targetRequirements.metadata?.instanceType === "string"
+            ? targetRequirements.metadata.instanceType : null,
         excludedResourceIds,
       }).length,
     );

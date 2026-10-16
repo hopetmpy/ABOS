@@ -223,6 +223,8 @@ export class EnvironmentResourceStore {
     provider: string;
     region?: string | null;
     requiredCapabilities?: string[];
+    /** Optional exact resource shape: no implicit resizing or size substitution. */
+    requiredInstanceType?: string | null;
     excludedResourceIds?: string[];
     requireExecutorAddress?: boolean;
   }): EnvironmentResource[] {
@@ -249,6 +251,8 @@ export class EnvironmentResourceStore {
         return false;
       }
       if (input.region && resource.region !== input.region) return false;
+      if (input.requiredInstanceType?.trim() &&
+          resource.metadata.instanceType !== input.requiredInstanceType.trim()) return false;
       const available = new Set(resource.capabilities.map(value =>
         value.trim().toLowerCase(),
       ));

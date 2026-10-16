@@ -442,6 +442,9 @@ export function createEnvironmentTools(
                 provider: environmentId,
                 requiredCapabilities: requirements.requiredCapabilities,
                 region: requirements.region,
+                requiredInstanceType:
+                  typeof requirements.metadata?.instanceType === "string"
+                    ? requirements.metadata.instanceType : null,
               }).length
           : undefined);
 

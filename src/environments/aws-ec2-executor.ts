@@ -85,7 +85,20 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
 
     const reusable = this.findReusableResources(
       spawnOptions.excludedResourceIds ?? [],
+      task.requiredCapabilities ?? [],
     );
+    const unprovenNewCapabilities =
+      unverifiableNewEc2ExecutorCapabilities(task.requiredCapabilities ?? []);
+    if (reusable.length === 0 && unprovenNewCapabilities.length > 0) {
+      return {
+        executable: false,
+        evidence: [
+          ...snapshot.evidence,
+          `No currently owned EC2 executor verifies Task capabilities: ${unprovenNewCapabilities.join(", ")}.`,
+          "A new Linux+SSM executor cannot claim these additional capabilities from an IAM profile or a generic EC2 quote. Probe another executor/provider/shape before billable provisioning; goal feasibility remains UNKNOWN.",
+        ],
+      };
+    }
     const instanceProfile =
       this.options.provider.getConfiguredIamInstanceProfile(
         this.options.resourceMetadata,
@@ -130,6 +143,7 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
   ): Promise<EnvironmentTaskSpawnResult> {
     const reusable = await this.findHealthyReusableResource(
       spawnOptions.excludedResourceIds ?? [],
+      task.requiredCapabilities ?? [],
     );
     if (reusable?.externalId) {
       return {
@@ -149,6 +163,13 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
       };
     }
 
+    const unprovenNewCapabilities =
+      unverifiableNewEc2ExecutorCapabilities(task.requiredCapabilities ?? []);
+    if (unprovenNewCapabilities.length > 0) {
+      throw new Error(
+        `New AWS Linux+SSM executor has no verified execution support for Task capabilities: ${unprovenNewCapabilities.join(", ")}. Probe an appropriate executor or provider before billable provisioning; this is not proof of objective impossibility.`,
+      );
+    }
     const instanceProfile =
       this.options.provider.getConfiguredIamInstanceProfile(
         this.options.resourceMetadata,
@@ -698,7 +719,22 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
     };
   }
 
-  private findReusableResources(excludedResourceIds: string[] = []) {
+  private findReusableResources(
+    excludedResourceIds: string[] = [],
+    requiredCapabilities: string[] = [],
+  ) {
+    // A Task must not inherit a VM only because it is owned and running.
+    // This Linux+SSM executor supplies shell; other task requirements must
+    // be explicitly present in the owned resource's capability inventory.
+    const required = requiredCapabilities.map(value => value.trim().toLowerCase())
+      .filter(Boolean);
+    const inventoryCapabilities = required.filter(value => value !== "shell");
+    // An explicitly requested EC2 shape is an execution requirement.
+    // An unknown/stale shape does not prove it fits and cannot trigger resize.
+    const requestedInstanceType =
+      typeof this.options.resourceMetadata?.instanceType === "string" &&
+      this.options.resourceMetadata.instanceType.trim()
+        ? this.options.resourceMetadata.instanceType.trim() : null;
     // On a real P-018 inventory, prefer canonical ownership/Task/retention
     // eligibility to this legacy shape filter. An active Task's VM cannot be
     // silently rebound to a different Task just because it is still running.
@@ -708,6 +744,8 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
       ? new Set(canonical.call(this.options.lifecycle.resources, {
           provider: this.environmentId,
           excludedResourceIds,
+          requiredCapabilities: inventoryCapabilities,
+          requiredInstanceType: requestedInstanceType,
           requireExecutorAddress: true,
         }).map(resource => resource.id))
       : null;
@@ -728,6 +766,14 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
           (ownedIds === null || ownedIds.has(resource.id)) &&
           resource.type === "aws-ec2-instance" &&
           resource.metadata.executorKind === "aws-ec2-ssm" &&
+          (!required.includes("shell") ||
+            (resource.capabilities.some(x => x.trim().toLowerCase() === "ssm") &&
+             resource.capabilities.some(x => x.trim().toLowerCase() === "linux"))) &&
+          inventoryCapabilities.every(capability =>
+            resource.capabilities.some(value =>
+              value.trim().toLowerCase() === capability)) &&
+          (requestedInstanceType === null ||
+            resource.metadata.instanceType === requestedInstanceType) &&
           ["ready", "running", "suspended"].includes(resource.status) &&
           resource.metadata.artifactCollectionState !== "pending" &&
           !releaseStates.has(
@@ -740,8 +786,9 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
 
   private async findHealthyReusableResource(
     excludedResourceIds: string[] = [],
+    requiredCapabilities: string[] = [],
   ) {
-    for (const candidate of this.findReusableResources(excludedResourceIds)) {
+    for (const candidate of this.findReusableResources(excludedResourceIds, requiredCapabilities)) {
       let current = candidate;
       if (current.status === "suspended") {
         current = await this.options.lifecycle.resume(current.id);
@@ -752,11 +799,45 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
 
       const observed = await this.options.lifecycle.health(current.id);
       if (["ready", "running"].includes(observed.status)) {
+        // Capabilities can be invalidated by reconciliation/recovery after
+        // inventory enumeration. Preserve Task requirements across that window.
+        const freshCapabilities = new Set(observed.capabilities.map(value =>
+          value.trim().toLowerCase()));
+        const stillSatisfiesTask = requiredCapabilities.every(value => {
+          const requirement = value.trim().toLowerCase();
+          if (!requirement) return true;
+          return requirement === "shell"
+            ? freshCapabilities.has("linux") && freshCapabilities.has("ssm")
+            : freshCapabilities.has(requirement);
+        });
+        if (!stillSatisfiesTask) continue;
+        // A provider health check may reveal an instance shape change since
+        // inventory discovery. Never bind a resource after a mismatched resize.
+        const requestedInstanceType =
+          typeof this.options.resourceMetadata?.instanceType === "string" &&
+          this.options.resourceMetadata.instanceType.trim()
+            ? this.options.resourceMetadata.instanceType.trim() : null;
+        if (requestedInstanceType !== null &&
+            observed.metadata.instanceType !== requestedInstanceType) continue;
         return observed;
       }
     }
     return null;
   }
+}
+
+// Narrow proof for this specific Linux+SSM executor, NOT a general ABOS
+// capability allowlist. Other resources may provide additional capabilities
+// when observed via P-018 inventory and checked again at Task binding.
+const BASE_EC2_SSM_TASK_CAPABILITIES = new Set([
+  "shell", "remote compute", "virtual machine", "linux", "ec2",
+  "ssm", "task executor",
+]);
+
+function unverifiableNewEc2ExecutorCapabilities(required: string[]): string[] {
+  return [...new Set(required.map(value => value.trim().toLowerCase())
+    .filter(value => value.length > 0 &&
+      !BASE_EC2_SSM_TASK_CAPABILITIES.has(value)))];
 }
 
 function resolveRuntimeGitRef(): string {
