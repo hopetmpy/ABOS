@@ -300,6 +300,24 @@ describe("buildPlannerPrompt", () => {
     expect(prompt).toContain('"estimatedTotalCostCents": 15000');
   });
 
+  it("keeps the planner's own output example parseable and valid for a single task", () => {
+    const prompt = buildPlannerPrompt(context);
+    const fence = "```json\\n";
+    const begin = prompt.indexOf(fence);
+    expect(begin).toBeGreaterThanOrEqual(0);
+    const from = begin + fence.length;
+    const end = prompt.indexOf("\\n```", from);
+    expect(end).toBeGreaterThan(from);
+    const example = JSON.parse(prompt.slice(from, end));
+    expect(() => validatePlannerOutput(example)).not.toThrow();
+    expect(example.tasks).toHaveLength(1);
+    expect(example.tasks[0].dependencies).toEqual([]);
+    expect(example.tasks[0].agentRole).toBe(example.customRoles[0].name);
+    expect(example.estimatedTotalCostCents).toBe(example.tasks[0].estimatedCostCents);
+    expect(example.path.preferredEnvironment).toBeNull();
+    expect(example.alternatives[0].preferredEnvironment).toBeNull();
+  });
+
   it("includes agent availability numbers", () => {
     const prompt = buildPlannerPrompt(context);
     expect(prompt).toContain("2");   // idleAgents
