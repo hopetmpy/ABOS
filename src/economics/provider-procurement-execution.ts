@@ -248,6 +248,18 @@ export async function executeReviewedProviderProcurement(
   // transaction with the durable P-030 intent claim; it cannot authorize an
   // external AWS balance or prove real supplier invoices.
   const stage = db.transaction(() => {
+    // A P-025 route can be cancelled, rejected or rebound while a trusted
+    // provider is asynchronously observing economics. Early provenance
+    // rejects invalid requests cheaply; this transactional check ensures
+    // that only the STILL-reviewed exact task path can claim a paid effect.
+    const activeReviewedPath = getReviewedTaskPathReceipt(db, scope.taskId);
+    if (!activeReviewedPath ||
+        activeReviewedPath.goalId !== scope.goalId ||
+        activeReviewedPath.pathId !== scope.pathId) {
+      throw new Error(
+        "P-025 task route changed or lost materialized review during economic observation; no procurement dispatch.",
+      );
+    }
     // Re-evaluate under the same local transaction that reserves funds and
     // claims dispatch. A concurrent acquisition with another key or repriced
     // quote may have committed while this request awaited provider economics.
@@ -303,7 +315,7 @@ export async function executeReviewedProviderProcurement(
       policyDecisionId,
       request,
       evidence: [
-        ...reviewedPath.evidence,
+        ...activeReviewedPath.evidence,
         ...netReview.evidence,
         ...exposure.evidence,
         `P-030 local funds held=${exposure.additionalHeldCents} ${scope.unit} since observed snapshot ${exposure.fundingObservedAt}.`,
