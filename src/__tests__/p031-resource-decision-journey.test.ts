@@ -83,6 +83,34 @@ describe("P-031 coherent Goal → owned inventory → selection → treasury evi
       expect(compatible.selected?.environmentId).toBe("cloud-owned");
       expect(compatible.selected?.estimate.reusableResourceCount).toBe(1);
 
+      // The same owned VM may satisfy an initial load but must not be
+      // counted as enough when measured demand increases.
+      inventory.applyMutation(owned.id, {
+        metadata: { capacity: { cpuCores: 2, memoryMb: 2048 } },
+      }, "capacity_observed");
+      const sizedSelector = new EnvironmentSelector(registry, {
+        reuseEvaluator: (provider, requirements) => inventory.findReusableCandidates({
+          provider,
+          requiredCapabilities: requirements.requiredCapabilities,
+          minimumCapacity: requirements.minimumCapacity,
+        }).length,
+      });
+      const initialDemand = await sizedSelector.select({
+        requiredCapabilities: ["compute"],
+        minimumCapacity: { cpuCores: 2, memoryMb: 2048 },
+      });
+      expect(initialDemand.candidates.find(x => x.environmentId === "cloud-owned")
+        ?.estimate.reusableResourceCount).toBe(1);
+      const surgeDemand = await sizedSelector.select({
+        requiredCapabilities: ["compute"],
+        minimumCapacity: { cpuCores: 8, memoryMb: 8192 },
+      });
+      expect(surgeDemand.candidates.find(x => x.environmentId === "cloud-owned")
+        ?.estimate.reusableResourceCount).toBe(0);
+      expect(surgeDemand.selected).not.toBeNull();
+      // It may search external larger capacity; no purchase is authorized.
+      expect(inventory.list()).toHaveLength(1);
+
       const larger = await selector.select({
         requiredCapabilities: ["compute"], metadata: { instanceType: "large" },
       });

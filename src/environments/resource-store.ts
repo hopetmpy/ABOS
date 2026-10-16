@@ -53,6 +53,30 @@ export interface EnvironmentResourceFilter {
   includeTerminated?: boolean;
 }
 
+/** P-018 recorded numeric capacity is candidate evidence only; never infer
+ * physical quantities from an EC2 size label, CPU load or advertised provider
+ * capability. Metrics remain open-ended and keys encode units, not FX. */
+export function meetsRecordedCapacity(
+  resource: EnvironmentResource,
+  minimumCapacity?: Record<string, number>,
+): boolean {
+  if (minimumCapacity == null) return true;
+  if (typeof minimumCapacity !== "object" || Array.isArray(minimumCapacity)) return false;
+  const required = Object.entries(minimumCapacity);
+  if (required.some(([metric, amount]) =>
+    !metric.trim() || typeof amount !== "number" ||
+    !Number.isFinite(amount) || amount <= 0)) return false;
+  if (required.length === 0) return true;
+  const recorded = resource.metadata.capacity;
+  if (!recorded || typeof recorded !== "object" || Array.isArray(recorded)) return false;
+  const metrics = recorded as Record<string, unknown>;
+  return required.every(([metric, minimum]) => {
+    const actual = Object.hasOwn(metrics, metric) ? metrics[metric] : null;
+    return typeof actual === "number" && Number.isFinite(actual) &&
+      actual >= minimum;
+  });
+}
+
 export class EnvironmentResourceStore {
   constructor(private readonly db: Database) {}
 
@@ -225,6 +249,10 @@ export class EnvironmentResourceStore {
     requiredCapabilities?: string[];
     /** Optional exact resource shape: no implicit resizing or size substitution. */
     requiredInstanceType?: string | null;
+    /** Open-ended, unit-explicit per-resource minima (e.g. memoryMb, cpuCores).
+     * Capacity numbers must be recorded under P-018 resource.metadata.capacity;
+     * neither instance type nor provider advertising proves these quantities. */
+    minimumCapacity?: Record<string, number>;
     excludedResourceIds?: string[];
     requireExecutorAddress?: boolean;
   }): EnvironmentResource[] {
@@ -257,6 +285,7 @@ export class EnvironmentResourceStore {
         value.trim().toLowerCase(),
       ));
       if (required.some(capability => !available.has(capability))) return false;
+      if (!meetsRecordedCapacity(resource, input.minimumCapacity)) return false;
 
       // A resource assigned to an active/unknown Task is not spare capacity.
       // Terminal ephemeral Tasks already make the resource cleanup-eligible.

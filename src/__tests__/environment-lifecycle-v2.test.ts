@@ -66,6 +66,43 @@ describe("Environment Execution & Lifecycle v2", () => {
       db.close();
     }
   });
+  it("matches quantitative open-ended demand only against P-018 proven per-resource capacity", () => {
+    const db = createDb();
+    try {
+      const store = new EnvironmentResourceStore(db);
+      const small = store.create({
+        provider: "cloud", externalId: "small", type: "vm", status: "ready",
+        capabilities: ["compute"],
+        metadata: { capacity: { cpuCores: 2, memoryMb: 1024, requestsPerSecond: 100 } },
+      });
+      const large = store.create({
+        provider: "cloud", externalId: "large", type: "vm", status: "running",
+        capabilities: ["compute"],
+        metadata: { capacity: { cpuCores: 8, memoryMb: 16384, requestsPerSecond: 500 } },
+      });
+      store.create({
+        provider: "cloud", externalId: "unknown", type: "vm",
+        status: "ready", capabilities: ["compute"],
+        metadata: { instanceType: "largest" },
+      });
+      const find = (minimumCapacity: Record<string, number>) =>
+        store.findReusableCandidates({
+          provider: "cloud", requiredCapabilities: ["compute"], minimumCapacity,
+        }).map(x => x.id);
+      expect(find({ cpuCores: 4, memoryMb: 4096 })).toEqual([large.id]);
+      expect(find({ cpuCores: 2, memoryMb: 1024 })).toEqual([small.id, large.id]);
+      expect(find({ requestsPerSecond: 300 })).toEqual([large.id]);
+      expect(find({ requestsPerSecond: 600 })).toEqual([]);
+      expect(find({ missingNewMetric: 1 })).toEqual([]);
+      expect(find({ cpuCores: Number.NaN })).toEqual([]);
+      expect(find({ memoryMb: -1 })).toEqual([]);
+      expect(find({ memoryMb: 0 })).toEqual([]);
+      // Freshly reconciled capacity shrink must invalidate the candidate.
+      store.applyMutation(large.id, { metadata: { capacity: { cpuCores: 1 } } }, "capacity_reobserved");
+      expect(find({ cpuCores: 4 })).toEqual([]);
+    } finally { db.close(); }
+  });
+
   it("persists ownership before provisioning and records lifecycle evidence", async () => {
     const db = createDb();
     try {

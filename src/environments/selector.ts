@@ -82,6 +82,19 @@ export class EnvironmentSelector {
     requirements: EnvironmentRequirements,
     runtimeReuseEvaluator?: EnvironmentReuseEvaluator,
   ): Promise<EnvironmentSelectionResult> {
+    // Invalid numeric demand must not silently become an unqualified
+    // provider route. Open metric names are allowed; the source supplies units.
+    if (requirements.minimumCapacity != null &&
+        (typeof requirements.minimumCapacity !== "object" ||
+         Array.isArray(requirements.minimumCapacity) ||
+         Object.entries(requirements.minimumCapacity).some(([metric, amount]) =>
+           !metric.trim() || typeof amount !== "number" ||
+           !Number.isFinite(amount) || amount <= 0))) {
+      return {
+        selected: null, candidates: [],
+        unresolved: ["minimumCapacity must contain positive finite numbers with nonempty unit-explicit metric keys; invalid sizing cannot authorize provisioning."],
+      };
+    }
     const snapshots = await this.registry.inspectAll();
     const reuseEvaluator = runtimeReuseEvaluator ?? this.options.reuseEvaluator;
     const provisional = await Promise.all(

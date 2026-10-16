@@ -22,6 +22,7 @@ describe("P-031 planner canonical P-018 owned resource evidence", () => {
         credentialsReference: "SUPER-SECRET-REFERENCE",
         metadata: {
           instanceType: "t3.micro",
+          capacity: { cpuCores: 2, memoryMb: 4096, invalid: "huge" },
           cpuUtilizationMetricStatus: "observed",
           cpuUtilizationAveragePct: 12.5,
           cpuUtilizationObservedAt: "2026-10-15T20:00:00.000Z",
@@ -35,15 +36,21 @@ describe("P-031 planner canonical P-018 owned resource evidence", () => {
         provider: "aws",
         goalId: goal.id,
         instanceType: "t3.micro",
+        recordedCapacity: { cpuCores: 2, memoryMb: 4096 },
+        capacityMetricsOmitted: 0,
         cpuMeasurement: { averagePct: 12.5, observedAt: "2026-10-15T20:00:00.000Z" },
       });
       const serialized = JSON.stringify(context.ownedResources);
       expect(serialized).not.toContain("SUPER-SECRET-REFERENCE");
       expect(serialized).not.toContain("NEVER-EXPOSE-ME");
       expect(serialized).not.toContain("estimatedCostCents");
+      expect(serialized).not.toContain("invalid");
+      expect(serialized).not.toContain("huge");
       const prompt = buildPlannerPrompt(context);
       expect(prompt).toContain("Canonical P-018 owned resource inventory");
       expect(prompt).toContain("t3.micro");
+      expect(prompt).toContain("memoryMb");
+      expect(prompt).toContain("4096");
       expect(prompt).toContain("not a live provider-capacity observation");
     } finally {
       db.close();

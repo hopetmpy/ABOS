@@ -104,6 +104,17 @@ function summarizeOwnedResourceInventory(
       const metadata = resource.metadata;
       const shape = typeof metadata.instanceType === "string"
         ? metadata.instanceType : null;
+      const rawCapacity = metadata.capacity;
+      const recordedMetrics = rawCapacity && typeof rawCapacity === "object" &&
+        !Array.isArray(rawCapacity)
+          ? Object.entries(rawCapacity).filter(([metric, quantity]) =>
+              metric.trim().length > 0 && typeof quantity === "number" &&
+              Number.isFinite(quantity) && quantity > 0)
+          : [];
+      const capacity = recordedMetrics.length > 0
+        ? Object.fromEntries(recordedMetrics.slice(0, 32))
+        : null;
+      const capacityMetricsOmitted = Math.max(0, recordedMetrics.length - 32);
       const cpuStatus = metadata.cpuUtilizationMetricStatus === "observed"
         ? "observed" : "unknown";
       const cpu = cpuStatus === "observed" &&
@@ -128,6 +139,8 @@ function summarizeOwnedResourceInventory(
         taskId: resource.taskId,
         retentionPolicy: resource.retentionPolicy,
         instanceType: shape,
+        recordedCapacity: capacity,
+        capacityMetricsOmitted,
         lastHealthCheck: resource.lastHealthCheck,
         cpuMeasurement: cpu,
       };
@@ -138,7 +151,8 @@ function summarizeOwnedResourceInventory(
       resources,
       limitations: [
         "Owned/adopted records are not live provider availability, task-spare capacity, verified monetary liquidity or procurement authority.",
-        "Check fresh provider health, capabilities, resource shape and Task/Goal ownership before reuse.",
+        "Check fresh provider health, capabilities, resource shape and Task/Goal ownership before reuse. P-018 capacity numbers are inventory claims until fresh execution-side verification.",
+        "Recorded capacity is metric-key/unit-specific (e.g. memoryMb), not CPU utilization. Capacity metric overflow on a resource requires P-018 re-enumeration.",
         ...(owned.length > resources.length
           ? [`Only ${resources.length} of ${owned.length} inventory records fit this planning context; enumerate remaining P-018 inventory before concluding a need is missing.`]
           : []),

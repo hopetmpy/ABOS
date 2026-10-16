@@ -19,6 +19,7 @@ import type {
   EnvironmentTaskTarget,
 } from "./task-executor.js";
 import { AwsEnvironmentProvider } from "./aws.js";
+import { meetsRecordedCapacity } from "./resource-store.js";
 import {
   ARTIFACT_MATERIALIZATION_PROTOCOL_VERSION,
   artifactTargetRelativePath,
@@ -762,6 +763,8 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
           excludedResourceIds,
           requiredCapabilities: inventoryCapabilities,
           requiredInstanceType: requestedInstanceType,
+          minimumCapacity: this.options.resourceMetadata?.minimumCapacity as
+            Record<string, number> | undefined,
           requireExecutorAddress: true,
         }).map(resource => resource.id))
       : null;
@@ -790,6 +793,10 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
               value.trim().toLowerCase() === capability)) &&
           (requestedInstanceType === null ||
             resource.metadata.instanceType === requestedInstanceType) &&
+          meetsRecordedCapacity(
+            resource,
+            this.options.resourceMetadata?.minimumCapacity as Record<string, number> | undefined,
+          ) &&
           ["ready", "running", "suspended"].includes(resource.status) &&
           resource.metadata.artifactCollectionState !== "pending" &&
           !releaseStates.has(
@@ -835,6 +842,10 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
             ? this.options.resourceMetadata.instanceType.trim() : null;
         if (requestedInstanceType !== null &&
             observed.metadata.instanceType !== requestedInstanceType) continue;
+        if (!meetsRecordedCapacity(
+          observed,
+          this.options.resourceMetadata?.minimumCapacity as Record<string, number> | undefined,
+        )) continue;
         return observed;
       }
     }

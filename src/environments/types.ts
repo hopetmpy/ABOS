@@ -91,6 +91,9 @@ export interface EnvironmentRequirements {
   maxEstimatedCostUnit?: string | null;
   /** Source-backed expected provider resource usage period; NOT a Task watchdog/timeout. Null/omitted means UNKNOWN. */
   expectedDurationMs?: number | null;
+  /** Per-resource quantitative needs; metric keys must encode their units.
+   * Unknown capacity cannot count as a compatible owned resource. */
+  minimumCapacity?: Record<string, number>;
   region?: string | null;
   goalId?: string | null;
   pathId?: string | null;

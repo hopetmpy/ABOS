@@ -113,6 +113,7 @@ export class EnvironmentMobilityCoordinator {
         requiredInstanceType:
           typeof targetRequirements.metadata?.instanceType === "string"
             ? targetRequirements.metadata.instanceType : null,
+        minimumCapacity: targetRequirements.minimumCapacity,
         excludedResourceIds,
       }).length,
     );
