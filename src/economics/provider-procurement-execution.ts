@@ -195,8 +195,8 @@ function requireObservedResourceFit(
       fit.resourceShape !== scope.resourceShape ||
       !source || !evidence.length ||
       !Number.isFinite(observedAt) || !Number.isFinite(validUntil) ||
-      !/(?:Z|[+-]\\d{2}:\\d{2})$/.test(fit.observedAt) ||
-      !/(?:Z|[+-]\\d{2}:\\d{2})$/.test(fit.validUntil) ||
+      !/(?:Z|[+-]\d{2}:\d{2})$/.test(fit.observedAt) ||
+      !/(?:Z|[+-]\d{2}:\d{2})$/.test(fit.validUntil) ||
       observedAt > now.getTime() || validUntil <= now.getTime() ||
       validUntil <= observedAt ||
       !observed || typeof observed !== "object" || Array.isArray(observed) ||
