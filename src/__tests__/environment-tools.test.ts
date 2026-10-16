@@ -96,6 +96,12 @@ describe("P-031 source-owned resource sizing in environment_select", () => {
       expect(burst.candidates[0].executionEligible).toBe(true);
       // No matching owned VM != provider cannot provision/discover capacity.
       expect(JSON.stringify(select.parameters)).toContain("minimum_capacity");
+      const invalid = JSON.parse(await select.execute({
+        required_capabilities: [],
+        minimum_capacity: { cpuCores: -2 },
+      }, {} as any));
+      expect(invalid.selected).toBeNull();
+      expect(invalid.unresolved.join(" ")).toContain("invalid sizing");
     } finally {
       db.close();
     }
