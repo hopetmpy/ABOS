@@ -13,6 +13,7 @@ import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
 import { EnvironmentRetentionCoordinator } from "../environments/retention.js";
 import type { EnvironmentProvider } from "../environments/types.js";
+import { prepareFinancialEffect, getFinancialEffectByOperationKey } from "../economics/financial-effects.js";
 
 function createDb() {
   const db = new Database(":memory:");
@@ -91,6 +92,77 @@ function provider(
 }
 
 describe("EnvironmentRetentionCoordinator", () => {
+  it("links unresolved P-030 financial effects to a retired resource without inventing a refund or stopping other cleanup", async () => {
+    const db = createDb();
+    try {
+      insertGoal(db, "goal-retire-billing", "completed");
+      const registry = new EnvironmentRegistry();
+      let destroyed = 0;
+      registry.register(provider({
+        destroy: async () => {
+          destroyed++;
+          return { status: "terminated", providerState: "terminated", evidence: ["fixture removed"] };
+        },
+      }));
+      const lifecycle = new EnvironmentLifecycleManager(registry, new EnvironmentResourceStore(db));
+      const owned = lifecycle.adopt({
+        provider: "cloud", externalId: "vm-billed", type: "compute",
+        goalId: "goal-retire-billing", status: "running",
+        retentionPolicy: "until_goal_complete",
+      });
+      const financial = prepareFinancialEffect(db, {
+        operationKey: "mock-resource-billing-001",
+        effectKind: "provider_resource_procurement",
+        provider: "cloud", amountCents: 2200, unit: "usd_cent",
+        request: {
+          resourceId: owned.id, providerAccountId: "account-mock",
+          operation: "provision",
+        },
+        evidence: ["Synthetic unsettled supplier intent, not an invoice."],
+      });
+      const result = await new EnvironmentRetentionCoordinator(db, registry, lifecycle).sweep();
+      expect(result.released).toBe(1);
+      expect(destroyed).toBe(1);
+      const retired = lifecycle.resources.get(owned.id)!;
+      expect(retired.status).toBe("terminated");
+      expect(retired.metadata.retentionBillingReconciliation)
+        .toBe("unverified_after_resource_release");
+      expect(retired.metadata.retentionBillingUnresolvedCount).toBe(1);
+      expect(retired.metadata.retentionBillingUnresolvedOperationKeys)
+        .toEqual(["mock-resource-billing-001"]);
+      expect(retired.evidence.join(" ")).toContain("Supplier billing reconciliation remains UNKNOWN");
+      expect(getFinancialEffectByOperationKey(db, "mock-resource-billing-001")?.state)
+        .toBe(financial.effect.state);
+      expect((db.prepare("SELECT COUNT(*) AS n FROM transactions").get() as {n:number}).n)
+        .toBe(0);
+      expect(lifecycle.resources.listEvents(owned.id).some(
+        event => event.operation === "retention_billing_reconciliation")).toBe(true);
+    } finally { db.close(); }
+  });
+
+  it("keeps supplier billing UNKNOWN after verified resource absence even when no local financial intent exists", async () => {
+    const db = createDb();
+    try {
+      insertGoal(db, "goal-empty-billing", "completed");
+      const registry = new EnvironmentRegistry();
+      registry.register(provider());
+      const lifecycle = new EnvironmentLifecycleManager(registry, new EnvironmentResourceStore(db));
+      const resource = lifecycle.adopt({
+        provider: "cloud", externalId: "vm-no-intent", type: "compute",
+        status: "running", goalId: "goal-empty-billing",
+        retentionPolicy: "until_goal_complete",
+      });
+      const sweep = await new EnvironmentRetentionCoordinator(db, registry, lifecycle).sweep();
+      expect(sweep.released).toBe(1);
+      const retired = lifecycle.resources.get(resource.id)!;
+      expect(retired.metadata.retentionBillingUnresolvedCount).toBe(0);
+      expect(retired.metadata.retentionBillingReconciliation)
+        .toBe("unverified_after_resource_release");
+      expect(retired.evidence.join(" ")).toContain("even when no local intent is recorded");
+    } finally { db.close(); }
+  });
+
+
   it("retires a positively never-dispatched failed provision locally without a provider destroy", async () => {
     const db = createDb();
     try {
