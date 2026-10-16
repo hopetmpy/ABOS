@@ -23,6 +23,9 @@ describe("P-031 planner canonical P-018 owned resource evidence", () => {
         metadata: {
           instanceType: "t3.micro",
           capacity: { cpuCores: 2, memoryMb: 4096, invalid: "huge" },
+          capacityMetricStatus: "observed",
+          capacityObservedAt: "2026-10-15T20:00:00.000Z",
+          capacitySource: "aws:ec2:describe-instance-types",
           cpuUtilizationMetricStatus: "observed",
           cpuUtilizationAveragePct: 12.5,
           cpuUtilizationObservedAt: "2026-10-15T20:00:00.000Z",
@@ -38,6 +41,12 @@ describe("P-031 planner canonical P-018 owned resource evidence", () => {
         instanceType: "t3.micro",
         recordedCapacity: { cpuCores: 2, memoryMb: 4096 },
         capacityMetricsOmitted: 0,
+        capacityEvidence: {
+          status: "observed",
+          observedAt: "2026-10-15T20:00:00.000Z",
+          source: "aws:ec2:describe-instance-types",
+          freshnessVerified: false,
+        },
         cpuMeasurement: { averagePct: 12.5, observedAt: "2026-10-15T20:00:00.000Z" },
       });
       const serialized = JSON.stringify(context.ownedResources);
