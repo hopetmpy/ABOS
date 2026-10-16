@@ -224,33 +224,51 @@ export class EnvironmentSelector {
       blockers.push(`unsupported operations: ${missingOperations.join(", ")}`);
     }
 
-    if (requirements.maxEstimatedCostCents != null) {
+    // A number without its unit is not a budget. This applies to read-only
+    // environment_select as well as Task execution: a source can quote credits
+    // while the caller expects USD, or omit its unit entirely.
+    const amount = requirements.maxEstimatedCostCents;
+    const budgetUnit = requirements.maxEstimatedCostUnit?.trim().toLowerCase() ?? "";
+    const quotedUnit = estimate.costUnit?.trim().toLowerCase() ?? "";
+    const hasAmount = amount != null;
+    const hasUnit = budgetUnit.length > 0;
+    if (hasAmount !== hasUnit) {
+      blockers.push(
+        "explicit budget amount and exact monetary unit must be supplied together; an untyped provider amount is not comparable",
+      );
+    } else if (hasAmount) {
       const coverage = estimate.costCoverage ?? "unknown";
-      if (coverage !== "complete") {
+      if (!Number.isSafeInteger(amount) || amount < 0) {
+        blockers.push("explicit provider budget amount is not a nonnegative safe integer");
+      } else if (coverage !== "complete") {
         blockers.push(
           `estimated cost coverage=${coverage} is not complete under an explicit budget`,
         );
-      } else if (estimate.estimatedCostCents == null) {
-        blockers.push("estimated cost is unknown under an explicit budget");
-      } else if (requirements.maxEstimatedCostUnit &&
-        (estimate.costUnit?.trim().toLowerCase() ?? null) !==
-          requirements.maxEstimatedCostUnit.trim().toLowerCase()) {
+      } else if (!Number.isSafeInteger(estimate.estimatedCostCents) ||
+                 (estimate.estimatedCostCents ?? -1) < 0) {
+        blockers.push("estimated cost is unknown or invalid under an explicit budget");
+      } else if (quotedUnit !== budgetUnit) {
         blockers.push(
           `estimated cost unit=${estimate.costUnit ?? "UNKNOWN"} does not match explicit budget unit=${requirements.maxEstimatedCostUnit}`,
         );
-      } else if (estimate.estimatedCostCents > requirements.maxEstimatedCostCents) {
+      } else if (estimate.estimatedCostCents! > amount) {
         blockers.push(
-          `estimated cost ${estimate.estimatedCostCents} exceeds budget ${requirements.maxEstimatedCostCents}`,
+          `estimated cost ${estimate.estimatedCostCents} exceeds budget ${amount}`,
         );
       }
     }
 
+    const costComparable = hasAmount && hasUnit &&
+      Number.isSafeInteger(amount) && amount >= 0 &&
+      estimate.costCoverage === "complete" && quotedUnit === budgetUnit &&
+      Number.isSafeInteger(estimate.estimatedCostCents) &&
+      (estimate.estimatedCostCents ?? -1) >= 0;
     const score = scoreCandidate({
       snapshot,
       satisfaction,
       estimate,
       preferredEnvironment: requirements.preferredEnvironment ?? null,
-      maxEstimatedCostCents: requirements.maxEstimatedCostCents ?? null,
+      maxEstimatedCostCents: costComparable ? amount : null,
       weights: {
         ...DEFAULT_ENVIRONMENT_SELECTION_WEIGHTS,
         ...(this.options.weights ?? {}),
@@ -493,7 +511,18 @@ function compareCandidates(preferredEnvironment: string | null) {
     if (b.score !== a.score) return b.score - a.score;
     const aCost = a.estimate.estimatedCostCents;
     const bCost = b.estimate.estimatedCostCents;
-    if (aCost != null && bCost != null && aCost !== bCost) return aCost - bCost;
+    const aUnit = a.estimate.costUnit?.trim().toLowerCase();
+    const bUnit = b.estimate.costUnit?.trim().toLowerCase();
+    // Ties may only be broken by comparable, complete prices in the SAME
+    // unit. A provider's cheaper-looking numeric credit amount is not a
+    // conversion to USD, and a partial quote is not a total cost.
+    if (aUnit && bUnit === aUnit &&
+        a.estimate.costCoverage === "complete" &&
+        b.estimate.costCoverage === "complete" &&
+        Number.isSafeInteger(aCost) && Number.isSafeInteger(bCost) &&
+        aCost! >= 0 && bCost! >= 0 && aCost !== bCost) {
+      return aCost! < bCost! ? -1 : 1;
+    }
     return a.environmentId.localeCompare(b.environmentId);
   };
 }
