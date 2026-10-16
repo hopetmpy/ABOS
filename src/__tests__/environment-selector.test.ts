@@ -248,7 +248,7 @@ describe("EnvironmentSelector", () => {
     expect(observed.candidates.find(c => c.environmentId === "a-vendor-claimed-spare")
       ?.estimate.reusableResourceCount).toBe(0);
     expect(observed.candidates.find(c => c.environmentId === "a-vendor-claimed-spare")
-      ?.evidence.join(" ")).toContain("not ABOS ownership");
+      ?.evidence.join(" ")).toContain("ABOS ownership and spare capacity are not established");
 
     const noInventory = await new EnvironmentSelector(registry).select({
       requiredCapabilities: ["compute"],
