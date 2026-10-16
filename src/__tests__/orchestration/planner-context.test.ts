@@ -2,19 +2,21 @@ import { describe, expect, it } from "vitest";
 import { createTestDb } from "../mocks.js";
 import { EnvironmentResourceStore } from "../../environments/resource-store.js";
 import { buildPlannerContext } from "../../orchestration/planner-context.js";
+import { createGoal } from "../../orchestration/task-graph.js";
 import { buildPlannerPrompt } from "../../orchestration/planner.js";
 
 describe("P-031 planner canonical P-018 owned resource evidence", () => {
   it("injects scoped owner/status/shape and dated CPU evidence, not secrets or cash", async () => {
     const db = createTestDb();
     try {
+      const goal = createGoal(db.raw, "Inventory planning", "Map owned resources before acquisition.");
       const inventory = new EnvironmentResourceStore(db.raw);
       inventory.create({
         provider: "aws",
         externalId: "i-abc",
         type: "aws-ec2-instance",
         status: "running",
-        goalId: "goal-a",
+        goalId: goal.id,
         taskId: null,
         capabilities: ["compute", "linux"],
         credentialsReference: "SUPER-SECRET-REFERENCE",
@@ -26,12 +28,12 @@ describe("P-031 planner canonical P-018 owned resource evidence", () => {
           apiKey: "NEVER-EXPOSE-ME",
         },
       });
-      const context = await buildPlannerContext({ db: db.raw, goalId: "goal-a" });
+      const context = await buildPlannerContext({ db: db.raw, goalId: goal.id });
       expect(context.ownedResources?.status).toBe("observed");
       expect(context.ownedResources?.total).toBe(1);
       expect(context.ownedResources?.resources[0]).toMatchObject({
         provider: "aws",
-        goalId: "goal-a",
+        goalId: goal.id,
         instanceType: "t3.micro",
         cpuMeasurement: { averagePct: 12.5, observedAt: "2026-10-15T20:00:00.000Z" },
       });
