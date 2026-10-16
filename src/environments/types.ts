@@ -94,6 +94,9 @@ export interface EnvironmentRequirements {
   /** Per-resource quantitative needs; metric keys must encode their units.
    * Unknown capacity cannot count as a compatible owned resource. */
   minimumCapacity?: Record<string, number>;
+  /** Goal/Task resource-needed date with explicit timezone; independent of
+   * Task timeout, supplier billing duration and Goal's final deadline. */
+  neededByAt?: string | null;
   region?: string | null;
   goalId?: string | null;
   pathId?: string | null;
