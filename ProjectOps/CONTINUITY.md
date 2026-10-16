@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0028.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / QUANTITATIVE_CAPACITY_AND_QUOTED_NEED_TIME_E3_MAIN_GREEN / P005_LIVE_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / SOURCE_QUOTED_TIMING_AND_GENERIC_TASK_BRIDGE_E3_MAIN_GREEN / P005_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-quantitative-timing-capacity-checkpoint
-Host-Head-At-Audit-Open: 38638eb2ded83bef7e2e2f6399aa4b86af54b9fe
-Last-Reconciled-Host-Head: 38638eb2ded83bef7e2e2f6399aa4b86af54b9fe
-Observed-Main-Head: 38638eb2ded83bef7e2e2f6399aa4b86af54b9fe
-Last-Product-Head: 38638eb2ded83bef7e2e2f6399aa4b86af54b9fe
-Last-Product-CI: exact main 38638eb2 push 38921445725 — COMPLETE SUCCESS 8/8
+Current-Host-Branch: abos/p031-timing-bridge-provenance-checkpoint
+Host-Head-At-Audit-Open: 042f9d4d9339936c3eb700b1afc26f7a8dc4b308
+Last-Reconciled-Host-Head: 042f9d4d9339936c3eb700b1afc26f7a8dc4b308
+Observed-Main-Head: 042f9d4d9339936c3eb700b1afc26f7a8dc4b308
+Last-Product-Head: 042f9d4d9339936c3eb700b1afc26f7a8dc4b308
+Last-Product-CI: exact main 042f9d4d push 38924156441 attempt 2 — COMPLETE SUCCESS 8/8 (attempt 1 7/8 timeout)
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
 Last-Completed-CI: 38766126322 — SUCCESS 8/8
@@ -734,3 +734,11 @@ NEXT_ELIGIBLE_WORK: investigate source-backed goal/task requirements to derive c
 - R1 supporting AWS provider source: P-018 numeric demand remains unprovable without capacity evidence. PR #132 source `248c31f062f6565954f50faed5ed4b17e1fa0559`, source push `38920493427` and PR `38920498976` both SUCCESS **8/8 after attempt 2**. Initial push distribution Node22 lost installer TLS connection (`UND_ERR_SOCKET`); PR Node24 one unrelated existing environment registry test timed out at 30s; re-ran only failed jobs without product changes. MERGED `main 38638eb2ded83bef7e2e2f6399aa4b86af54b9fe`. Opt-in OFF-by-default read-only `ec2 describe-instance-types` from observed EC2 InstanceType records `capacity:{vCpuCount,memoryMiB}`, provenance/status/time. Missing/denied/mismatch/vanished EC2 results reset stale capacity to UNKNOWN; healthy independent of optional read. P-025 planner presents bounded numeric capacity and provenance with freshness unverified; no inference of workload available capacity, EBS or actual utilization. SQLite/synthetic AWS tests pass. Actual AWS LIVE API and CloudWatch reading NOT executed.
 - Exact merged-main CI `38921445725` independently COMPLETE/SUCCESS **8/8**; source CI E3 only does not establish real provider capacity usage, customer workload, supplier lead times/fees, an invoice, active account liquid funds, KYC/terms, authority or actual profit. P-005 E5/E6 UNKNOWN. P-031 EN_EJECUCIÓN; P-032 PLANIFICADO. No AWS purchase/provision/resize or autonomous financial side-effect executed.
 - NEXT_ELIGIBLE_WORK: run exact branch + PR CI for this checkpoint and merge documentation, check final main. Source next inside P-031: objective-conditioned real demand trends and resources' earliest-need/lead-time provenance; compare owned vs build/burst/defer and recurring commitments using P-025/P-018/P-030 without inventing LIVE external money or capacity. P-018 retention owner already handles release/reconcile; do not duplicate.
+
+### P-031 — E3 verified timing-sensitive choice and generic Task execution economic provenance (2026-10-16)
+
+- PR #133 source `9ce88fcbb677f8905c988da39e118f38edb3acc1`, push `38921840601` and PR `38921850250` SUCCESS 8/8; merged `main 6cadd7ec662786ec6c3b8cfaad986c66a0997e4f`, exact-main `38922370546` SUCCESS 8/8. Documented quantitative resource demand, provider nominal AWS CPU/memory shape, source-attributed latest quoted provisioning start and explicit incomplete E5/E6 LIVE evidence.
+- R1 source delta: P-018 selector computed `provisioningTiming=quoted_window_open|unknown|quoted_window_elapsed` when `neededByAt` was explicitly supplied, but did not use this evidence in ranked provider choice. A cheap/preferred supplier with already elapsed quoted window could be selected ahead of an eligible route with quoted open window. PR #134 source `83c19bd39e63f25003b55c813b682bf9c254822c`, push `38922628325` and PR `38922703776` both SUCCESS 8/8; merged `main b650af9ed391fc890148d6fdea4499413725f866`, exact-main push `38923398848` SUCCESS 8/8. Existing comparator now ranks compatible candidates with explicit resource need: open quote > unknown > elapsed quote. Preserves preference/score when untimed or tied; late or unknown remains DISCOVERABLE and not universally impossible. No supplier quote becomes a contract or authority.
+- CAUSAL_EXPANSION source: generic P-018 `EnvironmentExecutionBridge.spawn` still fed `Task.metadata.timeoutMs` into provider `expectedDurationMs` (billing/use estimate) despite prior AWS/mobility fixes; counted canonical spare without caller's exact shape/quantitative requirement; persisted `candidate.estimate.estimatedCostCents` as canonical USD-looking P-018 cents without verifying `costUnit`. PR #135 source `5fd3b983e694a6998577c029e1cdd8ec236db85c`, push `38923587527` and PR `38923593616` both SUCCESS 8/8; merged `main 042f9d4d9339936c3eb700b1afc26f7a8dc4b308`. Existing generic bridge uses explicit positive integer `options.metadata.expectedResourceDurationMs` or UNKNOWN, passes separate `neededByAt`/quantitative sizing into existing selector/P-018 spare lookup, and only persists `estimatedCostCents` for sourced `usd_cent`; rejects malformed explicit resource duration/date before dispatch. Executor, policy and P-030 remain independent. Direct synthetic regression verifies both known/unknown monetary units, Task timeout separation, sized reuse filter and fail-closed date inputs.
+- Merged-main source `042f9d4d...` push CI `38924156441`: attempt 1 had 7/8 PASS and existing unrelated `environment-registry.test.ts` test `selects environments by capability instead of provider-specific branching` timed out at 30 s on Node22 during full-suite load; Node24 and Windows22/24 succeeded. Same-SHA **rerun only failed job** attempt 2 COMPLETE/SUCCESS 8/8 without code changes. Never classify attempt1 as green; final main code E3 verified only.
+- Audit/NO_CHANGE: P-018 retirement/reconciliation already owned; P-025 planner model emits open-world capability needs but the canonical planned Task/TaskGraph binding lacks a persisted typed `minimumCapacity`/`neededByAt` resource-demand contract. Generic bridge accepts these as caller-provided options but that alone does not prove automatic end-to-end planner materialization. NEXT_ELIGIBLE_WORK: inspect and prove Goal → P-025 selected task → durable binding → P-018/P-031 selection need/sizing propagation without duplicating planner, task graph, financial authority or inventing demand. P-005 LIVE E5/E6 resource load, supplier lead time, invoice, credit, payments, income/ROI remain UNKNOWN; no billable procurement performed. P-031 EN_EJECUCIÓN and P-032 PLANIFICADO.
