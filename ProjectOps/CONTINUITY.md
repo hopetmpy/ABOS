@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0028.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / PLAN_COST_PROVENANCE_SOURCE_PENDING_CI / P005_LIVE_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / AWS_UTILIZATION_OBSERVATION_SOURCE_PENDING_CI / P005_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-plan-cost-provenance
-Host-Head-At-Audit-Open: c947c9e95c4e9faad8602373770f84b2ee78a1c9
-Last-Reconciled-Host-Head: c947c9e95c4e9faad8602373770f84b2ee78a1c9
-Observed-Main-Head: c947c9e95c4e9faad8602373770f84b2ee78a1c9
-Last-Product-Head: c947c9e95c4e9faad8602373770f84b2ee78a1c9
-Last-Product-CI: exact main c947c9e9 push 38841792586 — COMPLETE SUCCESS 8/8; plan-cost provenance source CI PENDING
+Current-Host-Branch: abos/p031-aws-utilization-observation
+Host-Head-At-Audit-Open: 2018756f17a9caa3b9d837f7fa8c9db451dd1c7c
+Last-Reconciled-Host-Head: 2018756f17a9caa3b9d837f7fa8c9db451dd1c7c
+Observed-Main-Head: 2018756f17a9caa3b9d837f7fa8c9db451dd1c7c
+Last-Product-Head: 2018756f17a9caa3b9d837f7fa8c9db451dd1c7c
+Last-Product-CI: exact main 2018756f push 38845512327 — COMPLETE SUCCESS 8/8; AWS utilization source CI PENDING
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
 Last-Completed-CI: 38766126322 — SUCCESS 8/8
@@ -675,3 +675,11 @@ NEXT_ELIGIBLE_WORK: investigate source-backed goal/task requirements to derive c
 - Decision CORRECT existing owner outputs, preserve schema/legacy field names and all strategic approval semantics. Updated `renderPlanMarkdown` total and each Task line, and `assessStrategicPlan` cost-floor/legacy scrutiny text to say `task_cost_cent` and explicitly deny supplier cash authority. Regression in the existing `plan-mode.test.ts` checks persisted markdown and review; no parallel money ledger, threshold or new approval state.
 - Branch `abos/p031-plan-cost-provenance`, based on `main c947c9e95c4e9faad8602373770f84b2ee78a1c9`. Source commits `4addb66`, `a8dd7fb`, regression `ed2f02d`; exact branch CI not yet verified at this checkpoint. This proves no external resource utilization, provider quote, account cash or LIVE billable execution. Keep P-005 E5/E6 UNKNOWN.
 - NEXT_ELIGIBLE_WORK: run exact-source branch/PR CI; remediate only demonstrated failures; merge to main only after gate and verify exact-main CI. Then continue other materially independent P-031 capacity/utilization and payment/invoice evidence, avoid new duplicated authorities, keep P-032 unopened.
+
+### P-031 — PR #117 exact main verified and quantitative AWS CPU observation source (2026-10-15/16)
+
+- PR #117 source `d34fa4a58873ee2ea96e4731e3e0ac97cdf8d0a3`: exact push `38845184149` and PR `38845211036` both COMPLETE/SUCCESS 8/8. SQUASH MERGED to `main 2018756f17a9caa3b9d837f7fa8c9db451dd1c7c`; exact-main run `38845512327` independently COMPLETE/SUCCESS 8/8. This supersedes old plan-cost-provenance CI pending checkpoint. P-031 remains EN_EJECUCIÓN.
+- P-031 source audit: P-018 `AwsEnvironmentProvider.health` observes EC2 state and SSM reachability plus estimated compute, but not quantitative utilization. It is incorrect to infer sizing/idle capacity from EC2 running state, absent CloudWatch data or task timeout. No CloudWatch CPU observation owner was present in the AWS adapter. This is a separate missing input, not a reason to duplicate lifecycle/selector/treasury.
+- R1 decision EXTEND the EXISTING P-018 AWS health provider with **explicit opt-in** `observeCloudWatchCpuUtilization` and read-only AWS CloudWatch `AWS/EC2 CPUUtilization Average` last 15 minutes. Default OFF avoids unexpected AWS read calls/cost/permissions. Valid source/time/range yields observed percentage+timestamp+provenance in existing resource metadata; absent/malformed/future/out-of-window/denied data remains UNKNOWN without falsely setting 0, changing health or resizing/retiring resources. CPU alone does not show complete workload capacity or provider invoice.
+- Code source `src/environments/aws.ts`, test `src/__tests__/aws-environment-lifecycle.test.ts`, commits `d954ac7` and `2b288ad` on `abos/p031-aws-utilization-observation`. Source CI NOT YET VERIFIED. This is an optional measurement capability, not LIVE observation of an actual EC2 instance; no EC2 purchase, invoice, refund or ROI demonstrated.
+- NEXT_ELIGIBLE_WORK: exact branch+PR CI and source review; merge and verify exact-main only if PASS; then investigate measured utilization and economic timing in broader P-031 decision flow, keeping AWS external money P-005 E5/E6 UNKNOWN and P-032 unopened.
