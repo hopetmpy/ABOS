@@ -266,6 +266,11 @@ describe("P-031 coherent Goal → owned inventory → selection → treasury evi
         otherChargesCents: null,
         unpricedComponents: ["domain and backup costs not quoted"],
         billingTermsEvidence: ["Illustrative scenario terms only."],
+        lifecycleTerms: {
+          renewal: "manual", additionalCommittedRenewalCents: 0, additionalExitChargeCents: 0,
+          source: "synthetic supplier agreement",
+          evidence: ["Test fixture: non-automatic renewal and no additional exit charge."],
+        },
       },
       financing: {
         accountId: "synthetic-account", unit: "usd_cent",

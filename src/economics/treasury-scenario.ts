@@ -286,6 +286,19 @@ export interface ProviderProcurementScenarioInput {
       validUntil: string;
       evidence: string[];
     } | null;
+    /** Independently sourced contract exposure beyond the quoted usage period.
+     * Charges below are ADDITIONAL to oneTime/other/recurring periods, not
+     * estimates or already counted line items. No invoice/retirement claim. */
+    lifecycleTerms?: {
+      renewal: "none" | "manual" | "automatic" | "unknown";
+      additionalCommittedRenewalCents: number | null;
+      additionalExitChargeCents: number | null;
+      source: string;
+      evidence: string[];
+      /** Real ability to stop automatic renewal is a provider-contract claim,
+       * not a claim that cancellation has happened. */
+      cancellationRouteEvidence?: string[];
+    } | null;
   };
   financing: {
     accountId: string | null;
@@ -463,11 +476,44 @@ export function assessProviderProcurementScenario(
       "Positive recurring supplier charges require at least one evidenced billing period; a zero-period quote omits the ongoing commitment.",
     );
   }
+  // A finite supplier usage quote is NOT proof that automatic renewal stops,
+  // that early-exit fees are zero, or that a contracted post-term obligation
+  // disappears. Keep these independently sourced liabilities in P-030, not
+  // in a parallel resource ledger or a fictional flat percentage buffer.
+  const lifecycle = input.cost.lifecycleTerms;
+  const renewalCharge = lifecycle
+    ? validProviderCents(lifecycle.additionalCommittedRenewalCents, "post-term renewal exposure") : null;
+  const exitCharge = lifecycle
+    ? validProviderCents(lifecycle.additionalExitChargeCents, "contract exit charge") : null;
+  const lifecycleEvidence = uniqueEvidence(lifecycle?.evidence);
+  const cancellationEvidence = uniqueEvidence(lifecycle?.cancellationRouteEvidence);
+  // A zero-priced introductory period may still carry an explicit binding
+  // paid renewal or exit charge. If lifecycle terms are quoted, price their
+  // exposure even when the currently billed recurring rate is zero.
+  const recurringLifecycleRequired = (recurring !== null && recurring > 0) || lifecycle != null;
+  const lifecycleComplete = !recurringLifecycleRequired || (!!lifecycle &&
+    ["none", "manual", "automatic"].includes(lifecycle.renewal) &&
+    !!lifecycle.source?.trim() && lifecycleEvidence.length > 0 &&
+    renewalCharge !== null && exitCharge !== null &&
+    (lifecycle.renewal !== "automatic" || cancellationEvidence.length > 0));
+  if (recurringLifecycleRequired && !lifecycleComplete) {
+    conditions.push(
+      "Recurring supplier contract lacks sourced renewal, post-term charge, exit-fee or automatic-cancellation-route coverage.",
+    );
+  } else if (recurringLifecycleRequired && lifecycle) {
+    evidence.push(
+      `Contract lifecycle: renewal=${lifecycle.renewal}; additional committed renewal=${renewalCharge} ${unit}; additional exit charge=${exitCharge} ${unit}; source=${lifecycle.source}.`,
+      ...lifecycleEvidence,
+      ...cancellationEvidence.map(x => "Cancellation route (not executed): " + x),
+    );
+  }
   const costIsComplete = oneTime !== null && recurring !== null &&
     periods !== null && other !== null && unpriced.length === 0 &&
-    !recurringTermMissing;
+    !recurringTermMissing && lifecycleComplete;
   const providerTotal = costIsComplete
-    ? BigInt(oneTime!) + BigInt(other!) + BigInt(recurring!) * BigInt(periods!)
+    ? BigInt(oneTime!) + BigInt(other!) + BigInt(recurring!) * BigInt(periods!) +
+      BigInt(recurringLifecycleRequired ? renewalCharge! : 0) +
+      BigInt(recurringLifecycleRequired ? exitCharge! : 0)
     : null;
   if (providerTotal !== null && providerTotal > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new Error("Provider total commitment exceeds exact integer arithmetic");

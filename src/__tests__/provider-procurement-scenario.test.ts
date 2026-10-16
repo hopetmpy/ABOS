@@ -23,6 +23,11 @@ function scenario(): ProviderProcurementScenarioInput {
       periods: 3,
       otherChargesCents: 1000,
       billingTermsEvidence: ["Account-scoped, time-bounded quote includes compute, storage, IPv4 and expected transfer."],
+      lifecycleTerms: {
+        renewal: "manual", additionalCommittedRenewalCents: 0, additionalExitChargeCents: 0,
+        source: "synthetic provider agreement",
+        evidence: ["Quote has no automatic renewal and no added contractual exit charges."],
+      },
       unpricedComponents: [],
     },
     financing: {
@@ -52,6 +57,46 @@ describe("P-031 provider procurement scenario in P-030 treasury", () => {
     expect(review.freeAfterProposalAndContingencyCents).toBe(27500);
     expect(review.conditions).toEqual([]);
     expect(review.limitations.join(" ")).toContain("NOT P-010 authorization");
+  });
+
+  it("does not conceal renewal or cancellation exposure behind a finite billed period count", () => {
+    const missing = scenario();
+    missing.cost.lifecycleTerms = null;
+    const unknown = assessProviderProcurementScenario(missing);
+    expect(unknown.status).toBe("needs_evidence");
+    expect(unknown.totalProposedCommitmentCents).toBeNull();
+    expect(unknown.freeAfterProposalAndContingencyCents).toBeNull();
+    expect(unknown.conditions.join(" ")).toContain("contract lacks sourced renewal");
+
+    const auto = scenario();
+    auto.cost.lifecycleTerms!.renewal = "automatic";
+    expect(assessProviderProcurementScenario(auto).status).toBe("needs_evidence");
+    auto.cost.lifecycleTerms!.cancellationRouteEvidence = [
+      "Synthetic supplier supports account-bound cancellation before renewal.",
+    ];
+    auto.cost.lifecycleTerms!.additionalCommittedRenewalCents = 2500;
+    auto.cost.lifecycleTerms!.additionalExitChargeCents = 500;
+    const complete = assessProviderProcurementScenario(auto);
+    expect(complete.status).toBe("review_ready");
+    expect(complete.totalProposedCommitmentCents).toBe(13000);
+    expect(complete.freeAfterProposalAndContingencyCents).toBe(24500);
+    expect(complete.evidence.join(" ")).toContain("not executed");
+
+    auto.cost.lifecycleTerms!.additionalExitChargeCents = null;
+    expect(assessProviderProcurementScenario(auto).totalProposedCommitmentCents).toBeNull();
+
+    // A free introductory billing period cannot erase an explicitly quoted
+    // paid renewal that becomes binding after the promotional period.
+    const promotional = scenario();
+    promotional.cost.recurringCentsPerPeriod = 0;
+    promotional.cost.lifecycleTerms!.renewal = "automatic";
+    promotional.cost.lifecycleTerms!.cancellationRouteEvidence = [
+      "Synthetic cancellation route available before the first paid renewal.",
+    ];
+    promotional.cost.lifecycleTerms!.additionalCommittedRenewalCents = 1500;
+    const promotionalReview = assessProviderProcurementScenario(promotional);
+    expect(promotionalReview.status).toBe("review_ready");
+    expect(promotionalReview.totalProposedCommitmentCents).toBe(5500);
   });
 
   it("never turns an AWS budget threshold or an asserted number into actual liquidity", () => {
