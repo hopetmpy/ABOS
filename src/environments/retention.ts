@@ -56,6 +56,37 @@ export class EnvironmentRetentionCoordinator {
       if (!decision.release) continue;
       result.releaseEligible += 1;
 
+      // P-018 recorded positive evidence that provider preflight rejected
+      // provisioning BEFORE any external operation. The local resource has
+      // nothing to destroy, and dispatching provider.destroy without an
+      // external identity may be unsafe. This is not a generic rule for
+      // failed/UNKNOWN resources: only this explicit durable proof qualifies.
+      if (initial.status === "failed" &&
+          initial.externalId === null &&
+          initial.metadata.provisionExternalEffectNotDispatched === true &&
+          initial.metadata.provisionNeedsReconciliation === false) {
+        const released = this.lifecycle.resources.applyMutation(
+          initial.id,
+          {
+            status: "terminated",
+            metadata: {
+              retentionReleaseState: "released",
+              retentionReleaseReason: decision.reason,
+              retentionReleasedAt: new Date().toISOString(),
+            },
+            evidence: [
+              "Provider preflight confirmed no provisioning dispatched and no external resource identity exists; local failed resource retired without provider destroy.",
+              "This local release is NOT supplier invoice settlement or proof of an account refund.",
+            ],
+          },
+          "retention",
+          "Resource rejected before any external provider dispatch; local retention completed.",
+        );
+        this.markLegacyExecutorReleased(released);
+        result.released += 1;
+        continue;
+      }
+
       let resource = initial;
       // An uncertain provision may already have created a billable resource.
       // Observe its external identity before issuing destructive cleanup.
