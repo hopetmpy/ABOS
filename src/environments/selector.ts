@@ -352,7 +352,11 @@ function assessProvisioningTiming(
     isExplicitInstant(rawObserved) &&
     Date.parse(rawObserved) <= Date.now() &&
     typeof rawSource === "string" && rawSource.trim().length > 0;
-  const latestMs = known ? Date.parse(neededByAt) - rawLead : Number.NaN;
+  const leadTimeMs = known ? Number(rawLead) : null;
+  const quoteObservedAt = known ? String(rawObserved) : null;
+  const quoteSource = known ? String(rawSource).trim() : null;
+  const latestMs = leadTimeMs != null
+    ? Date.parse(neededByAt) - leadTimeMs : Number.NaN;
   const canRepresent = Number.isFinite(latestMs) &&
     Math.abs(latestMs) <= 8_640_000_000_000_000;
   if (!known || !canRepresent) {
@@ -370,12 +374,12 @@ function assessProvisioningTiming(
   return {
     status: windowOpen ? "quoted_window_open" : "quoted_window_elapsed",
     neededByAt,
-    quotedProvisioningLeadTimeMs: rawLead,
-    quoteObservedAt: rawObserved,
-    quoteSource: rawSource.trim(),
+    quotedProvisioningLeadTimeMs: leadTimeMs,
+    quoteObservedAt,
+    quoteSource,
     latestQuotedStartAt: new Date(latestMs).toISOString(),
     evidence: [
-      `Provider-quoted lead time=${rawLead} ms, observed=${rawObserved}, source=${rawSource.trim()}, estimated latest start=${new Date(latestMs).toISOString()}, window=${windowOpen ? "open" : "elapsed"}. Quote not guaranteed and NOT procurement permission; assess contingency, terms, total dependencies and treasury separately.`,
+      `Provider-quoted lead time=${leadTimeMs} ms, observed=${quoteObservedAt}, source=${quoteSource}, estimated latest start=${new Date(latestMs).toISOString()}, window=${windowOpen ? "open" : "elapsed"}. Quote not guaranteed and NOT procurement permission; assess contingency, terms, total dependencies and treasury separately.`,
     ],
   };
 }
