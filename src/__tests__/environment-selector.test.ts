@@ -46,6 +46,7 @@ function provider(input: {
     estimate: async () => ({
       estimatedCostCents: input.cost,
       costCoverage: input.cost == null ? "unknown" : "complete",
+      costUnit: "usd_cent",
       reliability: input.reliability,
     }),
   };
@@ -69,7 +70,7 @@ describe("EnvironmentSelector", () => {
 
     const result = await new EnvironmentSelector(registry).select({
       requiredCapabilities: ["remote compute"],
-      maxEstimatedCostCents: 100,
+      maxEstimatedCostCents: 100, maxEstimatedCostUnit: "usd_cent",
     });
 
     expect(result.selected?.environmentId).toBe("provider-efficient");
@@ -93,7 +94,7 @@ describe("EnvironmentSelector", () => {
     const result = await new EnvironmentSelector(registry).select({
       requiredCapabilities: ["compute"],
       preferredEnvironment: "preferred-but-unavailable",
-      maxEstimatedCostCents: 100,
+      maxEstimatedCostCents: 100, maxEstimatedCostUnit: "usd_cent",
     });
 
     expect(result.selected?.environmentId).toBe("alternate");
@@ -142,7 +143,7 @@ describe("EnvironmentSelector", () => {
     const result = await new EnvironmentSelector(registry).select({
       requiredCapabilities: ["compute"],
       requiredOperations: ["provision"],
-      maxEstimatedCostCents: 100,
+      maxEstimatedCostCents: 100, maxEstimatedCostUnit: "usd_cent",
     });
 
     expect(result.selected?.environmentId).toBe("provisioner");
@@ -161,7 +162,7 @@ describe("EnvironmentSelector", () => {
 
     const result = await new EnvironmentSelector(registry).select({
       requiredCapabilities: ["compute"],
-      maxEstimatedCostCents: 50,
+      maxEstimatedCostCents: 50, maxEstimatedCostUnit: "usd_cent",
     });
 
     expect(result.selected).toBeNull();
@@ -186,7 +187,7 @@ describe("EnvironmentSelector", () => {
 
     const result = await new EnvironmentSelector(registry).select({
       requiredCapabilities: ["compute"],
-      maxEstimatedCostCents: 10,
+      maxEstimatedCostCents: 10, maxEstimatedCostUnit: "usd_cent",
     });
 
     expect(result.selected).toBeNull();
@@ -215,7 +216,7 @@ describe("EnvironmentSelector", () => {
         environmentId === "has-reuse" ? 1 : 0,
     }).select({
       requiredCapabilities: ["compute"],
-      maxEstimatedCostCents: 10,
+      maxEstimatedCostCents: 10, maxEstimatedCostUnit: "usd_cent",
     });
 
     expect(result.selected?.environmentId).toBe("has-reuse");
@@ -258,6 +259,68 @@ describe("EnvironmentSelector", () => {
     expect(noInventory.selected?.environmentId).toBe("a-vendor-claimed-spare");
   });
 
+  it("treats budget amount and unit as an inseparable economic contract", async () => {
+    const registry = new EnvironmentRegistry();
+    registry.register(provider({
+      id: "priced", capabilities: ["compute"], cost: 10,
+    }));
+    const selector = new EnvironmentSelector(registry);
+    for (const request of [
+      { requiredCapabilities: ["compute"], maxEstimatedCostCents: 100 },
+      { requiredCapabilities: ["compute"], maxEstimatedCostUnit: "usd_cent" },
+      { requiredCapabilities: ["compute"], maxEstimatedCostCents: 100,
+        maxEstimatedCostUnit: "credit_cent" },
+    ]) {
+      const result = await selector.select(request);
+      expect(result.selected).toBeNull();
+      expect(result.candidates[0]?.blockers.join(" ")).toMatch(
+        /amount and exact monetary unit|does not match explicit budget unit/,
+      );
+    }
+    const comparable = await selector.select({
+      requiredCapabilities: ["compute"], maxEstimatedCostCents: 10,
+      maxEstimatedCostUnit: "usd_cent",
+    });
+    expect(comparable.selected?.environmentId).toBe("priced");
+  });
+
+  it("never ranks incomparable currencies or partial quotes as cheaper total cost", async () => {
+    const registry = new EnvironmentRegistry();
+    const usd = provider({
+      id: "a-usd", capabilities: ["compute"], cost: 100, reliability: 0.9,
+    });
+    const credits = provider({
+      id: "z-credits", capabilities: ["compute"], cost: 1, reliability: 0.9,
+    });
+    credits.estimate = async () => ({
+      estimatedCostCents: 1, costCoverage: "complete",
+      costUnit: "credit_cent", reliability: 0.9,
+    });
+    registry.register(usd);
+    registry.register(credits);
+    const selector = new EnvironmentSelector(registry);
+    const unbudgeted = await selector.select({
+      requiredCapabilities: ["compute"],
+    });
+    // No conversion rate exists: score ties, so stable name ordering, NOT
+    // numeric 1 credit vs 100 USD, decides the otherwise equivalent options.
+    expect(unbudgeted.selected?.environmentId).toBe("a-usd");
+    const budgeted = await selector.select({
+      requiredCapabilities: ["compute"], maxEstimatedCostCents: 150,
+      maxEstimatedCostUnit: "usd_cent",
+    });
+    expect(budgeted.selected?.environmentId).toBe("a-usd");
+    expect(budgeted.candidates.find(c => c.environmentId === "z-credits")
+      ?.blockers.join(" ")).toContain("does not match explicit budget unit");
+    // A partial quote cannot win an unbudgeted total-cost tie-break either.
+    credits.estimate = async () => ({
+      estimatedCostCents: 1, costCoverage: "partial", costUnit: "usd_cent",
+      reliability: 0.9,
+    });
+    expect((await selector.select({ requiredCapabilities: ["compute"] }))
+      .selected?.environmentId).toBe("a-usd");
+  });
+
   it("lets policy exclude a route without treating the objective as impossible", async () => {
     const registry = new EnvironmentRegistry();
     registry.register(provider({
@@ -278,7 +341,7 @@ describe("EnvironmentSelector", () => {
       }),
     }).select({
       requiredCapabilities: ["compute"],
-      maxEstimatedCostCents: 10,
+      maxEstimatedCostCents: 10, maxEstimatedCostUnit: "usd_cent",
     });
 
     expect(result.selected?.environmentId).toBe("candidate-b");
