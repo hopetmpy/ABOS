@@ -141,7 +141,10 @@ export class EnvironmentSelector {
       evaluated.push(candidate);
     }
 
-    evaluated.sort(compareCandidates(requirements.preferredEnvironment ?? null));
+    evaluated.sort(compareCandidates(
+      requirements.preferredEnvironment ?? null,
+      requirements.neededByAt != null,
+    ));
 
     const selected = evaluated.find((candidate) => candidate.executionEligible) ?? null;
     const unresolved = selected
@@ -585,10 +588,29 @@ function normalize(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-function compareCandidates(preferredEnvironment: string | null) {
+function compareCandidates(
+  preferredEnvironment: string | null,
+  hasExplicitResourceNeedDate: boolean,
+) {
   return (a: EnvironmentSelectionCandidate, b: EnvironmentSelectionCandidate): number => {
     if (a.executionEligible !== b.executionEligible) {
       return a.executionEligible ? -1 : 1;
+    }
+    // When the goal has a separate, valid resource-needed date, prefer
+    // an evidenced supplier window still open. UNKNOWN remains eligible for
+    // discovery; a quoted elapsed window is evidence of timing risk, not
+    // objective impossibility. This never schedules or authorizes purchase.
+    if (hasExplicitResourceNeedDate) {
+      const rank = (candidate: EnvironmentSelectionCandidate) => {
+        switch (candidate.provisioningTiming?.status) {
+          case "quoted_window_open": return 0;
+          case "quoted_window_elapsed": return 2;
+          default: return 1;
+        }
+      };
+      const aRank = rank(a);
+      const bRank = rank(b);
+      if (aRank !== bRank) return aRank - bRank;
     }
     // Planner path intent is strategic evidence, not a weak cosmetic score.
     // Honor the preferred environment when it is executable; otherwise the
