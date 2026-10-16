@@ -6,7 +6,7 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0028.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / RESOURCE_DURATION_PROVENANCE_MAIN_CI_PENDING / P005_LIVE_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / RESOURCE_DURATION_E3_MAIN_GREEN_NEED_TIMING_NEXT / P005_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
@@ -18,7 +18,7 @@ Host-Head-At-Audit-Open: 04cda839bc38d6b2aefe926804748c172fec8889
 Last-Reconciled-Host-Head: 04cda839bc38d6b2aefe926804748c172fec8889
 Observed-Main-Head: 04cda839bc38d6b2aefe926804748c172fec8889
 Last-Product-Head: 04cda839bc38d6b2aefe926804748c172fec8889
-Last-Product-CI: exact main 04cda839 push 38853101041 — PENDING (source PR/push complete SUCCESS 8/8)
+Last-Product-CI: exact main 04cda839 push 38853101041 — COMPLETE SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
 Last-Completed-CI: 38766126322 — SUCCESS 8/8
@@ -715,5 +715,5 @@ NEXT_ELIGIBLE_WORK: investigate source-backed goal/task requirements to derive c
 - PR #124 documentation checkpoint for PR #121–#123 source/E3 evidence merged `main b4135bcc629367ce1846d115b5a00a481bbeb853`; PR source `1162d4b1b0ecb2f82a5a44541822115d2956462b` push `38852599665` and PR `38852613175` both COMPLETE/SUCCESS 8/8. Exact-main `38852955561` was cancelled by next source integration (not a PASS).
 - R1 source audit of existing `AwsEc2TaskExecutor.spawn`: Task `timeoutMs` had been passed as provider `expectedDurationMs` to AWS pricing and new EC2 provision, conflating task execution limit with independently evidenced resource expected runtime/recurring supplier cost. This could state a precise computable amount with no billing-duration evidence and bias procurement.
 - Decision EXTEND/CORRECT existing AWS executor, not create a quote/budget owner: `expectedDurationMs` is now UNKNOWN when no trusted explicit `resourceMetadata.expectedResourceDurationMs` exists; when provided, it must be a positive safe integer and remains a source-supplied *estimate*, not an authenticated bill. Existing SSM bootstrap command transport timeout is separate and preserved. P-010/P-030 purchase authority, P-018 lifecycle and AWS provider pricing scope remain unchanged. Existing test suite checks unknown, explicitly different, and invalid input before provisioning.
-- PR #125 source `3b348aca8d13f144648a6d6ef1f7c2e82f5ed098`, branch push `38852790537` and PR `38852806150` COMPLETE/SUCCESS **8/8**, SQUASH merged `main 04cda839bc38d6b2aefe926804748c172fec8889`. Exact-main push CI `38853101041` **PENDING** as of this checkpoint. No material AWS call, payment or income was executed.
-- P-031 EN_EJECUCIÓN; P-032 PLANIFICADO; real provider account terms, billing periods, task usage, external settlement, sustained ROI/revenue E5/E6 remain UNKNOWN under P-005. NEXT_ELIGIBLE_WORK: verify exact-main CI, update checkpoint, integrate documentation PR with full gate, then audit source-backed need/demand timing versus on/off lifecycle and P-030 recurring-term signals. Never equate CPU Average, Task timeout, provider invoice or liquidity.
+- PR #125 source `3b348aca8d13f144648a6d6ef1f7c2e82f5ed098`, branch push `38852790537` and PR `38852806150` COMPLETE/SUCCESS **8/8**, SQUASH merged `main 04cda839bc38d6b2aefe926804748c172fec8889`. Exact-main push CI `38853101041` independently COMPLETE/SUCCESS **8/8**. No material AWS call, payment or income was executed.
+- P-031 EN_EJECUCIÓN; P-032 PLANIFICADO; real provider account terms, billing periods, task usage, external settlement, sustained ROI/revenue E5/E6 remain UNKNOWN under P-005. NEXT_ELIGIBLE_WORK: integrate documentation PR with full exact gate, then audit source-backed need/demand timing versus on/off lifecycle and P-030 recurring-term signals. Never equate CPU Average, Task timeout, provider invoice or liquidity.
