@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0028.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / AWS_STALE_UTILIZATION_RECONCILIATION_SOURCE_PENDING_CI / P005_LIVE_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / SOURCE_CI_GREEN_UTILIZATION_LIVE_PENDING / P005_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-metrics-main-reconciliation
-Host-Head-At-Audit-Open: 887c5af0a285e38046c5c2257cb508132ccb6dd7
-Last-Reconciled-Host-Head: 887c5af0a285e38046c5c2257cb508132ccb6dd7
-Observed-Main-Head: 887c5af0a285e38046c5c2257cb508132ccb6dd7
-Last-Product-Head: 887c5af0a285e38046c5c2257cb508132ccb6dd7
-Last-Product-CI: exact main 887c5af0 push 38846239073 — COMPLETE SUCCESS 8/8; stale observation source CI PENDING
+Current-Host-Branch: abos/p031-main-observation-checkpoint
+Host-Head-At-Audit-Open: 4728d16fb3c6cfd88feae5a39939323d40bc1dbb
+Last-Reconciled-Host-Head: 4728d16fb3c6cfd88feae5a39939323d40bc1dbb
+Observed-Main-Head: 4728d16fb3c6cfd88feae5a39939323d40bc1dbb
+Last-Product-Head: 4728d16fb3c6cfd88feae5a39939323d40bc1dbb
+Last-Product-CI: exact main 4728d16f push 38846857695 — COMPLETE SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
 Last-Completed-CI: 38766126322 — SUCCESS 8/8
@@ -691,3 +691,12 @@ NEXT_ELIGIBLE_WORK: investigate source-backed goal/task requirements to derive c
 - Decision CORRECT the existing AWS health owner to clear `cpuUtilizationAveragePct` and `cpuUtilizationObservedAt` to null with `cpuUtilizationMetricStatus=unknown` only when the opt-in CloudWatch observation is enabled and EC2 is unobserved. No provider CloudWatch query is dispatched for missing EC2. Existing P-018 `EnvironmentResourceStore` remains durable authority; regression in existing `aws-environment-lifecycle.test.ts` verifies lifecycle.health and persisted metadata after stale metric.
 - Branch `abos/p031-metrics-main-reconciliation` based on `main 887c5af0a285e38046c5c2257cb508132ccb6dd7`; source `54a2e54` and test `ccc1ada`. Exact branch/PR CI PENDING. This scope adds no AWS billable mutation, no alleged invoice/cash/profit evidence and no second telemetry scheduler.
 - NEXT_ELIGIBLE_WORK: exact-source CI Node22/24 Windows22/24 security/integrity/distribution; correct any demonstrated failure; merge on complete PASS, verify exact-main and reconcile authority state. Further P-031 sizing/retirement learning requires valid utilization samples and external provider economics; P-005 E5/E6 UNKNOWN; do not open P-032.
+
+### P-031 — Exact-main reconciliation after PR #117–#119 (2026-10-15/16)
+
+- Verified `main 4728d16fb3c6cfd88feae5a39939323d40bc1dbb`, PR #119 SQUASH MERGED and exact-main GitHub Actions `38846857695` COMPLETE/SUCCESS **8/8**. Exact branch push `38846551019` and PR run `38846571452` on source `f6b825c482fe7b622732bead2b7d1e9a601a9838` both COMPLETE/SUCCESS 8/8. No change to the meaning of P-031 EN_EJECUCIÓN.
+- PR #117 `main 2018756f17a9caa3b9d837f7fa8c9db451dd1c7c`, exact-main run `38845512327` 8/8: persisted plan and strategic review now mark local estimates `task_cost_cent` instead of generic supplier-money cents; preserves original economic, policy and review authorities.
+- PR #118 `main 887c5af0a285e38046c5c2257cb508132ccb6dd7`, exact-main `38846239073` 8/8: existing P-018 AWS health can optionally observe a source-attributed recent CloudWatch CPU average, with UNKNOWN for inaccessible/invalid/no measurement. Default opt-out. Not a full utilization profile or billable AWS invoice.
+- PR #119 `main 4728d16fb3c6cfd88feae5a39939323d40bc1dbb`, exact-main `38846857695` 8/8: stale CPU percentage/timestamp cleared if EC2 disappears, including canonical P-018 SQLite health persistence; no second scheduler, new ledger, auto-resize or paid mutation.
+- These are E3 source/integration gates with simulated provider responses only: actual CloudWatch metric retrieval, quantitative application workload utilization, full supplier billing terms, account cash authority, AWS billable operation, invoice/refund/cancellation settlement, realized income or economic ROI **NOT VERIFIED** (P-005 E5/E6 UNKNOWN). The next source frontier is connecting appropriately observed task demand/load and resource sizing/timing/retirement decisions to existing P-025/P-018/P-030 owners without treating CPU alone as purchasing authority. Where live provider/account evidence is inaccessible, keep that route UNKNOWN and continue independent work. P-032 remains PLANIFICADO.
+- This branch `abos/p031-main-observation-checkpoint` updates canonical recovery only; no product source change. Documentation PR exact CI still to validate after creation. NEXT_ELIGIBLE_WORK: verify this reconciliation PR with full CI and integrate on PASS; then audit additional P-031 sizing/retirement/actual-cost integration only for proven deltas.
