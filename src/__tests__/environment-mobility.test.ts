@@ -131,6 +131,7 @@ function provider(
     estimate: async () => ({
       estimatedCostCents: 0,
       costCoverage: "complete",
+        costUnit: "usd_cent",
       reliability: 0.9,
     }),
   };
@@ -189,6 +190,7 @@ function selectionResult(
     estimate: {
       estimatedCostCents: 0,
       costCoverage: "complete",
+        costUnit: "usd_cent",
     },
     score: 1,
     executionEligible: true,
@@ -412,6 +414,7 @@ describe("Environment mobility", () => {
       preferredEnvironment: "env-a",
       excludedEnvironmentIds: ["env-a"],
       maxEstimatedCostCents: 10,
+          maxEstimatedCostUnit: "usd_cent",
     });
 
     expect(result.selected?.environmentId).toBe("env-b");
@@ -761,6 +764,7 @@ describe("Environment mobility", () => {
           requiredCapabilities: ["compute"],
           preferredEnvironment: "target",
           maxEstimatedCostCents: 10,
+          maxEstimatedCostUnit: "usd_cent",
         },
         "source is degraded",
       );
