@@ -1404,6 +1404,7 @@ export class Orchestrator {
 
     return buildPlannerContext({
       db: this.params.db,
+      goalId,
       workspace: new AgentWorkspace(goalId),
       funding: this.params.funding,
       identityAddress: this.params.identity.address,
