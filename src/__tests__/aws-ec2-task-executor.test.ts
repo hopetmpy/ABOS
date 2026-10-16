@@ -444,7 +444,7 @@ describe("AwsEc2TaskExecutor", () => {
       identity: {} as any, config: {} as any,
     });
     const dbTask = { ...task(), requiredCapabilities: ["shell", "database"] };
-    await expect(executor.spawn(dbTask)).rejects.toThrow("IAM instance profile");
+    await expect(executor.spawn(dbTask)).rejects.toThrow("no verified execution support");
     expect(observed).toBe(1);
     expect(owned.provisionCalls).toBe(0);
   });
