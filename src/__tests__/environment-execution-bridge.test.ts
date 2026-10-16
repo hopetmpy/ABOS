@@ -212,10 +212,15 @@ describe("EnvironmentExecutionBridge", () => {
       const bridge = new EnvironmentExecutionBridge(
         new EnvironmentSelector(registry), executors, lifecycle,
       );
+      // The fixture has no materialized P-025 adaptive_paths row: do not
+      // persist a nonexistent strategic FK when the real bridge adopts
+      // its first Task resource. Procurement route tests cover P-025.
+      const work = task();
+      work.strategicPathId = null;
 
       // This resource is still owned by a running Task; vendor's 500
       // "reusable" instances are not OUR inventory, and no hijack is allowed.
-      const busy = await bridge.spawn(task());
+      const busy = await bridge.spawn(work);
       expect(busy.environmentId).toBe("a-new");
       expect(busy.selection.candidates.find(c => c.environmentId === "a-new")
         ?.estimate.reusableResourceCount).toBe(0);
@@ -229,7 +234,7 @@ describe("EnvironmentExecutionBridge", () => {
       }).map(x => x.id)).toEqual([owned.id]);
       // A completed old Task releases its live-owned capacity for reuse; the
       // first new resource stays assigned to pending task-1 and is not spare.
-      const reused = await bridge.spawn(task());
+      const reused = await bridge.spawn(work);
       expect(reused.environmentId).toBe("z-reuse");
       expect(reused.selection.candidates.find(c => c.environmentId === "z-reuse")
         ?.estimate.reusableResourceCount).toBe(1);
