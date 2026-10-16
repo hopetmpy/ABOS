@@ -188,11 +188,11 @@ export function assessStrategicPlan(
   );
   if (plan.estimatedTotalCostCents < taskCost) {
     critique.push(
-      `Declared total cost ${plan.estimatedTotalCostCents}c is lower than the task-cost floor ${taskCost}c.`,
+      `Declared total local task cost ${plan.estimatedTotalCostCents} task_cost_cent is lower than the task-cost floor ${taskCost} task_cost_cent (not provider cash).`,
     );
   } else {
     evidence.push(
-      `Declared total cost ${plan.estimatedTotalCostCents}c covers the task-cost floor ${taskCost}c.`,
+      `Declared total local task cost ${plan.estimatedTotalCostCents} task_cost_cent covers the task-cost floor ${taskCost} task_cost_cent (not provider cash).`,
     );
   }
 

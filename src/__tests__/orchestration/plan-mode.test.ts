@@ -255,6 +255,10 @@ describe("orchestration/plan-mode", () => {
       expect(json).toContain("\"alternatives\"");
       expect(md).toContain("# Plan: goal-1 (v1)");
       expect(md).toContain("## Tasks");
+      expect(md).toContain("Estimated Local Task Cost: 1200 task_cost_cent");
+      expect(md).toContain("local task cost: 1200 task_cost_cent");
+      expect(md).toContain("NOT provider cash or spend authorization");
+      expect(md).not.toContain("Estimated Cost: 1200 cents");
     });
 
     it("persistPlan archives previous json version", async () => {
@@ -308,14 +312,17 @@ describe("orchestration/plan-mode", () => {
       expect(result.approved).toBe(true);
       expect(result.feedback).toContain("disposition=approve");
       expect(result.feedback).toContain("task-cost floor");
+      expect(result.feedback).toContain("1200 task_cost_cent");
+      expect(result.feedback).toContain("not provider cash");
       expect(result.feedback).toContain("material_differences=");
     });
 
     it("legacy budget marker never grants or denies approval by itself", async () => {
       const result = await reviewPlan(makePlan({ estimatedTotalCostCents: 9000 }), autoConfig);
       expect(result.approved).toBe(true);
-      expect(result.feedback).toContain("legacy_scrutiny_marker_exceeded=9000c>5000c");
+      expect(result.feedback).toContain("legacy_scrutiny_marker_exceeded=9000 task_cost_cent>5000 task_cost_cent");
       expect(result.feedback).toContain("this marker does not decide approval");
+      expect(result.feedback).toContain("or authorize supplier spending");
     });
 
     it("auto mode rejects a complex plan without explicit path intent", async () => {
@@ -597,7 +604,7 @@ describe("orchestration/plan-mode", () => {
     it("normalizes invalid config values without inventing approval semantics", async () => {
       const result = await reviewPlan(makePlan({ estimatedTotalCostCents: 99999 }), { mode: "unknown" as unknown as "auto", autoBudgetThreshold: Number.NaN, consensusCriticRole: "   ", reviewTimeoutMs: Number.NaN });
       expect(result.approved).toBe(true);
-      expect(result.feedback).toContain("legacy_scrutiny_marker_exceeded=99999c>5000c");
+      expect(result.feedback).toContain("legacy_scrutiny_marker_exceeded=99999 task_cost_cent>5000 task_cost_cent");
     });
   });
 

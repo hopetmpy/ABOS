@@ -6,22 +6,22 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0028.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / OPEN_WORLD_DEPENDENCY_PLANNER_SOURCE_PENDING_CI / P005_LIVE_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / PLAN_COST_PROVENANCE_SOURCE_PENDING_CI / P005_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-open-world-dependency-planner
-Host-Head-At-Audit-Open: 56a330e0ad4ce6a8df3b16124f1ffcffa3e4815d
-Last-Reconciled-Host-Head: 56a330e0ad4ce6a8df3b16124f1ffcffa3e4815d
-Observed-Main-Head: 56a330e0ad4ce6a8df3b16124f1ffcffa3e4815d
-Last-Product-Head: 56a330e0ad4ce6a8df3b16124f1ffcffa3e4815d
-Last-Product-CI: exact main 56a330e0 push 38840572951 — COMPLETE SUCCESS 8/8; planner source CI PENDING
+Current-Host-Branch: abos/p031-plan-cost-provenance
+Host-Head-At-Audit-Open: c947c9e95c4e9faad8602373770f84b2ee78a1c9
+Last-Reconciled-Host-Head: c947c9e95c4e9faad8602373770f84b2ee78a1c9
+Observed-Main-Head: c947c9e95c4e9faad8602373770f84b2ee78a1c9
+Last-Product-Head: c947c9e95c4e9faad8602373770f84b2ee78a1c9
+Last-Product-CI: exact main c947c9e9 push 38841792586 — COMPLETE SUCCESS 8/8; plan-cost provenance source CI PENDING
 Last-Completed-Plan: P-030
-Last-Completed-Merge: 24432e3d0474969333ef2d149bd0ff2b5c83c135
-Last-Completed-CI: 38777851448 — SUCCESS 8/8
+Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
+Last-Completed-CI: 38766126322 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -667,3 +667,11 @@ NEXT_ELIGIBLE_WORK: investigate source-backed goal/task requirements to derive c
 - Code `src/orchestration/planner.ts` source commit `2b9998c2972d2168d7767deb69ca2b5c7d58c79d`, test `src/__tests__/orchestration/planner.test.ts` commit `1022a903e30e504bc2678a038c2916d4daf653f1`. This is a prompt-contract E3 regression only; NO claim a model actually planned a SaaS or built dependencies, and no real supplier operation. Branch exact CI PENDING.
 - NEXT_ELIGIBLE_WORK: exact-source CI Node22/24+Windows22/24+security/integrity/distribution, audit all prompt owners for contradictory instructions, integrate on PASS; verify main. Continue objective-grounded need decomposition, timing/size/utilization evidence, and P-005 E5/E6 auth finance later; do not promote P-031 to HECHO or start P-032.
 
+
+### P-031 — PR #116 exact-main E3 and downstream local Task-cost provenance (2026-10-15/16)
+
+- Observed GitHub `main c947c9e95c4e9faad8602373770f84b2ee78a1c9`, PR #116 MERGED, exact-main run `38841792586` COMPLETE/SUCCESS 8/8 (Linux Node22/24, Windows Node22/24, public distribution Node22/24, security audit, rebrand integrity). This supersedes earlier `planner source CI PENDING` checkpoints; plan remains EN_EJECUCIÓN.
+- R1 source audit of planner downstream owners (`src/orchestration/plan-mode.ts`, `strategic-review.ts`) discovered that the corrected local `PlannerOutput.estimatedTotalCostCents` was still displayed as unqualified `cents`/`c` in durable `plan.md` and strategy-review feedback. Hypothesis: the value was supplier cash; falsified by `planner.ts` and `treasury-projection.ts`: it is `task_cost_cent`, non-convertible into USD, Conway credits, invoice, authority or realized profit. The misleading display is real even though the review threshold already lacked decision authority.
+- Decision CORRECT existing owner outputs, preserve schema/legacy field names and all strategic approval semantics. Updated `renderPlanMarkdown` total and each Task line, and `assessStrategicPlan` cost-floor/legacy scrutiny text to say `task_cost_cent` and explicitly deny supplier cash authority. Regression in the existing `plan-mode.test.ts` checks persisted markdown and review; no parallel money ledger, threshold or new approval state.
+- Branch `abos/p031-plan-cost-provenance`, based on `main c947c9e95c4e9faad8602373770f84b2ee78a1c9`. Source commits `4addb66`, `a8dd7fb`, regression `ed2f02d`; exact branch CI not yet verified at this checkpoint. This proves no external resource utilization, provider quote, account cash or LIVE billable execution. Keep P-005 E5/E6 UNKNOWN.
+- NEXT_ELIGIBLE_WORK: run exact-source branch/PR CI; remediate only demonstrated failures; merge to main only after gate and verify exact-main CI. Then continue other materially independent P-031 capacity/utilization and payment/invoice evidence, avoid new duplicated authorities, keep P-032 unopened.
