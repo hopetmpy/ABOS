@@ -188,50 +188,114 @@ function summarizeOwnedResourceInventory(
  * intentionally excludes. No new table, billing ledger, scheduling rule,
  * automatic scale/retirement decision or provider API call.
  */
+/**
+ * Resource-event IDs, not mutable present-day bindings, identify the exact
+ * P-018 owner snapshot in the existing P-013 Evidence Fabric. This is an
+ * observation at a point in time, never evidence of a continuous allocation
+ * interval, causal contribution or provider bill.
+ */
+interface RecordedResourceAssignment {
+  goalId: string | null;
+  taskId: string | null;
+  operation: string;
+  observedAt: string;
+}
+
+function recordedAssignmentHistory(
+  db: Database, resourceId: string,
+): { observations: RecordedResourceAssignment[]; incomplete: boolean } | null {
+  try {
+    const limit = 1024; // bounded model projection; saturation never implies no prior assignment
+    const rows = db.prepare(`
+      SELECT v.goal_id AS goalId, v.task_id AS taskId,
+             e.operation AS operation, e.created_at AS observedAt
+      FROM environment_resource_events e
+      INNER JOIN evidence_events v
+        ON v.authority_type = 'environment_resource_event'
+       AND v.authority_id = e.id AND v.event_type = 'environment.resource_event'
+      WHERE e.resource_id = ?
+      ORDER BY e.created_at DESC, e.rowid DESC
+      LIMIT ?
+    `).all(resourceId, limit) as RecordedResourceAssignment[];
+    rows.reverse();
+    const transitions: RecordedResourceAssignment[] = [];
+    for (const row of rows) {
+      const previous = transitions[transitions.length - 1];
+      if (!previous || previous.goalId !== row.goalId ||
+          previous.taskId !== row.taskId) transitions.push(row);
+    }
+    return { observations: transitions, incomplete: rows.length === limit };
+  } catch {
+    return null; // Legacy/lean embeddings must preserve UNKNOWN.
+  }
+}
+
 function describeResourceOutcomeLinks(db: Database, goalId?: string): string | null {
   let resources: ReturnType<EnvironmentResourceStore["list"]>;
   try {
     resources = new EnvironmentResourceStore(db).list({ includeTerminated: true });
   } catch {
-    // A lean host may not install P-018; do not claim zero owned resources.
     return "P-031 resource→Task outcome evidence UNKNOWN: P-018 inventory is unreadable; no resource economic learning inferred.";
   }
-  const linked = resources.filter(resource =>
-    Boolean(resource.taskId) ||
-    resource.metadata.retentionBillingReconciliation === "unverified_after_resource_release"
-  );
-  if (linked.length === 0) return null;
+  // Historical goal matches must remain discoverable after reassignment or
+  // detachment. The evidence owner recorded at event time is authoritative;
+  // the current resource.goalId cannot stand in for that historical owner.
+  let historicalIds = new Set<string>();
+  let historicalLookupAvailable = true;
+  try {
+    const goalScope = goalId ? "AND v.goal_id = ?" : "AND v.task_id IS NOT NULL";
+    const observed = db.prepare(`
+      SELECT DISTINCT e.resource_id AS resourceId
+      FROM evidence_events v
+      JOIN environment_resource_events e ON e.id = v.authority_id
+      WHERE v.authority_type = 'environment_resource_event'
+        AND v.event_type = 'environment.resource_event'
+        ${goalScope}
+    `).all(...(goalId ? [goalId] : [])) as { resourceId: string }[];
+    historicalIds = new Set(observed.map(row => row.resourceId));
+  } catch {
+    historicalLookupAvailable = false;
+  }
 
-  // A Goal-specific plan prefers current Goal evidence, but cannot pretend
-  // a different Goal's resource was a cost allocated to this Goal.
-  const scoped = goalId
-    ? linked.filter(resource => resource.goalId === goalId)
-    : linked;
-  if (scoped.length === 0) return null;
-  scoped.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id));
+  const linked = resources.filter(resource => {
+    if (goalId && resource.goalId !== goalId && !historicalIds.has(resource.id))
+      return false;
+    return Boolean(resource.taskId) ||
+      resource.metadata.retentionBillingReconciliation === "unverified_after_resource_release" ||
+      historicalIds.has(resource.id);
+  });
+  if (linked.length === 0) {
+    return !historicalLookupAvailable
+      ? "P-031 historical resource assignment evidence UNKNOWN: existing P-013/P-018 event authorities are unreadable."
+      : null;
+  }
 
-  const maxRows = 16; // context transport bound, never an inventory/discovery cap
-  const samples = scoped.slice(0, maxRows);
+  linked.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id));
+  const maxRows = 16;
+  const samples = linked.slice(0, maxRows);
   let pendingEffects: ReturnType<typeof listUnresolvedFinancialEffects> | null = null;
   try {
     pendingEffects = listUnresolvedFinancialEffects(db).filter(effect =>
       effect.effectKind === "provider_resource_procurement"
     );
   } catch {
-    // Read-only P-030 source may be absent in minimal legacy embeddings.
+    // P-030 may not be installed in a legacy embedding.
   }
   const linkedTask = db.prepare(
     "SELECT id, goal_id, status, estimated_cost_cents, actual_cost_cents FROM task_graph WHERE id = ?"
   );
   const linkedGoal = db.prepare("SELECT id, status FROM goals WHERE id = ?");
+  type RecordedTask = {
+    id: string; goal_id: string; status: string;
+    estimated_cost_cents: number; actual_cost_cents: number;
+  };
+  const seenCostTaskIds = new Set<string>();
   const lines = samples.map(resource => {
     const task = resource.taskId
-      ? linkedTask.get(resource.taskId) as {
-          id: string; goal_id: string; status: string;
-          estimated_cost_cents: number; actual_cost_cents: number;
-        } | undefined
+      ? linkedTask.get(resource.taskId) as RecordedTask | undefined
       : undefined;
-    const matchingTask = task?.goal_id === resource.goalId ? task : undefined;
+    const matchingTask = task?.goal_id === resource.goalId &&
+      (!goalId || resource.goalId === goalId) ? task : undefined;
     const goal = resource.goalId
       ? linkedGoal.get(resource.goalId) as { id: string; status: string } | undefined
       : undefined;
@@ -250,32 +314,66 @@ function describeResourceOutcomeLinks(db: Database, goalId?: string): string | n
       Number.isFinite(Date.parse(metadata.cpuUtilizationObservedAt))
         ? `${metadata.cpuUtilizationAveragePct}% @ ${metadata.cpuUtilizationObservedAt} (historical; freshness not established)`
         : "UNKNOWN";
-    const localActual = matchingTask &&
-      Number.isSafeInteger(matchingTask.actual_cost_cents) &&
-      matchingTask.actual_cost_cents > 0 &&
-      ["completed", "failed", "cancelled"].includes(matchingTask.status)
-        ? String(matchingTask.actual_cost_cents) : "UNKNOWN";
-    const localEstimate = matchingTask &&
-      Number.isSafeInteger(matchingTask.estimated_cost_cents) &&
-      matchingTask.estimated_cost_cents > 0
-        ? String(matchingTask.estimated_cost_cents) : "UNKNOWN";
+    // A Task may bind to multiple resources; quote its local cost only once,
+    // and never allocate that Task metric as a provider resource expense.
+    const duplicateTaskCost = matchingTask
+      ? seenCostTaskIds.has(matchingTask.id) : false;
+    if (matchingTask) seenCostTaskIds.add(matchingTask.id);
+    const localActual = duplicateTaskCost
+      ? `REFERENCE_ONLY:${matchingTask?.id}`
+      : matchingTask &&
+          Number.isSafeInteger(matchingTask.actual_cost_cents) &&
+          matchingTask.actual_cost_cents > 0 &&
+          ["completed", "failed", "cancelled"].includes(matchingTask.status)
+            ? String(matchingTask.actual_cost_cents) : "UNKNOWN";
+    const localEstimate = duplicateTaskCost
+      ? `REFERENCE_ONLY:${matchingTask?.id}`
+      : matchingTask &&
+          Number.isSafeInteger(matchingTask.estimated_cost_cents) &&
+          matchingTask.estimated_cost_cents > 0
+            ? String(matchingTask.estimated_cost_cents) : "UNKNOWN";
+    const history = recordedAssignmentHistory(db, resource.id);
+    const assignments = history?.observations.filter(row =>
+      row.taskId && (!goalId || row.goalId === goalId)
+    ) ?? [];
+    // Consecutive assignment events are sampled from the P-018/P-013 journal,
+    // not from current ownership; timestamps are observations, not durations.
+    const historicalLines = assignments.slice(-8).map(row => {
+      const historicalTask = linkedTask.get(row.taskId!) as RecordedTask | undefined;
+      const taskStatus = historicalTask?.goal_id === row.goalId
+        ? historicalTask.status : "UNKNOWN";
+      return `eventAt=${Number.isFinite(Date.parse(row.observedAt)) ? row.observedAt : "UNKNOWN"} ` +
+        `goal=${row.goalId ?? "UNKNOWN"} task=${row.taskId} operation=${row.operation}; ` +
+        `taskStatusNOW=${taskStatus} (not status at event time)`;
+    });
+    const recentAssignment = history?.observations.at(-1);
+    const detachedOrReassigned = recentAssignment && goalId &&
+      recentAssignment.goalId !== goalId ? "left_scoped_goal" : "not_proven";
     return `resource=${resource.id} provider=${resource.provider} lifecycle=${resource.status}; ` +
       `linkedTask=${resource.taskId ?? "UNKNOWN"} taskStatus=${matchingTask?.status ?? "UNKNOWN"}; ` +
       `linkedGoal=${resource.goalId ?? "UNKNOWN"} goalStatus=${goal?.status ?? "UNKNOWN"}; ` +
       `lastCpu=${cpu}; localTaskEstimate=${localEstimate} task_cost_cent; ` +
       `localTaskObservedCost=${localActual} task_cost_cent; ` +
-      `unresolvedLocalProviderIntents=${outstanding}; supplierFinalBilling=UNKNOWN`;
+      `unresolvedLocalProviderIntents=${outstanding}; supplierFinalBilling=UNKNOWN; ` +
+      `historicalAssignments=${history === null ? "UNKNOWN" : historicalLines.length} ` +
+      `reassignmentAfterScopedGoal=${detachedOrReassigned}` +
+      (historicalLines.length ? "\n  " + historicalLines.join("\n  ") : "") +
+      (history && (history.incomplete || assignments.length > historicalLines.length)
+        ? "\n  Historical assignment journal truncated for planner context; enumerate P-018/P-013 for full sequence." : "");
   });
   return [
-    "P-031 observed resource/Task/Goal links (P-018/P-025/P-030, READ ONLY; " +
+    "P-031 observed resource/Task/Goal links (P-018/P-013/P-025/P-030, READ ONLY; " +
       "correlation is NOT proof of resource contribution, causal ROI, profit, provider invoice, " +
       "refund, cancellation or authorization). Local Task cost is NOT allocated provider spend:",
     ...lines,
-    ...(scoped.length > samples.length
-      ? [`${scoped.length - samples.length} additional linked resources omitted from planner context; enumerate P-018 inventory before a global conclusion.`]
+    ...(linked.length > samples.length
+      ? [`${linked.length - samples.length} additional linked resources omitted from planner context; enumerate P-018 inventory before a global conclusion.`]
       : []),
-    "CPU alone cannot establish idleness, spare capacity, resize or retirement suitability. " +
-      "An unresolved-local-intent count of zero cannot prove an external bill is closed; " +
+    ...(!historicalLookupAvailable
+      ? ["Historical P-013/P-018 assignment index is unavailable; earlier owner changes are UNKNOWN."] : []),
+    "Assignment event timestamps prove recorded association snapshots ONLY, not continuous allocation intervals, utilization during a Task, or cost shares. " +
+      "Repeated Task costs are references, not multiple resource expenses. CPU alone cannot establish idleness, " +
+      "spare capacity, resize or retirement suitability. An unresolved-local-intent count of zero cannot prove an external bill is closed; " +
       "confirm fresh provider utilization, Task/Goal contribution, shared dependencies and independent supplier billing before economic action.",
   ].join("\n");
 }
