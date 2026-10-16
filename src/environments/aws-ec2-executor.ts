@@ -182,9 +182,13 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
 
     const name = workerName(task);
     const repositoryRef = this.options.repositoryRef ?? resolveRuntimeGitRef();
+    // Execution timeout is NOT supplier billing duration or EC2 lifetime.
+    // The host may provide independent sourced resource-duration evidence;
+    // otherwise this economic duration is UNKNOWN instead of invented.
+    const resourceDurationMs = evidencedResourceDurationMs(this.options.resourceMetadata);
     const estimate = await this.options.provider.estimate({
       requiredCapabilities: ["remote compute", "linux", "ssm"],
-      expectedDurationMs: task.metadata.timeoutMs,
+      expectedDurationMs: resourceDurationMs,
       goalId: task.goalId,
       pathId: task.strategicPathId ?? null,
       taskId: task.id,
@@ -214,12 +218,17 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
         "resume",
         "destroy",
       ],
-      expectedDurationMs: task.metadata.timeoutMs,
+      expectedDurationMs: resourceDurationMs,
       goalId: task.goalId,
       pathId: task.strategicPathId ?? null,
       taskId: task.id,
       selectionEstimateCents: estimate.estimatedCostCents ?? null,
-      selectionEvidence: estimate.evidence,
+      selectionEvidence: [
+        ...(estimate.evidence ?? []),
+        resourceDurationMs === null
+          ? "EC2 supplier runtime duration UNKNOWN; Task timeout cannot support provider price, timing or payment authority."
+          : `EC2 supplier duration estimate sourced from explicit resourceMetadata.expectedResourceDurationMs=${resourceDurationMs}; actual billing remains unverified.`,
+      ],
       metadata: {
         ...(this.options.resourceMetadata ?? {}),
         iamInstanceProfile: instanceProfile,
@@ -838,6 +847,16 @@ function unverifiableNewEc2ExecutorCapabilities(required: string[]): string[] {
   return [...new Set(required.map(value => value.trim().toLowerCase())
     .filter(value => value.length > 0 &&
       !BASE_EC2_SSM_TASK_CAPABILITIES.has(value)))];
+}
+
+/** Explicit source-backed resource usage expectation, never Task execution timeout. */
+function evidencedResourceDurationMs(metadata?: Record<string, unknown>): number | null {
+  const value = metadata?.expectedResourceDurationMs;
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+    throw new Error("expectedResourceDurationMs must be an explicit positive safe integer, not a Task timeout or inferred billing commitment.");
+  }
+  return value;
 }
 
 function resolveRuntimeGitRef(): string {
