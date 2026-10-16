@@ -514,6 +514,9 @@ Respond with a JSON object matching the PlannerOutput schema.
 All example numbers/roles below illustrate JSON SHAPE ONLY, not measured cost,
 provider pricing, a live wallet balance, a spending entitlement or verified
 resource availability. Fill with evidence-driven estimates and label assumptions.
+preferredEnvironment is either an exact observed registered provider ID or null;
+never copy a list of alternatives separated by a pipe as one provider name.
+Dependencies are ZERO-BASED indices of OTHER tasks, never the task itself.
 
 \`\`\`json
 {
@@ -523,7 +526,7 @@ resource availability. Fill with evidence-driven estimates and label assumptions
     "hypothesis": "Why this selected strategic route should achieve the objective",
     "assumptions": ["Material assumption 1"],
     "requiredCapabilities": ["capability requirement"],
-    "preferredEnvironment": "local | conway | aws | another registered environment | null",
+    "preferredEnvironment": null,
     "expectedOutcome": "Observable result that would validate this path"
   },
   "alternatives": [
@@ -533,7 +536,7 @@ resource availability. Fill with evidence-driven estimates and label assumptions
       "hypothesis": "Why this alternative could achieve the same objective",
       "assumptions": ["Alternative-specific assumption"],
       "requiredCapabilities": ["different or differently composed capability"],
-      "preferredEnvironment": "local | conway | aws | another registered environment | null",
+      "preferredEnvironment": null,
       "sequence": ["first strategic step", "second strategic step"],
       "expectedOutcome": "Observable result for the same objective",
       "estimatedCostCents": 60000,
@@ -557,13 +560,13 @@ resource availability. Fill with evidence-driven estimates and label assumptions
     {
       "title": "Clear, actionable task title",
       "description": "Detailed spec: what to do, inputs, expected outputs, success criteria",
-      "agentRole": "predefined_role or custom-role-name",
-      "dependencies": [0, 1],
+      "agentRole": "role-name",
+      "dependencies": [],
       "estimatedCostCents": 15000,
       "priority": 1,
       "timeoutMs": 3600000,
       "requiredCapabilities": ["capability needed by this task"],
-      "preferredEnvironment": "local | conway | aws | another registered environment | null"
+      "preferredEnvironment": null
     }
   ],
   "risks": ["Risk 1: description + mitigation", "Risk 2: ..."],
