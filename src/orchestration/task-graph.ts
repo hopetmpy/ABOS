@@ -1,4 +1,5 @@
 import type { Database } from "better-sqlite3";
+import type { TaskResourceNeed } from "../environments/types.js";
 import { ulid } from "ulid";
 import {
   getGoalById,
@@ -47,6 +48,8 @@ export interface TaskNode {
   requiredCapabilities?: string[];
   preferredEnvironment?: string | null;
   strategicPathId?: string | null;
+  /** P-031 demand; independent of Task timeout and monetary authorization. */
+  resourceNeed?: TaskResourceNeed | null;
   metadata: {
     estimatedCostCents: number;
     actualCostCents: number;
@@ -205,6 +208,7 @@ export function decomposeGoal(
         estimatedCostCents: planned.task.metadata?.estimatedCostCents,
         maxRetries: planned.task.metadata?.maxRetries,
         timeoutMs: planned.task.metadata?.timeoutMs,
+        resourceNeed: planned.task.resourceNeed ?? null,
       });
 
       localToPersisted.set(planned.localId, taskId);
@@ -492,6 +496,7 @@ function taskRowToTaskNode(row: TaskGraphRow): TaskNode {
     priority: row.priority,
     dependencies: row.dependencies,
     result: normalizeTaskResult(row.result),
+    resourceNeed: row.resourceNeed ?? null,
     metadata: {
       estimatedCostCents: row.estimatedCostCents,
       actualCostCents: row.actualCostCents,

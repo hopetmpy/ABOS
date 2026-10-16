@@ -219,6 +219,48 @@ function selectionResult(
 }
 
 describe("Environment mobility", () => {
+  it("forwards only the Task's persisted resource need, not timeout or task cost, to the canonical bridge", async () => {
+    const db = createDb();
+    try {
+      seedTaskContext(db);
+      const registry = new EnvironmentRegistry();
+      registry.register(provider("env-a"));
+      const lifecycle = new EnvironmentLifecycleManager(registry, new EnvironmentResourceStore(db));
+      const migrations = new EnvironmentMigrationStore(db);
+      let observed: EnvironmentTaskSpawnOptions | undefined;
+      const execution = {
+        spawn: vi.fn(async (_task: TaskNode, options?: EnvironmentTaskSpawnOptions) => {
+          observed = options;
+          return selectionResult("env-a");
+        }),
+      } as unknown as EnvironmentExecutionBridge;
+      const mobility = new EnvironmentMobilityCoordinator(
+        registry, new EnvironmentSelector(registry), lifecycle, migrations, execution,
+      );
+      const input = task();
+      input.resourceNeed = {
+        basis: "Goal specified minimum memory and explicit resource need date",
+        minimumCapacity: { memoryMiB: 8192 },
+        neededByAt: "2026-12-01T15:00:00Z",
+        expectedResourceDurationMs: 3_600_000,
+      };
+      await mobility.spawn(input);
+      expect(observed?.metadata).toMatchObject({
+        minimumCapacity: { memoryMiB: 8192 },
+        neededByAt: "2026-12-01T15:00:00Z",
+        expectedResourceDurationMs: 3_600_000,
+      });
+      expect(observed?.maxEstimatedCostCents).toBeUndefined();
+      const old = task();
+      await mobility.spawn(old);
+      expect(observed?.metadata).not.toHaveProperty("expectedResourceDurationMs");
+      expect(observed?.metadata).not.toHaveProperty("neededByAt");
+    } finally {
+      db.close();
+    }
+  });
+
+
   it("passes assembled continuation through the canonical spawn contract", async () => {
     const db = createDb();
     try {

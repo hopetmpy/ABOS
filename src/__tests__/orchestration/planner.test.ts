@@ -98,6 +98,34 @@ const failedTask: TaskNode = {
 // ---------------------------------------------------------------------------
 
 describe("validatePlannerOutput", () => {
+  it("keeps sourced, open-unit resource need separate from Task timeout", () => {
+    const request = {
+      basis: "User specified the minimum capacity and date",
+      minimumCapacity: { vCpuCount: 4, memoryMiB: 8192, futureUnit: 2 },
+      neededByAt: "2026-12-01T15:00:00Z",
+      expectedResourceDurationMs: 7_200_000,
+    };
+    const tasks = [{ ...validOutput().tasks[0], resourceNeed: request }];
+    expect(validatePlannerOutput(validOutput({ tasks })).tasks[0]?.resourceNeed)
+      .toEqual(request);
+    expect(validatePlannerOutput(validOutput()).tasks[0]?.resourceNeed).toBeUndefined();
+  });
+
+  it("does not silently drop invalid quantitative need or unproven date", () => {
+    const base = validOutput().tasks[0];
+    for (const resourceNeed of [
+      { basis: "", minimumCapacity: { vCpuCount: 4 } },
+      { basis: "Planner guess", minimumCapacity: { memoryMiB: -10 } },
+      { basis: "Planner guess", neededByAt: "2026-12-01" },
+      { basis: "Planner guess", expectedResourceDurationMs: 0 },
+      { basis: "Planner guess", minimumCapacity: {} },
+    ]) {
+      expect(() => validatePlannerOutput(validOutput({
+        tasks: [{ ...base, resourceNeed }],
+      }))).toThrow(/resourceNeed/);
+    }
+  });
+
   it("accepts valid complete output", () => {
     const result = validatePlannerOutput(validOutput());
     expect(result.analysis).toBe("Analysis text");

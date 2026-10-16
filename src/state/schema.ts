@@ -7,7 +7,13 @@ import { WORLD_MODEL_SCHEMA } from "./world-model-schema.js";
  * The database IS the abos's memory.
  */
 
-export const SCHEMA_VERSION = 23;
+export const SCHEMA_VERSION = 24;
+
+// P-031: resource demand belongs to the existing canonical Task, not a new
+// procurement scheduler, selector, or account/budget authority.
+export const MIGRATION_V24_TASK_RESOURCE_NEED = `
+  ALTER TABLE task_graph ADD COLUMN resource_need TEXT;
+`;
 
 // P-030: internal reserve allocations are earmarks, not settled cash movements.
 // Append-only decisions retain idempotency/recovery without a second payment ledger.
@@ -684,6 +690,7 @@ export const MIGRATION_V9 = `
     max_retries INTEGER DEFAULT 3,
     retry_count INTEGER DEFAULT 0,
     timeout_ms INTEGER DEFAULT 300000,
+    resource_need TEXT,                    -- optional Task need, NOT spend authority
     created_at TEXT NOT NULL,
     started_at TEXT,
     completed_at TEXT

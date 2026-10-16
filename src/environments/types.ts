@@ -75,6 +75,16 @@ export interface EnvironmentSnapshot {
   observedAt: string;
 }
 
+/** Goal/Task-scoped, open-world resource demand. A planner's basis is a
+ * provenance claim, never a supplier quote, wallet balance or P-010 approval.
+ * Task watchdog time is deliberately absent from this contract. */
+export interface TaskResourceNeed {
+  basis: string;
+  minimumCapacity?: Record<string, number>;
+  neededByAt?: string | null;
+  expectedResourceDurationMs?: number | null;
+}
+
 export interface EnvironmentRequirements {
   requiredCapabilities: string[];
   requiredOperations?: EnvironmentOperation[];
