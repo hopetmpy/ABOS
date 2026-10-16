@@ -96,6 +96,13 @@ export interface PlannerContext {
   adaptiveContext?: string;
   environmentSnapshots?: any[];
   capabilities?: any[];
+  /** Read-only P-018 owned inventory; no health, reuse or purchase authority. */
+  ownedResources?: {
+    status: "observed" | "unknown";
+    total: number | null;
+    resources: Array<Record<string, unknown>>;
+    limitations: string[];
+  };
 }
 
 export interface PlannerGoalInput {
@@ -269,6 +276,10 @@ export function buildPlannerPrompt(context: PlannerContext): string {
   const adaptiveContext = context.adaptiveContext?.trim() || "No adaptive path history exists for this goal yet.";
   const environmentSnapshots = formatJson(context.environmentSnapshots ?? []);
   const capabilities = formatJson(context.capabilities ?? []);
+  const ownedResources = formatJson(context.ownedResources ?? {
+    status: "unknown", total: null, resources: [],
+    limitations: ["P-018 inventory not supplied in this planning context."],
+  });
   const creditsDisplay = context.creditsCents === null
     ? "UNKNOWN (no current parent credit observation)"
     : `${context.creditsCents} cents`;
@@ -399,10 +410,12 @@ You have access to (injected at runtime):
 - Agent availability: ${context.idleAgents} idle, ${context.busyAgents} busy, ${context.maxAgents} max
 - Workspace contents: ${workspaceFiles} (outputs from prior tasks)
 - Environment registry snapshots: ${environmentSnapshots}
+- Canonical P-018 owned resource inventory: ${ownedResources}
 - Unified capability registry: ${capabilities}
 
 Runtime-truth rule for the two registries above:
 - Environment snapshots carry current provider availability/evidence when the provider can observe it.
+- P-018 inventory is a bounded representation of owned/adopted resource records, not a live provider-capacity observation or proof of spare resources. Task ownership, retention policy, resource health and actual capability/shape must be rechecked before reuse or procurement. An empty observed inventory differs from an unavailable inventory.
 - Capability entries may be discovered/unverified, degraded, unavailable, unauthorized, prohibited, unknown, or verified_available.
 - Never infer VERIFIED_AVAILABLE merely because a capability object, tool definition, package, skill, role, or provider name is present.
 - When environment/capability evidence conflicts or is incomplete, plan a probe/discovery step or choose another verified route; do not silently promote the claim.

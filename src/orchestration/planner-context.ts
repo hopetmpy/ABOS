@@ -6,6 +6,7 @@ import type { PlannerContext, PlannerOutput } from "./planner.js";
 import type { FundingProtocol } from "./types.js";
 import type { AgentWorkspace } from "./workspace.js";
 import { getActiveGoals } from "../state/database.js";
+import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { describeTaskCostLearning, describeRecordedInferenceResources, getRecordedInferenceResources, getTaskCostCalibration } from "../economics/treasury-projection.js";
 import { describeTreasuryReserveLearning, getTreasuryReserveLearning } from "../economics/treasury-reserves.js";
 
@@ -25,6 +26,8 @@ export interface PlannerContextOptions {
   adaptiveContext?: string;
   environmentSnapshots?: any[];
   capabilities?: any[];
+  /** Prioritize owned resources already associated with the objective. */
+  goalId?: string;
 }
 
 export const DEFAULT_PLANNER_AVAILABLE_ROLES = [
@@ -75,7 +78,78 @@ export async function buildPlannerContext(options: PlannerContextOptions): Promi
     adaptiveContext,
     environmentSnapshots: options.environmentSnapshots ?? [],
     capabilities: options.capabilities ?? [],
+    ownedResources: summarizeOwnedResourceInventory(options.db, options.goalId),
   };
+}
+
+/**
+ * P-018 is the single inventory authority. This summary exposes only
+ * operational identifiers/observations, not credentials, arbitrary provider
+ * metadata, tool secrets, supplier cash or an inferred right to reuse.
+ * The context-size limit is a transport bound, not a limit on ABOS discovery:
+ * incomplete inventory explicitly demands follow-up enumeration.
+ */
+function summarizeOwnedResourceInventory(
+  db: Database, goalId?: string,
+): NonNullable<PlannerContext["ownedResources"]> {
+  try {
+    const owned = new EnvironmentResourceStore(db).list();
+    owned.sort((a, b) => {
+      const priority = (value: typeof a) =>
+        value.goalId === goalId && goalId ? 0 : !value.goalId ? 1 : 2;
+      return priority(a) - priority(b) || a.id.localeCompare(b.id);
+    });
+    const maxContextRows = 100;
+    const resources = owned.slice(0, maxContextRows).map(resource => {
+      const metadata = resource.metadata;
+      const shape = typeof metadata.instanceType === "string"
+        ? metadata.instanceType : null;
+      const cpuStatus = metadata.cpuUtilizationMetricStatus === "observed"
+        ? "observed" : "unknown";
+      const cpu = cpuStatus === "observed" &&
+        typeof metadata.cpuUtilizationAveragePct === "number" &&
+        Number.isFinite(metadata.cpuUtilizationAveragePct) &&
+        typeof metadata.cpuUtilizationObservedAt === "string"
+          ? {
+              averagePct: metadata.cpuUtilizationAveragePct,
+              observedAt: metadata.cpuUtilizationObservedAt,
+              source: "P-018 provider health; freshness not independently verified",
+            }
+          : null;
+      return {
+        id: resource.id,
+        provider: resource.provider,
+        type: resource.type,
+        status: resource.status,
+        region: resource.region,
+        capabilities: resource.capabilities,
+        goalId: resource.goalId,
+        pathId: resource.pathId,
+        taskId: resource.taskId,
+        retentionPolicy: resource.retentionPolicy,
+        instanceType: shape,
+        lastHealthCheck: resource.lastHealthCheck,
+        cpuMeasurement: cpu,
+      };
+    });
+    return {
+      status: "observed",
+      total: owned.length,
+      resources,
+      limitations: [
+        "Owned/adopted records are not live provider availability, task-spare capacity, verified monetary liquidity or procurement authority.",
+        "Check fresh provider health, capabilities, resource shape and Task/Goal ownership before reuse.",
+        ...(owned.length > resources.length
+          ? [`Only ${resources.length} of ${owned.length} inventory records fit this planning context; enumerate remaining P-018 inventory before concluding a need is missing.`]
+          : []),
+      ],
+    };
+  } catch {
+    return {
+      status: "unknown", total: null, resources: [],
+      limitations: ["P-018 owned inventory could not be read; empty list is not proof that ABOS owns no resources."],
+    };
+  }
 }
 
 export async function persistPlannerArtifacts(params: {
