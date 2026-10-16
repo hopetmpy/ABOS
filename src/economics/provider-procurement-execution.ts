@@ -28,6 +28,8 @@ import {
   type FinancialEffectRecord,
 } from "./financial-effects.js";
 import { getReviewedTaskPathReceipt } from "../orchestration/orchestrator.js";
+import { getTaskById } from "../state/database.js";
+import type { TaskResourceNeed } from "../environments/types.js";
 
 export const PROVIDER_PROCUREMENT_POLICY_TOOL = "p031_provider_procurement";
 
@@ -69,11 +71,36 @@ export interface ProviderProcurementExecutionResult {
   evidence: string[];
 }
 
+/**
+ * Fresh source-backed description of the SPECIFIC offered provider resource.
+ * A Task sizing claim and a SKU label do not establish available capacity.
+ * Keys are open, exact metric/unit identifiers matching TaskResourceNeed.
+ */
+export interface ProviderResourceFitObservation {
+  resourceId: string;
+  resourceShape: string;
+  minimumCompatibleCapacity: Record<string, number>;
+  source: string;
+  observedAt: string;
+  validUntil: string;
+  evidence: string[];
+}
+
 export interface ProviderProcurementExecutionDependencies {
   /** Implementations authenticate origin, scope, freshness and financial data. */
   observeAuthenticatedEconomics: (
     scope: Readonly<ProviderProcurementScope>,
   ) => Promise<ProviderProcurementScenarioInput>;
+  /**
+   * Independently authenticate offered shape/capacity, provenance and its
+   * validity window. Required for a billed Task with quantitative demand.
+   * The adapter is supplied by the trusted host, never inferred from Planner
+   * basis, instance-type name, supplier cost quote or funds.
+   */
+  observeAuthenticatedResourceFit?: (
+    scope: Readonly<ProviderProcurementScope>,
+    resourceNeed: Readonly<TaskResourceNeed>,
+  ) => Promise<ProviderResourceFitObservation>;
   /** Trusted provider client only; may have monetary side effects. */
   dispatch: (
     scope: Readonly<ProviderProcurementScope>,
@@ -150,6 +177,44 @@ function requirePolicyReceipt(
   }
 }
 
+function requireObservedResourceFit(
+  scope: ProviderProcurementScope,
+  need: TaskResourceNeed,
+  fit: ProviderResourceFitObservation,
+  now: Date,
+): string[] {
+  const required = need.minimumCapacity ?? {};
+  const observed = fit.minimumCompatibleCapacity;
+  const source = fit.source?.trim();
+  const evidence = Array.isArray(fit.evidence)
+    ? fit.evidence.filter(x => typeof x === "string" && x.trim()) : [];
+  const observedAt = Date.parse(fit.observedAt);
+  const validUntil = Date.parse(fit.validUntil);
+  if (fit.resourceId !== scope.resourceId ||
+      fit.resourceShape !== scope.resourceShape ||
+      !source || !evidence.length ||
+      !Number.isFinite(observedAt) || !Number.isFinite(validUntil) ||
+      !/(?:Z|[+-]\\d{2}:\\d{2})$/.test(fit.observedAt) ||
+      !/(?:Z|[+-]\\d{2}:\\d{2})$/.test(fit.validUntil) ||
+      observedAt > now.getTime() || validUntil <= now.getTime() ||
+      validUntil <= observedAt ||
+      !observed || typeof observed !== "object" || Array.isArray(observed) ||
+      Object.entries(required).some(([metric, amount]) => {
+        const capacity = Object.hasOwn(observed, metric) ? observed[metric] : undefined;
+        return !metric.trim() || !Number.isFinite(amount) || amount <= 0 ||
+          typeof capacity !== "number" || !Number.isFinite(capacity) ||
+          capacity < amount;
+      })) {
+    throw new Error(
+      "P-031 resource capacity/shape lacks matching fresh independent provider evidence; procurement not dispatched.",
+    );
+  }
+  return [
+    `P-031 observed resource fit source=${source}; observedAt=${fit.observedAt}; validUntil=${fit.validUntil}; resource=${fit.resourceId}; shape=${fit.resourceShape}.`,
+    ...evidence,
+  ];
+}
+
 /**
  * Execute a SINGLE previously authorized provider operation through the
  * existing P-030 intent journal. Provider accepted/usable is NOT a settled
@@ -208,6 +273,24 @@ export async function executeReviewedProviderProcurement(
       evidence: ["Existing P-030 financial intent requires observation/reconciliation; no repeated provider dispatch."],
     };
   }
+  // P-031: the reviewed Task's quantitative demand must be independently
+  // compatible with this EXACT offered resource. No numeric capacity can be
+  // inferred from a SKU name, Planner basis, provider price or Task timeout.
+  const plannedNeed = getTaskById(db, scope.taskId)?.resourceNeed ?? null;
+  const quantifiedNeed = plannedNeed?.minimumCapacity &&
+    Object.keys(plannedNeed.minimumCapacity).length > 0 ? plannedNeed : null;
+  let fitEvidence: string[] = [];
+  if (quantifiedNeed) {
+    if (!dependencies.observeAuthenticatedResourceFit) {
+      throw new Error(
+        "P-031 independent resource capacity evidence unavailable for quantified Task demand; no billable dispatch.",
+      );
+    }
+    const observedFit = await dependencies.observeAuthenticatedResourceFit(
+      scope, quantifiedNeed,
+    );
+    fitEvidence = requireObservedResourceFit(scope, quantifiedNeed, observedFit, now);
+  }
   // Account economics is an asynchronous external observation. The final
   // same-resource overlap check belongs in the SQLite intent-claim transaction
   // below: two calls can both begin observation before either records an
@@ -258,6 +341,14 @@ export async function executeReviewedProviderProcurement(
         activeReviewedPath.pathId !== scope.pathId) {
       throw new Error(
         "P-025 task route changed or lost materialized review during economic observation; no procurement dispatch.",
+      );
+    }
+    // The resource demand cannot be silently rewritten during supplier
+    // observation, making a previously reviewed size a different purchase.
+    const currentNeed = getTaskById(db, scope.taskId)?.resourceNeed ?? null;
+    if (canonicalPolicyJson(currentNeed) !== canonicalPolicyJson(plannedNeed)) {
+      throw new Error(
+        "P-031 resource demand changed during procurement review; re-evaluate fit before dispatch.",
       );
     }
     // Re-evaluate under the same local transaction that reserves funds and
@@ -316,6 +407,7 @@ export async function executeReviewedProviderProcurement(
       request,
       evidence: [
         ...activeReviewedPath.evidence,
+        ...fitEvidence,
         ...netReview.evidence,
         ...exposure.evidence,
         `P-030 local funds held=${exposure.additionalHeldCents} ${scope.unit} since observed snapshot ${exposure.fundingObservedAt}.`,

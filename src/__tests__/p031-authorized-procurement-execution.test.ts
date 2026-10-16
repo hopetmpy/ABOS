@@ -7,6 +7,7 @@ import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { EnvironmentRetentionCoordinator } from "../environments/retention.js";
 import { createTestDb } from "./mocks.js";
 import { insertGoal, insertTask } from "../state/database.js";
+import type { TaskResourceNeed } from "../environments/types.js";
 import {
   executeReviewedProviderProcurement,
   procurementPolicyArgs,
@@ -137,6 +138,94 @@ function adapters(quote: ProviderProcurementScenarioInput, calls: string[],
 }
 
 describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => {
+  const sizedNeed: TaskResourceNeed = {
+    basis: "Independently measured workload (synthetic fixture only)",
+    minimumCapacity: { cpuCores: 4, memoryMb: 8192 },
+    neededByAt: "2026-12-01T15:00:00Z",
+    expectedResourceDurationMs: 7_200_000,
+  };
+  const fit = (scope: ProviderProcurementScope) => ({
+    resourceId: scope.resourceId,
+    resourceShape: scope.resourceShape,
+    minimumCompatibleCapacity: { cpuCores: 4, memoryMb: 8192 },
+    source: "synthetic-authenticated-provider-inventory",
+    observedAt: "2026-10-01T00:00:00Z",
+    validUntil: "2030-01-01T00:00:00Z",
+    evidence: ["Synthetic independent source confirms exact shape and capacity."],
+  });
+  const setNeed = (db: ReturnType<typeof createTestDb>, scope: ProviderProcurementScope) =>
+    db.raw.prepare("UPDATE task_graph SET resource_need = ? WHERE id = ?")
+      .run(JSON.stringify(sizedNeed), scope.taskId);
+
+  it("preserves authorized ability to acquire an independently verified correctly sized resource", async () => {
+    const { db, scope } = setup();
+    try {
+      setNeed(db, scope);
+      const quote = scenario(), calls: string[] = [];
+      const policyDecisionId = policy(db, scope, quote);
+      const deps = {
+        ...adapters(quote, calls),
+        observeAuthenticatedResourceFit: async () => fit(scope),
+      };
+      const result = await executeReviewedProviderProcurement(db.raw, {
+        scope, policyDecisionId, dependencies: deps, now: new Date("2026-10-15T00:00:00Z"),
+      });
+      expect(result.status).toBe("usable");
+      expect(result.financialEffect?.evidence.join(" ")).toContain("resource fit");
+      expect(calls).toHaveLength(1);
+    } finally { db.close(); }
+  });
+
+  it("does not buy an undersized or unverified shape even if the strategy, quote and policy are positive", async () => {
+    for (const damage of ["missing_adapter", "undersized", "wrong_resource", "wrong_shape", "expired", "empty_evidence"] as const) {
+      const { db, scope } = setup();
+      try {
+        setNeed(db, scope);
+        const quote = scenario(), calls: string[] = [];
+        const policyDecisionId = policy(db, scope, quote);
+        const badFit = fit(scope);
+        if (damage === "undersized") badFit.minimumCompatibleCapacity.memoryMb = 4096;
+        if (damage === "wrong_resource") badFit.resourceId = "different-resource";
+        if (damage === "wrong_shape") badFit.resourceShape = "t3.nano";
+        if (damage === "expired") badFit.validUntil = "2026-10-02T00:00:00Z";
+        if (damage === "empty_evidence") badFit.evidence = [];
+        const deps = {
+          ...adapters(quote, calls),
+          ...(damage === "missing_adapter" ? {} :
+            { observeAuthenticatedResourceFit: async () => badFit }),
+        };
+        await expect(executeReviewedProviderProcurement(db.raw, {
+          scope, policyDecisionId, dependencies: deps, now: new Date("2026-10-15T00:00:00Z"),
+        })).rejects.toThrow(/resource capacity|resource fit/i);
+        expect(calls).toEqual([]);
+        expect(getFinancialEffectByOperationKey(db.raw, scope.operationKey)).toBeUndefined();
+      } finally { db.close(); }
+    }
+  });
+
+  it("rechecks resource need after async verification before claiming any financial effect", async () => {
+    const { db, scope } = setup();
+    try {
+      setNeed(db, scope);
+      const quote = scenario(), calls: string[] = [];
+      const policyDecisionId = policy(db, scope, quote);
+      await expect(executeReviewedProviderProcurement(db.raw, {
+        scope, policyDecisionId, now: new Date("2026-10-15T00:00:00Z"),
+        dependencies: {
+          ...adapters(quote, calls),
+          observeAuthenticatedResourceFit: async () => {
+            db.raw.prepare("UPDATE task_graph SET resource_need = ? WHERE id = ?")
+              .run(JSON.stringify({ ...sizedNeed, minimumCapacity: { memoryMb: 16384 } }), scope.taskId);
+            return fit(scope);
+          },
+        },
+      })).rejects.toThrow(/resource demand changed/);
+      expect(calls).toEqual([]);
+      expect(getFinancialEffectByOperationKey(db.raw, scope.operationKey)).toBeUndefined();
+    } finally { db.close(); }
+  });
+
+
   it("executes a reviewed+funded+explicitly authorized synthetic provider once, without claiming payment", async () => {
     const { db, scope } = setup();
     try {
