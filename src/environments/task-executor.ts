@@ -191,16 +191,37 @@ export class EnvironmentExecutionBridge {
         "selection",
       );
     }
+    // A Task watchdog caps execution; it is neither expected billed VM
+    // lifetime nor a provisioning lead-time. Only distinct resource-use
+    // evidence may be supplied by a Task-spawn caller.
+    const rawDuration = options.metadata?.expectedResourceDurationMs;
+    if (rawDuration != null &&
+        (typeof rawDuration !== "number" || !Number.isSafeInteger(rawDuration) ||
+         rawDuration <= 0)) {
+      throw new EnvironmentTaskExecutionError(
+        null,
+        "expectedResourceDurationMs must be an independently sourced positive safe integer, not a Task timeout.",
+        ["Invalid resource duration did not reach provider selection or dispatch."],
+        "selection",
+      );
+    }
     // Resource inventory is P-018-owned, not a supplier estimate. Feed its
     // read-only spare-capacity candidates into the EXISTING selector, without
     // creating a second resource broker or treating a candidate as runnable.
     // Legacy test doubles without this store method simply have UNKNOWN reuse.
     const inventoryReuse = this.lifecycle?.resources?.findReusableCandidates;
     const reuseEvaluator = typeof inventoryReuse === "function"
-      ? (environmentId: string): number => this.executors.has(environmentId)
+      ? (environmentId: string, requirements: {
+          minimumCapacity?: Record<string, number>;
+          metadata?: Record<string, unknown>;
+        }): number => this.executors.has(environmentId)
         ? this.lifecycle!.resources.findReusableCandidates({
             provider: environmentId,
             excludedResourceIds: options.excludedResourceIds,
+            requiredInstanceType:
+              typeof requirements.metadata?.instanceType === "string"
+                ? requirements.metadata.instanceType : null,
+            minimumCapacity: requirements.minimumCapacity,
             requireExecutorAddress: true,
           }).length
         : 0
@@ -215,7 +236,10 @@ export class EnvironmentExecutionBridge {
           ? options.preferredEnvironment
           : task.preferredEnvironment ?? null,
       excludedEnvironmentIds: options.excludedEnvironmentIds ?? [],
-      expectedDurationMs: task.metadata.timeoutMs,
+      expectedDurationMs: rawDuration == null ? null : rawDuration,
+      minimumCapacity: options.metadata?.minimumCapacity as Record<string, number> | undefined,
+      neededByAt: typeof options.metadata?.neededByAt === "string"
+        ? options.metadata.neededByAt : null,
       maxEstimatedCostCents: options.maxEstimatedCostCents ?? null,
       maxEstimatedCostUnit: options.maxEstimatedCostUnit ?? null,
       goalId: task.goalId,
@@ -296,6 +320,11 @@ export class EnvironmentExecutionBridge {
     const attemptEvidence = [
       ...chosen.candidate.evidence,
       ...discoveryEvidence,
+      "Task timeout is not resource billing duration; resource use estimate supplied independently or UNKNOWN.",
+      ...(chosen.candidate.estimate.estimatedCostCents != null &&
+          chosen.candidate.estimate.costUnit !== "usd_cent"
+        ? ["Provider estimate has unknown/non-USD unit and cannot be recorded as canonical USD cents."]
+        : []),
       ...(chosen.assessment.evidence ?? []),
       `Selected environment=${chosen.candidate.environmentId} score=${chosen.candidate.score}`,
     ];
@@ -333,8 +362,10 @@ export class EnvironmentExecutionBridge {
           taskId: task.id,
           status: "running",
           capabilities: task.requiredCapabilities ?? [],
-          estimatedCostCents:
-            chosen.candidate.estimate.estimatedCostCents ?? null,
+          // P-018 canonical amount is cents but has no provider currency
+          // column. Do not launder untyped credits into apparent USD cents.
+          estimatedCostCents: chosen.candidate.estimate.costUnit === "usd_cent"
+            ? chosen.candidate.estimate.estimatedCostCents ?? null : null,
           retentionPolicy: "until_goal_complete",
           evidence: combinedEvidence,
           metadata: {
