@@ -371,8 +371,20 @@ export function assessProviderProcurementScenario(
   if (oneTime === null || recurring === null || periods === null || other === null) {
     conditions.push("Total one-time, recurring, duration or ancillary cost is UNKNOWN.");
   }
+  // A supplier charging a positive recurring amount cannot simultaneously
+  // have ZERO covered billing periods. That would silently drop the recurring
+  // obligation from the total, releasing apparent spendable account funds.
+  // Preserve legitimate one-off/free offers with zero recurring commitment.
+  const recurringTermMissing = recurring !== null && recurring > 0 &&
+    periods === 0;
+  if (recurringTermMissing) {
+    conditions.push(
+      "Positive recurring supplier charges require at least one evidenced billing period; a zero-period quote omits the ongoing commitment.",
+    );
+  }
   const costIsComplete = oneTime !== null && recurring !== null &&
-    periods !== null && other !== null && unpriced.length === 0;
+    periods !== null && other !== null && unpriced.length === 0 &&
+    !recurringTermMissing;
   const providerTotal = costIsComplete
     ? BigInt(oneTime!) + BigInt(other!) + BigInt(recurring!) * BigInt(periods!)
     : null;
