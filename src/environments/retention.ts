@@ -3,6 +3,7 @@ import type { Database } from "better-sqlite3";
 import type { EnvironmentRegistry } from "./registry.js";
 import type { EnvironmentLifecycleManager } from "./lifecycle.js";
 import type { EnvironmentResource } from "./types.js";
+import { listUnresolvedFinancialEffects } from "../economics/financial-effects.js";
 
 export interface EnvironmentRetentionSweepResult {
   evaluated: number;
@@ -393,6 +394,28 @@ export class EnvironmentRetentionCoordinator {
   }
 
   private markLegacyExecutorReleased(resource: EnvironmentResource): void {
+    // P-031/P-030: provider resource termination and economic closure are
+    // independent truths. Attach a *read-only* view of canonical unsettled
+    // financial intents to the already-terminated resource. Never mutate a
+    // financial effect, manufacture a refund or claim future bills have ceased.
+    const unresolved = listUnresolvedFinancialEffects(this.db)
+      .filter(effect => effect.effectKind === "provider_resource_procurement" &&
+        effect.provider === resource.provider &&
+        effect.request.resourceId === resource.id);
+    this.lifecycle.resources.applyMutation(resource.id, {
+      metadata: {
+        retentionBillingReconciliation: "unverified_after_resource_release",
+        retentionBillingObservedAt: new Date().toISOString(),
+        retentionBillingUnresolvedOperationKeys: unresolved.map(effect => effect.operationKey),
+        retentionBillingUnresolvedCount: unresolved.length,
+      },
+      evidence: [
+        `P-031 resource release identified ${unresolved.length} locally unresolved provider-procurement financial intent(s) for this exact provider/resource; canonical P-030 financial effects remain unchanged.`,
+        "Provider resource termination is not evidence of contract cancellation, disabled auto-renewal, final invoice, settled payment or refund. Supplier billing reconciliation remains UNKNOWN even when no local intent is recorded.",
+      ],
+    }, "retention_billing_reconciliation",
+    "Resource retired; supplier billing outcome separately unverified.");
+
     const addresses = [
       resource.metadata.executorAddress,
       resource.metadata.childAddress,
