@@ -341,8 +341,9 @@ describe("AwsEc2TaskExecutor", () => {
     expect(JSON.stringify(explicit.provisionInputs[0])).toContain(
       "explicit resourceMetadata.expectedResourceDurationMs=540000",
     );
+    const invalid = lifecycleStub();
     const wrongType = new AwsEc2TaskExecutor({
-      provider, lifecycle: explicit.lifecycle,
+      provider, lifecycle: invalid.lifecycle,
       identity: {} as any, config: {} as any,
       resourceMetadata: { expectedResourceDurationMs: "60000" },
     });
@@ -350,6 +351,7 @@ describe("AwsEc2TaskExecutor", () => {
       "expectedResourceDurationMs must be an explicit positive safe integer",
     );
     expect(explicit.provisionCalls).toBe(1);
+    expect(invalid.provisionCalls).toBe(0);
   });
 
   it("honors canonical P-018 spare capacity and will not hijack an active Task's running EC2", async () => {
