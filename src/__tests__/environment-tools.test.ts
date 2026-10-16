@@ -353,7 +353,10 @@ describe("P-031 conditional supplier-credit review", () => {
     const response = await tool.execute(args, {} as any);
     expect(response).toContain('"creditId": "aws-credit-1"');
     expect(response).toContain('"potentialCashOffsetUsdCents": null');
-    expect(response).toContain('"totalProposedCommitmentCents": 3200');
+    // Explicit provider credits do not fill unknown auto-renewal / exit terms.
+    // The known line-item subtotal (3200) is NOT an all-in commitment.
+    expect(response).toContain('"totalProposedCommitmentCents": null');
+    expect(response).toContain("contract lacks sourced renewal");
     expect(response).toContain('"freeBeforeProposalCents": null');
     expect(response).toContain('"purchaseAuthorized": false');
     const basic = await tool.execute({
@@ -437,7 +440,10 @@ describe("P-031 environment_procurement_review", () => {
       contingency_evidence: ["Measured provider recovery downside."],
     }, {} as any);
     expect(result).toContain('"accountId": "123456789012"');
-    expect(result).toContain('"totalProposedCommitmentCents": 7000');
+    // A user-supplied quote cannot supply contract-scoped lifecycle facts;
+    // the 7000 known subtotal is not proven to be the final commitment.
+    expect(result).toContain('"totalProposedCommitmentCents": null');
+    expect(result).toContain("contract lacks sourced renewal");
     expect(result).toContain('"status": "needs_evidence"');
     expect(result).toContain('"freeBeforeProposalCents": null');
     expect(result).toContain('"purchaseAuthorized": false');
