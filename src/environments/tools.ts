@@ -409,7 +409,7 @@ export function createEnvironmentTools(
           },
           expected_duration_ms: {
             type: ["number", "null"],
-            description: "Optional expected duration used by provider cost estimation.",
+            description: "Optional source-backed expected provider resource usage duration for cost estimation, not a Task execution timeout. Omit when unknown; it does not authorize purchase.",
           },
           region: {
             type: ["string", "null"],
