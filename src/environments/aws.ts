@@ -544,6 +544,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     let hourlyCostCents = positiveNumber(
       requirements.metadata?.hourlyCostCents,
     );
+    const rateWasCallerSupplied = hourlyCostCents != null;
     if (hourlyCostCents == null) {
       try {
         hourlyCostCents = await this.lookupLinuxOnDemandHourlyCostCents(
@@ -563,6 +564,12 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
 
     if (hourlyCostCents != null) {
       metadata.hourlyCostCents = hourlyCostCents;
+      // AWS Pricing API is denominated in USD. Caller-supplied rates need
+      // their own explicit unit; a number alone has no monetary provenance.
+      metadata.hourlyCostUnit = rateWasCallerSupplied
+        ? requirements.metadata?.hourlyCostUnit === "usd_cent"
+          ? "usd_cent" : null
+        : "usd_cent";
       metadata.pricingScope = "EC2 Linux On-Demand compute only; excludes storage, network, public IPv4, taxes, discounts, credits, and other AWS charges.";
     }
 
@@ -589,8 +596,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       // Pricing API amounts use USD. An externally injected hourly number
       // without its own USD unit evidence must not acquire that unit by guess.
       costUnit: estimatedCostCents !== null &&
-        (requirements.metadata?.hourlyCostCents == null ||
-          requirements.metadata?.hourlyCostUnit === "usd_cent")
+        metadata.hourlyCostUnit === "usd_cent"
         ? "usd_cent"
         : null,
       costCoverage: estimatedCostCents == null ? "unknown" : "partial",
@@ -866,6 +872,8 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         iamInstanceProfile,
         executorKind: request.metadata?.executorKind ?? null,
         hourlyCostCents: positiveNumber(request.metadata?.hourlyCostCents),
+        hourlyCostUnit: request.metadata?.hourlyCostUnit === "usd_cent"
+          ? "usd_cent" : null,
         accruedComputeEstimateCents: 0,
         billingStartedAt: instance.LaunchTime ?? new Date().toISOString(),
         costEstimateScope: "EC2 compute only; actual AWS billed cost is not claimed.",
@@ -2398,6 +2406,17 @@ function observeComputeEstimate(
   evidence?: string;
 } {
   const hourlyCostCents = positiveNumber(resource.metadata.hourlyCostCents);
+  // Even a number named "Cents" must not become USD-linked accrued cost if
+  // the originating hourly rate has no verified USD monetary unit.
+  if (hourlyCostCents != null && resource.metadata.hourlyCostUnit !== "usd_cent") {
+    return {
+      metadata: {
+        accruedComputeEstimateCents: null,
+        costEstimateObservedAt: observedAt.toISOString(),
+        costEstimateScope: "EC2 compute estimate UNKNOWN: hourly rate lacks verified usd_cent unit; never infer billable provider spend.",
+      },
+    };
+  }
   const accumulated = positiveNumber(
     resource.metadata.accruedComputeEstimateCents,
   ) ?? 0;
