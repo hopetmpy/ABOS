@@ -495,11 +495,13 @@ export class EnvironmentLifecycleManager {
             // at completion; only explicit post-mutation observations in the
             // provider result can replace that old measurement.
             ...(changesShape ? invalidatedCapacityEvidence() : {}),
+            ...(result.metadata ?? {}),
+            // The lifecycle, not the provider metadata bag, owns the durable
+            // reconciliation marker; a callback cannot override it.
             ...(economicMutation ? {
               mutationNeedsReconciliation: !mutationResolved,
               mutationUncertainOperation: mutationResolved ? null : operation,
             } : {}),
-            ...(result.metadata ?? {}),
           },
         },
         operation,
