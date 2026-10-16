@@ -450,6 +450,41 @@ describe("AwsEc2TaskExecutor", () => {
     expect(existing.provisionCalls).toBe(0);
   });
 
+  it("never reuses undersized or post-health-shrunk owned EC2 capacity", async () => {
+    const runner: EnvironmentCommandRunner = async (_command, args) => {
+      if (args[0] === "--version") return { exitCode: 0, stdout: "aws-cli/2.test", stderr: "" };
+      if (args[0] === "sts") return { exitCode: 0, stdout: JSON.stringify({ Account: "123456789012" }), stderr: "" };
+      if (args[0] === "configure") return { exitCode: 0, stdout: "us-east-1", stderr: "" };
+      throw new Error(`unexpected AWS call: ${args.join(" ")}`);
+    };
+    const owned = lifecycleStub([resource({
+      taskId: null,
+      metadata: {
+        executorKind: "aws-ec2-ssm", executorAddress: "aws://ec2/i-new",
+        capacity: { cpuCores: 2, memoryMb: 2048 },
+      },
+    })]);
+    (owned.lifecycle.resources as any).findReusableCandidates = () => owned.resources;
+    const executor = new AwsEc2TaskExecutor({
+      provider: new AwsEnvironmentProvider({ runner, defaultRegion: "us-east-1" }),
+      lifecycle: owned.lifecycle, identity: {} as any, config: {} as any,
+      resourceMetadata: { minimumCapacity: { cpuCores: 4, memoryMb: 4096 } },
+    });
+    expect((await executor.assess(task())).executable).toBe(false);
+    await expect(executor.spawn(task())).rejects.toThrow("IAM instance profile");
+    expect(owned.provisionCalls).toBe(0);
+
+    owned.resources[0]!.metadata.capacity = { cpuCores: 8, memoryMb: 8192 };
+    expect((await executor.assess(task())).executable).toBe(true);
+    (owned.lifecycle as any).health = async (id: string) => {
+      const current = owned.resources.find(x => x.id === id)!;
+      current.metadata.capacity = { cpuCores: 1, memoryMb: 1024 };
+      return current;
+    };
+    await expect(executor.spawn(task())).rejects.toThrow("IAM instance profile");
+    expect(owned.provisionCalls).toBe(0);
+  });
+
   it("does not count mismatched or unknown EC2 shape as reusable capacity", async () => {
     const runner: EnvironmentCommandRunner = async (_command, args) => {
       if (args[0] === "--version") return { exitCode: 0, stdout: "aws-cli/2.test", stderr: "" };
