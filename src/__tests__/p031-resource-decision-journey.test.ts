@@ -113,8 +113,6 @@ describe("P-031 coherent Goal → owned inventory → selection → treasury evi
 
       const larger = await selector.select({
         requiredCapabilities: ["compute"], metadata: { instanceType: "large" },
-      });      const larger = await selector.select({
-        requiredCapabilities: ["compute"], metadata: { instanceType: "large" },
       });
       expect(larger.candidates.find(x => x.environmentId === "cloud-owned")
         ?.estimate.reusableResourceCount).toBe(0);
