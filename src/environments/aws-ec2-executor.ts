@@ -762,6 +762,8 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
           excludedResourceIds,
           requiredCapabilities: inventoryCapabilities,
           requiredInstanceType: requestedInstanceType,
+          minimumCapacity: this.options.resourceMetadata?.minimumCapacity as
+            Record<string, number> | undefined,
           requireExecutorAddress: true,
         }).map(resource => resource.id))
       : null;
