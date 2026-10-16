@@ -226,6 +226,38 @@ describe("EnvironmentSelector", () => {
     ).toContain("reusable candidates=1");
   });
 
+  it("does not treat provider-reported spare capacity as ABOS-owned inventory", async () => {
+    const registry = new EnvironmentRegistry();
+    const reported = provider({
+      id: "a-vendor-claimed-spare", capabilities: ["compute"], cost: 5,
+    });
+    reported.estimate = async () => ({
+      estimatedCostCents: 5, costCoverage: "complete", costUnit: "usd_cent",
+      reusableResourceCount: 900,
+      evidence: ["Supplier claims spare capacity, not ABOS-owned."],
+    });
+    registry.register(reported);
+    registry.register(provider({
+      id: "z-verified-inventory", capabilities: ["compute"], cost: 5,
+    }));
+
+    const observed = await new EnvironmentSelector(registry, {
+      reuseEvaluator: id => id === "z-verified-inventory" ? 1 : 0,
+    }).select({ requiredCapabilities: ["compute"] });
+    expect(observed.selected?.environmentId).toBe("z-verified-inventory");
+    expect(observed.candidates.find(c => c.environmentId === "a-vendor-claimed-spare")
+      ?.estimate.reusableResourceCount).toBe(0);
+    expect(observed.candidates.find(c => c.environmentId === "a-vendor-claimed-spare")
+      ?.evidence.join(" ")).toContain("not ABOS ownership");
+
+    const noInventory = await new EnvironmentSelector(registry).select({
+      requiredCapabilities: ["compute"],
+    });
+    expect(noInventory.candidates.find(c => c.environmentId === "a-vendor-claimed-spare")
+      ?.estimate.reusableResourceCount).toBeNull();
+    expect(noInventory.selected?.environmentId).toBe("a-vendor-claimed-spare");
+  });
+
   it("lets policy exclude a route without treating the objective as impossible", async () => {
     const registry = new EnvironmentRegistry();
     registry.register(provider({
