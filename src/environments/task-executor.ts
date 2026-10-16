@@ -191,6 +191,20 @@ export class EnvironmentExecutionBridge {
         "selection",
       );
     }
+    // Resource inventory is P-018-owned, not a supplier estimate. Feed its
+    // read-only spare-capacity candidates into the EXISTING selector, without
+    // creating a second resource broker or treating a candidate as runnable.
+    // Legacy test doubles without this store method simply have UNKNOWN reuse.
+    const inventoryReuse = this.lifecycle?.resources?.findReusableCandidates;
+    const reuseEvaluator = typeof inventoryReuse === "function"
+      ? (environmentId: string): number => this.executors.has(environmentId)
+        ? this.lifecycle!.resources.findReusableCandidates({
+            provider: environmentId,
+            excludedResourceIds: options.excludedResourceIds,
+            requireExecutorAddress: true,
+          }).length
+        : 0
+      : undefined;
     const selection = await this.selector.select({
       // Task capabilities belong to the executor/tool plane, not necessarily to
       // the infrastructure provider itself. They remain available to adapters
@@ -212,7 +226,7 @@ export class EnvironmentExecutionBridge {
         agentRole: task.agentRole,
         ...(options.metadata ?? {}),
       },
-    });
+    }, reuseEvaluator);
 
     const discoveryEvidence: string[] = [];
     let chosen:
