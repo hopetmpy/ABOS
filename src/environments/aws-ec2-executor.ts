@@ -85,6 +85,7 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
 
     const reusable = this.findReusableResources(
       spawnOptions.excludedResourceIds ?? [],
+      task.requiredCapabilities ?? [],
     );
     const instanceProfile =
       this.options.provider.getConfiguredIamInstanceProfile(
@@ -130,6 +131,7 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
   ): Promise<EnvironmentTaskSpawnResult> {
     const reusable = await this.findHealthyReusableResource(
       spawnOptions.excludedResourceIds ?? [],
+      task.requiredCapabilities ?? [],
     );
     if (reusable?.externalId) {
       return {
@@ -698,7 +700,22 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
     };
   }
 
-  private findReusableResources(excludedResourceIds: string[] = []) {
+  private findReusableResources(
+    excludedResourceIds: string[] = [],
+    requiredCapabilities: string[] = [],
+  ) {
+    // A Task must not inherit a VM only because it is owned and running.
+    // This Linux+SSM executor supplies shell; other task requirements must
+    // be explicitly present in the owned resource's capability inventory.
+    const required = requiredCapabilities.map(value => value.trim().toLowerCase())
+      .filter(Boolean);
+    const inventoryCapabilities = required.filter(value => value !== "shell");
+    // An explicitly requested EC2 shape is an execution requirement.
+    // An unknown/stale shape does not prove it fits and cannot trigger resize.
+    const requestedInstanceType =
+      typeof this.options.resourceMetadata?.instanceType === "string" &&
+      this.options.resourceMetadata.instanceType.trim()
+        ? this.options.resourceMetadata.instanceType.trim() : null;
     // On a real P-018 inventory, prefer canonical ownership/Task/retention
     // eligibility to this legacy shape filter. An active Task's VM cannot be
     // silently rebound to a different Task just because it is still running.
@@ -708,6 +725,7 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
       ? new Set(canonical.call(this.options.lifecycle.resources, {
           provider: this.environmentId,
           excludedResourceIds,
+          requiredCapabilities: inventoryCapabilities,
           requireExecutorAddress: true,
         }).map(resource => resource.id))
       : null;
@@ -728,6 +746,14 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
           (ownedIds === null || ownedIds.has(resource.id)) &&
           resource.type === "aws-ec2-instance" &&
           resource.metadata.executorKind === "aws-ec2-ssm" &&
+          (!required.includes("shell") ||
+            (resource.capabilities.some(x => x.trim().toLowerCase() === "ssm") &&
+             resource.capabilities.some(x => x.trim().toLowerCase() === "linux"))) &&
+          inventoryCapabilities.every(capability =>
+            resource.capabilities.some(value =>
+              value.trim().toLowerCase() === capability)) &&
+          (requestedInstanceType === null ||
+            resource.metadata.instanceType === requestedInstanceType) &&
           ["ready", "running", "suspended"].includes(resource.status) &&
           resource.metadata.artifactCollectionState !== "pending" &&
           !releaseStates.has(
@@ -740,8 +766,9 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
 
   private async findHealthyReusableResource(
     excludedResourceIds: string[] = [],
+    requiredCapabilities: string[] = [],
   ) {
-    for (const candidate of this.findReusableResources(excludedResourceIds)) {
+    for (const candidate of this.findReusableResources(excludedResourceIds, requiredCapabilities)) {
       let current = candidate;
       if (current.status === "suspended") {
         current = await this.options.lifecycle.resume(current.id);
@@ -752,6 +779,14 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
 
       const observed = await this.options.lifecycle.health(current.id);
       if (["ready", "running"].includes(observed.status)) {
+        // A provider health check may reveal an instance shape change since
+        // inventory discovery. Never bind a resource after a mismatched resize.
+        const requestedInstanceType =
+          typeof this.options.resourceMetadata?.instanceType === "string" &&
+          this.options.resourceMetadata.instanceType.trim()
+            ? this.options.resourceMetadata.instanceType.trim() : null;
+        if (requestedInstanceType !== null &&
+            observed.metadata.instanceType !== requestedInstanceType) continue;
         return observed;
       }
     }
