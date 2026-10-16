@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / LATE_SETTLEMENT_SNAPSHOT_SOURCE_PENDING_CI / LIVE_AWS_ISSUER_UNWIRED / P005_LIVE_UNVERIFIED
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / PR102_SOURCE_AND_MAIN_E3_GREEN / LIVE_AWS_ISSUER_UNWIRED / P005_LIVE_UNVERIFIED
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-settlement-time-funding-exposure
-Host-Head-At-Audit-Open: 088de39896dcef837c7047c4c560e9cd0b7a29e8
-Last-Reconciled-Host-Head: 710fa0d61983a462450bde7994a5018c2172e6e4
-Observed-Main-Head: c2c9d505e266c71af314c860b5d47bca127cfb1a
-Last-Product-Head: c2c9d505e266c71af314c860b5d47bca127cfb1a
-Last-Product-CI: main c2c9d505 exact push 38824960720 — SUCCESS 8/8; new P-031 branch CI PENDING
+Current-Host-Branch: abos/p031-settlement-time-main-reconciliation
+Host-Head-At-Audit-Open: ba2a1d9995d4e913d937d800ef2628a594ae5dbe
+Last-Reconciled-Host-Head: ba2a1d9995d4e913d937d800ef2628a594ae5dbe
+Observed-Main-Head: ba2a1d9995d4e913d937d800ef2628a594ae5dbe
+Last-Product-Head: ba2a1d9995d4e913d937d800ef2628a594ae5dbe
+Last-Product-CI: exact main ba2a1d99 push 38827144249 — SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 24432e3d0474969333ef2d149bd0ff2b5c83c135
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
@@ -529,3 +529,14 @@ NEXT_ELIGIBLE_WORK: independent verification of provider account economics, *tru
 ## P-031 current recovery — settlement snapshot temporal fix (2026-10-15)
 
 Baseline `main c2c9d505` independently push-tested by CI `38824960720` SUCCESS 8/8. Branch `abos/p031-settlement-time-funding-exposure` corrects P-030 completed effects prepared before observed funds but settled later, which could otherwise disappear from account holds. Commits `f24d023` source / `e843eb9` tests; see `continuity/C0027.md`. Branch CI pending; no LIVE AWS financing, purchase or supplier invoice verified. P-031 stays EN_EJECUCIÓN; P-005 LIVE UNKNOWN. NEXT: PR CI/attacks, integration only on evidence, then provider account financing and settlement issuer or independent nonbillable P-031 work.
+
+## P-031 — PR #102 integrated and exact-main verified (2026-10-15)
+
+- Branch `abos/p031-settlement-time-funding-exposure`: final HEAD `74a31c5d5aa6acdec57e0a63fa32537a3b02627c`. CI push `38826758560` and PR `38826764761` both COMPLETE/SUCCESS **8/8**. Initial source CI failed solely because C0027 retained the previous branch header; corrected without relaxing verifier. Node22/24 and regression suites then passed.
+- PR #102 SQUASH MERGED at `main ba2a1d9995d4e913d937d800ef2628a594ae5dbe`; exact merged-main push workflow `38827144249` independently retrieved COMPLETE/SUCCESS **8/8**. This is E3 integrated source evidence, not simulated supplier cash or real AWS billing.
+- Causal correction: a completed P-030 supplier effect prepared before a financing snapshot but settled after it, or without valid completion chronology, can no longer be treated as already covered by that snapshot. Accountless late settlements remain UNKNOWN. Original account/provider/unit attribution, authoritative journal and no-repeat provider dispatch stay intact. Three new adversarial regression tests exercise both under-hold and appropriate pre-snapshot exclusion.
+- Source audit of `AwsEnvironmentProvider.observeEconomics`: AWS STS confirms account identity, Budgets observes threshold/spend and GetCredits observes conditional account credits. All are read-only and currently leave `spendableLiquidityUsdCents=null` and `procurementAuthority=not_established`; default AWS `authorizeNewProvision`/`authorizeBillableMutation` and the trusted P-031 `observeAuthenticatedEconomics` supplier adapter remain UNWIRED. A source-only mock is NOT an authenticated account USD funding issuer; do not introduce fictitious liquidity or paid callbacks. P-018 retention already owns nonbillable resource cleanup; no duplicate retention implementation.
+- P-031 stays `EN_EJECUCIÓN` because real supplier funding, account-scoped recurring quote/contract, P-010 exact durable mandate producer, provider settlement/invoice attribution and retirement billing cleanup are not yet E5/E6 verified. P-032 remains PLANIFICADO. No AWS purchase or transfer was performed.
+
+NEXT_ELIGIBLE_WORK: audit independent account financing/supplier-term and P-010 mandate sources actually available before introducing any live adapter; otherwise continue P-031 independently executable nonbillable reuse/retire/economic observation. Evidence on source CI cannot stand in for provider cash, contract, invoice or real business value.
+
