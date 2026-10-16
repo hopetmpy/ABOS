@@ -53,6 +53,30 @@ export interface EnvironmentResourceFilter {
   includeTerminated?: boolean;
 }
 
+/** P-018 recorded numeric capacity is candidate evidence only; never infer
+ * physical quantities from an EC2 size label, CPU load or advertised provider
+ * capability. Metrics remain open-ended and keys encode units, not FX. */
+export function meetsRecordedCapacity(
+  resource: EnvironmentResource,
+  minimumCapacity?: Record<string, number>,
+): boolean {
+  if (minimumCapacity == null) return true;
+  if (typeof minimumCapacity !== "object" || Array.isArray(minimumCapacity)) return false;
+  const required = Object.entries(minimumCapacity);
+  if (required.some(([metric, amount]) =>
+    !metric.trim() || typeof amount !== "number" ||
+    !Number.isFinite(amount) || amount <= 0)) return false;
+  if (required.length === 0) return true;
+  const recorded = resource.metadata.capacity;
+  if (!recorded || typeof recorded !== "object" || Array.isArray(recorded)) return false;
+  const metrics = recorded as Record<string, unknown>;
+  return required.every(([metric, minimum]) => {
+    const actual = Object.hasOwn(metrics, metric) ? metrics[metric] : null;
+    return typeof actual === "number" && Number.isFinite(actual) &&
+      actual >= minimum;
+  });
+}
+
 export class EnvironmentResourceStore {
   constructor(private readonly db: Database) {}
 
@@ -240,13 +264,6 @@ export class EnvironmentResourceStore {
       "artifact_hold", "destroy_requested", "pending_observation",
       "destroy_unavailable", "released",
     ]);
-    const minimumCapacity = input.minimumCapacity == null
-      ? [] : Object.entries(input.minimumCapacity);
-    // Invalid/unknown requirements never silently collapse to an empty
-    // request and inflate reuse counts.
-    const invalidCapacity = minimumCapacity.some(([metric, amount]) =>
-      !metric.trim() || typeof amount !== "number" ||
-      !Number.isFinite(amount) || amount <= 0);
     return this.list({ provider: input.provider }).filter(resource => {
       if (excluded.has(resource.id) || !resource.externalId?.trim() ||
           !["ready", "running", "suspended"].includes(resource.status) ||
@@ -268,17 +285,7 @@ export class EnvironmentResourceStore {
         value.trim().toLowerCase(),
       ));
       if (required.some(capability => !available.has(capability))) return false;
-      if (invalidCapacity) return false;
-      if (minimumCapacity.length > 0) {
-        const recorded = resource.metadata.capacity;
-        if (!recorded || typeof recorded !== "object" || Array.isArray(recorded)) return false;
-        const metrics = recorded as Record<string, unknown>;
-        if (minimumCapacity.some(([metric, needed]) => {
-          const actual = Object.hasOwn(metrics, metric) ? metrics[metric] : null;
-          return typeof actual !== "number" || !Number.isFinite(actual) ||
-            actual < needed;
-        })) return false;
-      }
+      if (!meetsRecordedCapacity(resource, input.minimumCapacity)) return false;
 
       // A resource assigned to an active/unknown Task is not spare capacity.
       // Terminal ephemeral Tasks already make the resource cleanup-eligible.
