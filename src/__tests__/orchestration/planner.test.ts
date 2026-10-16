@@ -291,6 +291,13 @@ describe("buildPlannerPrompt", () => {
     expect(prompt).toContain("earliest resource need, provisioning lead time");
     expect(prompt).not.toContain("conservative: +20% buffer");
     expect(prompt).not.toContain("2x expected duration");
+    expect(prompt).not.toContain("~5 credits/turn");
+    expect(prompt).not.toContain("50-200 | 10-30 min");
+    expect(prompt).not.toContain("Total task cost = inference + tools + compute");
+    expect(prompt).toContain("no fixed overhead percentage");
+    expect(prompt).toContain("not a provider-account usd_cent or Conway credit_cent spending mandate".replace("not a", "NOT a"));
+    expect(prompt).toContain("All example numbers/roles below illustrate JSON SHAPE ONLY");
+    expect(prompt).toContain('"estimatedTotalCostCents": 15000');
   });
 
   it("includes agent availability numbers", () => {
