@@ -10,7 +10,9 @@ import type {
   EnvironmentProvider,
   EnvironmentResource,
 } from "../environments/types.js";
-import type { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
+import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
+import { EnvironmentResourceStore } from "../environments/resource-store.js";
+import { createTestDb } from "./mocks.js";
 import type { TaskNode } from "../orchestration/task-graph.js";
 import {
   EXECUTION_CONTINUATION_PROTOCOL_VERSION,
@@ -153,6 +155,95 @@ describe("EnvironmentExecutionBridge", () => {
     const result = await bridge.spawn(task("beta"));
     expect(result.environmentId).toBe("beta");
     expect(attempts).toEqual(["beta"]);
+  });
+
+  it("prefers actually owned spare Task capacity, never vendor claims or an actively assigned instance", async () => {
+    const db = createTestDb();
+    try {
+      const registry = new EnvironmentRegistry();
+      const vendor = provider("a-new", 20);
+      vendor.estimate = async () => ({
+        estimatedCostCents: 20, reliability: 0.9,
+        reusableResourceCount: 500, // Supplier assertion is NOT ABOS-owned.
+      });
+      registry.register(vendor);
+      registry.register(provider("z-reuse", 20));
+      const executors = new EnvironmentTaskExecutorRegistry();
+      const spawned: string[] = [];
+      executors.register({
+        environmentId: "a-new",
+        spawn: async () => {
+          spawned.push("a-new");
+          return {
+            address: "a-new://new", name: "new-worker",
+            sandboxId: "new", resourceExternalId: "new",
+          };
+        },
+      });
+      executors.register({
+        environmentId: "z-reuse",
+        spawn: async () => {
+          spawned.push("z-reuse");
+          return {
+            address: "z-reuse://owned", name: "existing-worker",
+            sandboxId: "owned", resourceExternalId: "owned",
+          };
+        },
+      });
+      const now = new Date().toISOString();
+      db.raw.prepare(
+        "INSERT INTO goals (id, title, description, status, created_at) VALUES (?, ?, ?, ?, ?)",
+      ).run("goal-1", "Use existing capacity", "Test-only", "active", now);
+      for (const [id, status] of [
+        ["old-task", "running"], ["task-1", "pending"],
+      ]) {
+        db.raw.prepare(
+          "INSERT INTO task_graph (id, goal_id, title, description, status, priority, dependencies, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        ).run(id, "goal-1", id, "Test-only", status, 50, "[]", now);
+      }
+      const store = new EnvironmentResourceStore(db.raw);
+      const lifecycle = new EnvironmentLifecycleManager(registry, store);
+      const owned = lifecycle.adopt({
+        provider: "z-reuse", externalId: "owned", type: "compute",
+        goalId: "goal-1", taskId: "old-task",
+        status: "running", retentionPolicy: "until_goal_complete",
+        metadata: { executorAddress: "z-reuse://owned" },
+      });
+      const bridge = new EnvironmentExecutionBridge(
+        new EnvironmentSelector(registry), executors, lifecycle,
+      );
+
+      // This resource is still owned by a running Task; vendor's 500
+      // "reusable" instances are not OUR inventory, and no hijack is allowed.
+      const busy = await bridge.spawn(task());
+      expect(busy.environmentId).toBe("a-new");
+      expect(busy.selection.candidates.find(c => c.environmentId === "a-new")
+        ?.estimate.reusableResourceCount).toBe(0);
+      expect(busy.selection.candidates.find(c => c.environmentId === "z-reuse")
+        ?.estimate.reusableResourceCount).toBe(0);
+
+      db.raw.prepare("UPDATE task_graph SET status = 'completed' WHERE id = ?")
+        .run("old-task");
+      expect(store.findReusableCandidates({
+        provider: "z-reuse", requireExecutorAddress: true,
+      }).map(x => x.id)).toEqual([owned.id]);
+      // A completed old Task releases its live-owned capacity for reuse; the
+      // first new resource stays assigned to pending task-1 and is not spare.
+      const reused = await bridge.spawn(task());
+      expect(reused.environmentId).toBe("z-reuse");
+      expect(reused.selection.candidates.find(c => c.environmentId === "z-reuse")
+        ?.estimate.reusableResourceCount).toBe(1);
+      expect(reused.selection.candidates.find(c => c.environmentId === "a-new")
+        ?.estimate.reusableResourceCount).toBe(0);
+      expect(store.findByExternalId("z-reuse", "owned")?.id).toBe(owned.id);
+      expect(store.get(owned.id)?.taskId).toBe("task-1");
+      expect(spawned).toEqual(["a-new", "z-reuse"]);
+      // The Task now owns the previously spare resource and cannot be
+      // double-counted as spare by the next selector evaluation.
+      expect(store.findReusableCandidates({
+        provider: "z-reuse", requireExecutorAddress: true,
+      })).toHaveLength(0);
+    } finally { db.close(); }
   });
 
   it("passes only an explicit reviewed budget to the canonical selector", async () => {
