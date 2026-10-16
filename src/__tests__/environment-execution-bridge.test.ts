@@ -338,6 +338,12 @@ describe("EnvironmentExecutionBridge", () => {
     await expect(bridge.spawn(request, {
       metadata: { expectedResourceDurationMs: "7200000" },
     })).rejects.toMatchObject({ operation: "selection" });
+    await expect(bridge.spawn(request, {
+      metadata: { neededByAt: 1234567890 },
+    })).rejects.toMatchObject({ operation: "selection" });
+    await expect(bridge.spawn(request, {
+      metadata: { neededByAt: "2026-11-01" },
+    })).rejects.toMatchObject({ operation: "selection" });
     expect(dispatched).toBe(2);
     expect(adopted).toHaveLength(2);
   });
