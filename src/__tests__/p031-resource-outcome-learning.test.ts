@@ -141,6 +141,8 @@ describe("P-031 source-backed resource outcome → strategic planning (read-only
       });
       store.applyMutation("vm-cross-goal", {
         goalId: "goal-b", taskId: "task-foreign",
+        metadata: { cpuUtilizationMetricStatus: "observed", cpuUtilizationAveragePct: 88,
+          cpuUtilizationObservedAt: "2026-10-16T22:00:00Z" },
       }, "reassign", "Move to another Goal");
       const a = (await buildPlannerContext({ db: db.raw, goalId: "goal-a" })).adaptiveContext ?? "";
       const b = (await buildPlannerContext({ db: db.raw, goalId: "goal-b" })).adaptiveContext ?? "";
@@ -148,6 +150,8 @@ describe("P-031 source-backed resource outcome → strategic planning (read-only
       expect(a).toContain("task=task-b operation=create");
       expect(a).not.toContain("task=task-foreign operation=reassign");
       expect(a).toContain("reassignmentAfterScopedGoal=left_scoped_goal");
+      expect(a).toContain("lastCpu=UNKNOWN (latest CPU belongs to another current Goal");
+      expect(b).toContain("lastCpu=88%");
       expect(a).not.toContain("localTaskObservedCost=900");
       expect(b).toContain("resource=vm-cross-goal");
       expect(b).toContain("task=task-foreign operation=reassign");
