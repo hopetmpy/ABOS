@@ -276,6 +276,23 @@ describe("buildPlannerPrompt", () => {
     expect(prompt).toContain("generalist");
   });
 
+  it("decomposes full cross-provider resource needs without abandoning an unknown delivery route or inventing cash", () => {
+    const prompt = buildPlannerPrompt(context);
+    expect(prompt).toContain("ABOS, an autonomous operating system");
+    expect(prompt).toContain("No provider or single wallet is");
+    expect(prompt).not.toContain("on the Conway\\nnetwork");
+    expect(prompt).toContain("Decompose the complete deliverable BEFORE committing");
+    expect(prompt).toContain("not a closed shopping list");
+    expect(prompt).toContain("already owned, reusable, missing and unverified");
+    expect(prompt).toContain("no executable delivery route is currently known -> EXPLORE");
+    expect(prompt).toContain("no executable discovery/probe/acquisition step is known either -> OUTPUT");
+    expect(prompt).toContain("PlannerOutput estimatedCostCents is a LOCAL task-planning cost metric");
+    expect(prompt).toContain("tokens, elapsed time, electricity and network as investment");
+    expect(prompt).toContain("earliest resource need, provisioning lead time");
+    expect(prompt).not.toContain("conservative: +20% buffer");
+    expect(prompt).not.toContain("2x expected duration");
+  });
+
   it("includes agent availability numbers", () => {
     const prompt = buildPlannerPrompt(context);
     expect(prompt).toContain("2");   // idleAgents
