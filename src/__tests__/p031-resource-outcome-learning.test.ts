@@ -106,6 +106,73 @@ describe("P-031 source-backed resource outcome → strategic planning (read-only
     } finally { db.close(); }
   });
 
+  it("preserves ordered task assignments after detach without turning event timestamps into usage intervals", async () => {
+    const db = fixture();
+    try {
+      const store = new EnvironmentResourceStore(db.raw);
+      store.create({
+        id: "vm-rotating", provider: "synthetic-cloud", externalId: "vm-a",
+        type: "compute", goalId: "goal-a", taskId: "task-a", status: "running",
+      });
+      store.applyMutation("vm-rotating", { taskId: "task-b" }, "reassign", "New Task");
+      store.applyMutation("vm-rotating", { taskId: null }, "detach", "Resource released");
+      const context = await buildPlannerContext({ db: db.raw, goalId: "goal-a" });
+      const learning = context.adaptiveContext ?? "";
+      expect(learning).toContain("resource=vm-rotating");
+      expect(learning).toContain("linkedTask=UNKNOWN");
+      expect(learning).toContain("historicalAssignments=2");
+      expect(learning).toContain("task=task-a operation=create");
+      expect(learning).toContain("task=task-b operation=reassign");
+      expect(learning).toContain("taskStatusNOW=completed (not status at event time)");
+      expect(learning.indexOf("task=task-a operation=create")).toBeLessThan(
+        learning.indexOf("task=task-b operation=reassign"));
+      expect(learning).toContain("not continuous allocation intervals");
+      expect(store.listEvents("vm-rotating")).toHaveLength(3);
+    } finally { db.close(); }
+  });
+
+  it("keeps the previous Goal's event association after the resource moves to another Goal", async () => {
+    const db = fixture();
+    try {
+      const store = new EnvironmentResourceStore(db.raw);
+      store.create({
+        id: "vm-cross-goal", provider: "synthetic-cloud", externalId: "vm-shared",
+        type: "compute", goalId: "goal-a", taskId: "task-b", status: "running",
+      });
+      store.applyMutation("vm-cross-goal", {
+        goalId: "goal-b", taskId: "task-foreign",
+      }, "reassign", "Move to another Goal");
+      const a = (await buildPlannerContext({ db: db.raw, goalId: "goal-a" })).adaptiveContext ?? "";
+      const b = (await buildPlannerContext({ db: db.raw, goalId: "goal-b" })).adaptiveContext ?? "";
+      expect(a).toContain("resource=vm-cross-goal");
+      expect(a).toContain("task=task-b operation=create");
+      expect(a).not.toContain("task=task-foreign operation=reassign");
+      expect(a).toContain("reassignmentAfterScopedGoal=left_scoped_goal");
+      expect(a).not.toContain("localTaskObservedCost=900");
+      expect(b).toContain("resource=vm-cross-goal");
+      expect(b).toContain("task=task-foreign operation=reassign");
+      expect(b).not.toContain("task=task-b operation=create");
+    } finally { db.close(); }
+  });
+
+  it("does not double count a single task actual across two bound resources", async () => {
+    const db = fixture();
+    try {
+      const store = new EnvironmentResourceStore(db.raw);
+      for (const id of ["vm-one", "vm-two"]) store.create({
+        id, provider: "synthetic-cloud", externalId: id,
+        type: "compute", goalId: "goal-a", taskId: "task-b", status: "running",
+      });
+      const learning = (await buildPlannerContext({ db: db.raw, goalId: "goal-a" })).adaptiveContext ?? "";
+      expect(learning).toContain("resource=vm-one");
+      expect(learning).toContain("resource=vm-two");
+      expect(learning.match(/localTaskObservedCost=450 task_cost_cent/g)).toHaveLength(1);
+      expect(learning).toContain("localTaskObservedCost=REFERENCE_ONLY:task-b task_cost_cent");
+      expect(learning).toContain("Repeated Task costs are references");
+      expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as {n:number}).n).toBe(0);
+    } finally { db.close(); }
+  });
+
   it("does not invent economic outcome learning from Goals and Tasks without any owned resource", async () => {
     const db = fixture();
     try {
