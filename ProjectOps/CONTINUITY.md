@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0028.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / C0028_ACTIVE / PR109_TO_PR112_MAIN_E3_GREEN / P005_LIVE_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / RECURRING_TERM_SOURCE_PENDING_CI / P005_E5E6_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-owned-reuse-main-reconciliation
-Host-Head-At-Audit-Open: ec7e0d6cd8c3a8a2d09d3d484e7a1c1b67f1f4ca
-Last-Reconciled-Host-Head: ec7e0d6cd8c3a8a2d09d3d484e7a1c1b67f1f4ca
-Observed-Main-Head: ec7e0d6cd8c3a8a2d09d3d484e7a1c1b67f1f4ca
-Last-Product-Head: ec7e0d6cd8c3a8a2d09d3d484e7a1c1b67f1f4ca
-Last-Product-CI: exact main ec7e0d6c push 38837589113 — COMPLETE SUCCESS 8/8
+Current-Host-Branch: abos/p031-positive-recurring-term-coverage
+Host-Head-At-Audit-Open: 9a6c22d265e3a8ba8e322480ac7c06b11cecca95
+Last-Reconciled-Host-Head: 9a6c22d265e3a8ba8e322480ac7c06b11cecca95
+Observed-Main-Head: 9a6c22d265e3a8ba8e322480ac7c06b11cecca95
+Last-Product-Head: 9a6c22d265e3a8ba8e322480ac7c06b11cecca95
+Last-Product-CI: exact main 9a6c22d2 push 38838474178 — COMPLETE SUCCESS 8/8; current source CI PENDING
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 24432e3d0474969333ef2d149bd0ff2b5c83c135
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
@@ -639,4 +639,12 @@ NEXT_ELIGIBLE_WORK: validate PR/source CI, fix causal regressions, merge and exa
 - Audit next from concrete source owners, not stale narrative. Potential remaining P-031 source families include contextual dependency decomposition, actual utilization and capacity/timing economics; only implement a new gap once independently proven absent. Do not duplicate P-025 strategy, P-018 retention/selection, P-030 treasury or P-017 acquisition fabric. Provider-specific LIVE money cannot be fabricated by Budgets/credits.
 
 NEXT_ELIGIBLE_WORK: inspect and, where authenticated evidence exists, connect actual provider account liquidity, contractual pricing, P-010 issuer and P-030 invoice/retirement lifecycle without false success. Independently audit contextual sizing, timing and utilization outcomes against P-031 DoD; preserve NO_CHANGE when existing owners already cover it.
+
+### P-031 — Positive recurring quote requires evidenced nonzero term (2026-10-16)
+
+- Git exact current base: `main 9a6c22d265e3a8ba8e322480ac7c06b11cecca95`, CI `38838474178` COMPLETE/SUCCESS **8/8**. PR #113 already integrated C0027→C0028 without raising ProjectOps size threshold; P-031 still EN_EJECUCIÓN.
+- Causal gap: `assessProviderProcurementScenario` computed `oneTime+other+recurringCentsPerPeriod*periods` with `recurringCentsPerPeriod>0` but `periods=0`. This yielded a plausible known total that omitted an explicitly quoted recurring obligation and could admit P-031 `executeReviewedProviderProcurement` dispatch, creating an understated P-030 financial intent despite P-010 exact-args approval.
+- Decision CORRECT in the EXISTING P-030 scenario authority, not another treasury/policy: when a quote carries positive recurring charge with zero documented periods, mark term coverage incomplete, `totalProposedCommitmentCents=null`, downstream `freeAfterProposalAndContingencyCents=null` and status needs_evidence. A legitimate one-time/no-recurring quote (`recurringCentsPerPeriod=0`, `periods=0`) remains reviewable; no arbitrary minimum subscription imposed. Unknown periods and unknown ancillary costs keep earlier separate blockers.
+- Branch `abos/p031-positive-recurring-term-coverage`; production `src/economics/treasury-scenario.ts`; direct regressions `src/__tests__/provider-procurement-scenario.test.ts` and consumer dispatch rejection `src/__tests__/p031-authorized-procurement-execution.test.ts`. Commits source `1eef704fd8b18c065c45a1eb4060d235861535d0`, tests `3509ed5fb0b773ce806047ef31a8aecbbf12b1ba`, `58fb6d935d07f22ba4a99eefbc768a04ba309def`. CI NOT YET VERIFIED; no LIVE provider purchase/settlement.
+- NEXT_ELIGIBLE_WORK: PR exact-head Node22/24 + Windows22/24 + security+integrity+distribution CI, correct causal regressions, merge only on 8/8 and verify exact-main; then inspect evidenced demand timing/sizing and actual provider invoice/finance inputs without manufacturing facts. P-005 E5/E6 UNKNOWN and P-032 untouched.
 
