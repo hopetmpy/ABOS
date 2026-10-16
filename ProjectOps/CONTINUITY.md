@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / PR107_RESOURCE_CYCLE_MAIN_E3_GREEN / LIVE_AWS_ISSUER_UNWIRED / P005_E5E6_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / CANONICAL_REUSE_INVENTORY_SOURCE_PENDING_CI / LIVE_AWS_ISSUER_UNWIRED / P005_E5E6_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-resource-cycle-main-checkpoint
-Host-Head-At-Audit-Open: be80ccdab6cf8a0a4c551156bba85d650dce3851
-Last-Reconciled-Host-Head: be80ccdab6cf8a0a4c551156bba85d650dce3851
-Observed-Main-Head: be80ccdab6cf8a0a4c551156bba85d650dce3851
-Last-Product-Head: be80ccdab6cf8a0a4c551156bba85d650dce3851
-Last-Product-CI: exact main be80ccda push 38831762602 — COMPLETE SUCCESS 8/8
+Current-Host-Branch: abos/p031-owned-inventory-reuse-selection
+Host-Head-At-Audit-Open: b10bc7e6e6d66cd6a8da3f188684da0b12dd46b7
+Last-Reconciled-Host-Head: b10bc7e6e6d66cd6a8da3f188684da0b12dd46b7
+Observed-Main-Head: b10bc7e6e6d66cd6a8da3f188684da0b12dd46b7
+Last-Product-Head: b10bc7e6e6d66cd6a8da3f188684da0b12dd46b7
+Last-Product-CI: exact main b10bc7e6 push 38832394383 — COMPLETE SUCCESS 8/8; branch CI PENDING
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 24432e3d0474969333ef2d149bd0ff2b5c83c135
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
@@ -588,4 +588,15 @@ NEXT_ELIGIBLE_WORK: open PR and validate complete Node22/24, Windows, security, 
 - Independent audit of `EnvironmentSelector` and its regressions: provider-neutral inventory `reuseEvaluator`, capability proof, cost coverage and candidate selection already exist; NO_CHANGE to avoid duplicating a P-018 authority. P-031 remains `EN_EJECUCIÓN`; real provider liquidity, service billing terms, P-010 monetary issuer, external invoice/revenue/refund and LIVE economics E5/E6 are still unknown/not wired. P-032 remains PLANIFICADO.
 
 NEXT_ELIGIBLE_WORK: audit trusted independently authenticated account funding, service-specific costs and real P-010 operation issuer for eligible supplier/provider accounts, or provider-neutral nonbillable resource reuse and measured utilization where materially untested. Do not invent money from AWS budget limits or conditional credits, and do not conflate provider resource deletion with cancellation of AWS ancillary charges. On new findings, continue P-031 from Git/HEAD, not stale historical checkpoints.
+
+## P-031 — canonical owned-inventory reuse selection and AWS active-task protection (2026-10-15/16)
+
+- GitHub exact baseline `main b10bc7e6e6d66cd6a8da3f188684da0b12dd46b7`, push workflow `38832394383` COMPLETE/SUCCESS 8/8. P-031 EN_EJECUCIÓN. AWS billable execution remains unverified and unwired.
+- R2 audit: `EnvironmentSelector` had an injected `reuseEvaluator`, but vendor `EnvironmentEstimate.reusableResourceCount` was combined with ABOS inventory using `Math.max(providerCount, ownedCount)`. A vendor claim of hundreds of reusable resources could override an observed canonical count of ZERO and dominate strategic ranking. `EnvironmentExecutionBridge` never supplied a real P-018 inventory evaluator. AWS EC2 adapter also filtered only owned resource *shape* without rejecting resources currently assigned to another ACTIVE Task, risking false spare-capacity attribution/rebinding.
+- Decision CORRECT/REUSE existing owners only: `EnvironmentResourceStore.findReusableCandidates` is a read-only P-018 view of externally identified, ready/running/suspended tracked resources, excluding unknown mutations/provisioning, artifact holds, retirement states, explicitly excluded IDs, region/capability mismatches, resources of active/unknown Task owners, and terminal retention scopes. It reports potential candidates only, never proof of fresh health, free monetary liquidity, permission to resume, or supplier purchase authorization.
+- Existing `EnvironmentSelector.select` now accepts optional runtime inventory evaluator; supplier-reported reuse is preserved only as nonauthoritative evidence and never ranked as ABOS-owned. `EnvironmentExecutionBridge` feeds the *canonical owned inventory* for registered Task adapters, with no new broker. `AwsEc2TaskExecutor` respects that view before considering its existing provider-specific reuse checks; isolated legacy test doubles remain supported. AWS paid provisioning still requires its existing independent economic authority.
+- Source files: `src/environments/{resource-store,selector,task-executor,aws-ec2-executor}.ts`; tests `src/__tests__/{environment-selector,environment-execution-bridge,aws-ec2-task-executor}.test.ts`. Adversarial cases: supplier reports 500-900 reusable units while ABOS owns ZERO, busy running Task prevents reuse, completed prior Task with active owning Goal allows reuse, adoption rebinds a single existing resource rather than duplicate creation, inventory no longer double-counts after assignment.
+- This is source and test preparation; **current branch CI PENDING**, do not claim PASS/integration. Cost/utilization sizing, supplier finance and E5/E6 invoice/funds remain separate P-031 gaps. No real AWS purchase, transfer, settlement or refund was executed.
+
+NEXT_ELIGIBLE_WORK: exact branch PR+CI (Node22/24, Windows22/24, security/integrity/distribution), fix failures causally and merge on evidence; verify exact merged-main CI; preserve open P-031 for further evidence-driven sizing/timing and provider financing/settlement instead of opening P-032.
 

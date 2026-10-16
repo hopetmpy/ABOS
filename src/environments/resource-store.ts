@@ -212,6 +212,68 @@ export class EnvironmentResourceStore {
     return rows.map(deserializeResource);
   }
 
+  /**
+   * Provider-neutral read-only inventory signal for P-031 resource comparison.
+   * A tracked resource is only a REUSE CANDIDATE, never proof of present health,
+   * compatibility, spending rights or permission to resume billable capacity.
+   * Check ownership and retention obligations before attributing it to a
+   * new Task. Actual readiness/dispatch remain provider-executor duties.
+   */
+  findReusableCandidates(input: {
+    provider: string;
+    region?: string | null;
+    requiredCapabilities?: string[];
+    excludedResourceIds?: string[];
+    requireExecutorAddress?: boolean;
+  }): EnvironmentResource[] {
+    const excluded = new Set(input.excludedResourceIds ?? []);
+    const required = (input.requiredCapabilities ?? []).map(value =>
+      value.trim().toLowerCase(),
+    ).filter(Boolean);
+    const releaseStates = new Set([
+      "artifact_hold", "destroy_requested", "pending_observation",
+      "destroy_unavailable", "released",
+    ]);
+    return this.list({ provider: input.provider }).filter(resource => {
+      if (excluded.has(resource.id) || !resource.externalId?.trim() ||
+          !["ready", "running", "suspended"].includes(resource.status) ||
+          resource.metadata.provisionNeedsReconciliation === true ||
+          resource.metadata.mutationNeedsReconciliation === true ||
+          resource.metadata.artifactCollectionState === "pending" ||
+          releaseStates.has(String(resource.metadata.retentionReleaseState ?? ""))) {
+        return false;
+      }
+      if (input.requireExecutorAddress &&
+          (typeof resource.metadata.executorAddress !== "string" ||
+           !resource.metadata.executorAddress.trim())) {
+        return false;
+      }
+      if (input.region && resource.region !== input.region) return false;
+      const available = new Set(resource.capabilities.map(value =>
+        value.trim().toLowerCase(),
+      ));
+      if (required.some(capability => !available.has(capability))) return false;
+
+      // A resource assigned to an active/unknown Task is not spare capacity.
+      // Terminal ephemeral Tasks already make the resource cleanup-eligible.
+      if (resource.taskId) {
+        const owner = this.db.prepare(
+          "SELECT status FROM task_graph WHERE id = ?",
+        ).get(resource.taskId) as { status: string } | undefined;
+        if (!owner || !["completed", "failed", "cancelled"].includes(owner.status) ||
+            resource.retentionPolicy === "ephemeral") return false;
+      }
+      // A completed/failed Goal makes goal-scoped retention cleanup-eligible.
+      if (resource.goalId && resource.retentionPolicy === "until_goal_complete") {
+        const owner = this.db.prepare(
+          "SELECT status FROM goals WHERE id = ?",
+        ).get(resource.goalId) as { status: string } | undefined;
+        if (!owner || ["completed", "failed"].includes(owner.status)) return false;
+      }
+      return true;
+    });
+  }
+
   transition(
     id: string,
     toStatus: EnvironmentResourceStatus,

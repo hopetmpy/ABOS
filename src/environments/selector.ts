@@ -80,10 +80,12 @@ export class EnvironmentSelector {
 
   async select(
     requirements: EnvironmentRequirements,
+    runtimeReuseEvaluator?: EnvironmentReuseEvaluator,
   ): Promise<EnvironmentSelectionResult> {
     const snapshots = await this.registry.inspectAll();
+    const reuseEvaluator = runtimeReuseEvaluator ?? this.options.reuseEvaluator;
     const provisional = await Promise.all(
-      snapshots.map((snapshot) => this.evaluateSnapshot(snapshot, requirements)),
+      snapshots.map((snapshot) => this.evaluateSnapshot(snapshot, requirements, reuseEvaluator)),
     );
 
     const evaluated: EnvironmentSelectionCandidate[] = [];
@@ -120,6 +122,7 @@ export class EnvironmentSelector {
   private async evaluateSnapshot(
     snapshot: EnvironmentSnapshot,
     requirements: EnvironmentRequirements,
+    reuseEvaluator?: EnvironmentReuseEvaluator,
   ): Promise<EnvironmentSelectionCandidate> {
     const provider = this.registry.get(snapshot.id);
     if (!provider) {
@@ -150,25 +153,31 @@ export class EnvironmentSelector {
       ? await safeEstimate(provider, requirements, snapshot)
       : {};
 
-    if (this.options.reuseEvaluator) {
+    // Provider estimates can describe vendor inventory, not ABOS-owned spare
+    // resources. Never blend a supplier's advertised reuse count with the
+    // P-018 ownership source, especially when the canonical count is ZERO.
+    const providerReportedReuse = estimate.reusableResourceCount;
+    estimate.reusableResourceCount = null;
+    if (providerReportedReuse != null) {
+      estimate.evidence = [
+        ...(estimate.evidence ?? []),
+        `Provider reported reusable count=${String(providerReportedReuse)}; ABOS ownership and spare capacity are not established by this estimate.`,
+      ];
+    }
+    if (reuseEvaluator) {
       try {
-        const observedReuse = await this.options.reuseEvaluator(
-          snapshot.id,
-          requirements,
-        );
-        if (
-          typeof observedReuse === "number" &&
-          Number.isFinite(observedReuse) &&
-          observedReuse >= 0
-        ) {
-          const providerReuse = estimate.reusableResourceCount;
-          estimate.reusableResourceCount =
-            typeof providerReuse === "number" && Number.isFinite(providerReuse)
-              ? Math.max(providerReuse, observedReuse)
-              : observedReuse;
+        const observedReuse = await reuseEvaluator(snapshot.id, requirements);
+        if (typeof observedReuse === "number" &&
+            Number.isSafeInteger(observedReuse) && observedReuse >= 0) {
+          estimate.reusableResourceCount = observedReuse;
           estimate.evidence = [
             ...(estimate.evidence ?? []),
-            `Canonical ABOS resource inventory reusable candidates=${observedReuse}.`,
+            `Canonical ABOS resource inventory reusable candidates=${observedReuse}; provider health and assignment remain independently required.`,
+          ];
+        } else {
+          estimate.evidence = [
+            ...(estimate.evidence ?? []),
+            "Canonical ABOS resource reuse count UNKNOWN or invalid; no ownership-based reuse ranking.",
           ];
         }
       } catch (error) {

@@ -699,6 +699,18 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
   }
 
   private findReusableResources(excludedResourceIds: string[] = []) {
+    // On a real P-018 inventory, prefer canonical ownership/Task/retention
+    // eligibility to this legacy shape filter. An active Task's VM cannot be
+    // silently rebound to a different Task just because it is still running.
+    // Legacy isolated executor test doubles can lack the new store read API.
+    const canonical = this.options.lifecycle.resources.findReusableCandidates;
+    const ownedIds = typeof canonical === "function"
+      ? new Set(canonical.call(this.options.lifecycle.resources, {
+          provider: this.environmentId,
+          excludedResourceIds,
+          requireExecutorAddress: true,
+        }).map(resource => resource.id))
+      : null;
     const excluded = new Set(excludedResourceIds);
     const releaseStates = new Set([
       "artifact_hold",
@@ -713,6 +725,7 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
         (resource) =>
           resource.provider === "aws" &&
           !excluded.has(resource.id) &&
+          (ownedIds === null || ownedIds.has(resource.id)) &&
           resource.type === "aws-ec2-instance" &&
           resource.metadata.executorKind === "aws-ec2-ssm" &&
           ["ready", "running", "suspended"].includes(resource.status) &&

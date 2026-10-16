@@ -320,6 +320,39 @@ describe("AwsEc2TaskExecutor", () => {
     ).toBe(true);
   });
 
+  it("honors canonical P-018 spare capacity and will not hijack an active Task's running EC2", async () => {
+    const runner: EnvironmentCommandRunner = async (_command, args) => {
+      if (args[0] === "--version") return {
+        exitCode: 0, stdout: "aws-cli/2.test", stderr: "",
+      };
+      if (args[0] === "sts") return {
+        exitCode: 0, stdout: JSON.stringify({ Account: "123456789012" }), stderr: "",
+      };
+      if (args[0] === "configure") return {
+        exitCode: 0, stdout: "us-east-1", stderr: "",
+      };
+      return { exitCode: 1, stdout: "", stderr: "not available in synthetic test" };
+    };
+    const provider = new AwsEnvironmentProvider({ runner, defaultRegion: "us-east-1" });
+    const owned = lifecycleStub([resource({
+      taskId: "another-running-task",
+      status: "running",
+    })]);
+    // The P-018 inventory rejects active ownership. An AWS-specific legacy
+    // shape match must not override that canonical Task allocation.
+    (owned.lifecycle.resources as any).findReusableCandidates = () => [];
+    const executor = new AwsEc2TaskExecutor({
+      provider, lifecycle: owned.lifecycle,
+      identity: {} as any, config: {} as any,
+    });
+    const assessment = await executor.assess(task());
+    expect(assessment.executable).toBe(false);
+    expect(assessment.evidence?.join(" ")).toContain(
+      "No reusable AWS EC2 executor is currently owned",
+    );
+    expect(owned.provisionCalls).toBe(0);
+  });
+
   it("keeps an unproven EC2 candidate ephemeral and marks failed bootstrap for cleanup", async () => {
     const runner: EnvironmentCommandRunner = async (_command, args) => {
       if (args[0] === "ec2" && args[1] === "describe-instances") {
