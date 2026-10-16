@@ -380,7 +380,7 @@ describe("AwsEc2TaskExecutor", () => {
     const assessment = await executor.assess(gpuTask);
     expect(receivedRequirements).toEqual(["gpu"]);
     expect(assessment.executable).toBe(false);
-    await expect(executor.spawn(gpuTask)).rejects.toThrow("IAM instance profile");
+    await expect(executor.spawn(gpuTask)).rejects.toThrow("no verified execution support");
     expect(existing.provisionCalls).toBe(0);
     expect(calls.some(args => args[0] === "ec2" && args[1] === "run-instances")).toBe(false);
 
