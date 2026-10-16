@@ -62,6 +62,7 @@ describe("environment lifecycle agent tools", () => {
       estimate: async () => ({
         estimatedCostCents: 0,
         costCoverage: "complete",
+            costUnit: "usd_cent",
         reliability: 0.9,
       }),
     });
@@ -75,6 +76,7 @@ describe("environment lifecycle agent tools", () => {
     const result = await select!.execute({
       required_capabilities: ["compute"],
       max_estimated_cost_cents: 10,
+          max_estimated_cost_unit: "usd_cent",
     }, {} as any);
 
     const parsed = JSON.parse(result);
@@ -117,6 +119,7 @@ describe("environment lifecycle agent tools", () => {
           estimate: async () => ({
             estimatedCostCents: 0,
             costCoverage: "complete",
+            costUnit: "usd_cent",
             reliability: 0.9,
           }),
           provision: async () => {
@@ -170,6 +173,7 @@ describe("environment lifecycle agent tools", () => {
           required_capabilities: ["compute"],
           preferred_environment: "target-provider",
           max_estimated_cost_cents: 10,
+          max_estimated_cost_unit: "usd_cent",
         }, {} as any),
       );
 

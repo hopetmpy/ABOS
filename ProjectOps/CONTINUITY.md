@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / CANONICAL_REUSE_INVENTORY_SOURCE_PENDING_CI / LIVE_AWS_ISSUER_UNWIRED / P005_E5E6_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / OWNED_REUSE_MAIN_E3_GREEN / PROVIDER_COST_UNITS_SOURCE_PENDING_CI / P005_E5E6_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-owned-inventory-reuse-selection
-Host-Head-At-Audit-Open: b10bc7e6e6d66cd6a8da3f188684da0b12dd46b7
-Last-Reconciled-Host-Head: b10bc7e6e6d66cd6a8da3f188684da0b12dd46b7
-Observed-Main-Head: b10bc7e6e6d66cd6a8da3f188684da0b12dd46b7
-Last-Product-Head: b10bc7e6e6d66cd6a8da3f188684da0b12dd46b7
-Last-Product-CI: exact main b10bc7e6 push 38832394383 — COMPLETE SUCCESS 8/8; branch CI PENDING
+Current-Host-Branch: abos/p031-provider-cost-unit-comparability
+Host-Head-At-Audit-Open: a374547fbc71be6756545d349e298b35e45342d5
+Last-Reconciled-Host-Head: a374547fbc71be6756545d349e298b35e45342d5
+Observed-Main-Head: a374547fbc71be6756545d349e298b35e45342d5
+Last-Product-Head: a374547fbc71be6756545d349e298b35e45342d5
+Last-Product-CI: exact main a374547f push 38835008557 — COMPLETE SUCCESS 8/8; current source CI PENDING
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 24432e3d0474969333ef2d149bd0ff2b5c83c135
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
@@ -599,4 +599,14 @@ NEXT_ELIGIBLE_WORK: audit trusted independently authenticated account funding, s
 - This is source and test preparation; **current branch CI PENDING**, do not claim PASS/integration. Cost/utilization sizing, supplier finance and E5/E6 invoice/funds remain separate P-031 gaps. No real AWS purchase, transfer, settlement or refund was executed.
 
 NEXT_ELIGIBLE_WORK: exact branch PR+CI (Node22/24, Windows22/24, security/integrity/distribution), fix failures causally and merge on evidence; verify exact merged-main CI; preserve open P-031 for further evidence-driven sizing/timing and provider financing/settlement instead of opening P-032.
+
+## P-031 — provider unit-comparable selection and #109 source integration (2026-10-15/16)
+
+- PR #109 SOURCE final `adf9a2dfb8042077848e23f5702184552dea3a42`, PR CI `38834709857` COMPLETE/SUCCESS **8/8**; merged `main a374547fbc71be6756545d349e298b35e45342d5`, exact-main push `38835008557` COMPLETE/SUCCESS **8/8**. Vendor-claimed reuse no longer overrides P-018 owned spare capacity; AWS active-Task reuse respects canonical inventory. First CI failure was a test-only non-existent P-025 path FK; final corrected branch and merged main are both green. This is E3, not live AWS finance.
+- Subsequent R2 audit in `EnvironmentSelector` + the public `environment_select` tool found numeric `maxEstimatedCostCents` was accepted WITHOUT matching monetary unit, and tie-breaks compared two provider `estimatedCostCents` even if their `costUnit` differed or total price coverage was partial. Thus a vendor credit or incomplete quote could appear numerically cheaper than exact USD and be marked executable under an untyped amount. `EnvironmentExecutionBridge` itself already required typed amount+unit; the independent read-only selection surface did not.
+- Decision CORRECT current selector/tool only: optional explicit budget amount and exact unit must appear TOGETHER; estimated price must be complete, nonnegative safe integer and in identical case-normalized units. No budget remains a valid open-world route. Without an explicit typed budget, numeric total-cost tie-breaking occurs ONLY when both estimates declare complete coverage in the same known unit; otherwise preserve strategic candidate scores and deterministic stable order rather than invent FX rates. Expose `max_estimated_cost_unit` on `environment_select`; update source tests of public tool, budget edge cases, partial and mixed-unit tie comparisons. No fixed budget threshold or new finance authority.
+- Branch `abos/p031-provider-cost-unit-comparability`, source `src/environments/{selector,tools}.ts`, tests `src/__tests__/{environment-selector,environment-tools}.test.ts`; PR and branch source CI still PENDING at checkpoint, not integrated. No direct supplier action or account credit claim. Existing P-030 treasury/P-010 authorization required downstream; P-005 E5/E6 remains unknown.
+- P-031 stays `EN_EJECUCIÓN`; P-032 `PLANIFICADO`; source truth has not replaced outstanding supplier financing/contract/retirement billing verification.
+
+NEXT_ELIGIBLE_WORK: run source PR CI Node22/24+Windows/security/distribution, correct causal regressions if found; integrate only on PASS and check exact-main CI. Continue provider-neutral sizing/timing and genuine authenticated account/economic evidence within P-031, never invent cash or unit exchange.
 
