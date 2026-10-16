@@ -98,6 +98,33 @@ describe("P-031 provider procurement scenario in P-030 treasury", () => {
     }
   });
 
+  it("does not report a fully quoted commitment when recurring charges have zero billing periods", () => {
+    const underquoted = scenario();
+    underquoted.cost.periods = 0;
+    underquoted.cost.recurringCentsPerPeriod = 2000;
+    const review = assessProviderProcurementScenario(
+      underquoted, new Date("2026-10-15T10:00:00Z"),
+    );
+    expect(review.status).toBe("needs_evidence");
+    expect(review.conditions.join(" ")).toContain(
+      "Positive recurring supplier charges require at least one evidenced billing period",
+    );
+    expect(review.totalProposedCommitmentCents).toBeNull();
+    expect(review.freeBeforeProposalCents).toBe(40000);
+    expect(review.freeAfterProposalAndContingencyCents).toBeNull();
+
+    // Zero billing periods ARE meaningful when the provider actually quotes
+    // no recurring charge. Do not invent a subscription or ban one-off costs.
+    const oneOff = scenario();
+    oneOff.cost.periods = 0;
+    oneOff.cost.recurringCentsPerPeriod = 0;
+    const oneOffReview = assessProviderProcurementScenario(
+      oneOff, new Date("2026-10-15T10:00:00Z"),
+    );
+    expect(oneOffReview.status).toBe("review_ready");
+    expect(oneOffReview.totalProposedCommitmentCents).toBe(4000);
+  });
+
   it("does not let an empty alternative or missing downside substitute for economic judgment", () => {
     const params = scenario();
     params.alternatives = [];
