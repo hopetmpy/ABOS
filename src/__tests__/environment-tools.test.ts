@@ -75,6 +75,27 @@ describe("P-031 source-owned resource sizing in environment_select", () => {
         required_capabilities: [],
       }, {} as any));
       expect(generic.candidates[0].reusableResourceCount).toBe(3);
+      // An owned instance label cannot prove physical capacity. Required
+      // metrics become reuse candidates only when source records them.
+      const unknownCapacity = JSON.parse(await select.execute({
+        required_capabilities: [], minimum_capacity: { memoryMb: 4096 },
+      }, {} as any));
+      expect(unknownCapacity.candidates[0].reusableResourceCount).toBe(0);
+      inventory.applyMutation(inventory.list()[1]!.id, {
+        metadata: { capacity: { memoryMb: 8192, cpuCores: 4 } },
+      }, "capacity_observed");
+      const adequate = JSON.parse(await select.execute({
+        required_capabilities: [],
+        minimum_capacity: { memoryMb: 4096, cpuCores: 4 },
+      }, {} as any));
+      expect(adequate.candidates[0].reusableResourceCount).toBe(1);
+      const burst = JSON.parse(await select.execute({
+        required_capabilities: [], minimum_capacity: { memoryMb: 32768 },
+      }, {} as any));
+      expect(burst.candidates[0].reusableResourceCount).toBe(0);
+      expect(burst.candidates[0].executionEligible).toBe(true);
+      // No matching owned VM != provider cannot provision/discover capacity.
+      expect(JSON.stringify(select.parameters)).toContain("minimum_capacity");
     } finally {
       db.close();
     }
