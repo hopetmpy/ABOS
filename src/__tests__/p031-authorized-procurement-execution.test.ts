@@ -325,6 +325,7 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
       (q: ProviderProcurementScenarioInput) => { q.financing.unit = "credit_cent"; },
       (q: ProviderProcurementScenarioInput) => { q.financing.accountId = "999999999999"; },
       (q: ProviderProcurementScenarioInput) => { q.cost.otherChargesCents = null; },
+      (q: ProviderProcurementScenarioInput) => { q.cost.periods = 0; }, // Recurring price still positive.
       (q: ProviderProcurementScenarioInput) => { q.cost.unpricedComponents = ["data egress UNKNOWN"]; },
       (q: ProviderProcurementScenarioInput) => { q.financing.observedAvailableCents = 500; },
       (q: ProviderProcurementScenarioInput) => { q.financing.validUntil = "2020-01-01T00:00:00Z"; },
