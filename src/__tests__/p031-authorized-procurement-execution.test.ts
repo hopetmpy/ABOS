@@ -36,6 +36,11 @@ function scenario(): ProviderProcurementScenarioInput {
       oneTimeCents: 1000, recurringCentsPerPeriod: 500, periods: 3,
       otherChargesCents: 500, unpricedComponents: [],
       billingTermsEvidence: ["Authenticated quote includes storage, IPv4, compute and stated term."],
+      lifecycleTerms: {
+        renewal: "manual", additionalCommittedRenewalCents: 0, additionalExitChargeCents: 0,
+        source: "synthetic supplier contract",
+        evidence: ["Manual renewal with no additional binding exit charge."],
+      },
     },
     financing: {
       accountId: "123456789012", unit: "usd_cent",
@@ -248,6 +253,21 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
         expect(getFinancialEffectByOperationKey(db.raw, scope.operationKey)).toBeUndefined();
       } finally { db.close(); }
     }
+  });
+
+  it("refuses billable dispatch when automatically renewed contract lacks an evidenced exit route", async () => {
+    const { db, scope } = setup();
+    try {
+      const quote = scenario(), calls: string[] = [];
+      quote.cost.lifecycleTerms!.renewal = "automatic";
+      const policyDecisionId = policy(db, scope, quote);
+      await expect(executeReviewedProviderProcurement(db.raw, {
+        scope, policyDecisionId, dependencies: adapters(quote, calls),
+        now: new Date("2026-10-15T00:00:00Z"),
+      })).rejects.toThrow("P-030 provider scenario lacks funded");
+      expect(calls).toEqual([]);
+      expect(getFinancialEffectByOperationKey(db.raw, scope.operationKey)).toBeUndefined();
+    } finally { db.close(); }
   });
 
   it("accepts longer supplier-priced use without applying an artificial duration ceiling", async () => {
