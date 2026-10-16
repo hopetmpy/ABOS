@@ -1,4 +1,3 @@
-import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { createTestDb } from "./mocks.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
@@ -107,17 +106,16 @@ describe("P-031 source-backed resource outcome → strategic planning (read-only
     } finally { db.close(); }
   });
 
-  it("keeps lean hosts with no P-018 authority explicitly unknown and makes no ledger writes", async () => {
-    const db = new Database(":memory:");
+  it("does not invent economic outcome learning from Goals and Tasks without any owned resource", async () => {
+    const db = fixture();
     try {
-      const before = (db.prepare("SELECT COUNT(*) AS n FROM sqlite_master").get() as {n:number}).n;
-      // Minimal embeddings can lack both the resource and financial authorities.
-      // The P-031 summarizer itself is source-scoped; other planner sections
-      // may require canonical tables and are intentionally not called here.
-      const text = (await import("../orchestration/planner-context.js"));
-      expect(typeof text.buildPlannerContext).toBe("function");
-      expect(before).toBe(0);
-      expect((db.prepare("SELECT COUNT(*) AS n FROM sqlite_master").get() as {n:number}).n).toBe(before);
+      const before = (db.raw.prepare("SELECT COUNT(*) AS n FROM environment_resources").get() as {n:number}).n;
+      const context = await buildPlannerContext({ db: db.raw, goalId: "goal-a" });
+      expect(context.ownedResources).toMatchObject({ status: "observed", total: 0 });
+      expect(context.adaptiveContext ?? "").not.toContain("P-031 observed resource/Task/Goal links");
+      const after = (db.raw.prepare("SELECT COUNT(*) AS n FROM environment_resources").get() as {n:number}).n;
+      expect(after).toBe(before);
+      expect((db.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects").get() as {n:number}).n).toBe(0);
     } finally { db.close(); }
   });
 });
