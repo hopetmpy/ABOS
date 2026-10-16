@@ -85,6 +85,52 @@ describe("environment lifecycle agent tools", () => {
     expect(parsed.candidates).toHaveLength(1);
   });
 
+  it("shows actual ABOS-owned spare resources in public selection instead of supplier claims", async () => {
+    const db = createDb();
+    try {
+      const registry = new EnvironmentRegistry();
+      for (const id of ["a-vendor", "z-owned"]) {
+        registry.register({
+          id,
+          inspect: async () => ({
+            id, label: id, availability: "available" as const,
+            capabilities: [], evidence: ["fixture"],
+            constraints: [], observedAt: new Date().toISOString(),
+          }),
+          estimate: async () => ({
+            estimatedCostCents: 20,
+            costCoverage: "complete", costUnit: "usd_cent",
+            reliability: 0.9,
+            reusableResourceCount: id === "a-vendor" ? 900 : 0,
+          }),
+        });
+      }
+      const lifecycle = new EnvironmentLifecycleManager(
+        registry, new EnvironmentResourceStore(db),
+      );
+      lifecycle.adopt({
+        provider: "z-owned", externalId: "spare-1",
+        type: "compute", status: "running",
+        retentionPolicy: "manual_retention",
+      });
+      const select = createEnvironmentTools(registry, {
+        selector: new EnvironmentSelector(registry),
+        lifecycle,
+      }).find(x => x.name === "environment_select")!;
+      const observed = JSON.parse(await select.execute({
+        required_capabilities: [],
+      }, {} as any));
+      expect(observed.selected?.environment).toBe("z-owned");
+      expect(observed.selected?.reusableResourceCount).toBe(1);
+      expect(observed.candidates.find((x: any) => x.environment === "a-vendor")
+        ?.reusableResourceCount).toBe(0);
+      expect(observed.candidates.find((x: any) => x.environment === "a-vendor")
+        ?.evidence.join(" ")).toContain("ABOS ownership");
+      expect(lifecycle.resources.list()).toHaveLength(1);
+      expect(lifecycle.resources.list()[0]?.externalId).toBe("spare-1");
+    } finally { db.close(); }
+  });
+
   it("exposes non-destructive mobility planning and durable migration evidence", async () => {
     const db = createDb();
     try {
