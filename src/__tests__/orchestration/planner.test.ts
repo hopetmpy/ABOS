@@ -276,6 +276,48 @@ describe("buildPlannerPrompt", () => {
     expect(prompt).toContain("generalist");
   });
 
+  it("decomposes full cross-provider resource needs without abandoning an unknown delivery route or inventing cash", () => {
+    const prompt = buildPlannerPrompt(context);
+    expect(prompt).toContain("ABOS, an autonomous operating system");
+    expect(prompt).toContain("No provider or single wallet is");
+    expect(prompt).not.toContain("on the Conway\\nnetwork");
+    expect(prompt).toContain("Decompose the complete deliverable BEFORE committing");
+    expect(prompt).toContain("not a closed shopping list");
+    expect(prompt).toContain("already owned, reusable, missing and unverified");
+    expect(prompt).toContain("no executable delivery route is currently known -> EXPLORE");
+    expect(prompt).toContain("no executable discovery/probe/acquisition step is known either -> OUTPUT");
+    expect(prompt).toContain("PlannerOutput estimatedCostCents is a LOCAL task-planning cost metric");
+    expect(prompt).toContain("tokens, elapsed time, electricity and network as investment");
+    expect(prompt).toContain("earliest resource need, provisioning lead time");
+    expect(prompt).not.toContain("conservative: +20% buffer");
+    expect(prompt).not.toContain("2x expected duration");
+    expect(prompt).not.toContain("~5 credits/turn");
+    expect(prompt).not.toContain("50-200 | 10-30 min");
+    expect(prompt).not.toContain("Total task cost = inference + tools + compute");
+    expect(prompt).toContain("no fixed overhead percentage");
+    expect(prompt).toContain("not a provider-account usd_cent or Conway credit_cent spending mandate".replace("not a", "NOT a"));
+    expect(prompt).toContain("All example numbers/roles below illustrate JSON SHAPE ONLY");
+    expect(prompt).toContain('"estimatedTotalCostCents": 15000');
+  });
+
+  it("keeps the planner's own output example parseable and valid for a single task", () => {
+    const prompt = buildPlannerPrompt(context);
+    const fence = "```json\n";
+    const begin = prompt.indexOf(fence);
+    expect(begin).toBeGreaterThanOrEqual(0);
+    const from = begin + fence.length;
+    const end = prompt.indexOf("\n```", from);
+    expect(end).toBeGreaterThan(from);
+    const example = JSON.parse(prompt.slice(from, end));
+    expect(() => validatePlannerOutput(example)).not.toThrow();
+    expect(example.tasks).toHaveLength(1);
+    expect(example.tasks[0].dependencies).toEqual([]);
+    expect(example.tasks[0].agentRole).toBe(example.customRoles[0].name);
+    expect(example.estimatedTotalCostCents).toBe(example.tasks[0].estimatedCostCents);
+    expect(example.path.preferredEnvironment).toBeNull();
+    expect(example.alternatives[0].preferredEnvironment).toBeNull();
+  });
+
   it("includes agent availability numbers", () => {
     const prompt = buildPlannerPrompt(context);
     expect(prompt).toContain("2");   // idleAgents

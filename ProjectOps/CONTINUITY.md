@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0028.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / RECURRING_TERM_MAIN_E3_GREEN / P005_E5E6_LIVE_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / OPEN_WORLD_DEPENDENCY_PLANNER_SOURCE_PENDING_CI / P005_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-recurring-term-main-checkpoint
-Host-Head-At-Audit-Open: 8586fa7ba32b65e6e89cf2531fee74778114bf89
-Last-Reconciled-Host-Head: 8586fa7ba32b65e6e89cf2531fee74778114bf89
-Observed-Main-Head: 8586fa7ba32b65e6e89cf2531fee74778114bf89
-Last-Product-Head: 8586fa7ba32b65e6e89cf2531fee74778114bf89
-Last-Product-CI: exact main 8586fa7b push 38839938045 — COMPLETE SUCCESS 8/8
+Current-Host-Branch: abos/p031-open-world-dependency-planner
+Host-Head-At-Audit-Open: 56a330e0ad4ce6a8df3b16124f1ffcffa3e4815d
+Last-Reconciled-Host-Head: 56a330e0ad4ce6a8df3b16124f1ffcffa3e4815d
+Observed-Main-Head: 56a330e0ad4ce6a8df3b16124f1ffcffa3e4815d
+Last-Product-Head: 56a330e0ad4ce6a8df3b16124f1ffcffa3e4815d
+Last-Product-CI: exact main 56a330e0 push 38840572951 — COMPLETE SUCCESS 8/8; planner source CI PENDING
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 24432e3d0474969333ef2d149bd0ff2b5c83c135
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
@@ -657,4 +657,13 @@ NEXT_ELIGIBLE_WORK: inspect and, where authenticated evidence exists, connect ac
 - P-031 EN_EJECUCIÓN; P-032 PLANIFICADO; P-005 E5/E6 UNKNOWN. No provider paid operation executed. Funding authority, real account-specific bill/terms, utilization measurements and external settlement/cancellation remain explicit unverified frontiers.
 
 NEXT_ELIGIBLE_WORK: investigate source-backed goal/task requirements to derive contextual dependent resource needs using P-025/P-017 existing owners and independently measured resource utilization/defer/buy-now evidence without inventing measurements; when actual account-authorized external funding/contract access exists, connect to P-010/P-030 and verify invoice+retirement. Continue P-031 rather than declaring HECHO or opening P-032.
+
+### P-031 — Open-world dependency decomposition and acquisition timing in existing planner (2026-10-16)
+
+- Baseline `main 56a330e0ad4ce6a8df3b16124f1ffcffa3e4815d` exact-main CI `38840572951` independently COMPLETE/SUCCESS 8/8. Previous documentation-only PR #115 merged on that exact SHA; P-031 remains EN_EJECUCIÓN.
+- R2 causal audit of `src/orchestration/planner.ts` P-025 owner found internally contradictory prompts: global identity restricted ABOS to "colony on Conway network" despite actual P-018 multi-provider Registry; ANALYZE instructed `tasks: []` immediately when no known executable route, contradicting adaptive principles and later rules to explore discovery/acquisition; DECOMPOSE demanded an arbitrary +20% cost buffer and 2x duration timeout even with no source-backed overhead, while missing full contextual SaaS/resource dependency decomposition. This could bias P-031 toward false impossibility, unmodeled dependencies, invented spending units and premature procurement.
+- Decision CORRECT existing `buildPlannerPrompt` contract only; NO second planner, hardcoded vendor catalog, wallet or creator approval. Identity recognizes ABOS provider-neutral registered environments; no executable delivery route leads to EXPLORE discovery/probe/reuse/build/acquire where authorized, `tasks: []` only when even eligible discovery is unknown; map full deliverable dependencies (illustrative compute, domain, storage, APIs, backups, monitoring, open-ended), explicitly separate owned/reusable/unverified/missing, avoid buying before need without timing evidence.
+- Money and time remain source-attributed: planner task-cost metric cannot be silently converted to provider `usd_cent` / Conway `credit_cent`; tokens, elapsed time, electricity, network are investment, not provider cash; a goal deadline, Task timeout, provisioning lead, earliest resource need, recurring supplier period and cancellation are DIFFERENT. Remove universal inflation/multiplier prescriptions, retain actual evidence-based contingencies and P-010/P-030 financial authority.
+- Code `src/orchestration/planner.ts` source commit `2b9998c2972d2168d7767deb69ca2b5c7d58c79d`, test `src/__tests__/orchestration/planner.test.ts` commit `1022a903e30e504bc2678a038c2916d4daf653f1`. This is a prompt-contract E3 regression only; NO claim a model actually planned a SaaS or built dependencies, and no real supplier operation. Branch exact CI PENDING.
+- NEXT_ELIGIBLE_WORK: exact-source CI Node22/24+Windows22/24+security/integrity/distribution, audit all prompt owners for contradictory instructions, integrate on PASS; verify main. Continue objective-grounded need decomposition, timing/size/utilization evidence, and P-005 E5/E6 auth finance later; do not promote P-031 to HECHO or start P-032.
 
