@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import { EnvironmentRegistry } from "../environments/registry.js";
 import { EnvironmentSelector } from "../environments/selector.js";
 import { createEnvironmentTools } from "../environments/tools.js";
+import { EnvironmentResourceStore } from "../environments/resource-store.js";
+import type { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
+import { createTestDb } from "./mocks.js";
 import type { EnvironmentProvider } from "../environments/types.js";
 
 function provider(): EnvironmentProvider {
@@ -27,6 +30,50 @@ function provider(): EnvironmentProvider {
     },
   };
 }
+
+describe("P-031 source-owned resource sizing in environment_select", () => {
+  it("counts matching resource shapes without treating a smaller or unknown instance as reusable", async () => {
+    const db = createTestDb();
+    try {
+      const registry = new EnvironmentRegistry();
+      registry.register(provider());
+      const inventory = new EnvironmentResourceStore(db.raw);
+      inventory.create({
+        provider: "mock", externalId: "small", type: "vm", status: "ready",
+        capabilities: ["compute"], metadata: { instanceType: "small" },
+      });
+      inventory.create({
+        provider: "mock", externalId: "large", type: "vm", status: "ready",
+        capabilities: ["compute"], metadata: { instanceType: "large" },
+      });
+      inventory.create({
+        provider: "mock", externalId: "unknown", type: "vm", status: "ready",
+        capabilities: ["compute"],
+      });
+      const selector = new EnvironmentSelector(registry);
+      const lifecycle = { resources: inventory } as EnvironmentLifecycleManager;
+      const select = createEnvironmentTools(registry, { selector, lifecycle })
+        .find(tool => tool.name === "environment_select")!;
+      const large = JSON.parse(await select.execute({
+        required_capabilities: [], metadata: { instanceType: "large" },
+      }, {} as any));
+      expect(large.candidates[0].reusableResourceCount).toBe(1);
+      const impossibleShape = JSON.parse(await select.execute({
+        required_capabilities: [], metadata: { instanceType: "extra-large" },
+      }, {} as any));
+      expect(impossibleShape.candidates[0].reusableResourceCount).toBe(0);
+      // Zero known compatible owned instances is not a proof that the
+      // provider cannot acquire/provision the requested larger instance.
+      expect(impossibleShape.candidates[0].executionEligible).toBe(true);
+      const generic = JSON.parse(await select.execute({
+        required_capabilities: [],
+      }, {} as any));
+      expect(generic.candidates[0].reusableResourceCount).toBe(3);
+    } finally {
+      db.close();
+    }
+  });
+});
 
 describe("P-031 provider selection budget unit contract", () => {
   it("exposes exact cost unit and cannot silently compare an untyped amount", async () => {
