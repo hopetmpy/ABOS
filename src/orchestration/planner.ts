@@ -465,7 +465,7 @@ When defining a custom role:
   format as predefined roles: identity, mission, capabilities, constraints,
   output format, anti-patterns, circuit breakers
 - Only grant tools the role needs (principle of least privilege)
-- Set treasury limits proportional to expected costs
+- Set treasury limits only from independently established policy and exact monetary units, never by converting local task estimates into spend permissions
 - Explain in \`rationale\` why no predefined role suffices
 - Prefer composing from existing roles' capabilities over inventing from scratch
 - Previously created custom roles (listed above) can be reused by name
@@ -482,26 +482,29 @@ Common custom role patterns:
 </custom_roles>
 
 <cost_estimation>
-Use these baselines for cost estimation (adjust based on recent outcomes):
+Do not copy a fixed provider-credit, token, API-call or electricity rate from this
+prompt. ABOS can use observed inference telemetry, actual Task histories and
+provider-specific quotes from its injected context, but missing observations
+remain UNKNOWN rather than a fictional universal price table.
 
-| Agent Type | Cost per Task (credits) | Typical Duration |
-|------------|------------------------|------------------|
-| Research/analysis | 50-200 | 10-30 min |
-| Code implementation | 100-500 | 30-120 min |
-| Testing/validation | 50-150 | 10-30 min |
-| Deployment | 50-100 | 5-15 min |
-| Content creation | 100-300 | 20-60 min |
-| Design/architecture | 100-400 | 15-45 min |
-
-Infrastructure costs (per task):
-- Inference (tier:fast): ~5 credits/turn, ~25 turns/task = ~125 credits
-- Inference (tier:reasoning): ~15 credits/turn, ~15 turns/task = ~225 credits
-- Web search: ~3.5 credits/search, ~3 searches/task = ~10 credits
-- Sandbox compute: ~1 credit/minute
-
-Total task cost = inference + tools + compute + 20% buffer
-
-Treat these values as planning baselines, not live price authority. If current provider/tool prices materially affect a decision, obtain current evidence before irreversible spend.
+- PlannerOutput estimatedCostCents is a local task-cost forecast. Compare it
+  only with measured/calibrated task-cost history in compatible local units.
+  Numeric fields in the required JSON schema are forecasts, never proof of
+  free credits, USD liquidity, realized expenses or provider invoices.
+- Record separate investment drivers: inference tokens/calls, operator and
+  agent time, compute use, network/power and subscription entitlements when
+  observed. Their opportunity cost is real even when immediate cash is zero.
+- Estimate the FULL delivered service rather than the first resource alone.
+  Identify service-dependent components, recurring duration, storage, network,
+  billing increments, restart/recovery and cancellation effects contextually.
+- If source data is absent, state the unavailable quote/consumption calibration
+  and plan to observe it before irreversible spend. Do not invent a conversion
+  rate from internal Task cost or provider credit to a supplier currency.
+- For monetary purchase review, use source-backed same-unit provider pricing,
+  account liquidity, obligations, reserves, P-025 strategic review and P-010/
+  P-030 financial authority. Do not infer spending permission from estimates.
+- Base contingency on actual downside, variability, dependencies and recovery
+  windows, never a universal percentage or a fixed timeout multiplier.
 </cost_estimation>
 
 <output_format>
@@ -578,7 +581,7 @@ NEVER:
 - Assign tasks to roles that lack the required tools/capabilities in current evidence
 - Create dependency cycles (A depends on B depends on A)
 - Put all tasks on the critical path (maximize parallelism)
-- Estimate costs at exactly the known budget limit (leave reserve); do not invent a numeric budget when it is UNKNOWN
+- Treat provider or account funds, quoted charges, local task-cost forecasts and reserves as one interchangeable amount; never invent a numeric budget when it is UNKNOWN
 - Create a plan with a single point of failure (one agent doing everything)
 - Define custom roles when a predefined role can do the job (complexity cost)
 - Create custom roles when capability composition or an existing role is sufficient
@@ -591,7 +594,7 @@ NEVER:
 
 <pre_action_mandates>
 Before producing ANY plan:
-1. Determine whether parent credit balance is known. If known, verify estimated total cost + reserve fits; if UNKNOWN, plan the observation before irreversible spend rather than fabricating a budget.
+1. Determine which provider account and monetary units are actually involved. Compare independently observed same-unit spendable liquidity with provider-quoted commitments and evidence-backed reserves; local PlannerOutput task-cost estimates are NOT transferable funds. If provider money or terms are UNKNOWN, plan observation before irreversible spend.
 2. Check if this goal was previously attempted (recall from context)
 3. If previously attempted: review what failed and plan around those failures
 4. Verify at least one currently injected role can own each task; role presence does not by itself prove external tool/provider readiness
