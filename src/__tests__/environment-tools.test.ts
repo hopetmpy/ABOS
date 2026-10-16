@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EnvironmentRegistry } from "../environments/registry.js";
+import { EnvironmentSelector } from "../environments/selector.js";
 import { createEnvironmentTools } from "../environments/tools.js";
 import type { EnvironmentProvider } from "../environments/types.js";
 
@@ -26,6 +27,40 @@ function provider(): EnvironmentProvider {
     },
   };
 }
+
+describe("P-031 provider selection budget unit contract", () => {
+  it("exposes exact cost unit and cannot silently compare an untyped amount", async () => {
+    const registry = new EnvironmentRegistry();
+    registry.register({
+      ...provider(),
+      estimate: async () => ({
+        estimatedCostCents: 25, costUnit: "usd_cent",
+        costCoverage: "complete",
+      }),
+    });
+    const tool = createEnvironmentTools(registry, {
+      selector: new EnvironmentSelector(registry),
+    }).find(x => x.name === "environment_select")!;
+    const missingUnit = JSON.parse(await tool.execute({
+      required_capabilities: [], max_estimated_cost_cents: 100,
+    }, {} as any));
+    expect(missingUnit.selected).toBeNull();
+    expect(missingUnit.unresolved.join(" ")).toContain("amount and exact monetary unit");
+
+    const wrongUnit = JSON.parse(await tool.execute({
+      required_capabilities: [], max_estimated_cost_cents: 100,
+      max_estimated_cost_unit: "credit_cent",
+    }, {} as any));
+    expect(wrongUnit.selected).toBeNull();
+    expect(wrongUnit.unresolved.join(" ")).toContain("does not match explicit budget unit");
+
+    const correct = JSON.parse(await tool.execute({
+      required_capabilities: [], max_estimated_cost_cents: 100,
+      max_estimated_cost_unit: "usd_cent",
+    }, {} as any));
+    expect(correct.selected?.environmentId).toBe("mock");
+  });
+});
 
 describe("environment_economic_evidence tool", () => {
   it("discovers provider-neutral read-only economics without purchase authority", async () => {
