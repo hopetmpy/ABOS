@@ -225,6 +225,10 @@ export class EnvironmentResourceStore {
     requiredCapabilities?: string[];
     /** Optional exact resource shape: no implicit resizing or size substitution. */
     requiredInstanceType?: string | null;
+    /** Open-ended, unit-explicit per-resource minima (e.g. memoryMb, cpuCores).
+     * Capacity numbers must be recorded under P-018 resource.metadata.capacity;
+     * neither instance type nor provider advertising proves these quantities. */
+    minimumCapacity?: Record<string, number>;
     excludedResourceIds?: string[];
     requireExecutorAddress?: boolean;
   }): EnvironmentResource[] {
@@ -236,6 +240,13 @@ export class EnvironmentResourceStore {
       "artifact_hold", "destroy_requested", "pending_observation",
       "destroy_unavailable", "released",
     ]);
+    const minimumCapacity = input.minimumCapacity == null
+      ? [] : Object.entries(input.minimumCapacity);
+    // Invalid/unknown requirements never silently collapse to an empty
+    // request and inflate reuse counts.
+    const invalidCapacity = minimumCapacity.some(([metric, amount]) =>
+      !metric.trim() || typeof amount !== "number" ||
+      !Number.isFinite(amount) || amount <= 0);
     return this.list({ provider: input.provider }).filter(resource => {
       if (excluded.has(resource.id) || !resource.externalId?.trim() ||
           !["ready", "running", "suspended"].includes(resource.status) ||
@@ -257,6 +268,17 @@ export class EnvironmentResourceStore {
         value.trim().toLowerCase(),
       ));
       if (required.some(capability => !available.has(capability))) return false;
+      if (invalidCapacity) return false;
+      if (minimumCapacity.length > 0) {
+        const recorded = resource.metadata.capacity;
+        if (!recorded || typeof recorded !== "object" || Array.isArray(recorded)) return false;
+        const metrics = recorded as Record<string, unknown>;
+        if (minimumCapacity.some(([metric, needed]) => {
+          const actual = Object.hasOwn(metrics, metric) ? metrics[metric] : null;
+          return typeof actual !== "number" || !Number.isFinite(actual) ||
+            actual < needed;
+        })) return false;
+      }
 
       // A resource assigned to an active/unknown Task is not spare capacity.
       // Terminal ephemeral Tasks already make the resource cleanup-eligible.
