@@ -717,6 +717,49 @@ describe("Environment mobility", () => {
     }
   });
 
+  it("ranks actual P-018 spare inventory during mobility without counting its own source", async () => {
+    const db = createDb();
+    try {
+      const registry = new EnvironmentRegistry();
+      registry.register(provider("a-source"));
+      registry.register(provider("b-new"));
+      registry.register(provider("z-spare"));
+      const resources = new EnvironmentResourceStore(db);
+      const lifecycle = new EnvironmentLifecycleManager(registry, resources);
+      const source = lifecycle.adopt({
+        provider: "a-source", externalId: "source-owned",
+        type: "compute", status: "running", capabilities: ["compute"],
+        retentionPolicy: "manual_retention",
+      });
+      const spare = lifecycle.adopt({
+        provider: "z-spare", externalId: "spare-owned",
+        type: "compute", status: "running", capabilities: ["compute"],
+        retentionPolicy: "manual_retention",
+      });
+      const mobility = new EnvironmentMobilityCoordinator(
+        registry, new EnvironmentSelector(registry), lifecycle,
+        new EnvironmentMigrationStore(db), {} as EnvironmentExecutionBridge,
+      );
+      const plan = await mobility.plan(source.id, {
+        requiredCapabilities: ["compute"],
+      }, "Compare owned resources before replacing source capacity");
+
+      expect(plan.selection.selected?.environmentId).toBe("z-spare");
+      expect(plan.selection.candidates.find(x => x.environmentId === "a-source")
+        ?.estimate.reusableResourceCount).toBe(0);
+      expect(plan.selection.candidates.find(x => x.environmentId === "b-new")
+        ?.estimate.reusableResourceCount).toBe(0);
+      expect(plan.selection.candidates.find(x => x.environmentId === "z-spare")
+        ?.estimate.reusableResourceCount).toBe(1);
+      expect(plan.selection.selected?.evidence.join(" ")).toContain("Canonical ABOS resource inventory");
+      expect(plan.migration.targetProvider).toBe("z-spare");
+      expect(plan.excludedResourceIds).toEqual([source.id]);
+      expect(resources.get(source.id)?.status).toBe("running");
+      expect(resources.get(spare.id)?.status).toBe("running");
+      expect(resources.list({ includeTerminated: true })).toHaveLength(2);
+    } finally { db.close(); }
+  });
+
   it("plans a target without provisioning or destroying and excludes the current source", async () => {
     const db = createDb();
     try {
