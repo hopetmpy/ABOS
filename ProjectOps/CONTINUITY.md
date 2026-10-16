@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0028.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / SOURCED_RESOURCE_FIT_E3_MAIN_GREEN / P005_LIVE_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / SOURCE_PRICED_USAGE_HORIZON_E3_MAIN_GREEN / P005_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-resource-fit-main-checkpoint
+Current-Host-Branch: abos/p031-priced-usage-main-checkpoint
 Host-Head-At-Audit-Open: 042f9d4d9339936c3eb700b1afc26f7a8dc4b308
-Last-Reconciled-Host-Head: 3fc611365bf81b43d7bcbc9bddf7cfcbd3f6d294
-Observed-Main-Head: 3fc611365bf81b43d7bcbc9bddf7cfcbd3f6d294
-Last-Product-Head: 3fc611365bf81b43d7bcbc9bddf7cfcbd3f6d294
-Last-Product-CI: exact main 3fc611365bf81b43d7bcbc9bddf7cfcbd3f6d294 push 38943353745 — COMPLETE SUCCESS 8/8
+Last-Reconciled-Host-Head: a48d3aa34fcecf8689335ff7d0d74293f4684d36
+Observed-Main-Head: a48d3aa34fcecf8689335ff7d0d74293f4684d36
+Last-Product-Head: a48d3aa34fcecf8689335ff7d0d74293f4684d36
+Last-Product-CI: exact main a48d3aa34fcecf8689335ff7d0d74293f4684d36 push 38948525316 — COMPLETE SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
 Last-Completed-CI: 38766126322 — SUCCESS 8/8
@@ -760,3 +760,12 @@ NEXT_ELIGIBLE_WORK: investigate source-backed goal/task requirements to derive c
 - Same PR adds an actual P-025 `Orchestrator.tick()` review → persistent Task graph regression: synthetic full-service goal with compute/domain/API/backup discovery tasks and dependent economics review. All five tasks materialized; quantitative demand survived; last task remains blocked until four prerequisites; no financial effects or supplier mutations. Adversarial tests include valid fit, undersizing, wrong resource/shape, expired/missing evidence and changed demand during async review.
 - Source head `7aa15e93d0dfc610872af2b03915b1d077b4b14b`: branch push `38942991614` SUCCESS 8/8 and PR `38942997820` SUCCESS 8/8. Squash merged main `3fc611365bf81b43d7bcbc9bddf7cfcbd3f6d294`; exact-main push `38943353745` COMPLETE SUCCESS 8/8. This is E3 SOURCE/CI, NOT supplier account-funding observation, LIVE AWS purchase, provider invoice, refund, recurring obligation settlement or E6 profit.
 - P-031 remains EN_EJECUCIÓN; P-032 PLANIFICADO; P-005 LIVE UNKNOWN. NEXT_ELIGIBLE_WORK: compare provider-sourced lead-time and explicit resource-needed date with independently sourced cost duration, renewal/cancellation/retirement terms and actual capacity/utilization for the complete multi-service objective. Extend P-018/P-025/P-030 only when missing behavior is established. UNKNOWN provider terms/funding cause targeted discovery, not a fixed spending threshold, fictitious human approval or a declaration that autonomous acquisition is impossible.
+
+
+### P-031 — Supplier-priced resource-use coverage verified before economic dispatch (2026-10-16)
+
+- Baseline `main 433ab7370ae2357572a859d2f3ca8a89e9ea349e`. Audit of P-031 NEXT_ELIGIBLE_WORK with P-025 Task need, P-018 supplier timing/fit and P-030 `assessProviderProcurementScenario` showed an E3 gap: Task `expectedResourceDurationMs` is separate from Task timeout, and supplier `recurringCentsPerPeriod × periods` alone does not prove that a priced usage period actually covers the required resource-use duration. Neither the Task's watchdog nor a supplier period count supplies that link.
+- PR #141 https://github.com/hopetmpy/ABOS/pull/141 extends the existing **P-030 procurement economic scenario**, not a new planner/ledger/scheduler. Optional supplier-authenticated `cost.usageCoverage` records the exact resource ID/shape, priced coverage duration (milliseconds), billed periods included in the same recurring financial total, source, observed/validity times and evidence. At the existing P-031 `executeReviewedProviderProcurement` boundary, when a reviewed Task explicitly has `expectedResourceDurationMs`, a fresh matching quote with `coveredDurationMs >= expectedResourceDurationMs` and `pricedBillingPeriods = cost.periods` is required before P-010-bound/P-030 financial dispatch. Earlier tasks without a declared resource-use horizon remain compatible. A longer priced period is not automatically prohibited; total cost and alternatives remain judged by existing treasury. Existing P-031 Task-demand replay/review check continues after async supplier economics.
+- Tests: positive compatible duration; longer source-covered duration; UNKNOWN, insufficient, expired, foreign resource/shape, missing source, period count mismatch; code also corrects the earlier timezone offset suffix regex in the independent resource-fit observation. PR head `7115438b1a6c04e93626770fd7735cb3ed56fbca`: push run `38948044189` SUCCESS 8/8; PR run `38948083951` SUCCESS 8/8. Squash merged `main a48d3aa34fcecf8689335ff7d0d74293f4684d36` and exact-main push run `38948525316` COMPLETE SUCCESS 8/8 (Node22/24, Windows22/24, integrity/security/public distribution).
+- E3 source/CI only: `usageCoverage` is an externally authenticated supplier quote *interface*, not proof of a real AWS account, real bill, provisioning, actual utilization, cancellation, auto-renewal cancellation, refund or profit. The trusted supplier callback is not wired into a LIVE funded provider account; P-005 E5/E6 remain UNKNOWN. No purchase, wallet operation or provider account mutation was made.
+- P-031 EN_EJECUCIÓN; P-032 PLANIFICADO; next evidence-backed work: **separate auto-renewal/early-cancellation/retirement obligations and actual provider invoice/released billing exposure from usage-coverage time**. Audit existing P-018 retention/lifecycle and P-030 financial effects; add code only where source semantics require it, keeping UNKNOWN explicit and avoiding fixed monetary/manual approval rules. Retain provider-funded LIVE frontier under P-005.
