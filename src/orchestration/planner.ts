@@ -937,7 +937,7 @@ function validateTaskResourceNeed(value: unknown, path: string): TaskResourceNee
       need.neededByAt = null;
     } else {
       const date = requiredString(source.neededByAt, `${path}.neededByAt`);
-      if (!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(date) ||
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(date) ||
           !Number.isFinite(Date.parse(date))) {
         throw new Error(`${path}.neededByAt must be an explicit ISO instant with timezone`);
       }
