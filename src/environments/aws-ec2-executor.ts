@@ -233,7 +233,11 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
         ...(this.options.resourceMetadata ?? {}),
         iamInstanceProfile: instanceProfile,
         ...(typeof estimate.metadata?.hourlyCostCents === "number"
-          ? { hourlyCostCents: estimate.metadata.hourlyCostCents }
+          ? {
+              hourlyCostCents: estimate.metadata.hourlyCostCents,
+              hourlyCostUnit: estimate.metadata.hourlyCostUnit === "usd_cent"
+                ? "usd_cent" : null,
+            }
           : {}),
         service: "ec2",
         name,
