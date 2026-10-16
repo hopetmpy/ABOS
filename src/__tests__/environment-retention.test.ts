@@ -92,6 +92,43 @@ function provider(
 }
 
 describe("EnvironmentRetentionCoordinator", () => {
+  it("holds retirement while a billable capacity mutation is pending, then resumes after verified release", async () => {
+    const db = createDb();
+    try {
+      insertGoal(db, "goal-mutating", "completed");
+      const registry = new EnvironmentRegistry();
+      let destroys = 0;
+      registry.register(provider({
+        destroy: async () => {
+          destroys++;
+          return { status: "terminated", providerState: "terminated" };
+        },
+      }));
+      const lifecycle = new EnvironmentLifecycleManager(registry, new EnvironmentResourceStore(db));
+      const resource = lifecycle.adopt({
+        provider: "cloud", externalId: "vm-mutating", type: "compute",
+        status: "running", goalId: "goal-mutating",
+        retentionPolicy: "until_goal_complete",
+        metadata: { mutationNeedsReconciliation: true,
+          mutationUncertainOperation: "resize", capacity: null },
+      });
+      const retention = new EnvironmentRetentionCoordinator(db, registry, lifecycle);
+      const held = await retention.sweep();
+      expect(held.releaseEligible).toBe(1);
+      expect(held.pendingObservation).toBe(1);
+      expect(held.destroyAttempts).toBe(0);
+      expect(held.evidence.join(" ")).toContain("unresolved provider mutation");
+      expect(destroys).toBe(0);
+      expect(lifecycle.resources.get(resource.id)?.status).toBe("running");
+      // A provider-backed reconcile proves the old operation no longer
+      // unresolved; only then may the normal cleanup run.
+      const reconciled = await lifecycle.reconcile(resource.id);
+      expect(reconciled.metadata.mutationNeedsReconciliation).toBe(false);
+      const complete = await retention.sweep();
+      expect(complete.released).toBe(1);
+      expect(destroys).toBe(1);
+    } finally { db.close(); }
+  });
   it("links unresolved P-030 financial effects to a retired resource without inventing a refund or stopping other cleanup", async () => {
     const db = createDb();
     try {
