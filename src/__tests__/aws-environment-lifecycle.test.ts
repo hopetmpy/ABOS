@@ -1021,7 +1021,9 @@ describe("AwsEnvironmentProvider lifecycle", () => {
             State: { Name: "running" },
           }));
         }
-        if (args[0] === "ssm") return ok("null");
+        // The baseline fixture is an SSM-required executor; keep that
+        // independent readiness contract true when asserting API opt-out.
+        if (args[0] === "ssm") return ok(JSON.stringify({ PingStatus: "Online" }));
         throw new Error(`unexpected AWS call ${args.join(" ")}`);
       },
     });
