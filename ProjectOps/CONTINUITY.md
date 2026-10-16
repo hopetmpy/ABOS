@@ -5,20 +5,20 @@ Authority: CANONICAL_OPERATIONAL_CONTINUITY
 ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
-Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / PR109_TO_PR111_SOURCE_INTEGRATED / PUBLIC_INVENTORY_EVIDENCE_SOURCE_PENDING_CI / P005_E5E6_UNKNOWN
+Active-Segment: continuity/C0028.md
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / C0028_ACTIVE / PR109_TO_PR112_MAIN_E3_GREEN / P005_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-public-environment-owned-reuse
-Host-Head-At-Audit-Open: 619919f9569884e7415ac55d701418407f4ae7d9
-Last-Reconciled-Host-Head: 619919f9569884e7415ac55d701418407f4ae7d9
-Observed-Main-Head: 619919f9569884e7415ac55d701418407f4ae7d9
-Last-Product-Head: 619919f9569884e7415ac55d701418407f4ae7d9
-Last-Product-CI: PR111 source 38836314691 — COMPLETE SUCCESS 8/8; exact main 619919f9 push 38836552665 pending
+Current-Host-Branch: abos/p031-owned-reuse-main-reconciliation
+Host-Head-At-Audit-Open: ec7e0d6cd8c3a8a2d09d3d484e7a1c1b67f1f4ca
+Last-Reconciled-Host-Head: ec7e0d6cd8c3a8a2d09d3d484e7a1c1b67f1f4ca
+Observed-Main-Head: ec7e0d6cd8c3a8a2d09d3d484e7a1c1b67f1f4ca
+Last-Product-Head: ec7e0d6cd8c3a8a2d09d3d484e7a1c1b67f1f4ca
+Last-Product-CI: exact main ec7e0d6c push 38837589113 — COMPLETE SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 24432e3d0474969333ef2d149bd0ff2b5c83c135
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
@@ -628,4 +628,15 @@ NEXT_ELIGIBLE_WORK: open PR for this coherent source+test, run 8/8 exact-head CI
 - Exact branch CI pending. No LIVE AWS account cash, provider contract/terms, invoice settlement, profit, refund or acquisition authority evidenced; P-005 E5/E6 remains UNKNOWN; P-031 `EN_EJECUCIÓN`, P-032 `PLANIFICADO`.
 
 NEXT_ELIGIBLE_WORK: validate PR/source CI, fix causal regressions, merge and exact-main CI, then reconcile active recovery without claiming P-031 complete. Subsequent material frontier is authenticated supplier/account economics, P-010 account issuer, provider invoice/retirement billing or other P-031 independent evidence-driven sizing/timing.
+
+## P-031 — PR #109–#112 owned inventory/resource selection integrated (2026-10-15/16)
+
+- Latest verified GitHub `main ec7e0d6cd8c3a8a2d09d3d484e7a1c1b67f1f4ca`. Its **exact-main** push workflow `38837589113` COMPLETE/SUCCESS **8/8** (Node 22/24 build and tests, Windows 22/24 regressions, security, integrity, public distribution 22/24). Independently checked repository HEAD, workflow HEAD and PR #112 merged state/merge commit; all match.
+- PR #111 source `f01cf079f3399fe1a5ec76f8588d59d1ef2d8362`, PR CI `38836314691` 8/8 PASS, merged `main 619919f9569884e7415ac55d701418407f4ae7d9`; exact-main `38836552665` 8/8 PASS. Existing `EnvironmentMobilityCoordinator.plan` now injects P-018 canonical owned-spare candidates into existing selector, excluding source resource ID; planning never sends mutations.
+- PR #112 source `f3fbcfd025de294606cea4edc4c5cb51348dd78e`, branch push CI `38836754351` 8/8 PASS, PR CI `38837324763` 8/8 PASS, merged `main ec7e0d6cd8c3a8a2d09d3d484e7a1c1b67f1f4ca`; exact-main push CI `38837589113` 8/8 PASS. Agent-facing `environment_select` now uses the P-018 read-only owned-spare inventory when lifecycle is connected. Supplier reports of 900 spare resources do not trump ABOS's 1 actually owned candidate. No duplicate selector, coordinator, provider lock, ledger or purchase authorization.
+- Full P-031 reuse selection surfaces now share existing source: Task execution bridge, mobility planning and public environment selection. P-018 read-only candidate does not prove fresh provider health, Task compatibility, account liquidity, automatic acquire/restart or actual monetary savings. Provider may be considered without inventory when discovery is exploratory; decisions remain open to verified evidence.
+- P-031 **EN_EJECUCIÓN**, P-032 **PLANIFICADO**, P-005 LIVE economic E5/E6 **UNKNOWN**: no independently authenticated spendable supplier funds, full billable contract, account-bound durable P-010 monetary issuer, actual invoice/cancellation settlement or real cash/profit evidence; no AWS billable operations or transfers were executed.
+- Audit next from concrete source owners, not stale narrative. Potential remaining P-031 source families include contextual dependency decomposition, actual utilization and capacity/timing economics; only implement a new gap once independently proven absent. Do not duplicate P-025 strategy, P-018 retention/selection, P-030 treasury or P-017 acquisition fabric. Provider-specific LIVE money cannot be fabricated by Budgets/credits.
+
+NEXT_ELIGIBLE_WORK: inspect and, where authenticated evidence exists, connect actual provider account liquidity, contractual pricing, P-010 issuer and P-030 invoice/retirement lifecycle without false success. Independently audit contextual sizing, timing and utilization outcomes against P-031 DoD; preserve NO_CHANGE when existing owners already cover it.
 
