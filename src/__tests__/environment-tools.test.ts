@@ -58,7 +58,8 @@ describe("P-031 provider selection budget unit contract", () => {
       required_capabilities: [], max_estimated_cost_cents: 100,
       max_estimated_cost_unit: "usd_cent",
     }, {} as any));
-    expect(correct.selected?.environmentId).toBe("mock");
+    expect(correct.selected?.environment).toBe("mock");
+    expect(correct.selected?.costUnit).toBe("usd_cent");
   });
 });
 
