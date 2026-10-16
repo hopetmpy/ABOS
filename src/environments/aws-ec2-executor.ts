@@ -726,6 +726,7 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
           provider: this.environmentId,
           excludedResourceIds,
           requiredCapabilities: inventoryCapabilities,
+          requiredInstanceType: requestedInstanceType,
           requireExecutorAddress: true,
         }).map(resource => resource.id))
       : null;
