@@ -186,6 +186,58 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
     } finally { db.close(); }
   });
 
+  it("serializes distinct keys for the SAME resource after concurrent external observations with changed quotes", async () => {
+    const { db, scope } = setup();
+    try {
+      // Both prospective charges are individually affordable: insufficient
+      // funds cannot incidentally mask the duplicate-resource race.
+      const quoteA = scenario();
+      quoteA.financing.observedAvailableCents = 50_000;
+      const quoteB = scenario();
+      quoteB.financing.observedAvailableCents = 50_000;
+      quoteB.cost.oneTimeCents += 375;
+      const laterScope = { ...scope, operationKey: "concurrent-repriced-ec2-operation" };
+      const firstPermit = policy(db, scope, quoteA);
+      const secondPermit = policy(db, laterScope, quoteB);
+      const dispatched: string[] = [];
+      let observations = 0;
+      let release!: () => void;
+      const bothObserving = new Promise<void>(resolve => { release = resolve; });
+      const observe = (quote: ProviderProcurementScenarioInput): ProviderProcurementExecutionDependencies => ({
+        ...adapters(quote, dispatched),
+        observeAuthenticatedEconomics: async () => {
+          observations++;
+          if (observations === 2) release();
+          await bothObserving;
+          return quote;
+        },
+      });
+      const outcomes = await Promise.allSettled([
+        executeReviewedProviderProcurement(db.raw, {
+          scope, policyDecisionId: firstPermit,
+          dependencies: observe(quoteA),
+        }),
+        executeReviewedProviderProcurement(db.raw, {
+          scope: laterScope, policyDecisionId: secondPermit,
+          dependencies: observe(quoteB),
+        }),
+      ]);
+      expect(observations).toBe(2);
+      expect(outcomes.filter(x => x.status === "fulfilled")).toHaveLength(1);
+      expect(outcomes.filter(x => x.status === "rejected")).toHaveLength(1);
+      const rejection = outcomes.find(x => x.status === "rejected");
+      expect(rejection?.status === "rejected" ? String(rejection.reason) : "")
+        .toContain("overlaps unresolved intent");
+      expect(dispatched).toHaveLength(1);
+      const effects = db.raw.prepare(
+        "SELECT operation_key FROM financial_effects WHERE effect_kind = ?",
+      ).all("provider_resource_procurement") as { operation_key: string }[];
+      expect(effects).toHaveLength(1);
+      expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n)
+        .toBe(0);
+    } finally { db.close(); }
+  });
+
   it("blocks default P-010 allow with no explicit positive rule, even on an apparently funded account", async () => {
     const { db, scope } = setup();
     try {
