@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / OWNED_REUSE_MAIN_E3_GREEN / PROVIDER_COST_UNITS_SOURCE_PENDING_CI / P005_E5E6_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / PR109_PR110_MAIN_E3_GREEN / MOBILITY_OWNED_REUSE_PENDING_CI / P005_E5E6_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-provider-cost-unit-comparability
-Host-Head-At-Audit-Open: a374547fbc71be6756545d349e298b35e45342d5
-Last-Reconciled-Host-Head: a374547fbc71be6756545d349e298b35e45342d5
-Observed-Main-Head: a374547fbc71be6756545d349e298b35e45342d5
-Last-Product-Head: a374547fbc71be6756545d349e298b35e45342d5
-Last-Product-CI: exact main a374547f push 38835008557 — COMPLETE SUCCESS 8/8; current source CI PENDING
+Current-Host-Branch: abos/p031-mobility-owned-reuse-evidence
+Host-Head-At-Audit-Open: 1c26e760ed802dc855b104f5157e09f554437582
+Last-Reconciled-Host-Head: 1c26e760ed802dc855b104f5157e09f554437582
+Observed-Main-Head: 1c26e760ed802dc855b104f5157e09f554437582
+Last-Product-Head: 1c26e760ed802dc855b104f5157e09f554437582
+Last-Product-CI: exact main 1c26e760 push 38835984164 — COMPLETE SUCCESS 8/8; mobility source CI PENDING
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 24432e3d0474969333ef2d149bd0ff2b5c83c135
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
@@ -609,4 +609,14 @@ NEXT_ELIGIBLE_WORK: exact branch PR+CI (Node22/24, Windows22/24, security/integr
 - P-031 stays `EN_EJECUCIÓN`; P-032 `PLANIFICADO`; source truth has not replaced outstanding supplier financing/contract/retirement billing verification.
 
 NEXT_ELIGIBLE_WORK: run source PR CI Node22/24+Windows/security/distribution, correct causal regressions if found; integrate only on PASS and check exact-main CI. Continue provider-neutral sizing/timing and genuine authenticated account/economic evidence within P-031, never invent cash or unit exchange.
+
+## P-031 — mobility plan P-018 owned-spare evidence; PR #109/#110 exact main integrated (2026-10-15/16)
+
+- PR #109 final source `adf9a2dfb8042077848e23f5702184552dea3a42` CI `38834709857` COMPLETE/SUCCESS 8/8; integrated `main a374547fbc71be6756545d349e298b35e45342d5`, exact push CI `38835008557` COMPLETE/SUCCESS 8/8. P-018 canonical inventory now governs reuse ranking; AWS active Task-owned instance is not considered spare. Vendor inventory counts are not ABOS resources.
+- PR #110 final source `6459ef1e1ebe42022f5a7370e30534dcaa76c0ad` CI `38835685758` COMPLETE/SUCCESS 8/8; integrated `main 1c26e760ed802dc855b104f5157e09f554437582`, exact-main push CI `38835984164` independently checked COMPLETE/SUCCESS 8/8. Public `environment_select` and `environment_migration_plan` now require comparable typed amount/unit for optional explicit budgets. Incomparable currency or incomplete vendor pricing never becomes a verified total; no artificial cap or FX rate.
+- New R1 source finding: `EnvironmentMobilityCoordinator.plan` reused the same `EnvironmentSelector` but did not supply P-018-owned inventory reuse evidence, although P-031 Task bridge already does. Mobility could therefore rank a fresh provider ahead of genuinely spare ABOS-owned target under otherwise equal conditions. Decision REUSE current selector and `EnvironmentResourceStore.findReusableCandidates`, injecting read-only observed candidate counts at the mobility-plan invocation; explicitly exclude the source resource ID so it cannot count as its own migration target. A selected candidate is not automatic provisioning or authorization.
+- Branch `abos/p031-mobility-owned-reuse-evidence`, code commit `3be744493e39ad6e5d092b52866a7f9c77ab8a0f`, adversarial mobility test commit `5bf51a176496c4e89934e9be0be04ca25c5a499e`. Test must prove provider-neutral selection of the spare resource and no provider provisioning, destruction or ownership mutations during read-only planning. Branch CI PENDING. Do not confuse this E3 source test with LIVE economic E5/E6.
+- P-031 remains EN_EJECUCIÓN, P-032 PLANIFICADO. Real supplier funding, billable terms, issuer and settlement/invoice validation remain UNKNOWN/not wired. No external charge or payment attempted.
+
+NEXT_ELIGIBLE_WORK: open PR for this coherent source+test, run 8/8 exact-head CI, fix causal test failures, merge and validate exact main. Continue further material P-031 gaps only where evidence supports them; keep P-005 external financial execution separate.
 
