@@ -283,6 +283,41 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
     } finally { db.close(); }
   });
 
+  it("rechecks P-025 task route inside the funding claim after provider economics completes", async () => {
+    for (const invalidation of ["cancel_task", "withdraw_review", "retire_path"] as const) {
+      const { db, scope } = setup();
+      try {
+        const quote = scenario(), calls: string[] = [];
+        const decisionId = policy(db, scope, quote);
+        const dependencies = adapters(quote, calls);
+        dependencies.observeAuthenticatedEconomics = async () => {
+          // The initial strategic route was valid before the await. Another
+          // orchestrator action changes its authority during that await.
+          if (invalidation === "cancel_task") {
+            db.raw.prepare("UPDATE task_graph SET status = 'cancelled' WHERE id = ?")
+              .run(scope.taskId);
+          } else if (invalidation === "withdraw_review") {
+            db.raw.prepare("DELETE FROM kv WHERE key = ?")
+              .run(`orchestrator.review_feedback.${scope.goalId}`);
+          } else {
+            db.raw.prepare("UPDATE adaptive_paths SET status = 'failed' WHERE id = ?")
+              .run(scope.pathId);
+          }
+          return quote;
+        };
+        await expect(executeReviewedProviderProcurement(db.raw, {
+          scope, policyDecisionId: decisionId, dependencies,
+        })).rejects.toThrow("changed or lost materialized review");
+        expect(calls).toEqual([]);
+        expect(getFinancialEffectByOperationKey(db.raw, scope.operationKey)).toBeUndefined();
+        const row = db.raw.prepare(
+          "SELECT execution_state FROM policy_decisions WHERE id = ?",
+        ).get(decisionId) as { execution_state: string };
+        expect(row.execution_state).toBe("not_started");
+      } finally { db.close(); }
+    }
+  });
+
   it("rejects budgets, wrong account/currency, missing supplier components and underfunding", async () => {
     for (const change of [
       (q: ProviderProcurementScenarioInput) => { q.financing.basis = "budget_threshold"; },
