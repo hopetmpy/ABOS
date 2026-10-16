@@ -927,6 +927,46 @@ describe("AwsEnvironmentProvider lifecycle", () => {
     }
   });
 
+  it("expires stale CPU measurements durably when the provider no longer observes EC2", async () => {
+    const db = createTestDb();
+    try {
+      const calls: string[][] = [];
+      const registry = new EnvironmentRegistry();
+      registry.register(new AwsEnvironmentProvider({
+        defaultRegion: "us-east-1",
+        observeCloudWatchCpuUtilization: true,
+        runner: async (_command, args) => {
+          calls.push(args);
+          if (args[0] === "ec2" && args[1] === "describe-instances") {
+            return ok("null");
+          }
+          throw new Error(`unexpected AWS call: ${args.join(" ")}`);
+        },
+      }));
+      const store = new EnvironmentResourceStore(db.raw);
+      const owned = store.create({
+        provider: "aws", type: "aws-ec2-instance",
+        externalId: "i-1234567890", region: "us-east-1",
+        status: "running", metadata: {
+          instanceId: "i-1234567890",
+          cpuUtilizationAveragePct: 90,
+          cpuUtilizationObservedAt: new Date(Date.now() - 60_000).toISOString(),
+          cpuUtilizationMetricStatus: "observed",
+        },
+      });
+      const lifecycle = new EnvironmentLifecycleManager(registry, store);
+      const refreshed = await lifecycle.health(owned.id);
+      expect(refreshed.status).toBe("unknown");
+      expect(refreshed.metadata.cpuUtilizationAveragePct).toBeNull();
+      expect(refreshed.metadata.cpuUtilizationObservedAt).toBeNull();
+      expect(refreshed.metadata.cpuUtilizationMetricStatus).toBe("unknown");
+      expect(store.get(owned.id)?.metadata.cpuUtilizationAveragePct).toBeNull();
+      expect(calls.some(args => args[0] === "cloudwatch")).toBe(false);
+    } finally {
+      db.close();
+    }
+  });
+
   it("preserves running state while resizing an EC2 executor", async () => {
     const calls: string[][] = [];
     const runner: EnvironmentCommandRunner = async (_command, args) => {
