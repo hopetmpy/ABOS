@@ -205,6 +205,17 @@ export class EnvironmentExecutionBridge {
         "selection",
       );
     }
+    // Do not silently remove a malformed explicit due date; doing so would
+    // turn a timed Goal request into an untimed execution attempt.
+    if (options.metadata?.neededByAt != null &&
+        typeof options.metadata.neededByAt !== "string") {
+      throw new EnvironmentTaskExecutionError(
+        null,
+        "neededByAt must be an ISO 8601 resource need instant with timezone, not a Task execution timeout.",
+        ["Invalid resource need date did not reach provider selection or dispatch."],
+        "selection",
+      );
+    }
     // Resource inventory is P-018-owned, not a supplier estimate. Feed its
     // read-only spare-capacity candidates into the EXISTING selector, without
     // creating a second resource broker or treating a candidate as runnable.
