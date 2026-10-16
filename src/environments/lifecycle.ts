@@ -490,6 +490,11 @@ export class EnvironmentLifecycleManager {
               : []),
           ],
           metadata: {
+            // A concurrent health observation may have repopulated pre-resize
+            // capacity while the adapter was still pending. Invalidate again
+            // at completion; only explicit post-mutation observations in the
+            // provider result can replace that old measurement.
+            ...(changesShape ? invalidatedCapacityEvidence() : {}),
             ...(economicMutation ? {
               mutationNeedsReconciliation: !mutationResolved,
               mutationUncertainOperation: mutationResolved ? null : operation,
