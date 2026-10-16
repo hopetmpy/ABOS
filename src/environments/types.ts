@@ -89,6 +89,7 @@ export interface EnvironmentRequirements {
   maxEstimatedCostCents?: number | null;
   /** Unit required for source-attributed provider budgets; no implicit FX. */
   maxEstimatedCostUnit?: string | null;
+  /** Source-backed expected provider resource usage period; NOT a Task watchdog/timeout. Null/omitted means UNKNOWN. */
   expectedDurationMs?: number | null;
   region?: string | null;
   goalId?: string | null;
