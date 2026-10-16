@@ -271,6 +271,21 @@ export interface ProviderProcurementScenarioInput {
     /** Explicit unknown non-compute components make a total estimate unknown. */
     unpricedComponents?: string[];
     billingTermsEvidence?: string[];
+    /**
+     * Optional independent supplier-quoted duration covered by the SAME
+     * monetary commitment. Task resource duration and billing periods are
+     * different units: neither may be inferred from the other.
+     */
+    usageCoverage?: {
+      resourceId: string;
+      resourceShape: string;
+      coveredDurationMs: number;
+      pricedBillingPeriods: number;
+      source: string;
+      observedAt: string;
+      validUntil: string;
+      evidence: string[];
+    } | null;
   };
   financing: {
     accountId: string | null;
@@ -289,6 +304,72 @@ export interface ProviderProcurementScenarioInput {
   /** Additional reserve needed for the proposed downside beyond held reserves. */
   additionalContingencyCents: number | null;
   contingencyEvidence?: string[];
+}
+
+/**
+ * Same P-030 procurement economic authority: verify that a supplier-priced
+ * interval covers a reviewed Task's resource-use horizon. This is NOT a
+ * requirement for Task execution timeout, nor a renewal/cancellation claim.
+ * Requires independent per-resource quote identity, source, validity and
+ * exact correspondence to the periods included in the financial total.
+ */
+export function assessQuotedResourceUsageCoverage(
+  scenario: ProviderProcurementScenarioInput,
+  input: {
+    resourceId: string;
+    resourceShape: string;
+    expectedResourceDurationMs: number;
+  },
+  now = new Date(),
+): { ready: boolean; evidence: string[]; conditions: string[] } {
+  const quote = scenario.cost.usageCoverage;
+  const conditions: string[] = [];
+  if (!Number.isSafeInteger(input.expectedResourceDurationMs) ||
+      input.expectedResourceDurationMs <= 0) {
+    conditions.push("Task resource-use duration is not a positive safe integer.");
+  }
+  if (!quote) {
+    conditions.push("P-031 supplier-priced resource usage duration remains UNKNOWN.");
+  } else {
+    const observed = Date.parse(quote.observedAt);
+    const validUntil = Date.parse(quote.validUntil);
+    const explicit = (value: string) =>
+      typeof value === "string" &&
+      /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(value);
+    if (quote.resourceId !== input.resourceId ||
+        quote.resourceShape !== input.resourceShape) {
+      conditions.push("Supplier usage quote belongs to another resource or shape.");
+    }
+    if (!quote.source?.trim() || !Array.isArray(quote.evidence) ||
+        !quote.evidence.some(x => typeof x === "string" && x.trim()) ||
+        !explicit(quote.observedAt) || !explicit(quote.validUntil) ||
+        !Number.isFinite(observed) || !Number.isFinite(validUntil) ||
+        observed > now.getTime() || validUntil <= now.getTime() ||
+        validUntil <= observed) {
+      conditions.push("Supplier usage coverage provenance or freshness is UNKNOWN.");
+    }
+    if (!Number.isSafeInteger(quote.coveredDurationMs) ||
+        quote.coveredDurationMs <= 0 ||
+        quote.coveredDurationMs < input.expectedResourceDurationMs) {
+      conditions.push("Priced supplier usage duration does not cover the reviewed Task need.");
+    }
+    if (!Number.isSafeInteger(quote.pricedBillingPeriods) ||
+        quote.pricedBillingPeriods < 0 ||
+        quote.pricedBillingPeriods !== scenario.cost.periods) {
+      conditions.push("Quoted usage coverage and priced recurring periods differ.");
+    }
+  }
+  return conditions.length === 0 && quote
+    ? {
+      ready: true,
+      conditions: [],
+      evidence: [
+        `P-031 quoted resource usage coverage=${quote.coveredDurationMs} ms; priced periods=${quote.pricedBillingPeriods}; expected Task resource use=${input.expectedResourceDurationMs} ms; resource=${quote.resourceId}; shape=${quote.resourceShape}; quote source=${quote.source}; observed=${quote.observedAt}; expires=${quote.validUntil}.`,
+        ...quote.evidence,
+        "Usage coverage is source-reported, NOT actual utilization, automatic renewal control, cancellation or settlement.",
+      ],
+    }
+    : { ready: false, conditions, evidence: [] };
 }
 
 export interface ProviderProcurementScenarioReview {

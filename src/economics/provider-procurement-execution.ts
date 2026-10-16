@@ -14,6 +14,7 @@ import type Database from "better-sqlite3";
 import { canonicalPolicyJson, recordPolicyExecutionOutcome } from "../agent/policy-authorization.js";
 import {
   assessProviderProcurementScenario,
+  assessQuotedResourceUsageCoverage,
   type ProviderProcurementScenarioInput,
   type ProviderProcurementScenarioReview,
 } from "./treasury-scenario.js";
@@ -304,6 +305,24 @@ export async function executeReviewedProviderProcurement(
       scenario.financing.basis !== "externally_observed") {
     throw new Error("External financing observation does not match provider, account or unit.");
   }
+  // P-030 must compare explicitly quoted, billed supplier usage with
+  // P-031 Task resource lifetime. A list of periods or a Task timeout is
+  // not proof of coverage, and a cheap partial term is not a full quote.
+  let usageEvidence: string[] = [];
+  if (plannedNeed?.expectedResourceDurationMs != null) {
+    const usage = assessQuotedResourceUsageCoverage(scenario, {
+      resourceId: scope.resourceId,
+      resourceShape: scope.resourceShape,
+      expectedResourceDurationMs: plannedNeed.expectedResourceDurationMs,
+    }, now);
+    if (!usage.ready) {
+      throw new Error(
+        "P-031 resource usage billing coverage UNKNOWN/incompatible: " +
+        usage.conditions.join(" "),
+      );
+    }
+    usageEvidence = usage.evidence;
+  }
   const review = assessProviderProcurementScenario(scenario, now);
   if (review.status !== "review_ready" ||
       review.totalProposedCommitmentCents === null ||
@@ -408,6 +427,7 @@ export async function executeReviewedProviderProcurement(
       evidence: [
         ...activeReviewedPath.evidence,
         ...fitEvidence,
+        ...usageEvidence,
         ...netReview.evidence,
         ...exposure.evidence,
         `P-030 local funds held=${exposure.additionalHeldCents} ${scope.unit} since observed snapshot ${exposure.fundingObservedAt}.`,
