@@ -30,12 +30,24 @@ export const DEFAULT_ENVIRONMENT_SELECTION_WEIGHTS: EnvironmentSelectionWeights 
   reuse: 0.06,
 };
 
+export interface EnvironmentProvisionTimingEvidence {
+  status: "unknown" | "quoted_window_open" | "quoted_window_elapsed";
+  neededByAt: string;
+  quotedProvisioningLeadTimeMs: number | null;
+  quoteObservedAt: string | null;
+  quoteSource: string | null;
+  latestQuotedStartAt: string | null;
+  evidence: string[];
+}
+
 export interface EnvironmentSelectionCandidate {
   environmentId: string;
   snapshot: EnvironmentSnapshot;
   operations: EnvironmentOperation[];
   satisfaction: EnvironmentSatisfaction;
   estimate: EnvironmentEstimate;
+  /** Read-only schedule evidence; never a purchase/renewal authorization. */
+  provisioningTiming?: EnvironmentProvisionTimingEvidence;
   score: number;
   executionEligible: boolean;
   missingCapabilities: string[];
@@ -93,6 +105,13 @@ export class EnvironmentSelector {
       return {
         selected: null, candidates: [],
         unresolved: ["minimumCapacity must contain positive finite numbers with nonempty unit-explicit metric keys; invalid sizing cannot authorize provisioning."],
+      };
+    }
+    if (requirements.neededByAt != null &&
+        !isExplicitInstant(requirements.neededByAt)) {
+      return {
+        selected: null, candidates: [],
+        unresolved: ["neededByAt requires a valid ISO 8601 instant with explicit timezone; do not infer a procurement deadline."],
       };
     }
     const snapshots = await this.registry.inspectAll();
@@ -201,6 +220,9 @@ export class EnvironmentSelector {
       }
     }
 
+    const provisioningTiming = requirements.neededByAt
+      ? assessProvisioningTiming(requirements.neededByAt, estimate)
+      : undefined;
     const missingCapabilities =
       satisfaction.missingCapabilities ?? fallbackSatisfaction.missingCapabilities ?? [];
     const missingOperations = (requirements.requiredOperations ?? []).filter(
@@ -294,6 +316,7 @@ export class EnvironmentSelector {
       operations,
       satisfaction,
       estimate,
+      provisioningTiming,
       score,
       executionEligible: blockers.length === 0,
       missingCapabilities,
@@ -303,9 +326,58 @@ export class EnvironmentSelector {
         ...snapshot.evidence,
         ...(satisfaction.evidence ?? []),
         ...(estimate.evidence ?? []),
+        ...(provisioningTiming?.evidence ?? []),
       ],
     };
   }
+}
+
+function isExplicitInstant(value: unknown): value is string {
+  return typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
+    Number.isFinite(Date.parse(value));
+}
+
+/** Provider-quoted lead time only. Excludes unquoted acquisition, KYC,
+ * supplier changes and contingency, so cannot authorize or schedule purchase. */
+function assessProvisioningTiming(
+  neededByAt: string,
+  estimate: EnvironmentEstimate,
+): EnvironmentProvisionTimingEvidence {
+  const rawLead = estimate.metadata?.provisioningLeadTimeMs;
+  const rawObserved = estimate.metadata?.provisioningLeadTimeObservedAt;
+  const rawSource = estimate.metadata?.provisioningLeadTimeSource;
+  const known = typeof rawLead === "number" &&
+    Number.isSafeInteger(rawLead) && rawLead >= 0 &&
+    isExplicitInstant(rawObserved) &&
+    Date.parse(rawObserved) <= Date.now() &&
+    typeof rawSource === "string" && rawSource.trim().length > 0;
+  const latestMs = known ? Date.parse(neededByAt) - rawLead : Number.NaN;
+  const canRepresent = Number.isFinite(latestMs) &&
+    Math.abs(latestMs) <= 8_640_000_000_000_000;
+  if (!known || !canRepresent) {
+    return {
+      status: "unknown", neededByAt,
+      quotedProvisioningLeadTimeMs: null,
+      quoteObservedAt: null, quoteSource: null,
+      latestQuotedStartAt: null,
+      evidence: [
+        "Provider total provisioning lead time UNKNOWN/unproven: startupLatencyMs is not an acquisition quote. No safe purchase/defer date inferred.",
+      ],
+    };
+  }
+  const windowOpen = latestMs >= Date.now();
+  return {
+    status: windowOpen ? "quoted_window_open" : "quoted_window_elapsed",
+    neededByAt,
+    quotedProvisioningLeadTimeMs: rawLead,
+    quoteObservedAt: rawObserved,
+    quoteSource: rawSource.trim(),
+    latestQuotedStartAt: new Date(latestMs).toISOString(),
+    evidence: [
+      `Provider-quoted lead time=${rawLead} ms, observed=${rawObserved}, source=${rawSource.trim()}, estimated latest start=${new Date(latestMs).toISOString()}, window=${windowOpen ? "open" : "elapsed"}. Quote not guaranteed and NOT procurement permission; assess contingency, terms, total dependencies and treasury separately.`,
+    ],
+  };
 }
 
 function genericSatisfaction(
