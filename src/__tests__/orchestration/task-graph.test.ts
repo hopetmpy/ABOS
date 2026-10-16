@@ -94,6 +94,23 @@ describe("orchestration/task-graph", () => {
   });
 
   describe("decomposeGoal", () => {
+    it("persists the reviewed Task's resource demand as a durable open-world contract", () => {
+      const goal = createGoal(db, "Build service", "Serve a justified workload");
+      const need = {
+        basis: "User-specified workload sizing and independent resource window",
+        minimumCapacity: { vCpuCount: 4, memoryMiB: 8192 },
+        neededByAt: "2026-12-01T15:00:00Z",
+        expectedResourceDurationMs: 3_600_000,
+      };
+      const ids = decomposeGoal(db, goal.id, [
+        makeTask(goal.id, "Capacity-backed delivery", { resourceNeed: need }),
+      ]);
+      expect(getTaskById(db, ids[0]!)?.resourceNeed).toEqual(need);
+      expect(getReadyTasks(db).find((entry) => entry.id === ids[0])?.resourceNeed).toEqual(need);
+      expect(getTaskById(db, ids[0]!)?.timeoutMs).not.toBe(need.expectedResourceDurationMs);
+    });
+
+
     it("inserts tasks with dependencies resolved by title", () => {
       const goal = createGoal(db, "Goal", "Desc");
 

@@ -1217,6 +1217,7 @@ function plannerOutputToTasks(
     requiredCapabilities: task.requiredCapabilities ?? [],
     preferredEnvironment: task.preferredEnvironment ?? null,
     strategicPathId: null,
+    resourceNeed: task.resourceNeed ?? null,
     metadata: {
       estimatedCostCents: task.estimatedCostCents,
       timeoutMs: task.timeoutMs,
@@ -1252,6 +1253,7 @@ function taskRowToTaskNode(task: TaskGraphRow): TaskNode {
     priority: task.priority,
     dependencies: task.dependencies,
     result: normalizeTaskResult(task.result),
+    resourceNeed: task.resourceNeed ?? null,
     metadata: {
       estimatedCostCents: task.estimatedCostCents,
       actualCostCents: task.actualCostCents,

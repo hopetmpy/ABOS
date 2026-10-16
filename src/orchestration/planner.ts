@@ -1,4 +1,5 @@
 import type { Goal, TaskNode } from "./task-graph.js";
+import type { TaskResourceNeed } from "../environments/types.js";
 import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import type { ModelTier } from "../inference/provider-registry.js";
 
@@ -78,6 +79,7 @@ export interface PlannedTask {
   timeoutMs: number;
   requiredCapabilities?: string[];
   preferredEnvironment?: string | null;
+  resourceNeed?: TaskResourceNeed | null;
 }
 
 export interface PlannerContext {
@@ -579,7 +581,8 @@ Dependencies are ZERO-BASED indices of OTHER tasks, never the task itself.
       "priority": 1,
       "timeoutMs": 3600000,
       "requiredCapabilities": ["capability needed by this task"],
-      "preferredEnvironment": null
+      "preferredEnvironment": null,
+      "resourceNeed": null
     }
   ],
   "risks": ["Risk 1: description + mitigation", "Risk 2: ..."],
@@ -587,6 +590,17 @@ Dependencies are ZERO-BASED indices of OTHER tasks, never the task itself.
   "estimatedTimeMinutes": 120
 }
 \`\`\`
+
+When a task has a source-grounded resource requirement, include optional
+resourceNeed: { "basis": "Where this demand estimate comes from",
+"minimumCapacity": { "vCpuCount": 4, "memoryMiB": 8192 },
+"neededByAt": "2026-12-01T15:00:00Z",
+"expectedResourceDurationMs": 7200000 }.
+Keys for capacity must state their units. Omit unsupported numbers and dates;
+do not infer a resource-needed instant from Goal deadline or Task timeout.
+A planner basis is NOT provider quotation, observed utilization, cash or
+authorization. Use null for unknown resource need. This contract does not
+authorize billable acquisition or change Task watchdog semantics.
 
 Task descriptions must be self-contained. An agent reading only the task
 description (not the goal or other tasks) should know exactly what to do.
@@ -890,7 +904,63 @@ function validatePlannedTask(value: unknown, path: string): PlannedTask {
         : requiredString(record.preferredEnvironment, `${path}.preferredEnvironment`);
   }
 
+  if (record.resourceNeed !== undefined) {
+    task.resourceNeed = record.resourceNeed === null
+      ? null
+      : validateTaskResourceNeed(record.resourceNeed, `${path}.resourceNeed`);
+  }
+
   return task;
+}
+
+function validateTaskResourceNeed(value: unknown, path: string): TaskResourceNeed {
+  const source = asRecord(value, path);
+  const need: TaskResourceNeed = {
+    basis: requiredString(source.basis, `${path}.basis`),
+  };
+  if (source.minimumCapacity !== undefined) {
+    const capacity = asRecord(source.minimumCapacity, `${path}.minimumCapacity`);
+    if (Object.keys(capacity).length === 0) {
+      throw new Error(`${path}.minimumCapacity cannot be empty`);
+    }
+    need.minimumCapacity = {};
+    for (const [metric, amount] of Object.entries(capacity)) {
+      if (!metric.trim() || typeof amount !== "number" ||
+          !Number.isFinite(amount) || amount <= 0) {
+        throw new Error(`${path}.minimumCapacity must have nonempty unit keys and positive finite quantities`);
+      }
+      need.minimumCapacity[metric] = amount;
+    }
+  }
+  if (source.neededByAt !== undefined) {
+    if (source.neededByAt === null) {
+      need.neededByAt = null;
+    } else {
+      const date = requiredString(source.neededByAt, `${path}.neededByAt`);
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(date) ||
+          !Number.isFinite(Date.parse(date))) {
+        throw new Error(`${path}.neededByAt must be an explicit ISO instant with timezone`);
+      }
+      need.neededByAt = date;
+    }
+  }
+  if (source.expectedResourceDurationMs !== undefined) {
+    if (source.expectedResourceDurationMs === null) {
+      need.expectedResourceDurationMs = null;
+    } else {
+      const duration = source.expectedResourceDurationMs;
+      if (typeof duration !== "number" || !Number.isSafeInteger(duration) ||
+          duration <= 0) {
+        throw new Error(`${path}.expectedResourceDurationMs must be a positive safe integer`);
+      }
+      need.expectedResourceDurationMs = duration;
+    }
+  }
+  if (need.minimumCapacity === undefined && need.neededByAt == null &&
+      need.expectedResourceDurationMs == null) {
+    throw new Error(`${path} requires at least one concrete resource dimension`);
+  }
+  return need;
 }
 
 function validateTaskDependencies(tasks: PlannedTask[]): void {

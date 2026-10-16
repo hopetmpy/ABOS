@@ -7,6 +7,7 @@
 
 import Database from "better-sqlite3";
 import type BetterSqlite3 from "better-sqlite3";
+import type { TaskResourceNeed } from "../environments/types.js";
 import fs from "fs";
 import path from "path";
 
@@ -59,6 +60,7 @@ import {
   MIGRATION_V19_CAPABILITY_LIFECYCLE,
   MIGRATION_V20_SKILL_EVOLUTION,
   MIGRATION_V23_TREASURY_RESERVES,
+  MIGRATION_V24_TASK_RESOURCE_NEED,
 } from "./schema.js";
 import type {
   RiskLevel,
@@ -765,6 +767,19 @@ function applyMigrations(db: DatabaseType): void {
       version: 23,
       apply: () => db.exec(MIGRATION_V23_TREASURY_RESERVES),
     },
+    {
+      version: 24,
+      apply: () => {
+        // Fresh databases already have the column in CREATE_TABLES.
+        // Existing v23 databases need this additive migration exactly once.
+        // Sparse pre-orchestration legacy databases may not yet have task_graph:
+        // do not manufacture that unrelated table merely to add a column.
+        const fields = db.pragma("table_info(task_graph)") as { name: string }[];
+        if (fields.length > 0 && !fields.some((field) => field.name === "resource_need")) {
+          db.exec(MIGRATION_V24_TASK_RESOURCE_NEED);
+        }
+      },
+    },
   ];
 
   for (const m of migrations) {
@@ -855,6 +870,7 @@ export interface TaskGraphRow {
   maxRetries: number;
   retryCount: number;
   timeoutMs: number;
+  resourceNeed?: TaskResourceNeed | null;
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
@@ -1065,6 +1081,7 @@ export function insertTask(
     maxRetries?: number;
     retryCount?: number;
     timeoutMs?: number;
+    resourceNeed?: TaskResourceNeed | null;
     startedAt?: string | null;
     completedAt?: string | null;
   },
@@ -1075,8 +1092,8 @@ export function insertTask(
     `INSERT INTO task_graph
      (id, parent_id, goal_id, title, description, status, assigned_to, agent_role, priority,
       dependencies, result, estimated_cost_cents, actual_cost_cents, max_retries, retry_count,
-      timeout_ms, created_at, started_at, completed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      timeout_ms, resource_need, created_at, started_at, completed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     row.parentId ?? null,
@@ -1094,6 +1111,7 @@ export function insertTask(
     row.maxRetries ?? 3,
     row.retryCount ?? 0,
     row.timeoutMs ?? 300000,
+    row.resourceNeed == null ? null : JSON.stringify(row.resourceNeed),
     now,
     row.startedAt ?? null,
     row.completedAt ?? null,
@@ -2523,6 +2541,9 @@ function deserializeTaskGraphRow(row: any): TaskGraphRow {
     maxRetries: row.max_retries,
     retryCount: row.retry_count,
     timeoutMs: row.timeout_ms,
+    resourceNeed: row.resource_need
+      ? safeJsonParse<TaskResourceNeed | null>(row.resource_need, null, "taskGraph.resourceNeed")
+      : null,
     createdAt: row.created_at,
     startedAt: row.started_at ?? null,
     completedAt: row.completed_at ?? null,

@@ -185,6 +185,10 @@ export class EnvironmentMobilityCoordinator {
           mobilityExcludedEnvironmentIds: exclusions,
           mobilityExcludedResourceIds: resourceExclusions,
           mobilitySourceResourceId: active?.sourceResourceId ?? null,
+          ...(task.resourceNeed?.minimumCapacity ? { minimumCapacity: task.resourceNeed.minimumCapacity } : {}),
+          ...(task.resourceNeed?.neededByAt ? { neededByAt: task.resourceNeed.neededByAt } : {}),
+          ...(task.resourceNeed?.expectedResourceDurationMs ? { expectedResourceDurationMs: task.resourceNeed.expectedResourceDurationMs } : {}),
+          ...(task.resourceNeed ? { resourceNeedBasis: task.resourceNeed.basis } : {}),
         },
       });
 
@@ -865,7 +869,10 @@ function taskRequirements(task: TaskNode): Record<string, unknown> {
       task.preferredEnvironment ?? null,
     // The Task watchdog is not the expected provider billing/runtime period.
     // An actual resource-duration estimate requires independent source evidence.
-    expectedDurationMs: null,
+    expectedDurationMs: task.resourceNeed?.expectedResourceDurationMs ?? null,
+    minimumCapacity: task.resourceNeed?.minimumCapacity,
+    neededByAt: task.resourceNeed?.neededByAt ?? null,
+    resourceNeedBasis: task.resourceNeed?.basis ?? null,
     taskExecutionTimeoutMs: task.metadata.timeoutMs,
     goalId: task.goalId,
     pathId:
