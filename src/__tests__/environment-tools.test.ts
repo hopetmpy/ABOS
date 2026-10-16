@@ -51,7 +51,7 @@ describe("P-031 source-owned resource sizing in environment_select", () => {
         capabilities: ["compute"],
       });
       const selector = new EnvironmentSelector(registry);
-      const lifecycle = { resources: inventory } as EnvironmentLifecycleManager;
+      const lifecycle = { resources: inventory } as unknown as EnvironmentLifecycleManager;
       const select = createEnvironmentTools(registry, { selector, lifecycle })
         .find(tool => tool.name === "environment_select")!;
       const large = JSON.parse(await select.execute({
