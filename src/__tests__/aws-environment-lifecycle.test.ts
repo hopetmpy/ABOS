@@ -677,6 +677,7 @@ describe("AwsEnvironmentProvider lifecycle", () => {
     expect(estimate.costUnit).toBe("usd_cent");
     expect(estimate.costCoverage).toBe("partial");
     expect(estimate.metadata?.hourlyCostCents).toBeCloseTo(1.04, 6);
+    expect(estimate.metadata?.hourlyCostUnit).toBe("usd_cent");
 
     const injected = await provider.estimate({
       requiredCapabilities: [],
@@ -685,12 +686,50 @@ describe("AwsEnvironmentProvider lifecycle", () => {
     });
     expect(injected.estimatedCostCents).toBe(2);
     expect(injected.costUnit).toBeNull();
+    expect(injected.metadata?.hourlyCostUnit).toBeNull();
     const sourced = await provider.estimate({
       requiredCapabilities: [],
       expectedDurationMs: 3_600_000,
       metadata: { hourlyCostCents: 1.5, hourlyCostUnit: "usd_cent" },
     });
     expect(sourced.costUnit).toBe("usd_cent");
+    expect(sourced.metadata?.hourlyCostUnit).toBe("usd_cent");
+  });
+
+  it("refuses to accrue an untyped hourly rate as USD and preserves sourced USD estimate", async () => {
+    const provider = new AwsEnvironmentProvider({
+      defaultRegion: "us-east-1",
+      runner: async (_command, args) => {
+        if (args[0] === "ec2" && args[1] === "describe-instances") {
+          return ok(JSON.stringify({
+            InstanceId: "i-1234567890",
+            State: { Name: "running" },
+          }));
+        }
+        if (args[0] === "ssm" && args[1] === "describe-instance-information") {
+          return ok("null");
+        }
+        throw new Error(`unexpected AWS call ${args.join(" ")}`);
+      },
+    });
+    const baseline = {
+      instanceId: "i-1234567890",
+      hourlyCostCents: 10,
+      accruedComputeEstimateCents: 35,
+      billingStartedAt: new Date(Date.now() - 3_600_000).toISOString(),
+    };
+    const untyped = await provider.health(resource({ metadata: baseline }));
+    expect(untyped.healthy).toBe(true);
+    expect(untyped.metadata?.accruedComputeEstimateCents).toBeNull();
+    expect(untyped.metadata?.costEstimateScope).toContain("lacks verified usd_cent");
+    expect(untyped.evidence.join(" ")).not.toContain("accrued estimate=");
+
+    const usd = await provider.health(resource({
+      metadata: { ...baseline, hourlyCostUnit: "usd_cent" },
+    }));
+    expect(usd.healthy).toBe(true);
+    expect(usd.metadata?.accruedComputeEstimateCents).toBeGreaterThan(44);
+    expect(usd.evidence.join(" ")).toContain("compute-only accrued estimate");
   });
 
   it("materializes pending runtime artifacts through chunked SSM collection", async () => {

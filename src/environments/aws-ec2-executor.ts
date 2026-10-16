@@ -222,7 +222,10 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
       goalId: task.goalId,
       pathId: task.strategicPathId ?? null,
       taskId: task.id,
-      selectionEstimateCents: estimate.estimatedCostCents ?? null,
+      // P-018 stores a numeric estimate but has no adjacent monetary-unit
+      // column. Do not persist an ambiguous supplier-money amount as cents.
+      selectionEstimateCents: estimate.costUnit === "usd_cent"
+        ? estimate.estimatedCostCents ?? null : null,
       selectionEvidence: [
         ...(estimate.evidence ?? []),
         resourceDurationMs === null
@@ -233,7 +236,11 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
         ...(this.options.resourceMetadata ?? {}),
         iamInstanceProfile: instanceProfile,
         ...(typeof estimate.metadata?.hourlyCostCents === "number"
-          ? { hourlyCostCents: estimate.metadata.hourlyCostCents }
+          ? {
+              hourlyCostCents: estimate.metadata.hourlyCostCents,
+              hourlyCostUnit: estimate.metadata.hourlyCostUnit === "usd_cent"
+                ? "usd_cent" : null,
+            }
           : {}),
         service: "ec2",
         name,
