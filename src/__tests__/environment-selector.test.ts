@@ -52,6 +52,71 @@ function provider(input: {
   };
 }
 
+describe("P-031 provision timing from source-attributed provider quotes", () => {
+  const DAY = 86_400_000;
+  it("distinguishes future quoted window and elapsed window without authorizing purchase", async () => {
+    const registry = new EnvironmentRegistry();
+    registry.register({
+      ...provider({ id: "synthetic-cloud", capabilities: ["compute"] }),
+      estimate: async () => ({
+        startupLatencyMs: 4_000, // startup is not full supplier provisioning
+        metadata: {
+          provisioningLeadTimeMs: 7 * DAY,
+          provisioningLeadTimeObservedAt: new Date().toISOString(),
+          provisioningLeadTimeSource: "synthetic-supplier-quote",
+        },
+      }),
+    });
+    const select = new EnvironmentSelector(registry);
+    const later = new Date(Date.now() + 21 * DAY).toISOString();
+    const deferred = await select.select({
+      requiredCapabilities: ["compute"], neededByAt: later,
+    });
+    expect(deferred.selected?.provisioningTiming).toMatchObject({
+      status: "quoted_window_open",
+      neededByAt: later,
+      quotedProvisioningLeadTimeMs: 7 * DAY,
+      quoteSource: "synthetic-supplier-quote",
+    });
+    expect(Date.parse(deferred.selected?.provisioningTiming?.latestQuotedStartAt ?? ""))
+      .toBeGreaterThan(Date.now());
+    expect(deferred.selected?.evidence.join(" ")).toContain("NOT procurement permission");
+    const immediate = await select.select({
+      requiredCapabilities: ["compute"],
+      neededByAt: new Date(Date.now() + DAY).toISOString(),
+    });
+    expect(immediate.selected?.provisioningTiming?.status).toBe("quoted_window_elapsed");
+    // A late quote is not a proven objective impossibility or buying authority.
+    expect(immediate.selected?.executionEligible).toBe(true);
+  });
+
+  it("preserves unknown when only startup latency, stale-free provenance missing, or invalid need date exists", async () => {
+    const registry = new EnvironmentRegistry();
+    registry.register({
+      ...provider({ id: "synthetic", capabilities: ["compute"] }),
+      estimate: async () => ({
+        startupLatencyMs: 1_000,
+        metadata: { provisioningLeadTimeMs: 100_000 },
+      }),
+    });
+    const select = new EnvironmentSelector(registry);
+    const need = new Date(Date.now() + 10 * DAY).toISOString();
+    const unknown = await select.select({
+      requiredCapabilities: ["compute"], neededByAt: need,
+    });
+    expect(unknown.selected?.provisioningTiming).toMatchObject({
+      status: "unknown", latestQuotedStartAt: null,
+    });
+    expect(unknown.selected?.evidence.join(" ")).toContain("startupLatencyMs is not an acquisition quote");
+    expect(unknown.selected?.executionEligible).toBe(true);
+    const invalid = await select.select({
+      requiredCapabilities: ["compute"], neededByAt: "2026-11-01",
+    });
+    expect(invalid.selected).toBeNull();
+    expect(invalid.unresolved.join(" ")).toContain("explicit timezone");
+  });
+});
+
 describe("EnvironmentSelector", () => {
   it("selects by evidence rather than provider order or provider name", async () => {
     const registry = new EnvironmentRegistry();
