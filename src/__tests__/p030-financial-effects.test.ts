@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AbosDatabase } from "../types.js";
 import { createDatabase } from "../state/database.js";
+import { SCHEMA_VERSION } from "../state/schema.js";
 import { createTestDb } from "./mocks.js";
 import {
   FinancialEffectIdempotencyConflictError,
@@ -177,7 +178,7 @@ describe("P-030 financial effect authority", () => {
       )
       .get() as { name: string } | undefined;
 
-    expect(version.version).toBe(23);
+    expect(version.version).toBe(SCHEMA_VERSION);
     expect(table?.name).toBe("financial_effects");
   });
 

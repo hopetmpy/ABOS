@@ -772,8 +772,10 @@ function applyMigrations(db: DatabaseType): void {
       apply: () => {
         // Fresh databases already have the column in CREATE_TABLES.
         // Existing v23 databases need this additive migration exactly once.
+        // Sparse pre-orchestration legacy databases may not yet have task_graph:
+        // do not manufacture that unrelated table merely to add a column.
         const fields = db.pragma("table_info(task_graph)") as { name: string }[];
-        if (!fields.some((field) => field.name === "resource_need")) {
+        if (fields.length > 0 && !fields.some((field) => field.name === "resource_need")) {
           db.exec(MIGRATION_V24_TASK_RESOURCE_NEED);
         }
       },

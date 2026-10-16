@@ -8,6 +8,7 @@ import { createBuiltinTools } from "../agent/tools.js";
 import { buildPlannerContext } from "../orchestration/planner-context.js";
 import { runWithEvidenceContext } from "../observability/evidence.js";
 import { createDatabase } from "../state/database.js";
+import { SCHEMA_VERSION } from "../state/schema.js";
 import { createTestDb } from "./mocks.js";
 import { AdaptivePathEngine } from "../intelligence/adaptive-engine.js";
 import { getEvidenceByAuthority } from "../observability/evidence.js";
@@ -131,7 +132,7 @@ describe("P-030 durable internal reserve authority", () => {
     open.push(second);
     expect(getTreasuryReserveSnapshot(second.raw).totalCreditsCents).toBe(250);
     expect(setTreasuryReserve(second, input).applied).toBe(false);
-    expect((second.raw.prepare("SELECT MAX(version) AS v FROM schema_version").get() as {v:number}).v).toBe(23);
+    expect((second.raw.prepare("SELECT MAX(version) AS v FROM schema_version").get() as {v:number}).v).toBe(SCHEMA_VERSION);
     expect((second.raw.prepare("SELECT count(*) AS n FROM treasury_reserve_allocations").get() as {n:number}).n).toBe(1);
   });
 
@@ -219,7 +220,7 @@ describe("P-030 persisted v22 upgrade", () => {
     ).run("historical-capital", "capital_allocation", 175, "pre-upgrade economic history");
     // Reconstruct the persisted v22 schema boundary: no reserve table/version23.
     legacy.raw.exec(
-      "DROP TABLE treasury_reserve_allocations; DELETE FROM schema_version WHERE version=23;",
+      "DROP TABLE treasury_reserve_allocations; DELETE FROM schema_version WHERE version>=23;",
     );
     legacy.close();
     const upgraded = createDatabase(file);
@@ -227,7 +228,7 @@ describe("P-030 persisted v22 upgrade", () => {
     const version = upgraded.raw.prepare(
       "SELECT MAX(version) AS version FROM schema_version",
     ).get() as {version:number};
-    expect(version.version).toBe(23);
+    expect(version.version).toBe(SCHEMA_VERSION);
     expect((upgraded.raw.prepare(
       "SELECT amount_cents FROM transactions WHERE id='historical-capital'",
     ).get() as {amount_cents:number}).amount_cents).toBe(175);
