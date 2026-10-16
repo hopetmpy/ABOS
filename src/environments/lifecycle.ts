@@ -120,7 +120,10 @@ export class EnvironmentLifecycleManager {
           operation: "provision",
           reason: "Provider rejected provisioning before external dispatch.",
           evidence: [`No remote provisioning dispatched: ${detail}`],
-          metadata: { provisionNeedsReconciliation: false },
+          metadata: {
+            provisionNeedsReconciliation: false,
+            provisionExternalEffectNotDispatched: true,
+          },
         });
         throw error;
       }

@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0027.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / PR104_PR105_MAIN_E3_GREEN / LIVE_AWS_ISSUER_UNWIRED / P005_E5E6_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / FULL_RESOURCE_CYCLE_SOURCE_PENDING_CI / LIVE_AWS_ISSUER_UNWIRED / P005_E5E6_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-concurrent-claims-main-checkpoint
-Host-Head-At-Audit-Open: 5a63bcc04a396387ec6e5b12c5d7430dfc8b4f99
-Last-Reconciled-Host-Head: 5a63bcc04a396387ec6e5b12c5d7430dfc8b4f99
-Observed-Main-Head: 5a63bcc04a396387ec6e5b12c5d7430dfc8b4f99
-Last-Product-Head: 5a63bcc04a396387ec6e5b12c5d7430dfc8b4f99
-Last-Product-CI: exact main 5a63bcc0 push 38829419527 — COMPLETE SUCCESS 8/8
+Current-Host-Branch: abos/p031-full-resource-lifecycle-e2e
+Host-Head-At-Audit-Open: ebaaa005ff425e5920b776083560be1cc5387988
+Last-Reconciled-Host-Head: ebaaa005ff425e5920b776083560be1cc5387988
+Observed-Main-Head: ebaaa005ff425e5920b776083560be1cc5387988
+Last-Product-Head: ebaaa005ff425e5920b776083560be1cc5387988
+Last-Product-CI: exact main ebaaa005 push 38830053687 — COMPLETE SUCCESS 8/8; current source branch CI PENDING
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 24432e3d0474969333ef2d149bd0ff2b5c83c135
 Last-Completed-CI: 38777851448 — SUCCESS 8/8
@@ -568,4 +568,14 @@ NEXT_ELIGIBLE_WORK: run exact branch CI on coherent fix, attack consumer regress
 - P-031 `EN_EJECUCIÓN`, P-032 `PLANIFICADO`. Reconcile this verified source work without promoting it to autonomous paid deployment or business income.
 
 NEXT_ELIGIBLE_WORK: obtain or build independently authenticated provider account funding + recurring supplier terms + exact persistent account-specific monetary issuer when corresponding real authority exists; after external operation, verify invoice attribution, settlement and retention billing cleanup separately. Meanwhile follow P-031 provider-neutral reuse/retire and nonbillable tests where material; preserve UNKNOWN instead of manufacturing finance or duplicating P-030/P-018 owners.
+
+## P-031 — single lifecycle integration and proven no-dispatch cleanup (2026-10-15/16)
+
+- Verified exact main baseline `ebaaa005ff425e5920b776083560be1cc5387988` (PR #106 integrated, push workflow `38830053687` COMPLETE SUCCESS **8/8**). P-031 active; P-005 economic E5/E6 unknown.
+- Audit of `EnvironmentLifecycleManager`, `EnvironmentResourceStore`, `EnvironmentRetentionCoordinator` and P-031 reviewed procurement found that existing tests proved individual P-018/P-030 behaviors but NOT one complete reviewed acquisition→supplier dispatch→owned independent health→Task settlement→artifact hold→suspend→artifact collection→retirement→idempotent replay→billing UNKNOWN sequence. Decision REUSE: add integration regression on the existing P-031 test owner with synthetic provider only, no new runtime orchestrator, second ledger or supplier credit assumption. A local release must NOT mark P-030 financial effect settled or cash refunded.
+- R2 lifecycle defect found: `lifecycle.provision` marks trusted provider preflight `externalEffectNotDispatched=true` as local `failed` with no remote identity; P-018 retention treats ephemeral failed resource as cleanup eligible and may dispatch remote `destroy` despite the provider having positively refused creation. CORRECT: persist `provisionExternalEffectNotDispatched=true` only on that trusted explicit path, and let existing retention owner mark such failed/never-created resources locally `terminated` WITHOUT provider destroy. Unknown provision outcomes remain reconciliation-gated; failed real adopted resources with external IDs still require actual provider cleanup. This local retirement does not prove final external invoice/refund.
+- Branch `abos/p031-full-resource-lifecycle-e2e`; implementation `src/environments/{lifecycle,retention}.ts`; test owners `src/__tests__/{environment-retention,p031-authorized-procurement-execution}.test.ts`. Source commits `3c6c59968bd4595c670983a2198472790d7115c5`, `a2af4fb64ceacfafa177a625b71be2a78f0beb1d`; test commits `671d49481310c81b20db13c7cb4b6fb28aa554df`, `59f34189374f9970aa83fe107d32751f7e450892`.
+- Source tests and GitHub CI still **PENDING**, do not claim PASS or integration until final exact-head evidence. Money source AWS STS/Budgets/credits remains read-only without authenticated spendable balance, all-in contract and P-010 issuer; actual supplier invoice, revenue, profit and paid AWS execution remain UNKNOWN. P-031 EN_EJECUCIÓN and P-032 PLANIFICADO.
+
+NEXT_ELIGIBLE_WORK: open PR and validate complete Node22/24, Windows, security, integrity and public distribution CI; correct causal failures if needed, integrate, verify exact main and preserve recovery. Resume independently verifiable economic issuer/supplier quote or nonbillable provider-neutral resource operations without inventing LIVE financing.
 
