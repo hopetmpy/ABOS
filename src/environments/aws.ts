@@ -961,6 +961,10 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     const observed = await this.describeInstance(instanceId, region);
 
     if (!observed.instance) {
+      // Clear any older measurement on an unobserved resource. Without this,
+      // P-018's additive metadata persistence would keep stale CPU load and
+      // make it appear current after provider disappearance/recovery.
+      const cpuUnavailable = this.options.observeCloudWatchCpuUtilization === true;
       return {
         healthy: false,
         status: resource.status === "terminating" || resource.status === "terminated"
@@ -970,7 +974,17 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         evidence: [
           `AWS EC2 instance ${instanceId} was not observed by DescribeInstances.`,
           ...observed.evidence,
+          ...(cpuUnavailable
+            ? ["AWS CPU utilization UNKNOWN: EC2 instance unavailable; previous measurement is stale."]
+            : []),
         ],
+        ...(cpuUnavailable
+          ? { metadata: {
+              cpuUtilizationAveragePct: null,
+              cpuUtilizationObservedAt: null,
+              cpuUtilizationMetricStatus: "unknown",
+            } }
+          : {}),
       };
     }
 
