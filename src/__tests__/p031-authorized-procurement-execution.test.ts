@@ -4,6 +4,7 @@ import { AdaptiveStore } from "../intelligence/store.js";
 import { EnvironmentRegistry } from "../environments/registry.js";
 import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
+import { EnvironmentRetentionCoordinator } from "../environments/retention.js";
 import { createTestDb } from "./mocks.js";
 import { insertGoal, insertTask } from "../state/database.js";
 import {
@@ -424,6 +425,129 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
       expect(resources.get(scope.resourceId)?.externalId).toBe("synthetic-provider-resource-001");
       expect(calls).toEqual(["provider-provision"]);
       expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n).toBe(0);
+    } finally { db.close(); }
+  });
+
+  it("exercises reviewed acquisition, independent health, artifact-safe retirement and unresolved provider billing", async () => {
+    const { db, scope } = setup();
+    try {
+      const quote = scenario();
+      const providerCalls: string[] = [];
+      const registry = new EnvironmentRegistry();
+      registry.register({
+        id: "aws", // Registered synthetic provider only; zero AWS API calls.
+        inspect: async () => ({
+          id: "aws", label: "Synthetic owned compute",
+          availability: "available", capabilities: [], constraints: [],
+          evidence: ["Test fixture provider only."], observedAt: new Date().toISOString(),
+        }),
+        provision: async (request) => {
+          providerCalls.push("provision");
+          return {
+            externalId: "synthetic-full-cycle-worker",
+            status: "running" as const, type: request.resourceType,
+            providerState: "running",
+            evidence: ["Synthetic provider provisioned resource."],
+            metadata: {
+              artifactCollectionState: "pending",
+              remoteArtifacts: ["/tmp/service-artifact.txt"],
+            },
+          };
+        },
+        health: async () => {
+          providerCalls.push("health");
+          return {
+            healthy: true, status: "running" as const,
+            providerState: "running",
+            evidence: ["Independent synthetic read-only health confirmed readiness."],
+          };
+        },
+        suspend: async () => {
+          providerCalls.push("suspend");
+          return { status: "suspended" as const, providerState: "stopped" };
+        },
+        destroy: async (resource) => {
+          expect(resource.externalId).toBe("synthetic-full-cycle-worker");
+          providerCalls.push("destroy");
+          return { status: "terminated" as const, providerState: "terminated" };
+        },
+      });
+      const resources = new EnvironmentResourceStore(db.raw);
+      const lifecycle = new EnvironmentLifecycleManager(registry, resources);
+      const retention = new EnvironmentRetentionCoordinator(db.raw, registry, lifecycle);
+      const decisionId = policy(db, scope, quote);
+      const dependencies: ProviderProcurementExecutionDependencies = {
+        observeAuthenticatedEconomics: async () => quote,
+        dispatch: async (requested) => {
+          await lifecycle.provision("aws", {
+            resourceId: requested.resourceId,
+            resourceType: "compute",
+            goalId: requested.goalId, taskId: requested.taskId,
+            pathId: requested.pathId, region: requested.region,
+            requiredCapabilities: ["compute"],
+            retentionPolicy: "ephemeral",
+          });
+          return { status: "usable", providerEffectId: "test-provider-provision-001",
+            evidence: ["Synthetic supplier accepted capacity; NOT a payment receipt."] };
+        },
+        verifyResourceUsability: async (requested) => {
+          const observed = await lifecycle.health(requested.resourceId);
+          return { usable: observed.status === "running" &&
+              observed.externalId === "synthetic-full-cycle-worker",
+            resourceId: observed.id,
+            evidence: ["Independent P-018-owned synthetic health observation."] };
+        },
+      };
+      const acquired = await executeReviewedProviderProcurement(db.raw, {
+        scope, policyDecisionId: decisionId, dependencies,
+      });
+      expect(acquired.status).toBe("usable");
+      expect(acquired.dispatched).toBe(true);
+      expect(acquired.financialEffect?.state).toBe("pending");
+      expect(resources.get(scope.resourceId)).toMatchObject({
+        goalId: scope.goalId, taskId: scope.taskId, pathId: scope.pathId,
+        status: "running", externalId: "synthetic-full-cycle-worker",
+      });
+      expect((await retention.sweep()).releaseEligible).toBe(0);
+      expect(providerCalls).toEqual(["provision", "health"]);
+
+      // Resource work finished, but artifact ownership must survive teardown.
+      db.raw.prepare("UPDATE task_graph SET status = 'completed' WHERE id = ?")
+        .run(scope.taskId);
+      const held = await retention.sweep();
+      expect(held.artifactHolds).toBe(1);
+      expect(held.destroyAttempts).toBe(0);
+      expect(resources.get(scope.resourceId)?.status).toBe("suspended");
+      expect(providerCalls).toEqual(["provision", "health", "suspend"]);
+
+      // Artifact collection is separately evidenced; then resource cleanup is
+      // eligible. Destroy is not invoice settlement or an automatic refund.
+      resources.applyMutation(scope.resourceId, {
+        metadata: { artifactCollectionState: "collected" },
+        evidence: ["Synthetic artifact output independently retained."],
+      });
+      const released = await retention.sweep();
+      expect(released.released).toBe(1);
+      expect(released.destroyAttempts).toBe(1);
+      expect(resources.get(scope.resourceId)?.status).toBe("terminated");
+      expect(providerCalls).toEqual(["provision", "health", "suspend", "destroy"]);
+      expect((await retention.sweep()).destroyAttempts).toBe(0);
+      const replay = await executeReviewedProviderProcurement(db.raw, {
+        scope, policyDecisionId: decisionId, dependencies,
+      });
+      expect(replay.status).toBe("not_dispatched");
+      expect(providerCalls).toHaveLength(4);
+      const economic = getFinancialEffectByOperationKey(db.raw, scope.operationKey);
+      expect(economic?.state).toBe("pending");
+      expect(economic?.providerEffectId).toBe("test-provider-provision-001");
+      expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n)
+        .toBe(0);
+      const account = getProviderFundingSnapshotExposure(db.raw, {
+        provider: scope.provider, providerAccountId: scope.providerAccountId,
+        unit: scope.unit, fundingObservedAt: quote.financing.observedAt!,
+      });
+      expect(account.additionalHeldCents).toBe(3000);
+      expect(account.unresolvedCount).toBe(1);
     } finally { db.close(); }
   });
 
