@@ -510,6 +510,11 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
       });
       expect((await retention.sweep()).releaseEligible).toBe(0);
       expect(providerCalls).toEqual(["provision", "health"]);
+      const earlyReplay = await executeReviewedProviderProcurement(db.raw, {
+        scope, policyDecisionId: decisionId, dependencies,
+      });
+      expect(earlyReplay.status).toBe("not_dispatched");
+      expect(providerCalls).toEqual(["provision", "health"]);
 
       // Resource work finished, but artifact ownership must survive teardown.
       db.raw.prepare("UPDATE task_graph SET status = 'completed' WHERE id = ?")
@@ -532,10 +537,11 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
       expect(resources.get(scope.resourceId)?.status).toBe("terminated");
       expect(providerCalls).toEqual(["provision", "health", "suspend", "destroy"]);
       expect((await retention.sweep()).destroyAttempts).toBe(0);
-      const replay = await executeReviewedProviderProcurement(db.raw, {
+      // The completed Task no longer has an active P-025 route. Reject a
+      // late replay on strategic authority, without dispatching anything.
+      await expect(executeReviewedProviderProcurement(db.raw, {
         scope, policyDecisionId: decisionId, dependencies,
-      });
-      expect(replay.status).toBe("not_dispatched");
+      })).rejects.toThrow("P-025 task route");
       expect(providerCalls).toHaveLength(4);
       const economic = getFinancialEffectByOperationKey(db.raw, scope.operationKey);
       expect(economic?.state).toBe("pending");
