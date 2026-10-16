@@ -451,6 +451,98 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
     } finally { db.close(); }
   });
 
+  it("holds an older intent settled after the funding snapshot instead of reusing already-spent liquidity", async () => {
+    const { db, scope } = setup();
+    try {
+      const quote = scenario(), calls: string[] = [];
+      const key = "older-intent-late-settlement";
+      prepareFinancialEffect(db.raw, {
+        operationKey: key, effectKind: "provider_resource_procurement",
+        amountCents: 4000, unit: "usd_cent", provider: "aws",
+        request: { providerAccountId: scope.providerAccountId, resourceId: "older-resource" },
+      });
+      // Synthetic durable history: preparation preceded the funding snapshot.
+      db.raw.prepare("UPDATE financial_effects SET created_at = ? WHERE operation_key = ?")
+        .run("2026-09-29T00:00:00Z", key);
+      settleFinancialEffect(db.raw, key, {
+        providerEffectId: "mock-late-settlement",
+        evidence: ["Mock settlement observed AFTER source funding snapshot; no AWS charge."],
+      }, () => null);
+      const exposure = getProviderFundingSnapshotExposure(db.raw, {
+        provider: "aws", providerAccountId: scope.providerAccountId,
+        unit: "usd_cent", fundingObservedAt: quote.financing.observedAt!,
+      });
+      expect(exposure.completedAfterSnapshotCount).toBe(1);
+      expect(exposure.additionalHeldCents).toBe(4000);
+      const decisionId = policy(db, scope, quote);
+      await expect(executeReviewedProviderProcurement(db.raw, {
+        scope, policyDecisionId: decisionId, dependencies: adapters(quote, calls),
+      })).rejects.toThrow("insufficient after local commitments");
+      expect(calls).toEqual([]);
+    } finally { db.close(); }
+  });
+
+  it("keeps unscoped late settlements UNKNOWN, even if their intents predate the observed balance", async () => {
+    const { db, scope } = setup();
+    try {
+      const quote = scenario(), calls: string[] = [];
+      const key = "unknown-account-late-settlement";
+      prepareFinancialEffect(db.raw, {
+        operationKey: key, effectKind: "provider_resource_procurement",
+        amountCents: 500, unit: "usd_cent", provider: "aws",
+        request: { resourceId: "unknown-account" },
+      });
+      db.raw.prepare("UPDATE financial_effects SET created_at = ? WHERE operation_key = ?")
+        .run("2026-09-29T00:00:00Z", key);
+      settleFinancialEffect(db.raw, key, {
+        providerEffectId: "mock-unscoped-late",
+        evidence: ["Synthetic settlement, account attribution UNKNOWN."],
+      }, () => null);
+      const exposure = getProviderFundingSnapshotExposure(db.raw, {
+        provider: "aws", providerAccountId: scope.providerAccountId,
+        unit: "usd_cent", fundingObservedAt: quote.financing.observedAt!,
+      });
+      expect(exposure.unscopedUnresolvedCount).toBe(1);
+      const decisionId = policy(db, scope, quote);
+      await expect(executeReviewedProviderProcurement(db.raw, {
+        scope, policyDecisionId: decisionId, dependencies: adapters(quote, calls),
+      })).rejects.toThrow("unscoped financial obligations");
+      expect(calls).toEqual([]);
+    } finally { db.close(); }
+  });
+
+  it("excludes only completed charges with proven pre-snapshot settlement timestamps", () => {
+    const { db, scope } = setup();
+    try {
+      const key = "fully-pre-snapshot";
+      prepareFinancialEffect(db.raw, {
+        operationKey: key, effectKind: "provider_resource_procurement",
+        amountCents: 4000, unit: "usd_cent", provider: "aws",
+        request: { providerAccountId: scope.providerAccountId, resourceId: "older-resource" },
+      });
+      settleFinancialEffect(db.raw, key, {
+        providerEffectId: "mock-old-settlement",
+        evidence: ["Synthetic pre-snapshot supplier completion."],
+      }, () => null);
+      db.raw.prepare(
+        "UPDATE financial_effects SET created_at = ?, settled_at = ?, completed_at = ? WHERE operation_key = ?",
+      ).run("2026-09-28T00:00:00Z", "2026-09-29T00:00:00Z",
+        "2026-09-30T00:00:00Z", key);
+      const readExposure = () => getProviderFundingSnapshotExposure(db.raw, {
+        provider: "aws", providerAccountId: scope.providerAccountId,
+        unit: "usd_cent", fundingObservedAt: "2026-10-01T00:00:00Z",
+      });
+      expect(readExposure().additionalHeldCents).toBe(0);
+      expect(readExposure().completedAfterSnapshotCount).toBe(0);
+      // A legacy/incomplete completion record is not proof of pre-snapshot
+      // cash impact. Keep the hold until independent funding refresh.
+      db.raw.prepare("UPDATE financial_effects SET settled_at = NULL WHERE operation_key = ?")
+        .run(key);
+      expect(readExposure().additionalHeldCents).toBe(4000);
+      expect(readExposure().completedAfterSnapshotCount).toBe(1);
+    } finally { db.close(); }
+  });
+
   it("holds unscoped provider obligations but excludes verified other-account/provider liabilities", async () => {
     const { db, scope } = setup();
     try {
