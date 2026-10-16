@@ -251,6 +251,103 @@ describe("EnvironmentExecutionBridge", () => {
     } finally { db.close(); }
   });
 
+  it("preserves independently sourced duration, capacity and money provenance through the generic execution bridge", async () => {
+    const registry = new EnvironmentRegistry();
+    const observedRequirements: Array<Record<string, unknown>> = [];
+    let unit: string | null = null;
+    registry.register({
+      ...provider("generic-bridge"),
+      estimate: async (requirements) => {
+        observedRequirements.push({
+          expectedDurationMs: requirements.expectedDurationMs,
+          neededByAt: requirements.neededByAt,
+          minimumCapacity: requirements.minimumCapacity,
+        });
+        return {
+          estimatedCostCents: 275,
+          costUnit: unit,
+          costCoverage: "partial",
+          evidence: ["Synthetic provider quote; not authenticated payment."],
+        };
+      },
+    });
+    const executors = new EnvironmentTaskExecutorRegistry();
+    let dispatched = 0;
+    executors.register({
+      environmentId: "generic-bridge",
+      spawn: async () => {
+        dispatched += 1;
+        return {
+          address: `generic-bridge://worker-${dispatched}`,
+          sandboxId: `worker-${dispatched}`,
+          name: "worker",
+        };
+      },
+    });
+    const inventoryQueries: Array<Record<string, unknown>> = [];
+    const adopted: Array<Record<string, unknown>> = [];
+    const lifecycle = {
+      resources: {
+        findReusableCandidates: (filter: Record<string, unknown>) => {
+          inventoryQueries.push(filter);
+          return [];
+        },
+      },
+      adopt: (input: Record<string, unknown>) => {
+        adopted.push(input);
+        return { id: `owned-${adopted.length}` };
+      },
+    } as unknown as EnvironmentLifecycleManager;
+    const bridge = new EnvironmentExecutionBridge(
+      new EnvironmentSelector(registry), executors, lifecycle,
+    );
+
+    const request = task("generic-bridge");
+    // Existing Task watchdog is 10 s; supplier resource usage is unknown.
+    const unknown = await bridge.spawn(request);
+    expect(unknown.environmentId).toBe("generic-bridge");
+    expect(observedRequirements[0]?.expectedDurationMs).toBeNull();
+    expect(adopted[0]?.estimatedCostCents).toBeNull();
+    expect(unknown.evidence.join(" ")).toContain("cannot be recorded as canonical USD cents");
+    expect(dispatched).toBe(1);
+
+    const needBy = new Date(Date.now() + 86_400_000).toISOString();
+    unit = "usd_cent";
+    await bridge.spawn(request, {
+      metadata: {
+        expectedResourceDurationMs: 7_200_000,
+        neededByAt: needBy,
+        instanceType: "large",
+        minimumCapacity: { cpuCores: 4, memoryMb: 8192 },
+      },
+    });
+    expect(observedRequirements[1]).toMatchObject({
+      expectedDurationMs: 7_200_000,
+      neededByAt: needBy,
+      minimumCapacity: { cpuCores: 4, memoryMb: 8192 },
+    });
+    expect(inventoryQueries.some(query =>
+      query.requiredInstanceType === "large" &&
+      (query.minimumCapacity as Record<string, number>)?.memoryMb === 8192
+    )).toBe(true);
+    expect(adopted[1]?.estimatedCostCents).toBe(275);
+
+    await expect(bridge.spawn(request, {
+      metadata: { expectedResourceDurationMs: 0 },
+    })).rejects.toMatchObject({ operation: "selection" });
+    await expect(bridge.spawn(request, {
+      metadata: { expectedResourceDurationMs: "7200000" },
+    })).rejects.toMatchObject({ operation: "selection" });
+    await expect(bridge.spawn(request, {
+      metadata: { neededByAt: 1234567890 },
+    })).rejects.toMatchObject({ operation: "selection" });
+    await expect(bridge.spawn(request, {
+      metadata: { neededByAt: "2026-11-01" },
+    })).rejects.toMatchObject({ operation: "selection" });
+    expect(dispatched).toBe(2);
+    expect(adopted).toHaveLength(2);
+  });
+
   it("passes only an explicit reviewed budget to the canonical selector", async () => {
     const registry = new EnvironmentRegistry();
     const candidate = provider("priced", 80);
