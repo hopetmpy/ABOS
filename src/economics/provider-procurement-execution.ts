@@ -208,21 +208,10 @@ export async function executeReviewedProviderProcurement(
       evidence: ["Existing P-030 financial intent requires observation/reconciliation; no repeated provider dispatch."],
     };
   }
-  // A different key OR changed quote cannot re-dispatch an unresolved
-  // procurement for the same resource/account/operation. The pre-existing
-  // P-030 fingerprint catches identical terms; this narrower source guard
-  // also catches drift in price or financing before supplier reconciliation.
-  for (const outstanding of listUnresolvedFinancialEffects(db)) {
-    if (outstanding.effectKind !== "provider_resource_procurement" ||
-        outstanding.provider !== scope.provider ||
-        outstanding.unit !== scope.unit ||
-        outstanding.request.providerAccountId !== scope.providerAccountId ||
-        outstanding.request.resourceId !== scope.resourceId ||
-        outstanding.request.operation !== scope.operation) continue;
-    throw new FinancialEffectIntentPendingError(
-      scope.operationKey, outstanding.operationKey,
-    );
-  }
+  // Account economics is an asynchronous external observation. The final
+  // same-resource overlap check belongs in the SQLite intent-claim transaction
+  // below: two calls can both begin observation before either records an
+  // outstanding intent, and changed quotes generate different fingerprints.
   const scenario = await dependencies.observeAuthenticatedEconomics(scope);
   if (scenario.provider !== scope.provider ||
       scenario.accountId !== scope.providerAccountId ||
@@ -259,6 +248,22 @@ export async function executeReviewedProviderProcurement(
   // transaction with the durable P-030 intent claim; it cannot authorize an
   // external AWS balance or prove real supplier invoices.
   const stage = db.transaction(() => {
+    // Re-evaluate under the same local transaction that reserves funds and
+    // claims dispatch. A concurrent acquisition with another key or repriced
+    // quote may have committed while this request awaited provider economics.
+    // A supplier callback UNKNOWN/PENDING cannot be cleared by another quote.
+    for (const outstanding of listUnresolvedFinancialEffects(db)) {
+      if (outstanding.effectKind !== "provider_resource_procurement" ||
+          outstanding.provider !== scope.provider ||
+          outstanding.unit !== scope.unit ||
+          outstanding.request.providerAccountId !== scope.providerAccountId ||
+          outstanding.request.resourceId !== scope.resourceId ||
+          outstanding.request.operation !== scope.operation ||
+          outstanding.operationKey === scope.operationKey) continue;
+      throw new FinancialEffectIntentPendingError(
+        scope.operationKey, outstanding.operationKey,
+      );
+    }
     const exposure = getProviderFundingSnapshotExposure(db, {
       provider: scope.provider,
       providerAccountId: scope.providerAccountId,
