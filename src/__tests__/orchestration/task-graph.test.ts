@@ -19,6 +19,7 @@ import {
   getTasksByGoal,
   insertGoal,
   insertTask,
+  updateTaskStatus,
 } from "../../state/database.js";
 import { createInMemoryDb } from "./test-db.js";
 
@@ -413,8 +414,10 @@ describe("orchestration/task-graph", () => {
         goalId: goal.id,
         title: "task",
         description: "desc",
-        status: "running",
+        status: "assigned",
       });
+      // The observed transition, not successful completion, owns start time.
+      updateTaskStatus(db, taskId, "running");
 
       completeTask(db, taskId, SUCCESS_RESULT);
 
@@ -424,6 +427,21 @@ describe("orchestration/task-graph", () => {
       expect(task?.result).toEqual(SUCCESS_RESULT);
       expect(task?.startedAt).toBeTruthy();
       expect(task?.completedAt).toBeTruthy();
+    });
+
+    it("does not manufacture a start timestamp when a Task completes without a recorded running transition", () => {
+      const goal = createGoal(db, "Goal", "Desc");
+      const taskId = insertTask(db, {
+        goalId: goal.id, title: "finished without start event",
+        description: "No observed execution interval", status: "assigned",
+      });
+      expect(getTaskById(db, taskId)?.startedAt).toBeNull();
+      completeTask(db, taskId, SUCCESS_RESULT);
+      const persisted = getTaskById(db, taskId);
+      expect(persisted?.status).toBe("completed");
+      expect(persisted?.startedAt).toBeNull();
+      expect(persisted?.completedAt).toBeTruthy();
+      expect(persisted?.result).toEqual(SUCCESS_RESULT);
     });
 
     it("unblocks dependents when a dependency completes", () => {
