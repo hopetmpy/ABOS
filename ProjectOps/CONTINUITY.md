@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0028.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / SOURCE_TEMPORAL_RESOURCE_ASSOCIATION_E3_MAIN_GREEN / P005_LIVE_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / SOURCE_TASK_WINDOW_METERING_E3_MAIN_GREEN / P005_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-temporal-association-main-reconciliation
-Host-Head-At-Audit-Open: 948dc3cda9364520fc493408cbf3a6ece6dfbebd
-Last-Reconciled-Host-Head: 34bac124c04b1293c59c031af48ab32eeaa19510
-Observed-Main-Head: 34bac124c04b1293c59c031af48ab32eeaa19510
-Last-Product-Head: 34bac124c04b1293c59c031af48ab32eeaa19510
-Last-Product-CI: exact main 34bac124c04b1293c59c031af48ab32eeaa19510 push 38983037419 — COMPLETE SUCCESS 8/8
+Current-Host-Branch: abos/p031-task-metering-main-checkpoint
+Host-Head-At-Audit-Open: e74dbd027361d6d9eb13ff24d9d0e5335fe4f5d7
+Last-Reconciled-Host-Head: 4b9fbd164fa5f9e7200e41983b5d2fbf67413e0e
+Observed-Main-Head: 4b9fbd164fa5f9e7200e41983b5d2fbf67413e0e
+Last-Product-Head: 4b9fbd164fa5f9e7200e41983b5d2fbf67413e0e
+Last-Product-CI: exact main 4b9fbd164fa5f9e7200e41983b5d2fbf67413e0e push 38987671776 — COMPLETE SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
 Last-Completed-CI: 38766126322 — SUCCESS 8/8
