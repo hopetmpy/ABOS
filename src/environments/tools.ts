@@ -299,9 +299,16 @@ export function createEnvironmentTools(
           (typeof args.external_id !== "string" || !args.external_id.trim())) {
         return "BLOCKED: malformed external resource identity.";
       }
-      const dependencies = options.getTrustedProcurementDependencies?.(provider);
-      if (!dependencies) {
-        return "UNAVAILABLE: trusted provider finance, dispatch and independent usability adapters are not connected; no monetary action was dispatched.";
+      let dependencies: ProviderProcurementExecutionDependencies | null = null;
+      try {
+        dependencies = options.getTrustedProcurementDependencies?.(provider) ?? null;
+      } catch {
+        return "UNAVAILABLE: trusted provider procurement adapter failed before dispatch; no financial intent was claimed.";
+      }
+      if (!dependencies ||
+          typeof dependencies.observeAuthenticatedEconomics !== "function" ||
+          typeof dependencies.dispatch !== "function") {
+        return "UNAVAILABLE: trusted provider finance and dispatch adapters are not connected; no monetary action was dispatched.";
       }
       const scope: ProviderProcurementScope = {
         operationKey: (args.operation_key as string).trim(),
@@ -339,7 +346,7 @@ export function createEnvironmentTools(
         // Failures before dispatch must not expose provider credentials or
         // internal request details to inference. Recheck the canonical P-010,
         // P-025 and P-030 evidence rather than reusing a model assertion.
-        return "BLOCKED: source-verified procurement prerequisites unavailable or invalid; check canonical Task, policy and treasury evidence. No approved new dispatch established.";
+        return "BLOCKED/UNKNOWN: source-verified procurement prerequisites unavailable or invalid. Inspect the canonical P-030 financial intent before any retry; an uncertain prior dispatch is never safe to repeat blindly.";
       }
     },
   });
