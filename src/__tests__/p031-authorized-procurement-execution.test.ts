@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { PolicyEngine } from "../agent/policy-engine.js";
 import { AdaptiveStore } from "../intelligence/store.js";
 import { EnvironmentRegistry } from "../environments/registry.js";
@@ -173,6 +173,84 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
   const setNeed = (db: ReturnType<typeof createTestDb>, scope: ProviderProcurementScope) =>
     db.raw.prepare("UPDATE task_graph SET resource_need = ? WHERE id = ?")
       .run(JSON.stringify(sizedNeed), scope.taskId);
+
+  it("rejects a funding snapshot that expires while the trusted P-010 issuer is awaited", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-15T12:00:00Z"));
+    const { db, scope } = setup();
+    try {
+      const quote = scenario();
+      quote.financing.validUntil = "2026-10-15T12:01:00Z";
+      const calls: string[] = [];
+      const dependencies: ProviderProcurementExecutionDependencies = {
+        ...adapters(quote, calls),
+        issuePolicyDecision: async () => {
+          // Supplier-funded at start, but the account observation is no longer
+          // valid by the instant the local P-030 dispatch claim could happen.
+          vi.setSystemTime(new Date("2026-10-15T12:02:00Z"));
+          return policy(db, scope, quote);
+        },
+      };
+      await expect(executeReviewedProviderProcurement(db.raw, {
+        scope, dependencies,
+      })).rejects.toThrow(/expired before financial dispatch claim/i);
+      expect(calls).toEqual([]);
+      expect(getFinancialEffectByOperationKey(db.raw, scope.operationKey)).toBeUndefined();
+    } finally { db.close(); vi.useRealTimers(); }
+  });
+
+  it("rejects a resource fit that expires while provider economics are observed", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-15T12:00:00Z"));
+    const { db, scope } = setup();
+    try {
+      setNeed(db, scope);
+      const quote = scenario();
+      priceCoveredUsage(scope, quote);
+      const calls: string[] = [];
+      const resourceFit = fit(scope);
+      resourceFit.validUntil = "2026-10-15T12:01:00Z";
+      const decisionId = policy(db, scope, quote);
+      const dependencies: ProviderProcurementExecutionDependencies = {
+        ...adapters(quote, calls),
+        observeAuthenticatedResourceFit: async () => resourceFit,
+        observeAuthenticatedEconomics: async () => {
+          vi.setSystemTime(new Date("2026-10-15T12:02:00Z"));
+          return quote;
+        },
+      };
+      await expect(executeReviewedProviderProcurement(db.raw, {
+        scope, policyDecisionId: decisionId, dependencies,
+      })).rejects.toThrow(/fresh independent provider evidence/i);
+      expect(calls).toEqual([]);
+      expect(getFinancialEffectByOperationKey(db.raw, scope.operationKey)).toBeUndefined();
+    } finally { db.close(); vi.useRealTimers(); }
+  });
+
+  it("rejects billed usage coverage that expires during trusted policy review", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-15T12:00:00Z"));
+    const { db, scope } = setup();
+    try {
+      setNeed(db, scope);
+      const quote = scenario(), calls: string[] = [];
+      priceCoveredUsage(scope, quote);
+      quote.cost.usageCoverage!.validUntil = "2026-10-15T12:01:00Z";
+      const dependencies: ProviderProcurementExecutionDependencies = {
+        ...adapters(quote, calls),
+        observeAuthenticatedResourceFit: async () => fit(scope),
+        issuePolicyDecision: async () => {
+          vi.setSystemTime(new Date("2026-10-15T12:02:00Z"));
+          return policy(db, scope, quote);
+        },
+      };
+      await expect(executeReviewedProviderProcurement(db.raw, {
+        scope, dependencies,
+      })).rejects.toThrow(/priced usage evidence expired/i);
+      expect(calls).toEqual([]);
+      expect(getFinancialEffectByOperationKey(db.raw, scope.operationKey)).toBeUndefined();
+    } finally { db.close(); vi.useRealTimers(); }
+  });
 
   it("preserves authorized ability to acquire an independently verified correctly sized resource", async () => {
     const { db, scope } = setup();
