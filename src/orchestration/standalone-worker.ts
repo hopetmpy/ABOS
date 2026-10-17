@@ -285,7 +285,9 @@ export async function executeStandaloneTask(
         onExecutionStart: () => {
           // The canonical hook runs after harness initialization and before
           // the actual execute() call; transport dispatch is NOT this start.
-          startLocalTaskExecution(db.raw, mirrorTask.id, workerAddress);
+          startLocalTaskExecution(
+            db.raw, mirrorTask.id, workerAddress, remoteParentTask,
+          );
           observedHarnessStart = true;
         },
       },
