@@ -113,6 +113,7 @@ import { ConwayEnvironmentProvider } from "../environments/conway.js";
 import { AwsEnvironmentProvider } from "../environments/aws.js";
 import { AwsEc2TaskExecutor } from "../environments/aws-ec2-executor.js";
 import { createEnvironmentTools } from "../environments/tools.js";
+import type { ProviderProcurementExecutionDependencies } from "../economics/provider-procurement-execution.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
 import { EnvironmentRetentionCoordinator } from "../environments/retention.js";
@@ -189,6 +190,15 @@ export interface AgentLoopOptions {
   onStateChange?: (state: AgentState) => void;
   onTurnComplete?: (turn: AgentTurn) => void;
   ollamaBaseUrl?: string;
+  /**
+   * Trusted host-owned provider finance/dispatch/verification integration.
+   * Never derive this from model arguments, AWS IAM or a budget threshold.
+   * When absent, the economic execution tool reports UNAVAILABLE and does
+   * not dispatch; P-031 read-only resource review remains usable.
+   */
+  getTrustedProcurementDependencies?: (
+    providerId: string,
+  ) => ProviderProcurementExecutionDependencies | null;
 }
 
 /**
@@ -364,6 +374,7 @@ export async function runAgentLoop(
         providerAccountId,
         unit,
       }),
+    getTrustedProcurementDependencies: options.getTrustedProcurementDependencies,
   });
   const skillEvolutionTools = createSkillEvolutionTools();
   const skillEvolution = new SkillEvolutionEngine(db.raw);
