@@ -74,9 +74,9 @@ export async function probeConwayAccountReadOnly(
   now: () => Date = () => new Date(),
 ): Promise<ConwayAccountReadOnlyReport> {
   const [balanceResult, inventoryResult, pricingResult] = await Promise.allSettled([
-    client.getCreditsBalance(),
-    client.listSandboxes(),
-    client.getCreditsPricing(),
+    Promise.resolve().then(() => client.getCreditsBalance()),
+    Promise.resolve().then(() => client.listSandboxes()),
+    Promise.resolve().then(() => client.getCreditsPricing()),
   ]);
   const report: ConwayAccountReadOnlyReport = {
     kind: "conway_account_read_only_probe",
