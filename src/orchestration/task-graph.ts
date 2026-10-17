@@ -295,6 +295,13 @@ export function startLocalTaskExecution(db: Database, taskId: string, workerAddr
     if (task.startedAt !== null) {
       throw new Error(`Task ${taskId} has an unverified prior start timestamp`);
     }
+    // Tests and recovery may supply an assigned Task without a selected worker.
+    // Claim ownership atomically with the local execution start; never steal
+    // an assignment from a different worker.
+    if (task.assignedTo === null) {
+      db.prepare("UPDATE task_graph SET assigned_to = ? WHERE id = ?")
+        .run(workerAddress, taskId);
+    }
     updateTaskStatus(db, taskId, "running");
     const started = getTaskById(db, taskId)?.startedAt;
     if (!started) throw new Error(`Task ${taskId} running start was not persisted`);
