@@ -93,6 +93,27 @@ describe("P-031 Colony assignment/result provenance", () => {
     } finally { t.db.close(); }
   });
 
+  it("accepts only the most recent canonical sent assignment event when there is no KV receipt", async () => {
+    const t = fixture();
+    try {
+      t.db.prepare("INSERT INTO event_stream (id, type, agent_address, goal_id, task_id, content, token_count, created_at) VALUES (?, 'action', ?, ?, ?, ?, 1, datetime('now'))")
+        .run("evt-old", "0xparent", t.goal.id, t.taskId,
+          JSON.stringify({ action: "message_sent", messageType: "task_assignment", messageId: "assignment-old", to: "0xchild" }));
+      t.db.prepare("INSERT INTO event_stream (id, type, agent_address, goal_id, task_id, content, token_count, created_at) VALUES (?, 'action', ?, ?, ?, ?, 1, datetime('now'))")
+        .run("evt-new", "0xparent", t.goal.id, t.taskId,
+          JSON.stringify({ action: "message_sent", messageType: "task_assignment", messageId: "assignment-new", to: "0xchild" }));
+      // No current transport receipt: the journal does not prove a retry
+      // generation. With retries recorded, both remain unverified.
+      t.inbox.push({ message: t.resultMessage("assignment-new"), handledBy: "task_result", success: true });
+      expect(await t.orchestrator.collectResults()).toEqual([]);
+      t.db.prepare("UPDATE task_graph SET retry_count = 0 WHERE id = ?").run(t.taskId);
+      t.inbox.push({ message: t.resultMessage("assignment-old"), handledBy: "task_result", success: true });
+      expect(await t.orchestrator.collectResults()).toEqual([]);
+      t.inbox.push({ message: t.resultMessage("assignment-new"), handledBy: "task_result", success: true });
+      expect(await t.orchestrator.collectResults()).toHaveLength(1);
+    } finally { t.db.close(); }
+  });
+
   it("never treats unstructured text or missing success as an authenticated successful result", async () => {
     const t = fixture();
     try {
