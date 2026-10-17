@@ -325,6 +325,50 @@ export function startLocalTaskExecution(db: Database, taskId: string, workerAddr
   });
 }
 
+/**
+ * The harness returned or threw on THIS worker process. This is not a parent
+ * message receipt, a provider sample, or a billed workload duration.
+ * Persist locally before the TaskGraph terminal transition; an interrupted
+ * process cannot produce a fabricated settlement event.
+ */
+export function recordObservedHarnessExecutionSettled(
+  db: Database, taskId: string, workerAddress: string,
+  outcome: "returned" | "threw",
+  origin?: { parentGoalId: string; parentTaskId: string; parentRetryCount: number },
+): void {
+  withTransaction(db, () => {
+    const task = getTaskById(db, taskId);
+    if (!task || task.status !== "running" || task.assignedTo !== workerAddress ||
+        !task.startedAt) {
+      throw new Error(`Task ${taskId} has no active observed execution owned by ${workerAddress}`);
+    }
+    const observedAt = new Date().toISOString();
+    appendEvidenceEvent(db, {
+      correlationId: correlationIdFor("goal", task.goalId),
+      eventType: "task.local_harness_execution_settled",
+      domain: "orchestration",
+      authorityType: "task_graph",
+      authorityId: task.id,
+      goalId: task.goalId,
+      taskId: task.id,
+      epistemicStatus: "observation",
+      createdAt: observedAt,
+      payload: {
+        workerAddress, retryCountAtSettlement: task.retryCount,
+        recordedStartedAt: task.startedAt, settledObservedAt: observedAt,
+        outcome, boundary: "harness_execute_promise_settled",
+        ...(origin ? { remoteParentTask: origin } : {}),
+        durationAuthority: "UNKNOWN", providerCpuShare: "UNKNOWN",
+        providerBilledCost: "UNKNOWN",
+      },
+      provenance: {
+        source: origin ? "StandaloneTaskWorker" : "LocalWorker",
+        scope: origin ? "remote_worker_process_local_sqlite" : "local_worker_process",
+      },
+    });
+  });
+}
+
 function recordTaskOutcomeEvidence(
   db: Database,
   task: ReturnType<typeof getTaskById> & {},
