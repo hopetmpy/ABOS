@@ -136,7 +136,7 @@ export async function probeConwayAccountReadOnly(
       Number.isSafeInteger(t.vcpu) && t.vcpu > 0 &&
       Number.isSafeInteger(t.memoryMb) && t.memoryMb > 0 &&
       Number.isSafeInteger(t.diskGb) && t.diskGb > 0 &&
-      Number.isSafeInteger(t.monthlyCents) && t.monthlyCents > 0);
+      Number.isSafeInteger(t.monthlyCents) && t.monthlyCents >= 0);
     report.pricing.advertisedTierCount = valid ? tiers.length : null;
     report.pricing.status = valid && tiers.length > 0 ? "partial" : "unknown";
     if (!valid || tiers.length === 0)
