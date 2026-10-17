@@ -230,6 +230,86 @@ function recordedAssignmentHistory(
   }
 }
 
+
+/**
+ * P-031 source-only temporal discrimination, never an allocation or a bill.
+ * Task execution dates are local timestamps; P-018/P-013 resource events are
+ * recorded association snapshots; provider CPU datapoints may summarize a
+ * wider bucket. A positive result establishes point-time compatibility ONLY.
+ */
+function recordedInstant(value: unknown): number | null {
+  if (typeof value !== "string" ||
+      !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(value)) {
+    return null;
+  }
+  const at = Date.parse(value);
+  return Number.isFinite(at) && new Date(at).toISOString().slice(0, 10) ===
+    new Date(value).toISOString().slice(0, 10) ? at : null;
+}
+
+function describeResourceTaskMeteringTime(
+  db: Database,
+  history: ReturnType<typeof recordedAssignmentHistory>,
+  resource: { goalId: string | null; metadata: Record<string, unknown> },
+  goalId?: string,
+): string {
+  const metadata = resource.metadata;
+  const sampleAt = recordedInstant(metadata.cpuUtilizationObservedAt);
+  const cpu = metadata.cpuUtilizationAveragePct;
+  if (metadata.cpuUtilizationMetricStatus !== "observed" ||
+      typeof cpu !== "number" || !Number.isFinite(cpu) || cpu < 0 || cpu > 100 ||
+      sampleAt === null) return "UNKNOWN_NO_VALID_CPU_SAMPLE";
+  if (goalId && resource.goalId !== goalId)
+    return "UNKNOWN_CURRENT_OWNER_DIFFERENT_GOAL";
+  if (!history || history.incomplete || history.observations.length === 0)
+    return "UNKNOWN_MISSING_OR_INCOMPLETE_OWNER_JOURNAL";
+
+  // The prior snapshot is no more than the latest *recorded* association.
+  // Do not interpolate an actual usage interval or assume exclusive use.
+  let atSample = -1;
+  for (let i = 0; i < history.observations.length; i++) {
+    const eventAt = recordedInstant(history.observations[i].observedAt);
+    if (eventAt === null) return "UNKNOWN_INVALID_OWNER_EVENT_TIME";
+    if (eventAt === sampleAt) return "UNKNOWN_SAMPLE_AT_OWNER_BOUNDARY";
+    if (eventAt < sampleAt) atSample = i;
+  }
+  if (atSample < 0) return "UNKNOWN_SAMPLE_BEFORE_RECORDED_OWNER";
+  const snapshot = history.observations[atSample];
+  if (!snapshot.taskId || !snapshot.goalId ||
+      (goalId && snapshot.goalId !== goalId))
+    return "UNKNOWN_NO_SCOPED_TASK_OWNER_AT_SAMPLE";
+
+  let task: {
+    goal_id: string; status: string;
+    started_at: string | null; completed_at: string | null;
+  } | undefined;
+  try {
+    task = db.prepare(
+      "SELECT goal_id, status, started_at, completed_at FROM task_graph WHERE id = ?"
+    ).get(snapshot.taskId) as typeof task;
+  } catch {
+    return "UNKNOWN_TASK_TIME_AUTHORITY_UNREADABLE";
+  }
+  if (!task || task.goal_id !== snapshot.goalId)
+    return "UNKNOWN_TASK_OWNER_MISMATCH";
+  const started = recordedInstant(task.started_at);
+  const completed = task.completed_at == null ? null : recordedInstant(task.completed_at);
+  if (started === null || (task.completed_at != null && completed === null) ||
+      (completed !== null && completed < started) ||
+      (!["running", "completed", "failed", "cancelled"].includes(task.status)) ||
+      (task.status !== "running" && completed === null))
+    return "UNKNOWN_INCOMPLETE_OR_INVALID_TASK_WINDOW";
+  if (sampleAt < started || (completed !== null && sampleAt > completed))
+    return "OUTSIDE_RECORDED_TASK_WINDOW_NO_ATTRIBUTION";
+
+  // Provider aggregation start/end, per-process shares and billing windows
+  // are not present in this journal; a point match cannot prove CPU usage.
+  return `RECORDED_TIMESTAMP_OVERLAP_ONLY task=${snapshot.taskId} ` +
+    `metricAt=${metadata.cpuUtilizationObservedAt} taskStarted=${task.started_at} ` +
+    `taskCompleted=${task.completed_at ?? "OPEN"} ` +
+    "metricAggregateCoverage=UNKNOWN taskCpuShare=UNKNOWN providerBilledUsage=UNKNOWN";
+}
+
 function describeResourceOutcomeLinks(db: Database, goalId?: string): string | null {
   let resources: ReturnType<EnvironmentResourceStore["list"]>;
   try {
@@ -335,6 +415,7 @@ function describeResourceOutcomeLinks(db: Database, goalId?: string): string | n
           matchingTask.estimated_cost_cents > 0
             ? String(matchingTask.estimated_cost_cents) : "UNKNOWN";
     const history = recordedAssignmentHistory(db, resource.id);
+    const meteringTime = describeResourceTaskMeteringTime(db, history, resource, goalId);
     const assignments = history?.observations.filter(row =>
       row.taskId && (!goalId || row.goalId === goalId)
     ) ?? [];
@@ -358,7 +439,8 @@ function describeResourceOutcomeLinks(db: Database, goalId?: string): string | n
       `localTaskObservedCost=${localActual} task_cost_cent; ` +
       `unresolvedLocalProviderIntents=${outstanding}; supplierFinalBilling=UNKNOWN; ` +
       `historicalAssignments=${history === null || history.observations.length === 0 ? "UNKNOWN" : historicalLines.length} ` +
-      `reassignmentAfterScopedGoal=${detachedOrReassigned}` +
+      `reassignmentAfterScopedGoal=${detachedOrReassigned}; ` +
+      `cpuSampleTaskTimeEvidence=${meteringTime}` +
       (historicalLines.length ? "\n  " + historicalLines.join("\n  ") : "") +
       (history && (history.incomplete || assignments.length > historicalLines.length)
         ? "\n  Historical assignment journal truncated for planner context; enumerate P-018/P-013 for full sequence." : "");
@@ -373,7 +455,8 @@ function describeResourceOutcomeLinks(db: Database, goalId?: string): string | n
       : []),
     ...(!historicalLookupAvailable
       ? ["Historical P-013/P-018 assignment index is unavailable; earlier owner changes are UNKNOWN."] : []),
-    "Assignment event timestamps prove recorded association snapshots ONLY, not continuous allocation intervals, utilization during a Task, or cost shares. " +
+    "Assignment event timestamps and Task start/end dates support only conservative point-time compatibility, " +
+      "not continuous allocation intervals, provider CPU aggregate bucket boundaries, attribution of utilization during a Task, or cost shares. " +
       "Repeated Task costs are references, not multiple resource expenses. CPU alone cannot establish idleness, " +
       "spare capacity, resize or retirement suitability. An unresolved-local-intent count of zero cannot prove an external bill is closed; " +
       "confirm fresh provider utilization, Task/Goal contribution, shared dependencies and independent supplier billing before economic action.",
