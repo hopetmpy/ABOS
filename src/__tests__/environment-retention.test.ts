@@ -13,7 +13,12 @@ import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
 import { EnvironmentRetentionCoordinator } from "../environments/retention.js";
 import type { EnvironmentProvider } from "../environments/types.js";
-import { prepareFinancialEffect, getFinancialEffectByOperationKey } from "../economics/financial-effects.js";
+import {
+  claimFinancialEffectDispatch,
+  prepareFinancialEffect,
+  getFinancialEffectByOperationKey,
+  settleFinancialEffect,
+} from "../economics/financial-effects.js";
 
 function createDb() {
   const db = new Database(":memory:");
@@ -174,6 +179,67 @@ describe("EnvironmentRetentionCoordinator", () => {
         .toBe(0);
       expect(lifecycle.resources.listEvents(owned.id).some(
         event => event.operation === "retention_billing_reconciliation")).toBe(true);
+    } finally { db.close(); }
+  });
+
+
+  it("retains the quoted renewal of a completed purchase after physical retirement without claiming cancellation", async () => {
+    const db = createDb();
+    try {
+      insertGoal(db, "goal-contract-completed", "completed");
+      const registry = new EnvironmentRegistry();
+      registry.register(provider());
+      const lifecycle = new EnvironmentLifecycleManager(
+        registry, new EnvironmentResourceStore(db),
+      );
+      const resource = lifecycle.adopt({
+        provider: "cloud", externalId: "vm-previously-settled",
+        type: "compute", goalId: "goal-contract-completed",
+        status: "running", retentionPolicy: "until_goal_complete",
+      });
+      const operationKey = "quoted-auto-renewal-completed-fixture";
+      prepareFinancialEffect(db, {
+        operationKey, effectKind: "provider_resource_procurement",
+        provider: "cloud", amountCents: 2000, unit: "usd_cent",
+        request: {
+          resourceId: resource.id, providerAccountId: "fixture-account",
+          operation: "provision",
+          supplierLifecycleQuote: {
+            renewal: "automatic",
+            additionalCommittedRenewalCents: 450,
+            additionalExitChargeCents: 100,
+            cancellationRouteDocumented: true,
+            source: "synthetic-provider-contract",
+          },
+        },
+        evidence: ["Only a synthetic provider quotation, not cancellation."],
+      });
+      claimFinancialEffectDispatch(db, operationKey);
+      settleFinancialEffect(db, operationKey, {
+        providerEffectId: "mock-settlement-receipt-1",
+        providerStatus: "synthetic-settlement",
+        evidence: ["Synthetic settlement for the initial purchase only."],
+      }, () => "synthetic-accounting-reference");
+
+      const sweep = await new EnvironmentRetentionCoordinator(db, registry, lifecycle)
+        .sweep();
+      expect(sweep.released).toBe(1);
+      const retired = lifecycle.resources.get(resource.id)!;
+      expect(retired.metadata.retentionBillingUnresolvedCount).toBe(0);
+      expect(retired.metadata.retentionBillingLifecycleQuotes).toEqual([{
+        operationKey,
+        financialEffectState: "completed",
+        renewalQuoted: "automatic",
+        additionalCommittedRenewalCents: 450,
+        additionalExitChargeCents: 100,
+        cancellationRouteDocumented: true,
+        supplierCancellationStatus: "UNKNOWN",
+      }]);
+      expect(retired.metadata.retentionBillingReconciliation)
+        .toBe("unverified_after_resource_release");
+      expect(retired.evidence.join(" ")).toContain("Renewal and exit quotations");
+      expect(getFinancialEffectByOperationKey(db, operationKey)?.state)
+        .toBe("completed");
     } finally { db.close(); }
   });
 
