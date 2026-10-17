@@ -40,8 +40,8 @@ Master-Transformation-Plan: P-007
 | P-028 | Implementar delegation por competencia, evidencia y coste | HECHO | PR #71 integrado; `main 803802f68cc3c1b7c1bd8d850768ca924a18aca2` revalidado por CI `36206237455` SUCCESS 8/8 | plan/P-028.md |
 | P-029 | Hacer real child bootstrap, Constitution gate y Family Knowledge Fabric | HECHO | PR #74 integrado; `main d14f04b9fdea98eecd9d8e772b223b55d1fcf010` revalidado por CI `36220600132` SUCCESS 8/8 | plan/P-029.md |
 | P-030 | Construir Family Economics y Treasury causal | HECHO | PR #75 integrado; `main 2fd877667b493ba5cea967092d79abed41787e70` revalidado por CI `38766126322` SUCCESS 8/8, E3; E5/E6 LIVE siguen P-005 | plan/P-030.md |
-| P-031 | Habilitar autonomous resource acquisition y reinvestment bajo autoridad | EN_EJECUCIÓN | Dependencias P-010/P-017/P-018/P-026/P-027/P-030 HECHO; estado vivo en CONTINUITY + Active-Segment; source E3 integrado, P-005 LIVE pendiente | plan/P-031.md |
-| P-032 | Evolucionar Soul y Self-Model semántico sin rigidizar identidad | PLANIFICADO | P-020 + P-022 + P-023 + P-029 | plan/P-032.md |
+| P-031 | Habilitar autonomous resource acquisition y reinvestment bajo autoridad | HECHO | PR #206 integrado; exact main `9033ce0b9e40bb3a275f3c23f44c27518bd0f2c2` CI `39076067564` SUCCESS 8/8; SOURCE/E3 únicamente, fronteras proveedor/dinero E5/E6 permanecen P-005 | plan/P-031.md |
+| P-032 | Evolucionar Soul y Self-Model semántico sin rigidizar identidad | EN_EJECUCIÓN | P-020 + P-022 + P-023 + P-029 HECHO; auditoría abierta en CONTINUITY + C0030; source sin modificar en la activación | plan/P-032.md |
 | P-033 | Integrar End-to-End Autonomous Runtime como una sola trayectoria | PLANIFICADO | P-008..P-032 + gaps reconciliados P-037..P-039 según rutas ejercitadas | plan/P-033.md |
 | P-034 | Ejecutar fault injection, recovery y sustained-operation campaign | PLANIFICADO | P-011 + P-012 + P-013 + P-033 | plan/P-034.md |
 | P-035 | Retirar stubs, duplicados y autoridades legacy después de integración | PLANIFICADO | P-008..P-034 + P-037..P-039 materialmente aplicables | plan/P-035.md |
