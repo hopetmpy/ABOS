@@ -319,18 +319,53 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
   };
 
   const listSandboxes = async (): Promise<SandboxInfo[]> => {
-    const result = await request("GET", "/v1/sandboxes");
-    const sandboxes = Array.isArray(result) ? result : result.sandboxes || [];
-    return sandboxes.map((s: any) => ({
-      id: s.id || s.sandbox_id,
-      status: s.status || "unknown",
-      region: s.region || "",
-      vcpu: s.vcpu || 0,
-      memoryMb: s.memory_mb || 0,
-      diskGb: s.disk_gb || 0,
-      terminalUrl: s.terminal_url,
-      createdAt: s.created_at || "",
-    }));
+    const result: unknown = await request("GET", "/v1/sandboxes");
+    // Conway documents { data: [...] }; deployed/legacy providers may use
+    // { sandboxes: [...] } or an array. An unrecognized response is UNKNOWN,
+    // never "no sandbox": P-018 reuse, health and reconciliation depend on it.
+    const response = result && typeof result === "object" && !Array.isArray(result)
+      ? result as Record<string, unknown> : null;
+    const raw: unknown = Array.isArray(result) ? result
+      : response?.data ?? response?.sandboxes;
+    if (!Array.isArray(raw)) {
+      throw new Error("Conway sandbox inventory shape is unrecognized; resource existence UNKNOWN.");
+    }
+    // Do not interpret a partial provider view as an authoritative empty list.
+    // Pagination is not exposed by ConwayProbe: fail closed rather than
+    // treating an unseen page's resources as absent.
+    const total = response?.count ?? response?.total;
+    const hasMore = response?.hasMore === true || response?.has_more === true ||
+      [response?.next_cursor, response?.nextCursor, response?.next_token,
+        response?.nextToken].some(value => typeof value === "string" && value.trim());
+    if (response?.source === "workers_fallback_blocked" ||
+        response?.partial === true || hasMore ||
+        (total !== undefined && (!Number.isSafeInteger(total) ||
+          (total as number) < raw.length || (total as number) > raw.length))) {
+      throw new Error("Conway sandbox inventory is incomplete/unavailable; resource existence UNKNOWN.");
+    }
+    return raw.map((item: unknown): SandboxInfo => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        throw new Error("Conway sandbox inventory has an invalid entry; resource existence UNKNOWN.");
+      }
+      const sandbox = item as Record<string, unknown>;
+      const id = sandbox.id ?? sandbox.sandbox_id;
+      if (typeof id !== "string" || !id.trim()) {
+        throw new Error("Conway sandbox inventory has an unidentifiable resource; existence UNKNOWN.");
+      }
+      const numeric = (value: unknown) => typeof value === "number" &&
+        Number.isSafeInteger(value) && value >= 0 ? value : 0;
+      return {
+        id,
+        status: typeof sandbox.status === "string" ? sandbox.status : "unknown",
+        region: typeof sandbox.region === "string" ? sandbox.region : "",
+        vcpu: numeric(sandbox.vcpu),
+        memoryMb: numeric(sandbox.memory_mb),
+        diskGb: numeric(sandbox.disk_gb),
+        terminalUrl: typeof sandbox.terminal_url === "string"
+          ? sandbox.terminal_url : undefined,
+        createdAt: typeof sandbox.created_at === "string" ? sandbox.created_at : "",
+      };
+    });
   };
 
   // ─── Credits ─────────────────────────────────────────────────
