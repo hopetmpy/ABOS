@@ -17,6 +17,7 @@ import type {
   AwsEc2ProcurementDecision,
 } from "./aws.js";
 import type { EnvironmentProvisionRequest } from "./types.js";
+import { LifecycleProcurementNotDispatchedError } from "./procurement-lifecycle-adapter.js";
 
 interface ClaimedPermit {
   scope: Readonly<ProviderProcurementScope>;
@@ -81,7 +82,7 @@ export function createAwsClaimedProvisionAuthority(db: Database.Database) {
           !["ec2", "aws-ec2-instance"].includes(request.resourceType) ||
           !claimed(scope, authorized.policyDecisionId, authorized.amountCents) ||
           pending.has(scope.resourceId)) {
-        throw new Error(
+        throw new LifecycleProcurementNotDispatchedError(
           "P-031 AWS provisioning mandate lacks exact live P-030 claim, trusted billing interval or resource scope; no provider action authorized.",
         );
       }
