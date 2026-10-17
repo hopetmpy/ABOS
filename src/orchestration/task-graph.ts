@@ -290,8 +290,10 @@ export function completeTask(db: Database, taskId: string, result: TaskResult): 
 
     updateTaskStatus(db, taskId, "completed");
     db.prepare(
-      "UPDATE task_graph SET result = ?, actual_cost_cents = ?, started_at = COALESCE(started_at, ?) WHERE id = ?",
-    ).run(JSON.stringify(result), result.costCents, new Date().toISOString(), taskId);
+      // Completion does not prove when execution began. Preserve UNKNOWN
+      // unless the canonical lifecycle recorded started_at independently.
+      "UPDATE task_graph SET result = ?, actual_cost_cents = ? WHERE id = ?",
+    ).run(JSON.stringify(result), result.costCents, taskId);
 
     unblockReadyBlockedTasks(db);
     refreshGoalStatus(db, task.goalId);
