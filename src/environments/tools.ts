@@ -1,4 +1,9 @@
 import type { AbosTool } from "../types.js";
+import {
+  executeReviewedProviderProcurement,
+  type ProviderProcurementExecutionDependencies,
+  type ProviderProcurementScope,
+} from "../economics/provider-procurement-execution.js";
 import type { EnvironmentLifecycleManager } from "./lifecycle.js";
 import type { EnvironmentRegistry } from "./registry.js";
 import type { EnvironmentSelector } from "./selector.js";
@@ -70,6 +75,15 @@ export interface EnvironmentToolingOptions {
     scopeCoverage: "scoped_records" | "unscoped_records_present";
     limitations: string[];
   };
+  /**
+   * Trusted HOST-supplied economic/dispatch/verification adapter, never a
+   * model-supplied quote or default financial authority. Absent => unavailable;
+   * the agent can still discover/review resources without purchasing.
+   * Existing P-025/P-010/P-030 validations execute again on each request.
+   */
+  getTrustedProcurementDependencies?: (
+    providerId: string,
+  ) => ProviderProcurementExecutionDependencies | null;
 }
 
 export function createEnvironmentTools(
@@ -226,6 +240,106 @@ export function createEnvironmentTools(
         return sanitizeProviderOutput(JSON.stringify(result, null, 2));
       } catch {
         return `UNKNOWN: ${environment} economic observation failed; no account balance, budget or spending authority can be inferred.`;
+      }
+    },
+  });
+
+  tools.push({
+    name: "environment_procurement_execute",
+    description:
+      "Execute one explicitly reviewed and authorized provider-resource acquisition " +
+      "using canonical P-025/P-010/P-030 evidence and an independently trusted host " +
+      "provider adapter. Financial side effects are possible. Never infer funds " +
+      "from a budget, model estimate or review; UNKNOWN/UNAVAILABLE does not buy.",
+    category: "financial",
+    riskLevel: "dangerous",
+    parameters: {
+      type: "object",
+      properties: {
+        operation_key: { type: "string", description: "Stable idempotency key for this exact acquisition attempt." },
+        operation: { type: "string", description: "provision, resize, resume, recover, renew, or other." },
+        provider: { type: "string", description: "Registered provider identifier." },
+        provider_account_id: { type: "string" },
+        unit: { type: "string", description: "Exact provider account monetary unit." },
+        goal_id: { type: "string" },
+        task_id: { type: "string" },
+        path_id: { type: "string", description: "Canonical selected P-025 path ID." },
+        resource_id: { type: "string", description: "Canonical P-018 resource ID." },
+        region: { type: "string" },
+        resource_shape: { type: "string" },
+        external_id: { type: "string", description: "Optional known existing provider resource identity." },
+        policy_decision_id: { type: "string", description: "Previously persisted exact P-010 financial policy decision ID." },
+      },
+      required: [
+        "operation_key", "operation", "provider", "provider_account_id",
+        "unit", "goal_id", "task_id", "path_id", "resource_id",
+        "region", "resource_shape", "policy_decision_id",
+      ],
+    },
+    execute: async (args, context) => {
+      const values = [
+        "operation_key", "operation", "provider", "provider_account_id",
+        "unit", "goal_id", "task_id", "path_id", "resource_id",
+        "region", "resource_shape", "policy_decision_id",
+      ] as const;
+      // Scope is a request, not a financial authority. Reject malformed
+      // values before asking a provider to observe or mutate anything.
+      if (values.some(key => typeof args[key] !== "string" ||
+          !(args[key] as string).trim())) {
+        return "BLOCKED: incomplete procurement scope or policy decision.";
+      }
+      const provider = (args.provider as string).trim();
+      if (!registry.get(provider)) return "UNAVAILABLE: provider is not registered.";
+      const operation = (args.operation as string).trim();
+      if (!["provision", "resize", "resume", "recover", "renew", "other"]
+        .includes(operation)) {
+        return "BLOCKED: unsupported procurement operation.";
+      }
+      if (args.external_id !== undefined &&
+          (typeof args.external_id !== "string" || !args.external_id.trim())) {
+        return "BLOCKED: malformed external resource identity.";
+      }
+      const dependencies = options.getTrustedProcurementDependencies?.(provider);
+      if (!dependencies) {
+        return "UNAVAILABLE: trusted provider finance, dispatch and independent usability adapters are not connected; no monetary action was dispatched.";
+      }
+      const scope: ProviderProcurementScope = {
+        operationKey: (args.operation_key as string).trim(),
+        operation: operation as ProviderProcurementScope["operation"],
+        provider,
+        providerAccountId: (args.provider_account_id as string).trim(),
+        unit: (args.unit as string).trim(),
+        goalId: (args.goal_id as string).trim(),
+        taskId: (args.task_id as string).trim(),
+        pathId: (args.path_id as string).trim(),
+        resourceId: (args.resource_id as string).trim(),
+        region: (args.region as string).trim(),
+        resourceShape: (args.resource_shape as string).trim(),
+        ...(typeof args.external_id === "string" ?
+          { externalId: args.external_id.trim() } : {}),
+      };
+      try {
+        const result = await executeReviewedProviderProcurement(context.db.raw, {
+          scope,
+          policyDecisionId: (args.policy_decision_id as string).trim(),
+          dependencies,
+        });
+        // The result is a P-030 intent/Task usability outcome, not a receipt
+        // for a provider invoice, paid resource or realised profit.
+        return sanitizeProviderOutput(JSON.stringify({
+          status: result.status,
+          dispatched: result.dispatched,
+          operationKey: scope.operationKey,
+          financialEffectId: result.financialEffect?.id ?? null,
+          financialResolution: result.financialEffect?.resolution ?? "UNKNOWN",
+          evidence: result.evidence,
+          supplierSettlement: "UNKNOWN",
+        }));
+      } catch {
+        // Failures before dispatch must not expose provider credentials or
+        // internal request details to inference. Recheck the canonical P-010,
+        // P-025 and P-030 evidence rather than reusing a model assertion.
+        return "BLOCKED: source-verified procurement prerequisites unavailable or invalid; check canonical Task, policy and treasury evidence. No approved new dispatch established.";
       }
     },
   });
