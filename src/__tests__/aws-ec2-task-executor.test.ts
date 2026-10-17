@@ -939,6 +939,8 @@ describe("AwsEc2TaskExecutor", () => {
             CommandId: "cmd-task",
             Status: "Success",
             ResponseCode: 0,
+            ExecutionStartDateTime: "2026-10-16T19:00:00.000Z",
+            ExecutionEndDateTime: "2026-10-16T19:01:10.000Z",
             StandardOutputContent:
               `noise before marker\nABOS_TASK_RESULT_BASE64=${encodedResult(expected)}\n`,
             StandardErrorContent: "",
@@ -978,6 +980,13 @@ describe("AwsEc2TaskExecutor", () => {
       "aws://ec2/i-new/artifact/%2Ftmp%2Fresult.txt",
     ]);
     expect(dispatched.metadata?.delivery).toBe("aws_ssm");
+    expect(dispatched.metadata?.ssmCommandWindow).toEqual({
+      commandId: "cmd-task",
+      startedAt: "2026-10-16T19:00:00.000Z",
+      endedAt: "2026-10-16T19:01:10.000Z",
+    });
+    expect(dispatched.metadata?.ssmCommandWindowAuthority)
+      .toBe("aws_ssm_get_command_invocation_command_only");
     expect(dispatched.metadata?.artifactCollectionState).toBe("pending");
     expect(dispatched.metadata?.remoteArtifacts).toEqual([
       "/tmp/result.txt",
@@ -1087,6 +1096,8 @@ describe("AwsEc2TaskExecutor", () => {
         .extensions["future-provider"],
     ).toEqual({ opaque: true });
     expect(dispatched.metadata?.continuationDelivered).toBe(true);
+    expect(dispatched.metadata?.ssmCommandWindow).toBeNull();
+    expect(dispatched.metadata?.ssmCommandWindowAuthority).toBe("UNKNOWN");
     expect(dispatched.metadata?.continuationProtocolVersion).toBe(
       EXECUTION_CONTINUATION_PROTOCOL_VERSION,
     );
