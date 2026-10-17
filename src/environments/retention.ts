@@ -3,6 +3,7 @@ import type { Database } from "better-sqlite3";
 import type { EnvironmentRegistry } from "./registry.js";
 import type { EnvironmentLifecycleManager } from "./lifecycle.js";
 import type { EnvironmentResource } from "./types.js";
+import { isExplicitInstant } from "./time-evidence.js";
 import {
   getFinancialEffectByOperationKey,
   listFinancialEffectsByStates,
@@ -298,7 +299,7 @@ export class EnvironmentRetentionCoordinator {
       for (const item of quotes) {
         if (!item || typeof item !== "object" || Array.isArray(item) ||
             typeof item.operationKey !== "string") continue;
-        const until = typeof item.supplierStatusValidUntil === "string"
+        const until = isExplicitInstant(item.supplierStatusValidUntil)
           ? Date.parse(item.supplierStatusValidUntil) : NaN;
         if (Number.isFinite(until) && until > now) continue;
         const effect = getFinancialEffectByOperationKey(this.db, item.operationKey);
@@ -323,11 +324,11 @@ export class EnvironmentRetentionCoordinator {
           continue;
         }
         if (!receipt) continue;
-        const observedAt = Date.parse(receipt.observedAt);
-        const validUntil = Date.parse(receipt.validUntil);
+        const observedAt = isExplicitInstant(receipt.observedAt)
+          ? Date.parse(receipt.observedAt) : NaN;
+        const validUntil = isExplicitInstant(receipt.validUntil)
+          ? Date.parse(receipt.validUntil) : NaN;
         const receivedAt = Date.now();
-        const explicit = (v: unknown): v is string => typeof v === "string" &&
-          /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(v);
         const match = receipt.provider === scope.provider &&
           receipt.providerAccountId === scope.providerAccountId &&
           receipt.resourceId === scope.resourceId &&
@@ -339,7 +340,7 @@ export class EnvironmentRetentionCoordinator {
         if (!match || !states || typeof receipt.source !== "string" ||
             !receipt.source.trim() || !Array.isArray(receipt.evidence) ||
             !receipt.evidence.some(e => typeof e === "string" && e.trim()) ||
-            !explicit(receipt.observedAt) || !explicit(receipt.validUntil) ||
+            !isExplicitInstant(receipt.observedAt) || !isExplicitInstant(receipt.validUntil) ||
             !Number.isFinite(observedAt) || !Number.isFinite(validUntil) ||
             observedAt > receivedAt || validUntil <= receivedAt || validUntil <= observedAt) {
           result.evidence.push("Supplier receipt scope, status or provenance invalid; no financial change.");
@@ -355,7 +356,7 @@ export class EnvironmentRetentionCoordinator {
         const prior = oldQuotes.find(x => x && typeof x === "object" &&
           x.operationKey === scope.operationKey);
         if (!prior) continue;
-        const previousAt = typeof prior.supplierStatusObservedAt === "string"
+        const previousAt = isExplicitInstant(prior.supplierStatusObservedAt)
           ? Date.parse(prior.supplierStatusObservedAt) : NaN;
         if (Number.isFinite(previousAt) && previousAt >= observedAt) continue;
         const updated = oldQuotes.map(x => x && typeof x === "object" &&

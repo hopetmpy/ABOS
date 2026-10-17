@@ -324,6 +324,26 @@ describe("EnvironmentRetentionCoordinator", () => {
       expect(fresh.supplierObservations).toBe(0);
       expect(supplierCalls).toBe(1);
 
+      // Date.parse normalizes February 30 to March 2. An impossible cached
+      // supplier expiry cannot defer an independent contract observation.
+      restarted.resources.applyMutation(resource.id, {
+        metadata: {
+          retentionBillingLifecycleQuotes: quotes.map(x => ({
+            ...x, supplierStatusValidUntil: "2027-02-30T12:00:00Z",
+          })),
+        },
+      }, "test", "corrupt cached supplier calendar date");
+      let afterInvalidCacheCalls = 0;
+      const invalidCache = await new EnvironmentRetentionCoordinator(
+        db, registry, restarted,
+        () => async () => {
+          afterInvalidCacheCalls += 1;
+          return null;
+        },
+      ).sweep();
+      expect(invalidCache.supplierObservations).toBe(0);
+      expect(afterInvalidCacheCalls).toBe(1);
+
       // Expire only the cached observation: an account-forged receipt must
       // never erase prior verified status, even on a subsequent host run.
       restarted.resources.applyMutation(resource.id, {
@@ -351,6 +371,28 @@ describe("EnvironmentRetentionCoordinator", () => {
       const unchanged = restarted.resources.get(resource.id)!;
       const retained = unchanged.metadata.retentionBillingLifecycleQuotes as Array<Record<string, unknown>>;
       expect(retained[0]?.supplierCancellationStatus).toBe("cancelled");
+
+      // A syntactically ISO-shaped but nonexistent supplier validity date
+      // is not an authenticated term. Do not persist it as a current receipt.
+      const malformedReceipt = await new EnvironmentRetentionCoordinator(
+        db, registry, restarted,
+        () => async scope => ({
+          ...scope,
+          source: "supplier-contract-read",
+          observedAt: new Date(Date.now() - 1_000).toISOString(),
+          validUntil: "2027-02-30T12:00:00Z",
+          evidence: ["Source response has an impossible Gregorian calendar day."],
+          cancellation: "active",
+          autoRenewal: "enabled",
+          finalInvoice: "finalized",
+        }),
+      ).sweep();
+      expect(malformedReceipt.supplierObservations).toBe(0);
+      expect(malformedReceipt.evidence.join(" ")).toContain("invalid");
+      expect((restarted.resources.get(resource.id)!.metadata
+        .retentionBillingLifecycleQuotes as Array<Record<string, unknown>>)[0]
+        ?.supplierCancellationStatus).toBe("cancelled");
+
       // Failure to create a supplier observer is only a local observation gap:
       // no provider dispatch, no missing cash and no loss of prior receipts.
       const unavailable = await new EnvironmentRetentionCoordinator(

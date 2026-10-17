@@ -195,7 +195,7 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
   });
 
   it("does not buy an undersized or unverified shape even if the strategy, quote and policy are positive", async () => {
-    for (const damage of ["missing_adapter", "undersized", "wrong_resource", "wrong_shape", "expired", "empty_evidence"] as const) {
+    for (const damage of ["missing_adapter", "undersized", "wrong_resource", "wrong_shape", "expired", "invalid_calendar", "empty_evidence"] as const) {
       const { db, scope } = setup();
       try {
         setNeed(db, scope);
@@ -207,6 +207,7 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
         if (damage === "wrong_resource") badFit.resourceId = "different-resource";
         if (damage === "wrong_shape") badFit.resourceShape = "t3.nano";
         if (damage === "expired") badFit.validUntil = "2026-10-02T00:00:00Z";
+        if (damage === "invalid_calendar") badFit.validUntil = "2027-02-30T00:00:00Z";
         if (damage === "empty_evidence") badFit.evidence = [];
         const deps = {
           ...adapters(quote, calls),
@@ -225,7 +226,7 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
   it("never charges for a shorter, stale, mismatched or unknown supplier billing interval", async () => {
     for (const mode of [
       "missing", "too_short", "wrong_resource", "wrong_shape",
-      "mismatched_periods", "expired", "no_source",
+      "mismatched_periods", "expired", "invalid_calendar", "no_source",
     ] as const) {
       const { db, scope } = setup();
       try {
@@ -239,6 +240,7 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
         if (mode === "wrong_shape") coverage.resourceShape = "different-instance";
         if (mode === "mismatched_periods") coverage.pricedBillingPeriods = 1;
         if (mode === "expired") coverage.validUntil = "2026-10-02T00:00:00Z";
+        if (mode === "invalid_calendar") coverage.validUntil = "2027-02-30T00:00:00Z";
         if (mode === "no_source") coverage.source = "";
         const policyDecisionId = policy(db, scope, quote);
         await expect(executeReviewedProviderProcurement(db.raw, {

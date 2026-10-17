@@ -5,6 +5,7 @@
  */
 import type { TreasuryProjection } from "./treasury-projection.js";
 import type { EnvironmentEconomicObservation } from "../environments/types.js";
+import { isExplicitInstant } from "../environments/time-evidence.js";
 
 export interface TreasuryRiskScenario {
   id: string;
@@ -346,16 +347,13 @@ export function assessQuotedResourceUsageCoverage(
   } else {
     const observed = Date.parse(quote.observedAt);
     const validUntil = Date.parse(quote.validUntil);
-    const explicit = (value: string) =>
-      typeof value === "string" &&
-      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value);
     if (quote.resourceId !== input.resourceId ||
         quote.resourceShape !== input.resourceShape) {
       conditions.push("Supplier usage quote belongs to another resource or shape.");
     }
     if (!quote.source?.trim() || !Array.isArray(quote.evidence) ||
         !quote.evidence.some(x => typeof x === "string" && x.trim()) ||
-        !explicit(quote.observedAt) || !explicit(quote.validUntil) ||
+        !isExplicitInstant(quote.observedAt) || !isExplicitInstant(quote.validUntil) ||
         !Number.isFinite(observed) || !Number.isFinite(validUntil) ||
         observed > now.getTime() || validUntil <= now.getTime() ||
         validUntil <= observed) {
@@ -527,10 +525,12 @@ export function assessProviderProcurementScenario(
   if (input.financing.unit !== unit || input.financing.accountId !== accountId) {
     conditions.push("Account or monetary unit of financing does not match proposed provider obligation.");
   }
-  const fundingValidUntil = input.financing.validUntil == null
-    ? null : Date.parse(input.financing.validUntil);
-  const fundingObservedAt = input.financing.observedAt == null
-    ? null : Date.parse(input.financing.observedAt);
+  // Financing provenance needs a real calendar instant, not a timestamp
+  // silently normalized by Date.parse from a nonexistent supplier date.
+  const fundingValidUntil = isExplicitInstant(input.financing.validUntil)
+    ? Date.parse(input.financing.validUntil) : null;
+  const fundingObservedAt = isExplicitInstant(input.financing.observedAt)
+    ? Date.parse(input.financing.observedAt) : null;
   const fundingAgeUsable = fundingObservedAt !== null &&
     Number.isFinite(fundingObservedAt) &&
     fundingObservedAt <= now.getTime() &&
