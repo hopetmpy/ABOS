@@ -642,6 +642,58 @@ describe("P-031 AWS real lifecycle secondary gate, synthetic account only", () =
     } finally { db.close(); }
   });
 
+  it("releases a P-030 intent as rejected when the second AWS mandate cannot match trusted resource shape", async () => {
+    const { db, scope: original, registry, args } = setup();
+    try {
+      const scope: ProviderProcurementScope = {
+        ...original, provider: "aws", providerAccountId: "123456789012",
+        region: "us-east-1", resourceShape: "t3.small",
+      };
+      const quote = createScenario();
+      quote.provider = "aws"; quote.accountId = scope.providerAccountId;
+      quote.financing.accountId = scope.providerAccountId;
+      const externalProvision = vi.fn(async () => ({
+        externalId: "must-never-exist", status: "ready" as const,
+      }));
+      registry.register({
+        id: "aws",
+        inspect: async () => ({
+          id: "aws", label: "Synthetic AWS secondary preflight",
+          availability: "available" as const,
+          capabilities: ["compute"], evidence: ["test"], constraints: [],
+          observedAt: new Date().toISOString(),
+        }),
+        provision: externalProvision,
+      } as any);
+      const authority = createAwsClaimedProvisionAuthority(db.raw);
+      const lifecycle = new EnvironmentLifecycleManager(
+        registry, new EnvironmentResourceStore(db.raw),
+      );
+      const dependencies = createLifecycleProcurementDependencies(lifecycle, {
+        observeAuthenticatedEconomics: async () => quote,
+        issuePolicyDecision: async () => exactP010Decision(db, scope, quote),
+        resolveProvisionRequest: async () => ({
+          resourceType: "ec2",
+          retentionPolicy: "until_goal_complete" as const,
+          requiredCapabilities: ["remote compute"],
+          metadata: { instanceType: "t3.micro" }, // stale host specification
+        }),
+      }, authority);
+      const tool = createEnvironmentTools(registry, {
+        getTrustedProcurementDependencies: () => dependencies,
+      }).find(t => t.name === "environment_procurement_execute")!;
+      const result = JSON.parse(await tool.execute({
+        ...args, provider: "aws", provider_account_id: scope.providerAccountId,
+        region: scope.region, resource_shape: scope.resourceShape,
+      }, { db } as any));
+      expect(result.status).toBe("rejected");
+      expect(result.dispatched).toBe(false);
+      expect(result.financialEffectState).toBe("rejected");
+      expect(result.supplierSettlement).toBe("UNKNOWN");
+      expect(externalProvision).not.toHaveBeenCalled();
+    } finally { db.close(); }
+  });
+
   it("rejects a forged AWS secondary mandate without a matching live P-030 dispatch claim", async () => {
     const { db, scope: original } = setup();
     try {
