@@ -288,7 +288,12 @@ export class EnvironmentRetentionCoordinator {
           !resource.externalId) continue;
       const quotes = resource.metadata.retentionBillingLifecycleQuotes;
       if (!Array.isArray(quotes) || quotes.length === 0) continue;
-      const observer = this.trustedSupplierObserver(resource.provider);
+      let observer: TrustedSupplierContractObserver | null;
+      try { observer = this.trustedSupplierObserver(resource.provider); }
+      catch {
+        result.evidence.push("Trusted supplier observer factory unavailable; physical cleanup remains independent.");
+        continue;
+      }
       if (!observer) continue;
       for (const item of quotes) {
         if (!item || typeof item !== "object" || Array.isArray(item) ||
@@ -320,6 +325,7 @@ export class EnvironmentRetentionCoordinator {
         if (!receipt) continue;
         const observedAt = Date.parse(receipt.observedAt);
         const validUntil = Date.parse(receipt.validUntil);
+        const receivedAt = Date.now();
         const explicit = (v: unknown): v is string => typeof v === "string" &&
           /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(v);
         const match = receipt.provider === scope.provider &&
@@ -335,7 +341,7 @@ export class EnvironmentRetentionCoordinator {
             !receipt.evidence.some(e => typeof e === "string" && e.trim()) ||
             !explicit(receipt.observedAt) || !explicit(receipt.validUntil) ||
             !Number.isFinite(observedAt) || !Number.isFinite(validUntil) ||
-            observedAt > now || validUntil <= now || validUntil <= observedAt) {
+            observedAt > receivedAt || validUntil <= receivedAt || validUntil <= observedAt) {
           result.evidence.push("Supplier receipt scope, status or provenance invalid; no financial change.");
           continue;
         }

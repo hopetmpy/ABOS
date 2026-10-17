@@ -776,3 +776,9 @@ NEXT_ELIGIBLE_WORK: investigate source-backed goal/task requirements to derive c
 - Product PR #181 merged main `97046cbbba71260825a36f1361b96a28221ad1d3`; exact main CI run `39013142850` SUCCESS 8/8. Supplier-quoted renewal/exit obligations are now durable in existing P-030 financial intent and visible on retired P-018 resource, even for completed initial purchases.
 - Source/economic boundary remains open: physical resource release proves neither supplier contract cancellation nor final bill/refund. Trusted provider-authenticated post-release contract state and actual provider funding/price/issuer are not supplied by ordinary CLI. No E5/E6 economic claim. P-031 EN_EJECUCIÓN, P-032 PLANIFICADO, P-005 LIVE UNKNOWN.
 - State and next source-eligible audit in `continuity/C0028.md`: existing P-018/P-030 ownership first; narrow post-retirement supplier-observation reconciliation if genuine source gap, with no duplicate money authority or inferred cancellation.
+
+
+### P-031 — supplier contract observation PR #182 (2026-10-17)
+
+- Initial PR #182 source head `d4e995be19c4414a539dd297121806240ef37f4e` CI `39048473885` SUCCESS 8/8. Follow-up source hardening and documentation are pending final exact-HEAD CI; do not claim integrated on this checkpoint. Details and scope in `continuity/C0028.md`.
+- Existing P-018 lifecycle owner now has an optional host-only supplier contract observer (not provisioned in default CLI); P-030 financial effects untouched. Model arguments never become supplier account receipt; independent cancellation/renewal/invoice observation is neither actual payment nor refund. P-031 EN_EJECUCIÓN, P-005 LIVE UNKNOWN, P-032 PLANIFICADO.

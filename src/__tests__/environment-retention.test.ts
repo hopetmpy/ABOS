@@ -351,6 +351,15 @@ describe("EnvironmentRetentionCoordinator", () => {
       const unchanged = restarted.resources.get(resource.id)!;
       const retained = unchanged.metadata.retentionBillingLifecycleQuotes as Array<Record<string, unknown>>;
       expect(retained[0]?.supplierCancellationStatus).toBe("cancelled");
+      // Failure to create a supplier observer is only a local observation gap:
+      // no provider dispatch, no missing cash and no loss of prior receipts.
+      const unavailable = await new EnvironmentRetentionCoordinator(
+        db, registry, restarted, () => {
+          throw new Error("provider contract API not configured");
+        },
+      ).sweep();
+      expect(unavailable.supplierObservations).toBe(0);
+      expect(unavailable.evidence.join(" ")).toContain("observer factory unavailable");
       expect(getFinancialEffectByOperationKey(db, key)?.state).toBe("completed");
     } finally { db.close(); }
   });
