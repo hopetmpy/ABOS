@@ -467,7 +467,7 @@ describe("P-031 agent environment_procurement_execute runtime route", () => {
           }),
         }),
       }).find(t => t.name === "environment_procurement_execute")!;
-      expect(JSON.stringify(tool.parameters)).not.toContain('"policy_decision_id"]');
+      expect(tool.parameters.required as string[]).not.toContain("policy_decision_id");
       const first = JSON.parse(await tool.execute(args, { db } as any));
       expect(first.status).toBe("usable");
       expect(first.dispatched).toBe(true);
