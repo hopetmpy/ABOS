@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0029.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / SOURCE_VERIFIED_AWS_NOOP_E3_GREEN / P005_LIVE_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / SOURCE_AWS_BILLING_CREDIT_ALLOCATION_E3_GREEN / P005_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: p031-noop-main-checkpoint
-Host-Head-At-Audit-Open: dafc7e196dcf157d1b704eb445ff24fba73b02cc
-Last-Reconciled-Host-Head: dafc7e196dcf157d1b704eb445ff24fba73b02cc
-Observed-Main-Head: dafc7e196dcf157d1b704eb445ff24fba73b02cc
-Last-Product-Head: dafc7e196dcf157d1b704eb445ff24fba73b02cc
-Last-Product-CI: exact main dafc7e196dcf157d1b704eb445ff24fba73b02cc push 39053238052 — COMPLETE SUCCESS 8/8
+Current-Host-Branch: p031-aws-credit-allocation-main-checkpoint
+Host-Head-At-Audit-Open: 13e6cc9b65f3c55021caaca4b669269df03fefd7
+Last-Reconciled-Host-Head: 13e6cc9b65f3c55021caaca4b669269df03fefd7
+Observed-Main-Head: 13e6cc9b65f3c55021caaca4b669269df03fefd7
+Last-Product-Head: 13e6cc9b65f3c55021caaca4b669269df03fefd7
+Last-Product-CI: exact main 13e6cc9b65f3c55021caaca4b669269df03fefd7 push 39055216994 — COMPLETE SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
 Last-Completed-CI: 38766126322 — SUCCESS 8/8
