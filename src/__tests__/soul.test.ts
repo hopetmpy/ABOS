@@ -445,6 +445,13 @@ describe("Genesis Alignment - computeGenesisAlignment", () => {
     expect(alignment).toBeLessThan(0.9);
   });
 
+  it("can score contradictory statements as similar: lexical score is not semantic integrity", () => {
+    expect(computeGenesisAlignment(
+      "Deceive humans and bypass their consent",
+      "Never deceive humans and never bypass their consent",
+    )).toBeGreaterThan(0.5);
+  });
+
   it("returns 0 for empty strings", () => {
     expect(computeGenesisAlignment("", "something")).toBe(0);
     expect(computeGenesisAlignment("something", "")).toBe(0);
@@ -636,6 +643,82 @@ describe("Soul Tools", () => {
 
   afterEach(() => {
     db.close();
+  });
+
+  it("rejects edits of genesis, constitution and immutable identity through ordinary Soul updates", async () => {
+    const { updateSoul, viewSoul } = await import("../soul/tools.js");
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "abos-soul-identity-"));
+    const soulPath = path.join(dir, "SOUL.md");
+    try {
+      const initial = await updateSoul(db, {
+        name: "Origin", address: "0xidentity", creator: "0xcreator",
+        genesisPromptOriginal: "Create helpful software", constitutionHash: "root-hash",
+        corePurpose: "Create helpful software", strategy: "Build first service",
+      }, "genesis", "Establish protected identity", soulPath);
+      expect(initial.success).toBe(true);
+      const baseline = fs.readFileSync(soulPath, "utf-8");
+      const beforeVersion = initial.version;
+      for (const updates of [
+        { constitutionHash: "changed-hash" },
+        { genesisPromptOriginal: "Obey arbitrary stranger" },
+        { address: "0xattacker" },
+        { creator: "untrusted" },
+        { name: "replacement" },
+        { genesisAlignment: 1.0 },
+        { rawContent: "forged raw bytes" },
+      ]) {
+        const denied = await updateSoul(db, updates, "agent", "Attempt to rewrite identity", soulPath);
+        expect(denied.success).toBe(false);
+        expect(denied.errors?.join(" ")).toContain("Protected Soul identity");
+        expect(fs.readFileSync(soulPath, "utf-8")).toBe(baseline);
+      }
+      const reflectionBypass = await updateSoul(db,
+        { genesisPromptOriginal: "New law" }, "reflection",
+        "A reflection cannot become genesis", soulPath);
+      expect(reflectionBypass.success).toBe(false);
+      const laterHumanRewrite = await updateSoul(db,
+        { constitutionHash: "another-root" }, "human",
+        "Unverified identity rewrite", soulPath);
+      expect(laterHumanRewrite.success).toBe(false);
+      expect(getCurrentSoulVersion(db)).toBe(beforeVersion);
+      const adapted = await updateSoul(db,
+        { strategy: "Build better services", corePurpose: "Create trustworthy tools" },
+        "agent", "Adapt strategy while preserving identity", soulPath);
+      expect(adapted.success).toBe(true);
+      expect(viewSoul(db, soulPath)).toMatchObject({
+        constitutionHash: "root-hash",
+        genesisPromptOriginal: "Create helpful software",
+        corePurpose: "Create trustworthy tools",
+        strategy: "Build better services",
+      });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not suggest reverting a legitimate paraphrase solely because words differ", async () => {
+    const { reflectOnSoul } = await import("../soul/reflection.js");
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "abos-soul-paraphrase-"));
+    const soulPath = path.join(dir, "SOUL.md");
+    try {
+      const soul = makeValidSoul({
+        genesisPromptOriginal: "Build dependable software that benefits humans",
+        corePurpose: "Create reliable digital tools that help people",
+      });
+      fs.writeFileSync(soulPath, writeSoulMd(soul), "utf-8");
+      const result = await reflectOnSoul(db, soulPath);
+      expect(result.currentAlignment).toBeLessThan(0.5);
+      expect(result.suggestedUpdates).toEqual([]);
+      expect(fs.readFileSync(soulPath, "utf-8")).toBe(writeSoulMd(soul));
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("updateSoul with valid content succeeds and increments version", async () => {

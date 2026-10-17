@@ -2731,7 +2731,7 @@ Model: ${ctx.inference.getDefaultModel()}
           section: {
             type: "string",
             description:
-              "Section to update: corePurpose, values, behavioralGuidelines, personality, boundaries, strategy",
+              "Writable SOUL/v1 body field: corePurpose, values, behavioralGuidelines, personality, boundaries, strategy, capabilities, relationships, financialCharacter. Identity/constitution/genesis metadata are protected.",
           },
           content: {
             type: "string",
@@ -2747,11 +2747,22 @@ Model: ${ctx.inference.getDefaultModel()}
       },
       execute: async (args, ctx) => {
         const { updateSoul } = await import("../soul/tools.js");
-        const section = args.section as string;
+        const section = typeof args.section === "string" ? args.section.trim() : "";
         const content = args.content as string;
         const reason = args.reason as string;
+        // This is a list of SOUL/v1 writable sections, not a closed catalogue
+        // of abilities. Agent-provided section names must not become arbitrary
+        // JS object keys (especially protected identity/genesis metadata).
+        const editable = new Set([
+          "corePurpose", "values", "behavioralGuidelines", "personality",
+          "boundaries", "strategy", "capabilities", "relationships",
+          "financialCharacter",
+        ]);
+        if (!editable.has(section)) {
+          return "BLOCKED: section is not a writable SOUL/v1 body field.";
+        }
 
-        const updates: Record<string, unknown> = {};
+        const updates: Record<string, unknown> = Object.create(null);
         if (
           ["values", "behavioralGuidelines", "boundaries"].includes(section)
         ) {
@@ -2791,7 +2802,7 @@ Model: ${ctx.inference.getDefaultModel()}
         const reflection = await reflectOnSoul(ctx.db.raw);
 
         const lines: string[] = [
-          `Genesis alignment: ${reflection.currentAlignment.toFixed(2)}`,
+          `Genesis lexical overlap (diagnostic, not semantic identity proof): ${reflection.currentAlignment.toFixed(2)}`,
           `Auto-updated sections: ${reflection.autoUpdated.length > 0 ? reflection.autoUpdated.join(", ") : "none"}`,
         ];
 

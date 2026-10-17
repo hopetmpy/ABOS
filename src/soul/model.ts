@@ -27,8 +27,9 @@ export function createHash(content: string): string {
 // ─── Genesis Alignment ──────────────────────────────────────────
 
 /**
- * Compute alignment between current soul and genesis prompt.
- * Uses Jaccard + recall similarity on word sets.
+ * Legacy diagnostic of lexical token overlap between current purpose and
+ * genesis wording. Jaccard + recall are NOT semantic alignment, proof of
+ * unchanged constitution or authority for identity/purpose reversion.
  */
 export function computeGenesisAlignment(
   currentPurpose: string,
