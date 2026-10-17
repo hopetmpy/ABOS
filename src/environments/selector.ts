@@ -107,6 +107,17 @@ export class EnvironmentSelector {
         unresolved: ["minimumCapacity must contain positive finite numbers with nonempty unit-explicit metric keys; invalid sizing cannot authorize provisioning."],
       };
     }
+    // A requested resource lifetime is not a Task watchdog. Reject malformed
+    // or zero durations BEFORE provider ranking, rather than letting supplier
+    // estimates turn them into a $0 or nonrepresentable obligation.
+    if (requirements.expectedDurationMs != null &&
+        (!Number.isSafeInteger(requirements.expectedDurationMs) ||
+          requirements.expectedDurationMs <= 0)) {
+      return {
+        selected: null, candidates: [],
+        unresolved: ["expectedDurationMs requires independently sourced positive safe integer resource-use milliseconds; invalid duration cannot infer zero provider cost."],
+      };
+    }
     if (requirements.neededByAt != null &&
         !isExplicitInstant(requirements.neededByAt)) {
       return {
