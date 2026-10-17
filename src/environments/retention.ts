@@ -3,7 +3,10 @@ import type { Database } from "better-sqlite3";
 import type { EnvironmentRegistry } from "./registry.js";
 import type { EnvironmentLifecycleManager } from "./lifecycle.js";
 import type { EnvironmentResource } from "./types.js";
-import { listUnresolvedFinancialEffects } from "../economics/financial-effects.js";
+import {
+  listFinancialEffectsByStates,
+  listUnresolvedFinancialEffects,
+} from "../economics/financial-effects.js";
 
 export interface EnvironmentRetentionSweepResult {
   evaluated: number;
@@ -419,16 +422,52 @@ export class EnvironmentRetentionCoordinator {
       .filter(effect => effect.effectKind === "provider_resource_procurement" &&
         effect.provider === resource.provider &&
         effect.request.resourceId === resource.id);
+    // A first supplier invoice may be settled while an automatic renewal or
+    // cancellation obligation remains. Retention must not inspect only
+    // unresolved intents: approved lifecycle terms of COMPLETED acquisitions
+    // also matter for follow-up contract review. The canonical financial
+    // journal is read-only here; rejected-before-dispatch intents are excluded.
+    const lifecycleQuotes = listFinancialEffectsByStates(this.db, [
+      "prepared", "dispatching", "pending", "unknown",
+      "reconciliation_required", "completed",
+    ]).filter(effect =>
+      effect.effectKind === "provider_resource_procurement" &&
+      effect.provider === resource.provider &&
+      effect.request.resourceId === resource.id,
+    ).map(effect => {
+      const raw = effect.request.supplierLifecycleQuote;
+      const quote = raw && typeof raw === "object" && !Array.isArray(raw)
+        ? raw as Record<string, unknown> : {};
+      const renewal = ["none", "manual", "automatic"].includes(String(quote.renewal))
+        ? String(quote.renewal) : "unknown";
+      const amount = (value: unknown) =>
+        typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+          ? value : null;
+      return {
+        operationKey: effect.operationKey,
+        financialEffectState: effect.state,
+        renewalQuoted: renewal,
+        additionalCommittedRenewalCents:
+          amount(quote.additionalCommittedRenewalCents),
+        additionalExitChargeCents: amount(quote.additionalExitChargeCents),
+        cancellationRouteDocumented: quote.cancellationRouteDocumented === true,
+        // Quote terms never establish the current contract/cancellation
+        // status, zero further supplier bills, credit or reimbursement.
+        supplierCancellationStatus: "UNKNOWN",
+      };
+    });
     this.lifecycle.resources.applyMutation(resource.id, {
       metadata: {
         retentionBillingReconciliation: "unverified_after_resource_release",
         retentionBillingObservedAt: new Date().toISOString(),
         retentionBillingUnresolvedOperationKeys: unresolved.map(effect => effect.operationKey),
         retentionBillingUnresolvedCount: unresolved.length,
+        retentionBillingLifecycleQuotes: lifecycleQuotes,
       },
       evidence: [
         `P-031 resource release identified ${unresolved.length} locally unresolved provider-procurement financial intent(s) for this exact provider/resource; canonical P-030 financial effects remain unchanged.`,
         "Provider resource termination is not evidence of contract cancellation, disabled auto-renewal, final invoice, settled payment or refund. Supplier billing reconciliation remains UNKNOWN even when no local intent is recorded.",
+        `P-031 retained ${lifecycleQuotes.length} canonical source-quoted lifecycle term record(s), including completed purchase intents. Renewal and exit quotations are not evidence of executed cancellation or absent future billing.`,
       ],
     }, "retention_billing_reconciliation",
     "Resource retired; supplier billing outcome separately unverified.");
