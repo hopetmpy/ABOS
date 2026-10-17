@@ -315,6 +315,7 @@ function describeResourceTaskMeteringTime(
   const providerPeriod =
     metadata.cpuUtilizationMetricSource === "aws_cloudwatch_AWS/EC2_CPUUtilization_Average" &&
     metadata.cpuUtilizationPeriodEvidence === "requested_only" &&
+    typeof metadata.cpuUtilizationRequestedPeriodSeconds === "number" &&
     Number.isSafeInteger(metadata.cpuUtilizationRequestedPeriodSeconds) &&
     (metadata.cpuUtilizationRequestedPeriodSeconds as number) > 0 &&
     (metadata.cpuUtilizationRequestedPeriodSeconds as number) <= Number.MAX_SAFE_INTEGER / 1000
