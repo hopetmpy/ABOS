@@ -25,6 +25,7 @@ import {
 } from "./planner.js";
 import { ColonyMessaging, type AgentMessage } from "./messaging.js";
 import { generateTodoMd } from "./attention.js";
+import { createTaskExecutionEnvelope } from "./task-execution-envelope.js";
 import { UnifiedInferenceClient } from "../inference/inference-client.js";
 import { reviewPlan } from "./plan-mode.js";
 import { buildPlannerContext, getNextPlannerVersion, persistPlannerArtifacts } from "./planner-context.js";
@@ -58,6 +59,7 @@ const logger = createLogger("orchestration.orchestrator");
 
 const ORCHESTRATOR_STATE_KEY = "orchestrator.state";
 const ORCHESTRATOR_TODO_KEY = "orchestrator.todo_md";
+const COLONY_ASSIGNMENT_KEY_PREFIX = "orchestrator.colony_assignment.";
 const DEFAULT_TASK_FUNDING_CENTS = 25;
 
 /**
@@ -99,6 +101,7 @@ interface TaskResultEnvelope {
   goalId: string | null;
   result: TaskResult;
   sourceAddress?: string | null;
+  assignmentMessageId?: string | null;
   error?: string;
 }
 
@@ -358,7 +361,11 @@ export class Orchestrator {
       if (
         !sameAgentAddress(entry.message.from, taskRow.assignedTo) ||
         (entry.message.goalId != null && entry.message.goalId !== taskRow.goalId) ||
-        (entry.message.taskId != null && entry.message.taskId !== taskRow.id)
+        (entry.message.taskId != null && entry.message.taskId !== taskRow.id) ||
+        !isCurrentColonyAssignmentResult(
+          this.params.db, taskRow, entry.message.from,
+          parsed.assignmentMessageId ?? null,
+        )
       ) {
         logger.warn("Ignored asynchronous Task result from non-authoritative assignment", {
           taskId: taskRow.id,
@@ -844,19 +851,21 @@ export class Orchestrator {
             taskId: executionTask.id,
             priority: "high",
             requiresResponse: true,
-            content: JSON.stringify({
-              taskId: executionTask.id,
-              title: executionTask.title,
-              description: executionTask.description,
-              agentRole: executionTask.agentRole,
-              dependencies: executionTask.dependencies,
-              timeoutMs: executionTask.metadata.timeoutMs,
-              requiredCapabilities: executionTask.requiredCapabilities ?? [],
-              preferredEnvironment: executionTask.preferredEnvironment ?? null,
-              strategicPathId: executionTask.strategicPathId ?? null,
-            }),
+            content: JSON.stringify(createTaskExecutionEnvelope(executionTask)),
           });
 
+          // Transport identity only, never a Task execution-start clock.
+          // Persist before network send so an immediate reply cannot precede
+          // our durable authorization of its assignment message identity.
+          this.params.db.prepare(
+            "INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))",
+          ).run(COLONY_ASSIGNMENT_KEY_PREFIX + executionTask.id, JSON.stringify({
+            messageId: message.id,
+            goalId: executionTask.goalId,
+            taskId: executionTask.id,
+            workerAddress: assignment.agentAddress,
+            retryCount: executionTask.metadata.retryCount,
+          }));
           await this.params.messaging.send(message);
         }
 
@@ -905,10 +914,19 @@ export class Orchestrator {
 
     for (const event of this.pendingTaskResults) {
       const taskRow = getTaskById(this.params.db, event.taskId);
-      if (!taskRow || taskRow.status === "cancelled") {
-        // A late result from a superseded path is evidence from an obsolete
-        // execution branch. It must not resurrect or fail the current plan.
+      if (!taskRow || (taskRow.status !== "assigned" && taskRow.status !== "running")) {
+        // Neither a terminal Task nor a cancelled/superseded path may be
+        // resurrected by a late or duplicate remote delivery.
         continue;
+      }
+      if (event.sourceAddress &&
+          (!taskRow.assignedTo ||
+            !sameAgentAddress(event.sourceAddress, taskRow.assignedTo) ||
+            !isCurrentColonyAssignmentResult(
+              this.params.db, taskRow, event.sourceAddress,
+              event.assignmentMessageId ?? null,
+            ))) {
+        continue; // ownership or generation changed after inbox processing
       }
 
       if (event.result.success) {
@@ -1519,41 +1537,53 @@ function sameAgentAddress(left: string, right: string): boolean {
   return left === right;
 }
 
-function parseTaskResultMessage(message: AgentMessage): TaskResultEnvelope | null {
-  const payload = safeJsonParse(message.content);
-  const fallbackTaskId = typeof message.taskId === "string" ? message.taskId : null;
-
-  if (!payload || typeof payload !== "object") {
-    if (!fallbackTaskId) {
-      return null;
-    }
-
-    return {
-      taskId: fallbackTaskId,
-      goalId: message.goalId,
-      result: {
-        success: true,
-        output: message.content,
-        artifacts: [],
-        costCents: 0,
-        duration: 0,
-      },
-    };
+/**
+ * Parent-side receipt validation. Canonical Colony result messages carry
+ * assignmentMessageId; it must match the latest durable Task assignment even
+ * when a previous attempt used the same worker address after a retry.
+ * A legacy source without a persisted assignment marker stays supported, but
+ * never upgrades an unverifiable remote timestamp to execution evidence.
+ */
+function isCurrentColonyAssignmentResult(
+  db: Database,
+  task: TaskGraphRow,
+  sourceAddress: string,
+  assignmentMessageId: string | null,
+): boolean {
+  try {
+    const row = db.prepare("SELECT value FROM kv WHERE key = ?")
+      .get(COLONY_ASSIGNMENT_KEY_PREFIX + task.id) as { value: string } | undefined;
+    if (!row) return assignmentMessageId === null;
+    const receipt = JSON.parse(row.value) as Record<string, unknown>;
+    return typeof assignmentMessageId === "string" &&
+      receipt.messageId === assignmentMessageId &&
+      receipt.taskId === task.id &&
+      receipt.goalId === task.goalId &&
+      receipt.retryCount === task.retryCount &&
+      typeof receipt.workerAddress === "string" &&
+      sameAgentAddress(receipt.workerAddress, sourceAddress);
+  } catch {
+    return false; // damaged receipt is UNKNOWN, never proof of assignment
   }
+}
 
-  const obj = payload as Record<string, unknown>;
-  const nested = obj.result && typeof obj.result === "object"
-    ? obj.result as Record<string, unknown>
-    : obj;
-
-  const taskId = firstString(obj.taskId, fallbackTaskId);
-  if (!taskId) {
+function parseTaskResultMessage(message: AgentMessage): TaskResultEnvelope | null {
+  const obj = safeJsonParse(message.content);
+  if (!obj) return null; // never turn arbitrary plain text into a successful Task
+  const nested = obj.result && typeof obj.result === "object" &&
+    !Array.isArray(obj.result) ? obj.result as Record<string, unknown> : obj;
+  const taskId = firstString(obj.taskId, message.taskId);
+  if (!taskId || (message.taskId && taskId !== message.taskId)) return null;
+  if (typeof nested.success !== "boolean" && typeof obj.success !== "boolean") {
+    return null; // no implicit success in remote results
+  }
+  if ("assignmentMessageId" in obj &&
+      (typeof obj.assignmentMessageId !== "string" || obj.assignmentMessageId.length === 0)) {
     return null;
   }
 
-  const success = firstBoolean(nested.success, obj.success, true);
+  const success = firstBoolean(nested.success, obj.success);
   const output = firstString(nested.output, obj.output, success ? "ok" : "task failed") ?? "";
-
   const result: TaskResult = {
     success,
     output,
@@ -1561,11 +1591,12 @@ function parseTaskResultMessage(message: AgentMessage): TaskResultEnvelope | nul
     costCents: firstNumber(nested.costCents, obj.costCents, 0),
     duration: firstNumber(nested.duration, obj.duration, 0),
   };
-
   return {
     taskId,
     goalId: message.goalId,
     result,
+    assignmentMessageId: typeof obj.assignmentMessageId === "string"
+      ? obj.assignmentMessageId : null,
     error: success ? undefined : (firstString(obj.error, output) ?? undefined),
   };
 }
