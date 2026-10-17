@@ -195,6 +195,7 @@ function summarizeOwnedResourceInventory(
  * interval, causal contribution or provider bill.
  */
 interface RecordedResourceAssignment {
+  eventId: string;
   goalId: string | null;
   taskId: string | null;
   operation: string;
@@ -209,7 +210,7 @@ function recordedAssignmentHistory(
   try {
     const limit = 1024; // bounded model projection; saturation never implies no prior assignment
     const rows = db.prepare(`
-      SELECT v.goal_id AS goalId, v.task_id AS taskId,
+      SELECT e.id AS eventId, v.goal_id AS goalId, v.task_id AS taskId,
              e.operation AS operation, e.created_at AS observedAt,
              e.from_status AS fromStatus, e.to_status AS toStatus
       FROM environment_resource_events e
@@ -220,6 +221,16 @@ function recordedAssignmentHistory(
       ORDER BY e.created_at DESC, e.rowid DESC
       LIMIT ?
     `).all(resourceId, limit) as RecordedResourceAssignment[];
+    // P-018 may retain events from before P-013 or from an interrupted
+    // evidence write. INNER JOIN alone silently erases those transitions.
+    // Likewise multiple P-013 snapshots for one P-018 event are ambiguous.
+    // Neither situation can establish continuous historical ownership.
+    const total = db.prepare(
+      "SELECT COUNT(*) AS count FROM environment_resource_events WHERE resource_id = ?"
+    ).get(resourceId) as { count: number };
+    const distinctIds = new Set(rows.map(row => row.eventId));
+    const incomplete = rows.length === limit ||
+      total.count !== distinctIds.size || distinctIds.size !== rows.length;
     rows.reverse();
     const transitions: RecordedResourceAssignment[] = [];
     for (const row of rows) {
@@ -227,7 +238,7 @@ function recordedAssignmentHistory(
       if (!previous || previous.goalId !== row.goalId ||
           previous.taskId !== row.taskId) transitions.push(row);
     }
-    return { observations: transitions, events: rows, incomplete: rows.length === limit };
+    return { observations: transitions, events: rows, incomplete };
   } catch {
     return null; // Legacy/lean embeddings must preserve UNKNOWN.
   }
@@ -487,7 +498,7 @@ function describeResourceOutcomeLinks(db: Database, goalId?: string): string | n
       `cpuSampleTaskTimeEvidence=${meteringTime}` +
       (historicalLines.length ? "\n  " + historicalLines.join("\n  ") : "") +
       (history && (history.incomplete || assignments.length > historicalLines.length)
-        ? "\n  Historical assignment journal truncated for planner context; enumerate P-018/P-013 for full sequence." : "");
+        ? "\n  Historical assignment journal incomplete or truncated for planner context; enumerate P-018/P-013 for full sequence." : "");
   });
   return [
     "P-031 observed resource/Task/Goal links (P-018/P-013/P-025/P-030, READ ONLY; " +
