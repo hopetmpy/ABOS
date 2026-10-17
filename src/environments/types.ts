@@ -282,6 +282,26 @@ export interface EnvironmentEconomicObservation {
     purchaseTypeApplications: string[] | null;
     evidence: string[];
   }>;
+  /**
+   * Explicit single-page, account-scoped Billing credit allocations.
+   * Negative signed USD cents are discounts applied to a bill, NOT new cash.
+   * A finalized allocation is not a paid invoice, refund or provider settlement.
+   */
+  creditAllocationHistory?: {
+    windowStart: string;
+    windowEnd: string;
+    completeness: "observed_page" | "partial" | "unavailable";
+    entries: Array<{
+      creditId: string | null;
+      billingMonth: string | null;
+      appliedServiceName: string | null;
+      amountUsdCents: number | null;
+      amountRaw: string | null;
+      estimatedBill: boolean | null;
+      evidence: string[];
+    }>;
+    evidence: string[];
+  };
   /** No budget value, AWS credit or observed account spend proves general available cash. */
   spendableLiquidityUsdCents: null;
   recurringCommitmentUsdCents: null;
@@ -303,6 +323,8 @@ export interface EnvironmentProvider {
   observeEconomics?(options?: {
     /** Explicit opt-in for additional provider credit observation/API calls. */
     includeProviderCredits?: boolean;
+    /** Explicitly opt in to one additional AWS Billing allocation history read. */
+    includeCreditAllocationHistory?: boolean;
   }): Promise<EnvironmentEconomicObservation>;
   canSatisfy?(
     requirements: EnvironmentRequirements,

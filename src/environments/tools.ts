@@ -222,6 +222,10 @@ export function createEnvironmentTools(
           type: "boolean",
           description: "Explicit opt-in to additional provider-account credit observation; provider API reads may have their own costs.",
         },
+        include_credit_allocation_history: {
+          type: "boolean",
+          description: "Explicit opt-in to one more account-scoped AWS Billing allocation read; source may have API query costs, never proof of paid invoices or available funds.",
+        },
       },
       required: ["environment"],
     },
@@ -236,6 +240,7 @@ export function createEnvironmentTools(
       try {
         const result = await provider.observeEconomics({
           includeProviderCredits: args.include_provider_credits === true,
+          includeCreditAllocationHistory: args.include_credit_allocation_history === true,
         });
         return sanitizeProviderOutput(JSON.stringify(result, null, 2));
       } catch {

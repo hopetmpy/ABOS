@@ -227,6 +227,129 @@ describe("AwsEnvironmentProvider lifecycle", () => {
     }
   });
 
+  it("observes exact signed applied AWS credits only after explicit account-scoped opt-in", async () => {
+    const calls: string[][] = [];
+    const aws = new AwsEnvironmentProvider({
+      runner: async (_command, args) => {
+        calls.push(args);
+        if (args[0] === "sts") return ok(JSON.stringify({ Account: "123456789012" }));
+        if (args[0] === "budgets") return ok(JSON.stringify({ Budgets: [] }));
+        if (args[0] === "billing" && args[1] === "get-credit-allocation-history") {
+          return ok(JSON.stringify({ creditAllocationHistoryList: [
+            {
+              creditId: "credit-1", accountId: "123456789012",
+              appliedServiceName: "Amazon Elastic Compute Cloud - Compute",
+              billingMonth: "2026-10", isEstimatedBill: true,
+              creditAmount: { currencyCode: "USD", currencyAmount: "-4.50" },
+            },
+            {
+              creditId: "credit-2", accountId: "123456789012",
+              appliedServiceName: "Amazon S3", billingMonth: "2026-09",
+              isEstimatedBill: false,
+              creditAmount: { currencyCode: "USD", currencyAmount: "-1.00" },
+            },
+          ] }));
+        }
+        throw new Error("Unexpected read " + args.join(" "));
+      },
+    });
+    const baseline = await aws.observeEconomics();
+    expect(baseline.creditAllocationHistory).toBeUndefined();
+    expect(calls.map(c => c[0])).toEqual(["sts", "budgets"]);
+    calls.length = 0;
+
+    const recorded = await aws.observeEconomics({
+      includeCreditAllocationHistory: true,
+    });
+    expect(calls.map(c => c[0])).toEqual(["sts", "billing", "budgets"]);
+    const args = calls[1]!;
+    expect(args.slice(0, 2)).toEqual(["billing", "get-credit-allocation-history"]);
+    expect(args).toContain("--no-paginate");
+    expect(args).toContain("--account-id");
+    expect(args).toContain("123456789012");
+    expect(args).toContain("--start-date");
+    expect(args).toContain("--end-date");
+    expect(recorded.creditAllocationHistory?.completeness).toBe("observed_page");
+    expect(recorded.creditAllocationHistory?.entries).toHaveLength(2);
+    expect(recorded.creditAllocationHistory?.entries[0]).toMatchObject({
+      creditId: "credit-1", amountUsdCents: -450, amountRaw: "-4.50",
+      estimatedBill: true,
+    });
+    expect(recorded.creditAllocationHistory?.entries[1]).toMatchObject({
+      creditId: "credit-2", amountUsdCents: -100, estimatedBill: false,
+    });
+    expect(recorded.status).toBe("observed");
+    expect(recorded.spendableLiquidityUsdCents).toBeNull();
+    expect(recorded.recurringCommitmentUsdCents).toBeNull();
+    expect(recorded.procurementAuthority).toBe("not_established");
+    expect(recorded.creditAllocationHistory?.evidence.join(" "))
+      .toContain("NOT provider liquidity");
+  });
+
+  it("keeps account-mismatched, imprecise, unfinalized and incomplete AWS credit allocations PARTIAL", async () => {
+    const calls: string[][] = [];
+    const aws = new AwsEnvironmentProvider({
+      runner: async (_command, args) => {
+        calls.push(args);
+        if (args[0] === "sts") return ok(JSON.stringify({ Account: "123456789012" }));
+        if (args[0] === "budgets") return ok(JSON.stringify({ Budgets: [] }));
+        if (args[0] === "billing") return ok(JSON.stringify({
+          creditAllocationHistoryList: [
+            { creditId: "foreign", accountId: "999999999999",
+              billingMonth: "2026-10", isEstimatedBill: false,
+              creditAmount: { currencyCode: "USD", currencyAmount: "-900.00" } },
+            { creditId: "imprecise", accountId: "123456789012",
+              billingMonth: "2026-10", isEstimatedBill: false,
+              creditAmount: { currencyCode: "USD", currencyAmount: "-1.004" } },
+            { creditId: "unverified-bill", accountId: "123456789012",
+              billingMonth: "2026-10",
+              creditAmount: { currencyCode: "EUR", currencyAmount: "-100.00" } },
+          ],
+          partialResults: true,
+          failedMonths: ["2026-09"],
+          nextToken: "more",
+        }));
+        throw new Error("Unexpected AWS query");
+      },
+    });
+    const result = await aws.observeEconomics({
+      includeCreditAllocationHistory: true,
+    });
+    expect(result.status).toBe("partial");
+    expect(result.creditAllocationHistory?.completeness).toBe("partial");
+    expect(result.creditAllocationHistory?.entries).toHaveLength(2);
+    expect(result.creditAllocationHistory?.entries[0]).toMatchObject({
+      amountUsdCents: null, amountRaw: "-1.004", estimatedBill: false,
+    });
+    expect(result.creditAllocationHistory?.entries[1]).toMatchObject({
+      amountUsdCents: null, estimatedBill: null,
+    });
+    expect(result.creditAllocationHistory?.evidence.join(" ")).toContain("another page");
+    expect(result.creditAllocationHistory?.evidence.join(" ")).toContain("2026-09");
+    expect(calls.filter(c => c[1] === "get-credit-allocation-history"))
+      .toHaveLength(1);
+    expect(result.spendableLiquidityUsdCents).toBeNull();
+    expect(result.procurementAuthority).toBe("not_established");
+  });
+
+  it("preserves UNKNOWN when the opted-in AWS Billing allocation read is denied", async () => {
+    const aws = new AwsEnvironmentProvider({
+      runner: async (_command, args) => {
+        if (args[0] === "sts") return ok(JSON.stringify({ Account: "123456789012" }));
+        if (args[0] === "budgets") return ok(JSON.stringify({ Budgets: [] }));
+        return { stdout: "", stderr: "AccessDenied", exitCode: 255 };
+      },
+    });
+    const result = await aws.observeEconomics({
+      includeCreditAllocationHistory: true,
+    });
+    expect(result.status).toBe("partial");
+    expect(result.creditAllocationHistory?.completeness).toBe("unavailable");
+    expect(result.creditAllocationHistory?.entries).toEqual([]);
+    expect(result.spendableLiquidityUsdCents).toBeNull();
+    expect(result.procurementAuthority).toBe("not_established");
+  });
+
   it("provisions one tagged EC2 instance and waits for provider readiness", async () => {
     const calls: string[][] = [];
     const runner: EnvironmentCommandRunner = async (_command, args) => {

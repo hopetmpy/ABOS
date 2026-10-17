@@ -229,6 +229,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
    */
   async observeEconomics(options: {
     includeProviderCredits?: boolean;
+    includeCreditAllocationHistory?: boolean;
   } = {}): Promise<EnvironmentEconomicObservation> {
     const observedAt = new Date().toISOString();
     const base: EnvironmentEconomicObservation = {
@@ -346,6 +347,116 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         base.evidence.push("AWS Billing GetCredits probe failed; optional account-credit capital is UNKNOWN.");
       }
     }
+    let allocationComplete = true;
+    if (options.includeCreditAllocationHistory === true) {
+      // One explicit account-scoped Billing read. No automatic polling and
+      // no silent pagination: each external query may have its own costs.
+      const windowEnd = Math.floor(Date.now() / 1000);
+      const windowStart = windowEnd - 30 * 86_400;
+      const history: NonNullable<EnvironmentEconomicObservation["creditAllocationHistory"]> = {
+        windowStart: new Date(windowStart * 1000).toISOString(),
+        windowEnd: new Date(windowEnd * 1000).toISOString(),
+        completeness: "unavailable",
+        entries: [],
+        evidence: [
+          "One account-scoped AWS Billing credit allocation page over the preceding 30 days; earlier months or additional pages are not covered.",
+          "Applied credit is a billing discount, NOT provider liquidity, a cash receipt, a paid invoice or a refund.",
+        ],
+      };
+      base.creditAllocationHistory = history;
+      try {
+        const response = await this.runner("aws", [
+          "billing", "get-credit-allocation-history",
+          "--account-id", accountId,
+          "--start-date", String(windowStart),
+          "--end-date", String(windowEnd),
+          "--region", "us-east-1",
+          "--no-paginate", "--output", "json",
+        ], 30_000);
+        const payload = response.exitCode === 0
+          ? parseJson<Record<string, unknown>>(response.stdout) : null;
+        if (!payload || !Array.isArray(payload.creditAllocationHistoryList)) {
+          allocationComplete = false;
+          history.evidence.push("AWS Billing allocation history denied or malformed; no credit application inferred.");
+        } else {
+          history.completeness = "observed_page";
+          for (const raw of payload.creditAllocationHistoryList) {
+            if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+              allocationComplete = false;
+              continue;
+            }
+            const entry = raw as Record<string, unknown>;
+            if (entry.accountId !== accountId) {
+              allocationComplete = false;
+              history.evidence.push("Billing credit allocation belonged to another or unverified account; excluded.");
+              continue;
+            }
+            const amount = entry.creditAmount &&
+              typeof entry.creditAmount === "object" &&
+              !Array.isArray(entry.creditAmount)
+              ? entry.creditAmount as Record<string, unknown> : {};
+            const rawAmount = typeof amount.currencyAmount === "string"
+              ? amount.currencyAmount : null;
+            const negative = rawAmount?.startsWith("-") === true;
+            const unsigned = costAmount({
+              Amount: negative ? rawAmount!.slice(1) : rawAmount,
+              Unit: amount.currencyCode,
+            });
+            const signedCents = unsigned.cents === null ? null
+              : negative ? -unsigned.cents : unsigned.cents;
+            const billingMonth = typeof entry.billingMonth === "string" &&
+              /^\d{4}-(0[1-9]|1[0-2])$/.test(entry.billingMonth)
+              ? entry.billingMonth : null;
+            const estimatedBill = typeof entry.isEstimatedBill === "boolean"
+              ? entry.isEstimatedBill : null;
+            if (signedCents === null || billingMonth === null ||
+                estimatedBill === null) allocationComplete = false;
+            history.entries.push({
+              creditId: typeof entry.creditId === "string" ? entry.creditId : null,
+              billingMonth,
+              appliedServiceName: typeof entry.appliedServiceName === "string"
+                ? entry.appliedServiceName : null,
+              amountUsdCents: signedCents,
+              amountRaw: rawAmount,
+              estimatedBill,
+              evidence: [
+                "AWS Billing credit applied to a bill: negative amount can reduce invoiced charges.",
+                estimatedBill === true
+                  ? "AWS marks the bill estimated; final allocation has not been observed."
+                  : estimatedBill === false
+                    ? "AWS marks this allocation as not estimated, NOT as an invoice payment or refund."
+                    : "Bill estimate/finalization status missing.",
+                ...(signedCents === null ? [
+                  "Monetary amount not provably exact signed USD cents; numeric outcome UNKNOWN.",
+                ] : []),
+              ],
+            });
+          }
+          const truncated = typeof payload.nextToken === "string" &&
+            payload.nextToken.trim().length > 0;
+          const failedMonths = Array.isArray(payload.failedMonths)
+            ? payload.failedMonths.filter((v): v is string =>
+                typeof v === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(v))
+            : [];
+          if (payload.partialResults === true || truncated || failedMonths.length) {
+            allocationComplete = false;
+            history.evidence.push(
+              "AWS Billing reported partial months or another page; no full historical credit application total inferred.",
+            );
+            if (failedMonths.length) {
+              history.evidence.push("Billing months unavailable: " + failedMonths.join(", "));
+            }
+          }
+          history.completeness = allocationComplete ? "observed_page" : "partial";
+        }
+      } catch {
+        allocationComplete = false;
+        history.evidence.push("AWS Billing credit allocation read unavailable; no invoice or discount inferred.");
+      }
+      base.evidence.push(
+        "AWS Billing allocation history was explicitly requested for one account and one page; never usable as funding, settlement or purchase authority.",
+      );
+    }
     const result = await this.runner(
       "aws", [
         "budgets", "describe-budgets", "--account-id", accountId,
@@ -388,7 +499,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       });
     }
     base.budgets = budgets;
-    base.status = creditsComplete ? "observed" : "partial";
+    base.status = creditsComplete && allocationComplete ? "observed" : "partial";
     base.evidence.push(
       `AWS Budgets COST entries observed=${budgets.length}; no aggregation across possibly overlapping budgets.`,
     );
