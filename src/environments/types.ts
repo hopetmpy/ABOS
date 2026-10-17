@@ -309,7 +309,7 @@ export interface EnvironmentEconomicObservation {
    * remain separate P-030 questions. Never derive USD from this value.
    */
   nativeCreditBalance?: {
-    unit: "conway_credit_cent";
+    unit: "credit_cent";
     observedBalanceCents: number;
     accountScope: "authenticated_client_unattributed";
     observedAt: string;
