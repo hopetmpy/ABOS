@@ -13,6 +13,18 @@ import type {
 import type { EnvironmentProvisionRequest } from "./types.js";
 import type { EnvironmentLifecycleManager } from "./lifecycle.js";
 
+/**
+ * Restricted to local host preflight. An uncertain provider response must
+ * never carry this marker; only trusted code proving no external effect may.
+ */
+export class LifecycleProcurementNotDispatchedError extends Error {
+  readonly externalEffectNotDispatched = true;
+  constructor(message: string) {
+    super(message);
+    this.name = "LifecycleProcurementNotDispatchedError";
+  }
+}
+
 export interface TrustedLifecycleProcurementSource {
   observeAuthenticatedEconomics:
     ProviderProcurementExecutionDependencies["observeAuthenticatedEconomics"];
@@ -38,23 +50,34 @@ export function createLifecycleProcurementDependencies(
     observeAuthenticatedResourceFit: source.observeAuthenticatedResourceFit,
     dispatch: async (scope, authorized) => {
       if (scope.operation !== "provision") {
-        throw new Error(
+        throw new LifecycleProcurementNotDispatchedError(
           "P-018 lifecycle procurement adapter implements provision only; other economic operations need a trusted dedicated dispatcher.",
         );
       }
       if (authorized.unit !== scope.unit || !authorized.policyDecisionId ||
           !Number.isSafeInteger(authorized.amountCents) ||
           authorized.amountCents < 0) {
-        throw new Error("P-030 dispatch claim is incompatible with provider scope.");
+        throw new LifecycleProcurementNotDispatchedError(
+          "P-030 dispatch claim is incompatible with provider scope.",
+        );
       }
-      const prepared = await source.resolveProvisionRequest(scope);
+      let prepared: Awaited<ReturnType<TrustedLifecycleProcurementSource["resolveProvisionRequest"]>>;
+      try {
+        prepared = await source.resolveProvisionRequest(scope);
+      } catch {
+        throw new LifecycleProcurementNotDispatchedError(
+          "Trusted host provisioning preflight failed before any provider dispatch.",
+        );
+      }
       if (!prepared || typeof prepared.resourceType !== "string" ||
           !prepared.resourceType.trim() ||
           typeof prepared.retentionPolicy !== "string" ||
           !prepared.retentionPolicy.trim() ||
           !Array.isArray(prepared.requiredCapabilities) ||
           prepared.requiredCapabilities.some(item => typeof item !== "string")) {
-        throw new Error("Host provisioning specification unavailable or invalid.");
+        throw new LifecycleProcurementNotDispatchedError(
+          "Host provisioning specification unavailable or invalid before provider dispatch.",
+        );
       }
       const owned = await lifecycle.provision(scope.provider, {
         ...prepared,
