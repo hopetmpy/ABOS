@@ -243,6 +243,118 @@ describe("EnvironmentRetentionCoordinator", () => {
     } finally { db.close(); }
   });
 
+  it("uses authenticated post-retirement contract observations without settling supplier invoices or replaying stale receipts", async () => {
+    const db = createDb();
+    try {
+      insertGoal(db, "goal-contract-observation", "completed");
+      const registry = new EnvironmentRegistry();
+      registry.register(provider());
+      const lifecycle = new EnvironmentLifecycleManager(
+        registry, new EnvironmentResourceStore(db),
+      );
+      const resource = lifecycle.adopt({
+        provider: "cloud", externalId: "vm-contract-observed",
+        type: "compute", goalId: "goal-contract-observation",
+        status: "running", retentionPolicy: "until_goal_complete",
+      });
+      const key = "provider-contract-observation-fixture";
+      prepareFinancialEffect(db, {
+        operationKey: key, effectKind: "provider_resource_procurement",
+        provider: "cloud", amountCents: 2000, unit: "usd_cent",
+        request: {
+          providerAccountId: "trusted-account", resourceId: resource.id,
+          supplierLifecycleQuote: {
+            renewal: "automatic", additionalCommittedRenewalCents: 300,
+            additionalExitChargeCents: 100, source: "synthetic-supplier-quote",
+          },
+        },
+        evidence: ["Synthetic supplier quote is not an invoice."],
+      });
+      claimFinancialEffectDispatch(db, key);
+      settleFinancialEffect(db, key, {
+        providerEffectId: "synthetic-first-charge",
+        providerStatus: "fixture-closed-first-charge",
+        evidence: ["Fixture only."],
+      }, () => null);
+      await new EnvironmentRetentionCoordinator(db, registry, lifecycle).sweep();
+      const retired = lifecycle.resources.get(resource.id)!;
+      expect(retired.status).toBe("terminated");
+      expect(retired.metadata.retentionBillingReconciliation)
+        .toBe("unverified_after_resource_release");
+
+      let supplierCalls = 0;
+      const readContract = async (scope: {
+        provider: string; providerAccountId: string; resourceId: string;
+        externalResourceId: string; operationKey: string;
+      }) => {
+        supplierCalls += 1;
+        return {
+          ...scope,
+          source: "trusted-provider-contract-api",
+          observedAt: new Date(Date.now() - 30_000).toISOString(),
+          validUntil: new Date(Date.now() + 120_000).toISOString(),
+          evidence: ["Provider-side synthetic contract state, not financial settlement."],
+          cancellation: "cancelled" as const,
+          autoRenewal: "disabled" as const,
+          finalInvoice: "outstanding" as const,
+        };
+      };
+      const completed = await new EnvironmentRetentionCoordinator(
+        db, registry, lifecycle,
+        () => readContract,
+      ).sweep();
+      expect(completed.destroyAttempts).toBe(0);
+      expect(completed.supplierObservations).toBe(1);
+      expect(supplierCalls).toBe(1);
+      const observed = lifecycle.resources.get(resource.id)!;
+      const quotes = observed.metadata.retentionBillingLifecycleQuotes as Array<Record<string, unknown>>;
+      expect(quotes[0]?.supplierCancellationStatus).toBe("cancelled");
+      expect(quotes[0]?.supplierAutoRenewalStatus).toBe("disabled");
+      expect(quotes[0]?.supplierFinalInvoiceStatus).toBe("outstanding");
+      expect(observed.metadata.retentionBillingReconciliation)
+        .toBe("unverified_after_resource_release");
+      expect(getFinancialEffectByOperationKey(db, key)?.state).toBe("completed");
+
+      const restarted = new EnvironmentLifecycleManager(
+        registry, new EnvironmentResourceStore(db),
+      );
+      const fresh = await new EnvironmentRetentionCoordinator(
+        db, registry, restarted, () => readContract,
+      ).sweep();
+      expect(fresh.supplierObservations).toBe(0);
+      expect(supplierCalls).toBe(1);
+
+      // Expire only the cached observation: an account-forged receipt must
+      // never erase prior verified status, even on a subsequent host run.
+      restarted.resources.applyMutation(resource.id, {
+        metadata: {
+          retentionBillingLifecycleQuotes: quotes.map(x => ({
+            ...x, supplierStatusValidUntil: new Date(Date.now() - 60_000).toISOString(),
+          })),
+        },
+      }, "test", "expire provider receipt");
+      const rejected = await new EnvironmentRetentionCoordinator(
+        db, registry, restarted,
+        () => async scope => ({
+          ...scope,
+          providerAccountId: "foreign-account",
+          source: "wrong-account-fixture",
+          observedAt: new Date().toISOString(),
+          validUntil: new Date(Date.now() + 60_000).toISOString(),
+          evidence: ["Unrelated provider account."],
+          cancellation: "active",
+          autoRenewal: "enabled",
+          finalInvoice: "finalized",
+        }),
+      ).sweep();
+      expect(rejected.supplierObservations).toBe(0);
+      const unchanged = restarted.resources.get(resource.id)!;
+      const retained = unchanged.metadata.retentionBillingLifecycleQuotes as Array<Record<string, unknown>>;
+      expect(retained[0]?.supplierCancellationStatus).toBe("cancelled");
+      expect(getFinancialEffectByOperationKey(db, key)?.state).toBe("completed");
+    } finally { db.close(); }
+  });
+
   it("keeps supplier billing UNKNOWN after verified resource absence even when no local financial intent exists", async () => {
     const db = createDb();
     try {
