@@ -10,6 +10,7 @@ import {
   getGoalProgress,
   getReadyTasks,
   pruneCompletedGoals,
+  startLocalTaskExecution,
   type TaskNode,
   type TaskResult,
 } from "../../orchestration/task-graph.js";
@@ -22,6 +23,7 @@ import {
   updateTaskStatus,
 } from "../../state/database.js";
 import { createInMemoryDb } from "./test-db.js";
+import { getEvidenceByAuthority } from "../../observability/evidence.js";
 
 type DecomposeTaskInput = Omit<TaskNode, "id" | "metadata">;
 
@@ -534,6 +536,51 @@ describe("orchestration/task-graph", () => {
 
       failTask(db, taskId, "failed", true);
       expect(getTaskById(db, taskId)?.status).toBe("blocked");
+    });
+
+    it("preserves recorded Task start across a retry in P-013 without claiming CPU metering", () => {
+      const goal = createGoal(db, "Restartable work", "Worker failure and retry");
+      const taskId = insertTask(db, {
+        goalId: goal.id, title: "retry evidence", description: "persist attempts",
+        status: "assigned", assignedTo: "local://worker-one", maxRetries: 1,
+      });
+      startLocalTaskExecution(db, taskId, "local://worker-one");
+      const firstStartedAt = getTaskById(db, taskId)?.startedAt;
+      expect(firstStartedAt).toBeTruthy();
+      failTask(db, taskId, "transient", true);
+      expect(getTaskById(db, taskId)?.startedAt).toBeNull();
+      assignTask(db, taskId, "local://worker-two");
+      startLocalTaskExecution(db, taskId, "local://worker-two");
+      completeTask(db, taskId, SUCCESS_RESULT);
+
+      const events = getEvidenceByAuthority(db, "task_graph", taskId);
+      expect(events.map(e => e.eventType)).toEqual([
+        "task.local_harness_execution_started",
+        "task.attempt_outcome_recorded",
+        "task.local_harness_execution_started",
+        "task.attempt_outcome_recorded",
+      ]);
+      const first = events[1]?.payload as Record<string, unknown>;
+      const last = events[3]?.payload as Record<string, unknown>;
+      expect(first.recordedStartedAt).toBe(firstStartedAt);
+      expect(first.retryCountBeforeOutcome).toBe(0);
+      expect(first.retryScheduled).toBe(true);
+      expect(last.retryCountBeforeOutcome).toBe(1);
+      expect(last.outcome).toBe("completed");
+      expect(first.providerBilledCost).toBe("UNKNOWN");
+      expect(first.durationAuthority).toBe("UNKNOWN");
+      expect(events.every(e => e.goalId === goal.id && e.taskId === taskId)).toBe(true);
+    });
+
+    it("refuses a stale worker start without changing assignment or recording false evidence", () => {
+      const goal = createGoal(db, "Worker race", "Reject obsolete worker");
+      const taskId = insertTask(db, {
+        goalId: goal.id, title: "guarded", description: "guarded",
+        status: "assigned", assignedTo: "local://new-worker",
+      });
+      expect(() => startLocalTaskExecution(db, taskId, "local://old-worker")).toThrow(/not assigned/);
+      expect(getTaskById(db, taskId)?.status).toBe("assigned");
+      expect(getEvidenceByAuthority(db, "task_graph", taskId)).toHaveLength(0);
     });
 
     it("clears started/completed timestamps on retry", () => {
