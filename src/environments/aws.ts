@@ -186,6 +186,9 @@ interface AwsSsmInvocation {
   StandardOutputContent?: string;
   StandardErrorContent?: string;
   ResponseCode?: number;
+  /** AWS SSM get-command-invocation command timestamps; NOT harness CPU. */
+  ExecutionStartDateTime?: string;
+  ExecutionEndDateTime?: string;
 }
 
 interface AwsSsmInstanceInfo {
