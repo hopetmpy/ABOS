@@ -82,7 +82,7 @@ export interface EnvironmentToolingOptions {
    * Existing P-025/P-010/P-030 validations execute again on each request.
    */
   getTrustedProcurementDependencies?: (
-    providerId: string,
+    providerId: string, operation?: string,
   ) => ProviderProcurementExecutionDependencies | null;
 }
 
@@ -301,7 +301,7 @@ export function createEnvironmentTools(
       }
       let dependencies: ProviderProcurementExecutionDependencies | null = null;
       try {
-        dependencies = options.getTrustedProcurementDependencies?.(provider) ?? null;
+        dependencies = options.getTrustedProcurementDependencies?.(provider, operation) ?? null;
       } catch {
         return "UNAVAILABLE: trusted provider procurement adapter failed before dispatch; no financial intent was claimed.";
       }
