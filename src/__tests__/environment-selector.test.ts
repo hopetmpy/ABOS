@@ -205,6 +205,64 @@ describe("P-031 provision timing from source-attributed provider quotes", () => 
     expect(invalid.selected).toBeNull();
     expect(invalid.unresolved.join(" ")).toContain("explicit timezone");
   });
+  it("rejects impossible need dates before querying providers and accepts actual leap days", async () => {
+    const invalidRegistry = new EnvironmentRegistry();
+    let providerInspections = 0;
+    invalidRegistry.register({
+      ...provider({ id: "supplier", capabilities: ["compute"] }),
+      inspect: async () => {
+        providerInspections += 1;
+        throw new Error("An impossible resource need date must not reach supplier selection");
+      },
+    });
+    const invalidSelector = new EnvironmentSelector(invalidRegistry);
+    for (const neededByAt of [
+      "2026-02-30T12:00:00Z",
+      "2026-04-31T09:00:00+05:30",
+      "2027-02-29T09:00:00Z",
+      "2026-12-01T24:00:00Z",
+    ]) {
+      const result = await invalidSelector.select({
+        requiredCapabilities: ["compute"], neededByAt,
+      });
+      expect(result.selected).toBeNull();
+      expect(result.candidates).toEqual([]);
+      expect(result.unresolved.join(" ")).toContain("neededByAt");
+    }
+    expect(providerInspections).toBe(0);
+    const validRegistry = new EnvironmentRegistry();
+    validRegistry.register(provider({ id: "supplier", capabilities: ["compute"] }));
+    const valid = await new EnvironmentSelector(validRegistry).select({
+      requiredCapabilities: ["compute"], neededByAt: "2028-02-29T09:00:00+05:30",
+    });
+    expect(valid.selected?.environmentId).toBe("supplier");
+    expect(valid.selected?.provisioningTiming?.status).toBe("unknown");
+  });
+
+  it("preserves UNKNOWN when a supplier lead-time observation has an impossible date", async () => {
+    const registry = new EnvironmentRegistry();
+    registry.register({
+      ...provider({ id: "supplier", capabilities: ["compute"] }),
+      estimate: async () => ({
+        metadata: {
+          provisioningLeadTimeMs: DAY,
+          provisioningLeadTimeObservedAt: "2026-02-30T10:00:00Z",
+          provisioningLeadTimeSource: "supplier-data",
+        },
+      }),
+    });
+    const result = await new EnvironmentSelector(registry).select({
+      requiredCapabilities: ["compute"],
+      neededByAt: new Date(Date.now() + 7 * DAY).toISOString(),
+    });
+    expect(result.selected?.provisioningTiming).toMatchObject({
+      status: "unknown",
+      quoteObservedAt: null,
+      latestQuotedStartAt: null,
+    });
+    // Unverifiable supplier timing must not forbid other feasible discovery.
+    expect(result.selected?.executionEligible).toBe(true);
+  });
 });
 
 describe("EnvironmentSelector", () => {
