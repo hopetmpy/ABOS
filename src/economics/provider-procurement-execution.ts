@@ -516,20 +516,34 @@ export async function executeReviewedProviderProcurement(
         "Supplier acceptance, verified resource usability and actual financial settlement are separate observations.",
       ],
     };
-  } catch {
-    // A remote operation MAY have happened. No automatic retry, no alleged
-    // failure/refund, and no leak of provider credentials or error payload.
+  } catch (error) {
+    // A *trusted adapter* may prove the provider rejected the action BEFORE
+    // dispatch. That is not an unresolved external bill or a reason to hold
+    // liquidity forever. Conversely, a timeout/error with no such proof may
+    // have created a resource: never retry it blindly or infer a refund.
+    const neverDispatched = typeof error === "object" && error !== null &&
+      (error as { externalEffectNotDispatched?: unknown })
+        .externalEffectNotDispatched === true;
+    const resolution = neverDispatched ? "rejected" : "unknown";
+    const message = neverDispatched
+      ? "Trusted provider preflight established NO external dispatch; no supplier charge or refund is asserted."
+      : "Provider dispatch response lost; external monetary outcome UNKNOWN, reconcile before retry.";
     const effect = recordFinancialEffectObservation(db, scope.operationKey, {
-      resolution: "unknown",
-      evidence: ["Provider dispatch response lost; external monetary outcome UNKNOWN, reconcile before retry."],
+      resolution,
+      evidence: [message],
     });
-    recordPolicyExecutionOutcome(db, policyDecisionId, "unknown", {
-      operationKey: scope.operationKey, financialEffectId: effect.id,
-      providerOutcome: "unknown",
-    });
+    recordPolicyExecutionOutcome(db, policyDecisionId,
+      neverDispatched ? "failed" : "unknown", {
+        operationKey: scope.operationKey,
+        financialEffectId: effect.id,
+        providerOutcome: resolution,
+      });
     return {
-      status: "unknown", dispatched: true, financialEffect: effect, review: netReview,
-      evidence: ["External procurement outcome UNKNOWN; reconcile provider and financial intent before new action."],
+      status: resolution,
+      dispatched: !neverDispatched,
+      financialEffect: effect,
+      review: netReview,
+      evidence: [message],
     };
   }
 }
