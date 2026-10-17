@@ -21,7 +21,9 @@ describe("P-031 persisted local worker attempt evidence", () => {
         status: "pending", maxRetries: 0,
       });
       assignTask(db.raw, taskId, "local://remote-parent-task");
-      startLocalTaskExecution(db.raw, taskId, "local://remote-parent-task");
+      startLocalTaskExecution(db.raw, taskId, "local://remote-parent-task", {
+        parentGoalId: "parent-goal", parentTaskId: "parent-task", parentRetryCount: 2,
+      });
       recordObservedHarnessExecutionSettled(
         db.raw, taskId, "local://remote-parent-task", "returned",
         { parentGoalId: "parent-goal", parentTaskId: "parent-task", parentRetryCount: 2 },
@@ -37,6 +39,8 @@ describe("P-031 persisted local worker attempt evidence", () => {
         "task.local_harness_execution_settled",
         "task.attempt_outcome_recorded",
       ]);
+      expect((events[0]!.payload as any).remoteParentTask)
+        .toEqual({ parentGoalId: "parent-goal", parentTaskId: "parent-task", parentRetryCount: 2 });
       expect((events[1]!.payload as any).remoteParentTask)
         .toEqual({ parentGoalId: "parent-goal", parentTaskId: "parent-task", parentRetryCount: 2 });
       expect((events[1]!.payload as any).outcome).toBe("returned");
