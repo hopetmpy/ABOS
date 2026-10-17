@@ -15,7 +15,7 @@ import { createLogger } from "../observability/logger.js";
 import type { HarnessContext, WorkerInferenceClient } from "../agent/harness-types.js";
 import { buildWisdomFromGoal, createBudgetFromTask } from "../agent/harness-types.js";
 import { HarnessRegistry } from "../agent/harness-registry.js";
-import { completeTask, failTask } from "./task-graph.js";
+import { completeTask, failTask, startLocalTaskExecution } from "./task-graph.js";
 import type { TaskNode, TaskResult } from "./task-graph.js";
 import { AgentWorkspace } from "./workspace.js";
 import type {
@@ -55,6 +55,8 @@ export interface WorkerExecutionOptions {
   workerId?: string;
   abortSignal?: AbortSignal;
   executionContinuation?: ExecutionContinuationContext;
+  /** Invoked after initialization, immediately before local harness execution. */
+  onExecutionStart?: () => void | Promise<void>;
 }
 
 /**
@@ -123,6 +125,7 @@ export async function executeTaskWithHarness(
   );
 
   await harness.initialize(task, context);
+  await options.onExecutionStart?.();
   return harness.execute();
 }
 
@@ -210,6 +213,9 @@ export class LocalWorkerPool {
         workerId,
         abortSignal: signal,
         executionContinuation,
+        onExecutionStart: () => startLocalTaskExecution(
+          this.config.db, task.id, `local://${workerId}`,
+        ),
       });
 
       if (result.success) {
