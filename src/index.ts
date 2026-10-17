@@ -74,6 +74,7 @@ Usage:
   abos --init         Initialize wallet and config directory
   abos --provision    Provision Conway API key via SIWE
   abos --status       Show current abos status
+  abos --probe-conway Read Conway balance, sandbox inventory and tier catalog (GET only; no agent boot)
   abos --execute-task-file <path>  Execute one Task envelope and emit TaskResult
   abos --version      Show version
   abos --help         Show this help
@@ -144,6 +145,35 @@ Environment:
       process.exit(1);
     }
     process.exit(0);
+  }
+
+  if (args.includes("--probe-conway")) {
+    // Diagnostic bypasses run(): no wallet bootstrap, registration, DB,
+    // heartbeat, Task or dispatch. Use current configured Conway key only.
+    const config = loadConfig();
+    const apiKey = process.env.CONWAY_API_KEY?.trim() ||
+      config?.conwayApiKey?.trim() || loadApiKeyFromConfig();
+    if (!apiKey) {
+      process.stdout.write(JSON.stringify({
+        kind: "conway_account_read_only_probe",
+        status: "not_executed",
+        reason: "conway_credentials_unavailable",
+        purchaseAuthority: "not_established",
+      }) + "\n");
+      process.exitCode = 2;
+      return;
+    }
+    const { probeConwayAccountReadOnly } = await import(
+      "./conway/read-only-account-probe.js"
+    );
+    const report = await probeConwayAccountReadOnly(createConwayClient({
+      apiUrl: process.env.CONWAY_API_URL?.trim() ||
+        config?.conwayApiUrl || "https://api.conway.tech",
+      apiKey,
+      sandboxId: config?.sandboxId || "",
+    }));
+    process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+    return;
   }
 
   if (args.includes("--status")) {
