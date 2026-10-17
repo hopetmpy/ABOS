@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0029.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / SOURCE_CONWAY_INVENTORY_RECONCILIATION_E3_GREEN / P005_LIVE_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / SOURCE_CONWAY_READONLY_ACCOUNT_PROBE_E3_GREEN / P005_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: p031-conway-inventory-main-checkpoint
-Host-Head-At-Audit-Open: 0196ca8743cb99104e10a8f2f859a000a43bbd82
-Last-Reconciled-Host-Head: 0196ca8743cb99104e10a8f2f859a000a43bbd82
-Observed-Main-Head: 0196ca8743cb99104e10a8f2f859a000a43bbd82
-Last-Product-Head: 0196ca8743cb99104e10a8f2f859a000a43bbd82
-Last-Product-CI: exact main 0196ca8743cb99104e10a8f2f859a000a43bbd82 push 39060800177 — COMPLETE SUCCESS 8/8
+Current-Host-Branch: p031-conway-readonly-probe-main-checkpoint
+Host-Head-At-Audit-Open: 709e27bccb47e0e7fe0b492f0a9472471e27cda0
+Last-Reconciled-Host-Head: 709e27bccb47e0e7fe0b492f0a9472471e27cda0
+Observed-Main-Head: 709e27bccb47e0e7fe0b492f0a9472471e27cda0
+Last-Product-Head: 709e27bccb47e0e7fe0b492f0a9472471e27cda0
+Last-Product-CI: exact main 709e27bccb47e0e7fe0b492f0a9472471e27cda0 push 39063092270 — COMPLETE SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
 Last-Completed-CI: 38766126322 — SUCCESS 8/8
