@@ -331,7 +331,7 @@ export function createEnvironmentTools(
           dispatched: result.dispatched,
           operationKey: scope.operationKey,
           financialEffectId: result.financialEffect?.id ?? null,
-          financialResolution: result.financialEffect?.resolution ?? "UNKNOWN",
+          financialEffectState: result.financialEffect?.state ?? "UNKNOWN",
           evidence: result.evidence,
           supplierSettlement: "UNKNOWN",
         }));
