@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0028.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / SOURCE_SUPPLIER_RENEWAL_QUOTE_RETENTION_E3_GREEN / P005_LIVE_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / SOURCE_POST_RETIREMENT_SUPPLIER_OBSERVATION_E3_GREEN / P005_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-post-retirement-supplier-checkpoint
-Host-Head-At-Audit-Open: 97046cbbba71260825a36f1361b96a28221ad1d3
-Last-Reconciled-Host-Head: 97046cbbba71260825a36f1361b96a28221ad1d3
-Observed-Main-Head: 97046cbbba71260825a36f1361b96a28221ad1d3
-Last-Product-Head: 97046cbbba71260825a36f1361b96a28221ad1d3
-Last-Product-CI: exact main 97046cbbba71260825a36f1361b96a28221ad1d3 push 39013142850 — COMPLETE SUCCESS 8/8
+Current-Host-Branch: abos/p031-supplier-contract-main-checkpoint
+Host-Head-At-Audit-Open: 6209ae743b03b43a1e6a0999f83a391f1597ad46
+Last-Reconciled-Host-Head: 6209ae743b03b43a1e6a0999f83a391f1597ad46
+Observed-Main-Head: 6209ae743b03b43a1e6a0999f83a391f1597ad46
+Last-Product-Head: 6209ae743b03b43a1e6a0999f83a391f1597ad46
+Last-Product-CI: exact main 6209ae743b03b43a1e6a0999f83a391f1597ad46 push 39049002359 — COMPLETE SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
 Last-Completed-CI: 38766126322 — SUCCESS 8/8
@@ -782,3 +782,10 @@ NEXT_ELIGIBLE_WORK: investigate source-backed goal/task requirements to derive c
 
 - Initial PR #182 source head `d4e995be19c4414a539dd297121806240ef37f4e` CI `39048473885` SUCCESS 8/8. Follow-up source hardening and documentation are pending final exact-HEAD CI; do not claim integrated on this checkpoint. Details and scope in `continuity/C0028.md`.
 - Existing P-018 lifecycle owner now has an optional host-only supplier contract observer (not provisioned in default CLI); P-030 financial effects untouched. Model arguments never become supplier account receipt; independent cancellation/renewal/invoice observation is neither actual payment nor refund. P-031 EN_EJECUCIÓN, P-005 LIVE UNKNOWN, P-032 PLANIFICADO.
+
+
+### P-031 — post-retirement supplier observation integrated and revalidated (2026-10-17)
+
+- Product PR #182 merged at exact main `6209ae743b03b43a1e6a0999f83a391f1597ad46`, candidate head `9a5865947d8abb911a07a6c599d7daa243c22510`, final PR run `39048777469` SUCCESS 8/8; exact main push run `39049002359` COMPLETE SUCCESS 8/8, no open PR at reconciliation. This supersedes the earlier candidate-only checkpoint in C0028.
+- P-018 resource-retention sweep now supports **optional trusted host** read-only provider/account/operation scoped supplier contract observations after physical termination; rejects mismatch/stale observation and preserves prior evidence across restart; observer setup failures do not block unrelated resource release. P-030 financial effects unchanged. No account or billing receipt is supplied by default `src/index.ts`. E3 only, no actual provider cancellation, charge, payment, refund or revenue claimed.
+- P-031 EN_EJECUCIÓN; P-032 PLANIFICADO; P-005 external LIVE E5/E6 UNKNOWN. NEXT_ELIGIBLE_WORK: evaluate remaining source-backed P-031 DoD gaps against existing P-018/P-030/P-010 and real provider read adapters; do not infer funded AWS account or settled invoice from source-only integration.
