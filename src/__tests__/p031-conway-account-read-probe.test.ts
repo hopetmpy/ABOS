@@ -114,6 +114,62 @@ describe("P-031 Conway authenticated GET-only diagnostic", () => {
     expect(JSON.stringify(report)).not.toContain("private resource");
   });
 
+  it.each([
+    [{ tiers: [{ name: "small", vcpu: 1, memory_mb: 512, disk_gb: 5, monthly_cents: 200 }] }, 200],
+    [{ pricing: [{ name: "legacy", vcpu: 2, memory_mb: 2048, disk_gb: 10, monthly_cents: 800 }] }, 800],
+    [{ data: [{ name: "data", vcpu: 1, memory_mb: 512, disk_gb: 5, monthly_cents: 0 }] }, 0],
+  ])("preserves exact observed provider-priced tiers without deducing complete contract", async (payload, amount) => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify(payload), {
+      status: 200, headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetcher);
+    const client = createConwayClient({
+      apiUrl: "https://api.conway.tech", apiKey: "test-secret", sandboxId: "sbx",
+    });
+    const tiers = await client.getCreditsPricing();
+    expect(tiers).toHaveLength(1);
+    expect(tiers[0]?.monthlyCents).toBe(amount);
+    const report = await probeConwayAccountReadOnly({
+      getCreditsBalance: async () => 500,
+      listSandboxes: async () => [],
+      getCreditsPricing: async () => tiers,
+    });
+    expect(report.pricing.status).toBe("partial");
+    expect(report.pricing.advertisedTierCount).toBe(1);
+    expect(report.pricing.exactChargedUnit).toBeNull();
+    expect(report.billingContract).toBe("not_verified");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    {},
+    { tiers: null },
+    { tiers: { name: "not-an-array" } },
+    { tiers: [{ name: "missing price", vcpu: 1, memory_mb: 512, disk_gb: 5 }] },
+    { tiers: [{ name: "text price", vcpu: 1, memory_mb: 512, disk_gb: 5, monthly_cents: "0" }] },
+    { tiers: [{ name: "fractional", vcpu: 1, memory_mb: 512, disk_gb: 5, monthly_cents: 0.3 }] },
+    { tiers: [{ name: "negative", vcpu: 1, memory_mb: 512, disk_gb: 5, monthly_cents: -100 }] },
+    { tiers: [{ name: "invalid capacity", vcpu: 0, memory_mb: 512, disk_gb: 5, monthly_cents: 10 }] },
+    { tiers: [null] },
+  ])("rejects missing or imprecise Conway price source rather than fabricating a free tier", async payload => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(payload), {
+      status: 200, headers: { "Content-Type": "application/json" },
+    })));
+    const client = createConwayClient({
+      apiUrl: "https://api.conway.tech", apiKey: "secret", sandboxId: "sbx",
+    });
+    await expect(client.getCreditsPricing()).rejects.toThrow(/UNKNOWN|invalid/i);
+    const report = await probeConwayAccountReadOnly({
+      getCreditsBalance: async () => 500,
+      listSandboxes: async () => [],
+      getCreditsPricing: () => client.getCreditsPricing(),
+    });
+    expect(report.pricing.status).toBe("unknown");
+    expect(report.pricing.advertisedTierCount).toBeNull();
+    expect(report.verifiedFreeFunds).toBeNull();
+    expect(JSON.stringify(report)).not.toContain("secret");
+  });
+
   it("does not interpret invalid provider price tiers as a complete contract", async () => {
     const reads: ConwayReadOnlySource = {
       getCreditsBalance: async () => 0,

@@ -385,15 +385,37 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
   };
 
   const getCreditsPricing = async (): Promise<PricingTier[]> => {
-    const result = await request("GET", "/v1/credits/pricing");
-    const tiers = result.tiers || result.pricing || [];
-    return tiers.map((t: any) => ({
-      name: t.name || "",
-      vcpu: t.vcpu || 0,
-      memoryMb: t.memory_mb || 0,
-      diskGb: t.disk_gb || 0,
-      monthlyCents: t.monthly_cents || 0,
-    }));
+    const result: unknown = await request("GET", "/v1/credits/pricing");
+    const response = result && typeof result === "object" && !Array.isArray(result)
+      ? result as Record<string, unknown> : null;
+    // Preserve supported provider envelopes; an unknown envelope is not an
+    // authoritative empty tier catalog. Pricing is an advertised estimate,
+    // never a final same-account supplier contract or an exact charged unit.
+    const tiers: unknown = Array.isArray(result) ? result
+      : response?.tiers ?? response?.pricing ?? response?.data;
+    if (!Array.isArray(tiers)) {
+      throw new Error("Conway pricing response shape UNKNOWN; no zero-priced tier inferred.");
+    }
+    return tiers.map((value: unknown): PricingTier => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error("Conway pricing tier invalid; price and capacity UNKNOWN.");
+      }
+      const tier = value as Record<string, unknown>;
+      if (typeof tier.name !== "string" || !tier.name.trim() ||
+          !Number.isSafeInteger(tier.vcpu) || (tier.vcpu as number) <= 0 ||
+          !Number.isSafeInteger(tier.memory_mb) || (tier.memory_mb as number) <= 0 ||
+          !Number.isSafeInteger(tier.disk_gb) || (tier.disk_gb as number) <= 0 ||
+          !Number.isSafeInteger(tier.monthly_cents) || (tier.monthly_cents as number) < 0) {
+        throw new Error("Conway pricing tier lacks a precise provider quantity/price; UNKNOWN.");
+      }
+      return {
+        name: tier.name.trim(),
+        vcpu: tier.vcpu as number,
+        memoryMb: tier.memory_mb as number,
+        diskGb: tier.disk_gb as number,
+        monthlyCents: tier.monthly_cents as number,
+      };
+    });
   };
 
   const transferCredits = async (
