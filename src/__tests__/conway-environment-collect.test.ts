@@ -7,6 +7,7 @@ import {
 } from "../environments/conway.js";
 import type { EnvironmentResource } from "../environments/types.js";
 import { getHomeDir } from "../platform/home.js";
+import { createConwayClient } from "../conway/client.js";
 
 function resource(
   goalId: string,
@@ -44,9 +45,75 @@ describe("ConwayEnvironmentProvider collect", () => {
   const cleanup: string[] = [];
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     for (const target of cleanup.splice(0)) {
       fs.rmSync(target, { recursive: true, force: true });
     }
+  });
+
+  function clientForInventory(payload: unknown) {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetcher);
+    return { client: createConwayClient({
+      apiUrl: "https://api.conway.tech", apiKey: "test-key", sandboxId: "source-test",
+    }), fetcher };
+  }
+
+  it("reads Conway's documented data list as actual owned-provider inventory, not zero resources", async () => {
+    const { client, fetcher } = clientForInventory({ data: [
+      { id: "sbx-a", status: "running", region: "us-east",
+        vcpu: 2, memory_mb: 2048, disk_gb: 10 },
+      { id: "sbx-b", status: "stopped", region: "eu-north" },
+    ] });
+    const sandboxes = await client.listSandboxes();
+    expect(sandboxes).toHaveLength(2);
+    expect(sandboxes[0]).toMatchObject({
+      id: "sbx-a", status: "running", vcpu: 2, memoryMb: 2048, diskGb: 10,
+    });
+    expect(sandboxes[1]).toMatchObject({
+      id: "sbx-b", status: "stopped", vcpu: 0, memoryMb: 0, diskGb: 0,
+    });
+    const provider = new ConwayEnvironmentProvider(client);
+    const health = await provider.health!(resource("goal-a", { externalId: "sbx-a" }));
+    expect(health.healthy).toBe(true);
+    expect(health.status).toBe("running");
+    expect(health.metadata).toMatchObject({ vcpu: 2, memoryMb: 2048, diskGb: 10 });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    [[{ id: "sbx-array", status: "running" }], "sbx-array"],
+    [{ sandboxes: [{ id: "sbx-legacy", status: "running" }] }, "sbx-legacy"],
+    [{ data: [], count: 0 }, null],
+  ])("preserves known legacy inventory shapes and genuine complete emptiness", async (payload, id) => {
+    const { client } = clientForInventory(payload);
+    const found = await client.listSandboxes();
+    expect(found.map(x => x.id)).toEqual(id === null ? [] : [id]);
+  });
+
+  it.each([
+    [{}, "unrecognized"],
+    [{ data: null }, "unrecognized"],
+    [{ data: { id: "sbx-not-list" } }, "unrecognized"],
+    [{ data: [null] }, "invalid entry"],
+    [{ data: [{}] }, "unidentifiable"],
+    [{ data: [], count: 2 }, "incomplete"],
+    [{ data: [{ id: "sbx-one" }], next_cursor: "cursor" }, "incomplete"],
+    [{ data: [], has_more: true }, "incomplete"],
+    [{ sandboxes: [], count: 0, source: "workers_fallback_blocked" }, "incomplete"],
+    [{ data: [], partial: true }, "incomplete"],
+  ])("does not turn malformed or partial provider inventory into absence", async (payload, reason) => {
+    const { client } = clientForInventory(payload);
+    await expect(client.listSandboxes()).rejects.toThrow(reason);
+    // The same source failure must not count as reusable resources=0
+    // in P-031's selection estimate.
+    const provider = new ConwayEnvironmentProvider(client);
+    const estimate = await provider.estimate({ requiredCapabilities: [] });
+    expect(estimate.reusableResourceCount).toBeNull();
+    expect(estimate.evidence?.join(" ")).toContain("sandbox inventory unavailable");
   });
 
   it("reads an exact Conway native credit balance without inventing USD liquidity, account ID or procurement authority", async () => {
