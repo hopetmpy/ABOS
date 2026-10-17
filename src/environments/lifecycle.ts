@@ -468,6 +468,8 @@ export class EnvironmentLifecycleManager {
           ...(changesShape ? invalidatedCapacityEvidence() : {}),
           mutationNeedsReconciliation: true,
           mutationUncertainOperation: operation,
+          mutationExternalEffectNotDispatched: false,
+          mutationExternalEffectOperation: operation,
         },
         evidence: [
           `${operation} entered external observation/dispatch; resource is not spare until its provider outcome is reconciled.`,
@@ -510,6 +512,10 @@ export class EnvironmentLifecycleManager {
             ...(economicMutation ? {
               mutationNeedsReconciliation: !mutationResolved,
               mutationUncertainOperation: mutationResolved ? null : operation,
+              // Reset on every attempt: a previous no-op can never make a
+              // newly dispatched/UNKNOWN mutation appear non-billable.
+              mutationExternalEffectNotDispatched: result.externalMutationDispatched === false,
+              mutationExternalEffectOperation: operation,
             } : {}),
           },
         },
@@ -532,6 +538,8 @@ export class EnvironmentLifecycleManager {
               ...(economicMutation ? {
                 mutationNeedsReconciliation: prior.metadata.mutationNeedsReconciliation ?? false,
                 mutationUncertainOperation: prior.metadata.mutationUncertainOperation ?? null,
+                mutationExternalEffectNotDispatched: true,
+                mutationExternalEffectOperation: operation,
               } : {}),
               ...(changesShape ? Object.fromEntries(
                 Object.keys(invalidatedCapacityEvidence()).map(key =>
@@ -559,6 +567,8 @@ export class EnvironmentLifecycleManager {
             metadata: {
               mutationNeedsReconciliation: true,
               mutationUncertainOperation: operation,
+              mutationExternalEffectNotDispatched: false,
+              mutationExternalEffectOperation: operation,
             },
           },
           operation,
