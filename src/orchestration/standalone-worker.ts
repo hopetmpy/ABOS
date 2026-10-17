@@ -40,10 +40,13 @@ import {
   type ToolContext,
 } from "../types.js";
 import {
+  assignTask,
   completeTask,
   createGoal,
   decomposeGoal,
   failTask,
+  recordObservedHarnessExecutionSettled,
+  startLocalTaskExecution,
   type TaskNode,
   type TaskResult,
 } from "./task-graph.js";
@@ -246,7 +249,20 @@ export async function executeStandaloneTask(
     const mirrorTask =
       createLocalMirrorTask(db.raw, incomingTask);
 
-    const result = await executeTaskWithHarness(
+    // The remote mirror is a distinct local TaskGraph authority. Its Task ID
+    // must never be confused with the parent Task ID on a different host.
+    const workerId = `remote-${incomingTask.id}`;
+    const workerAddress = `local://${workerId}`;
+    const remoteParentTask = {
+      parentGoalId: incomingTask.goalId,
+      parentTaskId: incomingTask.id,
+      parentRetryCount: incomingTask.metadata.retryCount,
+    };
+    assignTask(db.raw, mirrorTask.id, workerAddress);
+    let observedHarnessStart = false;
+    let result: TaskResult;
+    try {
+      result = await executeTaskWithHarness(
       {
         db: db.raw,
         inference: workerInference,
@@ -263,12 +279,34 @@ export async function executeStandaloneTask(
       },
       mirrorTask,
       {
-        workerId:
-          `remote-${incomingTask.id}`,
+        workerId,
         executionContinuation:
           options.executionContinuation,
+        onExecutionStart: () => {
+          // The canonical hook runs after harness initialization and before
+          // the actual execute() call; transport dispatch is NOT this start.
+          startLocalTaskExecution(db.raw, mirrorTask.id, workerAddress);
+          observedHarnessStart = true;
+        },
       },
     );
+    } catch (error) {
+      if (observedHarnessStart) {
+        recordObservedHarnessExecutionSettled(
+          db.raw, mirrorTask.id, workerAddress, "threw", remoteParentTask,
+        );
+        failTask(
+          db.raw, mirrorTask.id,
+          error instanceof Error ? error.message : String(error), false,
+        );
+      }
+      throw error;
+    }
+    if (observedHarnessStart) {
+      recordObservedHarnessExecutionSettled(
+        db.raw, mirrorTask.id, workerAddress, "returned", remoteParentTask,
+      );
+    }
 
     if (result.success) {
       completeTask(
