@@ -692,20 +692,26 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
     }
 
     let estimatedCostCents: number | null = null;
-    if (
-      hourlyCostCents != null &&
-      requirements.expectedDurationMs != null &&
-      requirements.expectedDurationMs >= 0
-    ) {
-      estimatedCostCents = Math.ceil(
-        hourlyCostCents * (requirements.expectedDurationMs / 3_600_000),
+    if (hourlyCostCents != null &&
+        Number.isFinite(hourlyCostCents) && hourlyCostCents >= 0 &&
+        Number.isSafeInteger(requirements.expectedDurationMs) &&
+        (requirements.expectedDurationMs ?? 0) > 0) {
+      const priced = Math.ceil(
+        hourlyCostCents * (requirements.expectedDurationMs! / 3_600_000),
       );
-      evidence.push(
-        `AWS EC2 compute-only estimated task cost=${estimatedCostCents} cents for expectedDurationMs=${requirements.expectedDurationMs}; full AWS invoice cost remains unknown until billing evidence is available.`,
-      );
+      if (Number.isSafeInteger(priced) && priced >= 0) {
+        estimatedCostCents = priced;
+        evidence.push(
+          `AWS EC2 compute-only estimated task cost=${estimatedCostCents} cents for expectedDurationMs=${requirements.expectedDurationMs}; full AWS invoice cost remains unknown until billing evidence is available.`,
+        );
+      } else {
+        evidence.push(
+          "AWS estimated compute amount exceeds exact safe integer representation; total cost UNKNOWN.",
+        );
+      }
     } else {
       evidence.push(
-        "AWS EC2 task cost remains unknown because duration or pricing evidence is incomplete.",
+        "AWS EC2 task cost remains unknown because positive safe integer duration or pricing evidence is incomplete.",
       );
     }
 

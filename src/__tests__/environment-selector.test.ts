@@ -52,6 +52,39 @@ function provider(input: {
   };
 }
 
+describe("P-031 independent resource-use duration source contract", () => {
+  it("refuses zero, negative, fractional, unsafe, NaN and infinite durations before ranking or dispatch", async () => {
+    const registry = new EnvironmentRegistry();
+    let inspectCount = 0;
+    registry.register({
+      ...provider({ id: "priced-cloud", capabilities: ["compute"], cost: 100 }),
+      inspect: async () => {
+        inspectCount += 1;
+        throw new Error("Provider should not be queried for malformed resource lifetime");
+      },
+    });
+    const selector = new EnvironmentSelector(registry);
+    for (const value of [0, -1, 1.5, NaN, Infinity, -Infinity,
+      Number.MAX_SAFE_INTEGER + 1]) {
+      const result = await selector.select({
+        requiredCapabilities: ["compute"], expectedDurationMs: value,
+      });
+      expect(result.selected).toBeNull();
+      expect(result.candidates).toEqual([]);
+      expect(result.unresolved.join(" ")).toContain("expectedDurationMs");
+    }
+    expect(inspectCount).toBe(0);
+    // Duration genuinely UNKNOWN is still discoverable; no mandatory
+    // purchasing timetable or universal fixed duration is invented.
+    const normal = new EnvironmentSelector(new EnvironmentRegistry());
+    const unknown = await normal.select({
+      requiredCapabilities: [], expectedDurationMs: null,
+    });
+    expect(unknown.candidates).toEqual([]);
+    expect(unknown.unresolved.join(" ")).not.toContain("expectedDurationMs");
+  });
+});
+
 describe("P-031 provision timing from source-attributed provider quotes", () => {
   const DAY = 86_400_000;
   it("distinguishes future quoted window and elapsed window without authorizing purchase", async () => {

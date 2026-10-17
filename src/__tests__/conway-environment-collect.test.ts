@@ -262,6 +262,53 @@ describe("ConwayEnvironmentProvider collect", () => {
     expect(estimate.evidence?.join(" ")).toContain("billing granularity");
   });
 
+  it("preserves UNKNOWN Conway cost for invalid resource periods and prorations exceeding safe cents", async () => {
+    const provider = new ConwayEnvironmentProvider({
+      getCreditsBalance: async () => 1_000,
+      getCreditsPricing: async () => [{
+        name: "real-shape", vcpu: 2, memoryMb: 4096,
+        diskGb: 50, monthlyCents: 3000,
+      }],
+    });
+    for (const duration of [0, -3, NaN, Infinity, 1.5,
+      Number.MAX_SAFE_INTEGER + 1]) {
+      const result = await provider.estimate({
+        requiredCapabilities: [], expectedDurationMs: duration,
+      });
+      expect(result.estimatedCostCents).toBeNull();
+      expect(result.costCoverage).toBe("unknown");
+      expect(result.costUnit).toBeNull();
+    }
+    const overflow = new ConwayEnvironmentProvider({
+      getCreditsBalance: async () => 1_000,
+      getCreditsPricing: async () => [{
+        name: "extreme-quote", vcpu: 2, memoryMb: 4096,
+        diskGb: 50, monthlyCents: Number.MAX_SAFE_INTEGER,
+      }],
+    });
+    const impossibleToRepresent = await overflow.estimate({
+      requiredCapabilities: [], expectedDurationMs: Number.MAX_SAFE_INTEGER,
+    });
+    expect(impossibleToRepresent.estimatedCostCents).toBeNull();
+    expect(impossibleToRepresent.costCoverage).toBe("unknown");
+    expect(impossibleToRepresent.evidence?.join(" ")).toContain("exact safe integer");
+    // An explicit provider-advertised zero-priced tier is different
+    // from a missing price or a zero-length usage request.
+    const zeroPriced = new ConwayEnvironmentProvider({
+      getCreditsBalance: async () => 1_000,
+      getCreditsPricing: async () => [{
+        name: "advertised-free", vcpu: 1, memoryMb: 1024,
+        diskGb: 10, monthlyCents: 0,
+      }],
+    });
+    const free = await zeroPriced.estimate({
+      requiredCapabilities: [], expectedDurationMs: 3_600_000,
+    });
+    expect(free.estimatedCostCents).toBe(0);
+    expect(free.costCoverage).toBe("partial");
+    expect(free.costUnit).toBeNull();
+  });
+
   it("collects a child runtime artifact to the canonical parent workspace with matching SHA-256", async () => {
     const body = Buffer.from([1, 2, 3, 4, 5, 250]);
     const sha256 = createHash("sha256")
