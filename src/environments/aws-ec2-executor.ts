@@ -964,7 +964,7 @@ function observedSsmCommandWindow(invocation: {
       typeof invocation.ExecutionEndDateTime !== "string") return null;
   const start = invocation.ExecutionStartDateTime;
   const end = invocation.ExecutionEndDateTime;
-  const zone = /(?:Z|[+-]\\d{2}:\\d{2})$/iu;
+  const zone = /(?:Z|[+-]\d{2}:\d{2})$/iu;
   if (!zone.test(start) || !zone.test(end)) return null;
   const a = Date.parse(start);
   const b = Date.parse(end);
