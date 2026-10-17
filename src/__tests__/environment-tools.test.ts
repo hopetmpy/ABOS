@@ -268,6 +268,56 @@ describe("P-031 optional provider-credit tool observation", () => {
   });
 });
 
+describe("P-031 explicit AWS Billing allocation tool route", () => {
+  it("never requests provider billing allocation history by default or confuses it with cash", async () => {
+    const registry = new EnvironmentRegistry();
+    const calls: Array<boolean | undefined> = [];
+    registry.register({
+      ...provider(), id: "aws",
+      async observeEconomics(options) {
+        calls.push(options?.includeCreditAllocationHistory);
+        return {
+          provider: "aws", status: "partial" as const,
+          accountId: "123456789012",
+          observedAt: new Date().toISOString(), budgets: [],
+          ...(options?.includeCreditAllocationHistory ? {
+            creditAllocationHistory: {
+              windowStart: "2026-09-17T00:00:00Z",
+              windowEnd: "2026-10-17T00:00:00Z",
+              completeness: "observed_page" as const,
+              entries: [{
+                creditId: "mock-credit", billingMonth: "2026-10",
+                appliedServiceName: "Amazon EC2",
+                amountUsdCents: -99, amountRaw: "-0.99",
+                estimatedBill: false,
+                evidence: ["Not a paid invoice"],
+              }],
+              evidence: ["Source-only applied provider credit"],
+            },
+          } : {}),
+          spendableLiquidityUsdCents: null,
+          recurringCommitmentUsdCents: null,
+          procurementAuthority: "not_established" as const,
+          evidence: ["Mock account observation"],
+        };
+      },
+    });
+    const tool = createEnvironmentTools(registry).find(
+      x => x.name === "environment_economic_evidence",
+    )!;
+    const normal = await tool.execute({ environment: "aws" }, {} as any);
+    expect(normal).not.toContain("mock-credit");
+    const requested = await tool.execute({
+      environment: "aws", include_credit_allocation_history: true,
+    }, {} as any);
+    expect(requested).toContain("mock-credit");
+    expect(requested).toContain('"amountUsdCents": -99');
+    expect(requested).toContain('"procurementAuthority": "not_established"');
+    expect(requested).toContain('"spendableLiquidityUsdCents": null');
+    expect(calls).toEqual([false, true]);
+  });
+});
+
 describe("P-031 reviewed path origin in environment procurement", () => {
   it("distinguishes canonical task review from a model-claimed path", async () => {
     const registry = new EnvironmentRegistry();
