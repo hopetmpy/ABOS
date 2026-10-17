@@ -4,6 +4,8 @@ import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { prepareFinancialEffect } from "../economics/financial-effects.js";
 import { buildPlannerContext } from "../orchestration/planner-context.js";
 import { buildPlannerPrompt } from "../orchestration/planner.js";
+import { assignTask, completeTask, failTask, startLocalTaskExecution } from "../orchestration/task-graph.js";
+import { insertTask } from "../state/database.js";
 
 function fixture() {
   const db = createTestDb();
@@ -193,6 +195,44 @@ describe("P-031 source-backed resource outcome → strategic planning (read-only
       expect(learned).toContain("Historical assignment journal incomplete or truncated");
       expect(learned).not.toContain("cpuSampleTaskTimeEvidence=RECORDED_TIMESTAMP_OVERLAP_ONLY");
       expect((db.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects").get() as { n: number }).n).toBe(0);
+    } finally { db.close(); }
+  });
+
+  it("reuses P-013 worker retry evidence in P-031 planning without inventing CPU cost or complete history", async () => {
+    const db = fixture();
+    try {
+      const taskId = insertTask(db.raw, {
+        goalId: "goal-a", title: "test worker attempts", description: "two local attempts",
+        status: "assigned", assignedTo: "local://first", maxRetries: 1,
+      });
+      startLocalTaskExecution(db.raw, taskId, "local://first");
+      failTask(db.raw, taskId, "first failure", true);
+      assignTask(db.raw, taskId, "local://second");
+      startLocalTaskExecution(db.raw, taskId, "local://second");
+      completeTask(db.raw, taskId, {
+        success: true, output: "done", artifacts: [], costCents: 0, duration: 1,
+      });
+      const store = new EnvironmentResourceStore(db.raw);
+      store.create({
+        id: "vm-worker", provider: "synthetic-cloud", externalId: "vm-worker",
+        type: "compute", goalId: "goal-a", taskId, status: "running",
+      });
+      const ctx = (await buildPlannerContext({ db: db.raw, goalId: "goal-a" })).adaptiveContext ?? "";
+      expect(ctx).toContain("localTaskAttemptEvidence=RECORDED_EVENTS_ONLY localWorkerStarts=2 parentTaskOutcomes=2");
+      expect(ctx).toContain("retryScheduled=1 outcomesWithUnknownStart=0");
+      expect(ctx).toContain("fullHistoryCoverage=UNKNOWN remoteWorkerPhysicalTime=UNKNOWN");
+      expect(ctx).toContain("providerCpuShare=UNKNOWN providerBilledCost=UNKNOWN");
+      expect(ctx).toContain("cpuSampleTaskTimeEvidence=UNKNOWN_NO_VALID_CPU_SAMPLE");
+      expect((db.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects").get() as { n: number }).n).toBe(0);
+      // A second resource bound to this Task is only a reference, never a
+      // second Task attempt count or duplicated provider economic expense.
+      store.create({
+        id: "vm-worker-extra", provider: "synthetic-cloud", externalId: "vm-worker-extra",
+        type: "compute", goalId: "goal-a", taskId, status: "running",
+      });
+      const multiple = (await buildPlannerContext({ db: db.raw, goalId: "goal-a" })).adaptiveContext ?? "";
+      expect(multiple.match(/localWorkerStarts=2/g)).toHaveLength(1);
+      expect(multiple).toContain(`localTaskAttemptEvidence=REFERENCE_ONLY:${taskId}`);
     } finally { db.close(); }
   });
 
