@@ -283,7 +283,16 @@ export function assignTask(db: Database, taskId: string, agentAddress: string): 
  * not a parent dispatch, provider CPU bucket or remote execution timestamp.
  * TaskGraph owns the status; P-013 mirrors it as correlated evidence.
  */
-export function startLocalTaskExecution(db: Database, taskId: string, workerAddress: string): void {
+export interface ParentTaskObservationContext {
+  parentGoalId: string;
+  parentTaskId: string;
+  parentRetryCount: number;
+}
+
+export function startLocalTaskExecution(
+  db: Database, taskId: string, workerAddress: string,
+  origin?: ParentTaskObservationContext,
+): void {
   withTransaction(db, () => {
     const task = getTaskById(db, taskId);
     if (!task) throw new Error(`Task not found: ${taskId}`);
@@ -319,8 +328,55 @@ export function startLocalTaskExecution(db: Database, taskId: string, workerAddr
         recordedStartedAt: started,
         workerAddress,
         boundary: "local_harness_execute_invocation",
+        ...(origin ? { remoteParentTask: origin } : {}),
       },
-      provenance: { source: "LocalWorkerPool", scope: "local_worker_only" },
+      provenance: origin
+        ? { source: "StandaloneTaskWorker", scope: "remote_worker_process_local_sqlite" }
+        : { source: "LocalWorkerPool", scope: "local_worker_only" },
+    });
+  });
+}
+
+/**
+ * The harness returned or threw on THIS worker process. This is not a parent
+ * message receipt, a provider sample, or a billed workload duration.
+ * Persist locally before the TaskGraph terminal transition; an interrupted
+ * process cannot produce a fabricated settlement event.
+ */
+export function recordObservedHarnessExecutionSettled(
+  db: Database, taskId: string, workerAddress: string,
+  outcome: "returned" | "threw",
+  origin?: ParentTaskObservationContext,
+): void {
+  withTransaction(db, () => {
+    const task = getTaskById(db, taskId);
+    if (!task || task.status !== "running" || task.assignedTo !== workerAddress ||
+        !task.startedAt) {
+      throw new Error(`Task ${taskId} has no active observed execution owned by ${workerAddress}`);
+    }
+    const observedAt = new Date().toISOString();
+    appendEvidenceEvent(db, {
+      correlationId: correlationIdFor("goal", task.goalId),
+      eventType: "task.local_harness_execution_settled",
+      domain: "orchestration",
+      authorityType: "task_graph",
+      authorityId: task.id,
+      goalId: task.goalId,
+      taskId: task.id,
+      epistemicStatus: "observation",
+      createdAt: observedAt,
+      payload: {
+        workerAddress, retryCountAtSettlement: task.retryCount,
+        recordedStartedAt: task.startedAt, settledObservedAt: observedAt,
+        outcome, boundary: "harness_execute_promise_settled",
+        ...(origin ? { remoteParentTask: origin } : {}),
+        durationAuthority: "UNKNOWN", providerCpuShare: "UNKNOWN",
+        providerBilledCost: "UNKNOWN",
+      },
+      provenance: {
+        source: origin ? "StandaloneTaskWorker" : "LocalWorker",
+        scope: origin ? "remote_worker_process_local_sqlite" : "local_worker_process",
+      },
     });
   });
 }
