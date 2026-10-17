@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-032
 Active-Segment: continuity/C0030.md
-Active-Intervention: P032_SOUL_SELF_MODEL — AUDIT_OPEN / P031_SOURCE_E3_MAIN_GREEN / P005_LIVE_UNKNOWN
+Active-Intervention: P032_SOUL_SELF_MODEL — EN_EJECUCIÓN / IMMUTABLE_IDENTITY_AND_LEXICAL_DIAGNOSTIC_E3_GREEN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-close-e3-open-p032-20261017
-Host-Head-At-Audit-Open: 9033ce0b9e40bb3a275f3c23f44c27518bd0f2c2
-Last-Reconciled-Host-Head: 9033ce0b9e40bb3a275f3c23f44c27518bd0f2c2
-Observed-Main-Head: 9033ce0b9e40bb3a275f3c23f44c27518bd0f2c2
-Last-Product-Head: 9033ce0b9e40bb3a275f3c23f44c27518bd0f2c2
-Last-Product-CI: exact main 9033ce0b9e40bb3a275f3c23f44c27518bd0f2c2 push 39076067564 — COMPLETE SUCCESS 8/8
+Current-Host-Branch: abos/p032-first-source-checkpoint-20261017
+Host-Head-At-Audit-Open: a576e4af3449d38cf46120142126aa571ab8e2bf
+Last-Reconciled-Host-Head: a576e4af3449d38cf46120142126aa571ab8e2bf
+Observed-Main-Head: a576e4af3449d38cf46120142126aa571ab8e2bf
+Last-Product-Head: a576e4af3449d38cf46120142126aa571ab8e2bf
+Last-Product-CI: exact main a576e4af3449d38cf46120142126aa571ab8e2bf push 39077213890 — COMPLETE SUCCESS 8/8
 Last-Completed-Plan: P-031
 Last-Completed-Merge: 9033ce0b9e40bb3a275f3c23f44c27518bd0f2c2
 Last-Completed-CI: 39076067564 — SUCCESS 8/8
@@ -30,6 +30,14 @@ Master-Plan-PR: 31
 Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
+
+
+## P-032 — Identity integrity and lexical-only diagnosis: E3 checkpoint (2026-10-17)
+
+- Product source PR #208 https://github.com/hopetmpy/ABOS/pull/208, squash merged `main a576e4af3449d38cf46120142126aa571ab8e2bf`. Exact-main push CI `39077213890` COMPLETE SUCCESS **8/8** (Node22/24, Windows22/24, distribution22/24, security/integrity). Zero live/external identity assertions. No open PR at initial checkpoint.
+- **Existing owner correction, not new Soul system:** `src/types.ts` defines immutable Soul frontmatter; `src/agent/tools-core.ts:update_soul` formerly projected ANY agent `section` to a patch key, while `src/soul/tools.ts:updateSoul` spread the patch and `validateSoul` checked body content but not ownership. Now the tool accepts only serializable Soul/v1 body fields and the shared writer rejects agent/reflection edits of immutable name, address, creator, bornAt, constitutionHash or genesisPromptOriginal, including first creation. Existing identity cannot silently change even with a label such as human/system; ordinary authored strategy, core-purpose description and reflection evidence remain possible.
+- `computeGenesisAlignment` remains Jaccard+recall **lexical diagnostic**, not a semantic verifier or automatic drift decision. `reflectOnSoul` no longer proposes restoring the original genesis solely because paraphrase shares few tokens. Adversarial tests cover origin immutability, post-genesis update, mutable strategy, semantically similar paraphrase with low overlap and contradictory content with high overlap. No new inference model, global allowlist of capabilities, approval engine or identity database.
+- **Still OPEN P-032.** Next causal audit: `updateSoul` writes SOUL.md before `insertSoulHistory` to SQLite; if history write fails, file and ledger may diverge despite a returned failure. Verify exact failure path and existing filesystem/DB recovery mechanisms before any solution. Assess external file tamper/restart, proper constitution binding, mutable self-model evidence and child inheritance; do not infer a second authority. P-005 E5/E6 remains UNKNOWN, P-031 SOURCE/E3 remains HECHO.
 
 ## P-031 — Cierre SOURCE/E3 y apertura de P-032 (2026-10-17)
 
