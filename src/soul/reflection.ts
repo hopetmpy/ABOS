@@ -83,13 +83,12 @@ export async function reflectOnSoul(
     // Build suggestions for mutable sections (NOT auto-applied)
     const suggestedUpdates: SoulReflection["suggestedUpdates"] = [];
 
-    if (alignment < 0.5 && soul.genesisPromptOriginal) {
-      suggestedUpdates.push({
-        section: "corePurpose",
-        reason: `Genesis alignment is low (${alignment.toFixed(2)}). Purpose may have drifted significantly from original genesis.`,
-        suggestedContent: soul.genesisPromptOriginal,
-      });
-    }
+    // Low word overlap can be a faithful paraphrase, and high overlap can
+    // reverse the meaning ("never deceive" vs "deceive"). The legacy score
+    // remains a lexical diagnostic, NOT evidence of purpose/constitution drift
+    // and not a reason to suggest reverting a mutable core-purpose description.
+    // Semantic suggestions require independent, attributed evidence; none is
+    // manufactured by this keyword comparison.
 
     return {
       currentAlignment: alignment,

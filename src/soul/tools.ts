@@ -43,6 +43,7 @@ export async function updateSoul(
 
     // Load current soul or create default
     let current = loadCurrentSoul(db, resolvedPath);
+    const existing = current;
     if (!current) {
       current = createDefaultSoul(
         updates.corePurpose || "No purpose set.",
@@ -50,6 +51,36 @@ export async function updateSoul(
         updates.address || "",
         updates.creator || "",
       );
+    }
+
+    // Soul v1 frontmatter is a protected identity reference, not a regular
+    // self-description. Agent/reflection paths cannot author those fields,
+    // even on first creation. Existing lineage/constitution references cannot
+    // be silently rewritten by labelling a call "system" or "human".
+    const immutable = [
+      "name", "address", "creator", "bornAt",
+      "constitutionHash", "genesisPromptOriginal",
+    ] as const;
+    const forbidden: string[] = immutable.filter(field =>
+      Object.hasOwn(updates, field) &&
+      (source === "agent" || source === "reflection" ||
+        (existing !== null && updates[field] !== existing[field]))
+    );
+    // Reflection owns its diagnostic score; ordinary self-editing cannot
+    // fabricate identity-alignment evidence or version/history metadata.
+    const managed = [
+      "genesisAlignment", "lastReflected", "format", "version",
+      "updatedAt", "rawContent", "contentHash",
+    ] as const;
+    if (source === "agent") {
+      forbidden.push(...managed.filter(field => Object.hasOwn(updates, field)));
+    }
+    if (forbidden.length > 0) {
+      return {
+        success: false,
+        version: current.version,
+        errors: ["Protected Soul identity or runtime evidence cannot be edited through updateSoul: " + forbidden.join(", ")],
+      };
     }
 
     // Merge updates into current soul
