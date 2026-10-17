@@ -19,6 +19,7 @@ import type {
 } from "./aws.js";
 import type { EnvironmentProvisionRequest, EnvironmentResource } from "./types.js";
 import { LifecycleProcurementNotDispatchedError } from "./procurement-lifecycle-adapter.js";
+import { isExplicitInstant } from "./time-evidence.js";
 
 interface ClaimedMutationPermit {
   scope: Readonly<ProviderProcurementScope>;
@@ -70,8 +71,10 @@ export function createAwsClaimedProvisionAuthority(db: Database.Database) {
       action: () => Promise<T>,
     ): Promise<T> {
       const now = Date.now();
-      const expiry = Date.parse(scenario.financing.validUntil ?? "");
-      const observation = Date.parse(scenario.financing.observedAt ?? "");
+      const expiry = isExplicitInstant(scenario.financing.validUntil)
+        ? Date.parse(scenario.financing.validUntil) : NaN;
+      const observation = isExplicitInstant(scenario.financing.observedAt)
+        ? Date.parse(scenario.financing.observedAt) : NaN;
       const evidence = scenario.cost.billingTermsEvidence?.filter(x => typeof x === "string" && x.trim()) ?? [];
       if (scope.provider !== "aws" || scope.operation !== "provision" ||
           scope.unit !== "usd_cent" || authorized.unit !== scope.unit ||
@@ -128,7 +131,8 @@ export function createAwsClaimedProvisionAuthority(db: Database.Database) {
       action: () => Promise<T>,
     ): Promise<T> {
       const now = Date.now();
-      const observedAt = Date.parse(scenario.financing.observedAt ?? "");
+      const observedAt = isExplicitInstant(scenario.financing.observedAt)
+        ? Date.parse(scenario.financing.observedAt) : NaN;
       const expiry = Date.parse(scenario.financing.validUntil ?? "");
       const evidence = scenario.cost.billingTermsEvidence?.filter(v =>
         typeof v === "string" && v.trim()) ?? [];
