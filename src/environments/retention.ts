@@ -131,7 +131,12 @@ export class EnvironmentRetentionCoordinator {
         result.artifactHolds += 1;
         continue;
       }
-      if (resource.metadata.retentionReleaseState === "pending_observation") {
+      // A process may crash after persisting destroy_requested but before
+      // recording the provider callback or pending_observation. Both states
+      // describe a possibly dispatched destructive action: reconcile first
+      // and never blindly issue another destroy on startup.
+      if (resource.metadata.retentionReleaseState === "pending_observation" ||
+          resource.metadata.retentionReleaseState === "destroy_requested") {
         resource = await this.observeAfterUncertainDestroy(resource, result);
         if (resource.status === "terminated") {
           result.released += 1;
@@ -150,10 +155,10 @@ export class EnvironmentRetentionCoordinator {
             ? resource.metadata.retentionDestroyFingerprint
             : null;
 
-        if (currentFingerprint === previousFingerprint) {
+        if (!previousFingerprint || currentFingerprint === previousFingerprint) {
           result.pendingObservation += 1;
           result.evidence.push(
-            `Retention release for resource ${resource.id} remains pending: provider observation is unchanged after an uncertain destroy, so ABOS will not blindly repeat the same destructive attempt.`,
+            `Retention release for resource ${resource.id} remains pending: the prior destroy fingerprint is ${previousFingerprint ? "unchanged" : "missing"} after provider observation. ABOS will not blindly repeat a possibly dispatched destructive attempt.`,
           );
           continue;
         }
