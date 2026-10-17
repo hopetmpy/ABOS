@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { AdaptiveStore } from "../intelligence/store.js";
 import { EnvironmentRegistry } from "../environments/registry.js";
 import { createEnvironmentTools } from "../environments/tools.js";
+import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
+import { EnvironmentResourceStore } from "../environments/resource-store.js";
+import { createLifecycleProcurementDependencies } from "../environments/procurement-lifecycle-adapter.js";
 import { PolicyEngine } from "../agent/policy-engine.js";
 import { createTestDb } from "./mocks.js";
 import { insertGoal, insertTask } from "../state/database.js";
@@ -198,6 +201,143 @@ describe("P-031 agent environment_procurement_execute runtime route", () => {
       expect(db.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects")
         .get()).toMatchObject({ n: 0 });
     } finally { db.close(); }
+  });
+
+  it("routes the actual agent catalog through host-backed P-018 provisioning and independently checked health", async () => {
+    const { db, registry, scope, args } = setup();
+    try {
+      const calls: string[] = [];
+      registry.register({
+        id: "synthetic",
+        async inspect() {
+          return {
+            id: "synthetic", label: "Trusted synthetic provider",
+            availability: "available", capabilities: [],
+            evidence: ["Test-only provider."], constraints: [],
+            observedAt: new Date().toISOString(),
+          };
+        },
+        async provision(request) {
+          calls.push(request.resourceId);
+          expect(request.goalId).toBe(scope.goalId);
+          expect(request.pathId).toBe(scope.pathId);
+          expect(request.taskId).toBe(scope.taskId);
+          expect(request.region).toBe(scope.region);
+          return {
+            status: "running", externalId: "synthetic-external-1",
+            providerState: "running",
+            evidence: ["Synthetic provider accepted one resource."],
+          };
+        },
+        async health(resource) {
+          expect(resource.externalId).toBe("synthetic-external-1");
+          return {
+            healthy: true, status: "running",
+            evidence: ["Independent synthetic provider health observation."],
+          };
+        },
+      });
+      const lifecycle = new EnvironmentLifecycleManager(
+        registry, new EnvironmentResourceStore(db.raw),
+      );
+      const quote = createScenario();
+      const policyDecisionId = exactP010Decision(db, scope, quote);
+      const dependencies = createLifecycleProcurementDependencies(lifecycle, {
+        observeAuthenticatedEconomics: async () => quote,
+        resolveProvisionRequest: async () => ({
+          resourceType: "synthetic-compute",
+          requiredCapabilities: ["compute"],
+          retentionPolicy: "until_goal_complete",
+          metadata: { instanceType: scope.resourceShape },
+        }),
+      });
+      const tool = createEnvironmentTools(registry, {
+        getTrustedProcurementDependencies: (provider, operation) =>
+          provider === "synthetic" && operation === "provision"
+            ? dependencies : null,
+      }).find(t => t.name === "environment_procurement_execute")!;
+
+      const input = { ...args, policy_decision_id: policyDecisionId };
+      const first = JSON.parse(await tool.execute(input, { db } as any));
+      expect(first.status).toBe("usable");
+      expect(first.dispatched).toBe(true);
+      expect(first.financialEffectState).toBe("pending");
+      expect(first.supplierSettlement).toBe("UNKNOWN");
+      expect(calls).toEqual([scope.resourceId]);
+      const resource = lifecycle.resources.get(scope.resourceId)!;
+      expect(resource.provider).toBe(scope.provider);
+      expect(resource.status).toBe("running");
+      expect(resource.goalId).toBe(scope.goalId);
+      expect(resource.taskId).toBe(scope.taskId);
+      expect(resource.pathId).toBe(scope.pathId);
+      expect(resource.lastHealthCheck).not.toBeNull();
+      expect(resource.externalId).toBe("synthetic-external-1");
+
+      const replay = JSON.parse(await tool.execute(input, { db } as any));
+      expect(replay.dispatched).toBe(false);
+      expect(replay.status).toBe("not_dispatched");
+      expect(calls).toHaveLength(1);
+      expect(db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get())
+        .toMatchObject({ n: 0 });
+    } finally {
+      db.close();
+    }
+  });
+
+  it("keeps P-018 unhealthy provision separate from paid settlement and does not re-dispatch", async () => {
+    const { db, registry, scope, args } = setup();
+    try {
+      const calls: string[] = [];
+      registry.register({
+        id: "synthetic",
+        async inspect() {
+          return {
+            id: "synthetic", label: "Synthetic unhealthy service",
+            availability: "available", capabilities: [],
+            evidence: ["Test-only provider."], constraints: [],
+            observedAt: new Date().toISOString(),
+          };
+        },
+        async provision(request) {
+          calls.push(request.resourceId);
+          return { status: "ready", externalId: "synthetic-resource-unhealthy" };
+        },
+        async health() {
+          return {
+            healthy: false, status: "degraded",
+            evidence: ["Unhealthy resource requires P-018 recovery."],
+          };
+        },
+      });
+      const lifecycle = new EnvironmentLifecycleManager(
+        registry, new EnvironmentResourceStore(db.raw),
+      );
+      const quote = createScenario();
+      const policyDecisionId = exactP010Decision(db, scope, quote);
+      const dependencies = createLifecycleProcurementDependencies(lifecycle, {
+        observeAuthenticatedEconomics: async () => quote,
+        resolveProvisionRequest: async () => ({
+          resourceType: "synthetic-compute",
+          requiredCapabilities: ["compute"], retentionPolicy: "ephemeral",
+        }),
+      });
+      const tool = createEnvironmentTools(registry, {
+        getTrustedProcurementDependencies: () => dependencies,
+      }).find(t => t.name === "environment_procurement_execute")!;
+      const input = { ...args, policy_decision_id: policyDecisionId };
+      const result = JSON.parse(await tool.execute(input, { db } as any));
+      expect(result.status).toBe("pending");
+      expect(result.financialEffectState).toBe("pending");
+      expect(lifecycle.resources.get(scope.resourceId)?.status).toBe("degraded");
+      expect(calls).toHaveLength(1);
+      const repeated = JSON.parse(await tool.execute(input, { db } as any));
+      expect(repeated.dispatched).toBe(false);
+      expect(calls).toHaveLength(1);
+      expect(db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get())
+        .toMatchObject({ n: 0 });
+    } finally {
+      db.close();
+    }
   });
 
   it("rejects unknown providers and invalid scope before looking up any trusted adapter", async () => {
