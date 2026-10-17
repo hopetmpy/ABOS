@@ -1000,6 +1000,9 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
                 cpuUtilizationAveragePct: null,
                 cpuUtilizationObservedAt: null,
                 cpuUtilizationMetricStatus: "unknown",
+                cpuUtilizationMetricSource: null,
+                cpuUtilizationRequestedPeriodSeconds: null,
+                cpuUtilizationPeriodEvidence: "unknown",
               } : {}),
               ...(capacityUnavailable ? {
                 capacity: null,
@@ -1063,6 +1066,9 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
           cpuUtilizationAveragePct: null,
           cpuUtilizationObservedAt: null,
           cpuUtilizationMetricStatus: "unknown",
+          cpuUtilizationMetricSource: null,
+          cpuUtilizationRequestedPeriodSeconds: null,
+          cpuUtilizationPeriodEvidence: "unknown",
         };
         evidence.push("AWS CPU utilization UNKNOWN: instance is not running; no measured idle CPU inferred.");
       }
@@ -2195,10 +2201,16 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         cpuUtilizationAveragePct: null,
         cpuUtilizationObservedAt: null,
         cpuUtilizationMetricStatus: "unknown",
+        cpuUtilizationMetricSource: null,
+        cpuUtilizationRequestedPeriodSeconds: null,
+        cpuUtilizationPeriodEvidence: "unknown",
       } as Record<string, unknown>,
       evidence: `AWS CloudWatch CPU utilization UNKNOWN: ${reason}. No size/retirement decision inferred.`,
     });
     const start = now.getTime() - 15 * 60_000;
+    // This is the requested CloudWatch statistics period, not provider-confirmed
+    // sample coverage, per-process usage, or a billing interval.
+    const requestedPeriodSeconds = 300;
     let result: CommandResult;
     try {
       result = await this.runAws([
@@ -2208,7 +2220,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         "--dimensions", `Name=InstanceId,Value=${instanceId}`,
         "--start-time", new Date(start).toISOString(),
         "--end-time", now.toISOString(),
-        "--period", "300",
+        "--period", String(requestedPeriodSeconds),
         "--statistics", "Average",
         "--output", "json",
         ...regionArgs(region),
@@ -2239,8 +2251,10 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         cpuUtilizationObservedAt: observedAt,
         cpuUtilizationMetricStatus: "observed",
         cpuUtilizationMetricSource: "aws_cloudwatch_AWS/EC2_CPUUtilization_Average",
+        cpuUtilizationRequestedPeriodSeconds: requestedPeriodSeconds,
+        cpuUtilizationPeriodEvidence: "requested_only",
       },
-      evidence: `AWS CloudWatch measured CPUUtilization Average=${latest.average}% observedAt=${observedAt}; CPU alone is not total capacity or invoice evidence.`,
+      evidence: `AWS CloudWatch measured CPUUtilization Average=${latest.average}% observedAt=${observedAt}; requestedPeriod=${requestedPeriodSeconds}s (provider bucket bounds UNKNOWN); CPU alone is not total capacity or invoice evidence, nor Task share.`,
     };
   }
 

@@ -1050,6 +1050,7 @@ describe("AwsEnvironmentProvider lifecycle", () => {
         expect(args).toContain("AWS/EC2");
         expect(args).toContain("CPUUtilization");
         expect(args).toContain("Name=InstanceId,Value=i-1234567890");
+        expect(args.slice(args.indexOf("--period"), args.indexOf("--period") + 2)).toEqual(["--period", "300"]);
         return ok(JSON.stringify({
           Datapoints: [
             { Timestamp: observedAt, Average: 27.5 },
@@ -1068,6 +1069,9 @@ describe("AwsEnvironmentProvider lifecycle", () => {
     expect(health.metadata?.cpuUtilizationAveragePct).toBe(27.5);
     expect(health.metadata?.cpuUtilizationObservedAt).toBe(observedAt);
     expect(health.metadata?.cpuUtilizationMetricStatus).toBe("observed");
+    expect(health.metadata?.cpuUtilizationRequestedPeriodSeconds).toBe(300);
+    expect(health.metadata?.cpuUtilizationPeriodEvidence).toBe("requested_only");
+    expect(health.evidence.join(" ")).toContain("requestedPeriod=300s (provider bucket bounds UNKNOWN)");
     expect(health.evidence.join(" ")).toContain("CPU alone is not total capacity or invoice evidence");
     expect(calls.filter(args => args[0] === "cloudwatch")).toHaveLength(1);
   });
@@ -1099,6 +1103,8 @@ describe("AwsEnvironmentProvider lifecycle", () => {
       expect(health.metadata?.cpuUtilizationAveragePct).toBeNull();
       expect(health.metadata?.cpuUtilizationObservedAt).toBeNull();
       expect(health.metadata?.cpuUtilizationMetricStatus).toBe("unknown");
+      expect(health.metadata?.cpuUtilizationRequestedPeriodSeconds).toBeNull();
+      expect(health.metadata?.cpuUtilizationPeriodEvidence).toBe("unknown");
       expect(health.evidence.join(" ")).toContain("CPU utilization UNKNOWN");
     }
   });
@@ -1128,6 +1134,8 @@ describe("AwsEnvironmentProvider lifecycle", () => {
           cpuUtilizationAveragePct: 90,
           cpuUtilizationObservedAt: new Date(Date.now() - 60_000).toISOString(),
           cpuUtilizationMetricStatus: "observed",
+          cpuUtilizationRequestedPeriodSeconds: 300,
+          cpuUtilizationPeriodEvidence: "requested_only",
         },
       });
       const lifecycle = new EnvironmentLifecycleManager(registry, store);
@@ -1136,6 +1144,8 @@ describe("AwsEnvironmentProvider lifecycle", () => {
       expect(refreshed.metadata.cpuUtilizationAveragePct).toBeNull();
       expect(refreshed.metadata.cpuUtilizationObservedAt).toBeNull();
       expect(refreshed.metadata.cpuUtilizationMetricStatus).toBe("unknown");
+      expect(refreshed.metadata.cpuUtilizationRequestedPeriodSeconds).toBeNull();
+      expect(refreshed.metadata.cpuUtilizationPeriodEvidence).toBe("unknown");
       expect(store.get(owned.id)?.metadata.cpuUtilizationAveragePct).toBeNull();
       expect(calls.some(args => args[0] === "cloudwatch")).toBe(false);
     } finally {
