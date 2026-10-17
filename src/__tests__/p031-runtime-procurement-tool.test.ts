@@ -543,6 +543,165 @@ describe("P-031 agent environment_procurement_execute runtime route", () => {
   });
 });
 
+
+describe("P-031 P-030-claimed AWS capacity mutation runtime, synthetic account only", () => {
+  for (const operation of ["resize", "resume", "recover"] as const) {
+    it("binds " + operation + " to one exact P-010/P-030 claim and rejects a raw repeat", async () => {
+      const { db, scope: baseline, args: original, registry } = setup();
+      try {
+        const scope: ProviderProcurementScope = {
+          ...baseline, operation,
+          operationKey: "p031-aws-mutation-" + operation,
+          provider: "aws", providerAccountId: "123456789012",
+          resourceId: "owned-mutation-" + operation, externalId: "i-mutated",
+          region: "us-east-1",
+          resourceShape: operation === "resize" ? "t3.small" : "t3.micro",
+        };
+        const quote = createScenario();
+        quote.provider = "aws"; quote.accountId = scope.providerAccountId;
+        quote.financing.accountId = scope.providerAccountId;
+        const authority = createAwsClaimedProvisionAuthority(db.raw);
+        const commands: string[][] = [];
+        const runner = vi.fn(async (_command: string, argv: string[]) => {
+          commands.push(argv);
+          const ok = (stdout = "{}") => ({ stdout, stderr: "", exitCode: 0 });
+          if (argv[0] === "sts" && argv[1] === "get-caller-identity")
+            return ok(JSON.stringify({ Account: scope.providerAccountId }));
+          if (argv[0] === "ec2" && argv[1] === "describe-instances")
+            return ok(JSON.stringify({
+              InstanceId: scope.externalId, State: { Name: "stopped" },
+              InstanceType: "t3.micro",
+            }));
+          if (argv[0] === "ec2" && ["start-instances", "stop-instances",
+            "modify-instance-attribute", "wait"].includes(argv[1]!)) return ok();
+          throw new Error("Unexpected synthetic AWS command: " + argv.join(" "));
+        });
+        const aws = new AwsEnvironmentProvider({
+          runner, defaultRegion: scope.region,
+          authorizeNewProvision: authority.authorizeNewProvision,
+          authorizeBillableMutation: authority.authorizeBillableMutation,
+        });
+        registry.register(aws);
+        const resources = new EnvironmentResourceStore(db.raw);
+        resources.create({
+          id: scope.resourceId, provider: scope.provider,
+          externalId: scope.externalId, type: "aws-ec2-instance",
+          goalId: scope.goalId, taskId: scope.taskId, pathId: scope.pathId,
+          region: scope.region, status: "suspended",
+          retentionPolicy: "until_goal_complete",
+          metadata: { instanceType: "t3.micro" },
+        });
+        const lifecycle = new EnvironmentLifecycleManager(registry, resources);
+        const first = createLifecycleProcurementDependencies(lifecycle, {
+          observeAuthenticatedEconomics: async () => quote,
+          resolveMutationRequest: async () => ({
+            externalId: scope.externalId!, region: scope.region,
+            targetInstanceType: scope.resourceShape,
+            source: "synthetic-trusted-host", evidence: ["Synthetic provider identity+shape."],
+          }),
+        }, authority);
+        const tool = createEnvironmentTools(registry, {
+          getTrustedProcurementDependencies: (provider, op) =>
+            provider === "aws" && op === operation ? first : null,
+        }).find(t => t.name === "environment_procurement_execute")!;
+        const input = {
+          ...original, operation, operation_key: scope.operationKey,
+          provider: scope.provider,
+          provider_account_id: scope.providerAccountId,
+          resource_id: scope.resourceId, external_id: scope.externalId,
+          region: scope.region, resource_shape: scope.resourceShape,
+          policy_decision_id: exactP010Decision(db, scope, quote),
+        };
+        await expect(aws.resume(resources.get(scope.resourceId)!))
+          .rejects.toBeInstanceOf(AwsEc2ProcurementNotDispatchedError);
+        // The raw AWS provider must not accept an operation outside an active
+        // claimed mandate even when STS has a matching account.
+        expect(commands.some(a => a[1] === "start-instances" ||
+          a[1] === "modify-instance-attribute")).toBe(false);
+
+        const result = JSON.parse(await tool.execute(input, { db } as any));
+        expect(result.dispatched).toBe(true);
+        expect(result.status).toBe("pending");
+        expect(result.financialEffectState).toBe("pending");
+        expect(result.supplierSettlement).toBe("UNKNOWN");
+        const effects = db.raw.prepare("SELECT COUNT(*) AS count FROM financial_effects")
+          .get() as { count: number };
+        expect(effects.count).toBe(1);
+        const mutations = () => commands.filter(c => c[0] === "ec2" &&
+          ["start-instances", "modify-instance-attribute"].includes(c[1]!));
+        expect(mutations()).toHaveLength(1);
+        const replay = JSON.parse(await tool.execute(input, { db } as any));
+        expect(replay.status).toBe("not_dispatched");
+        expect(mutations()).toHaveLength(1);
+        expect(authority.authorizeBillableMutation({
+          operation, resource: resources.get(scope.resourceId)!,
+          accountId: scope.providerAccountId, instanceId: scope.externalId!,
+          region: scope.region, targetInstanceType: scope.resourceShape,
+        }).allowed).toBe(false);
+        expect(db.raw.prepare("SELECT COUNT(*) AS count FROM transactions")
+          .get()).toMatchObject({ count: 0 });
+      } finally { db.close(); }
+    });
+  }
+
+  it("rejects an unproven target identity before AWS billable mutation", async () => {
+    const { db, scope: baseline, args: original, registry } = setup();
+    try {
+      const scope: ProviderProcurementScope = {
+        ...baseline, operation: "resize", provider: "aws",
+        providerAccountId: "123456789012", resourceId: "owned-invalid-mutation",
+        externalId: "i-valid", region: "us-east-1", resourceShape: "t3.small",
+      };
+      const quote = createScenario();
+      quote.provider = "aws"; quote.accountId = scope.providerAccountId;
+      quote.financing.accountId = scope.providerAccountId;
+      let physicalCalls = 0;
+      registry.register({
+        id: "aws",
+        inspect: async () => ({
+          id: "aws", label: "Synthetic", availability: "available" as const,
+          capabilities: [], evidence: [], constraints: [],
+          observedAt: new Date().toISOString(),
+        }),
+        resize: async () => {
+          physicalCalls++; return { status: "running" as const };
+        },
+      });
+      const resources = new EnvironmentResourceStore(db.raw);
+      resources.create({
+        id: scope.resourceId, provider: "aws", externalId: scope.externalId,
+        type: "aws-ec2-instance", region: scope.region, status: "suspended",
+        goalId: scope.goalId, taskId: scope.taskId, pathId: scope.pathId,
+        metadata: { instanceType: "t3.micro" },
+      });
+      const lifecycle = new EnvironmentLifecycleManager(registry, resources);
+      const authority = createAwsClaimedProvisionAuthority(db.raw);
+      const dependencies = createLifecycleProcurementDependencies(lifecycle, {
+        observeAuthenticatedEconomics: async () => quote,
+        resolveMutationRequest: async () => ({
+          externalId: "i-other-account", region: scope.region,
+          targetInstanceType: scope.resourceShape, source: "trusted-identity",
+          evidence: ["Account mismatch."],
+        }),
+      }, authority);
+      const tool = createEnvironmentTools(registry, {
+        getTrustedProcurementDependencies: () => dependencies,
+      }).find(t => t.name === "environment_procurement_execute")!;
+      const result = JSON.parse(await tool.execute({
+        ...original, operation: scope.operation, provider: scope.provider,
+        provider_account_id: scope.providerAccountId,
+        resource_id: scope.resourceId, external_id: scope.externalId,
+        region: scope.region, resource_shape: scope.resourceShape,
+        policy_decision_id: exactP010Decision(db, scope, quote),
+      }, { db } as any));
+      expect(result.status).toBe("rejected");
+      expect(result.dispatched).toBe(false);
+      expect(result.financialEffectState).toBe("rejected");
+      expect(physicalCalls).toBe(0);
+    } finally { db.close(); }
+  });
+});
+
 describe("P-031 AWS real lifecycle secondary gate, synthetic account only", () => {
   it("accepts exactly the P-030-claimed P-010-reviewed EC2 operation and refuses raw lifecycle bypass after the permit closes", async () => {
     const { db, scope: base, registry, args: original } = setup();
