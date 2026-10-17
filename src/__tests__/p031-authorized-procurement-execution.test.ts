@@ -333,6 +333,16 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
       expect(run.financialEffect?.state).toBe("pending");
       expect(run.financialEffect?.unit).toBe("usd_cent");
       expect(run.financialEffect?.request.providerAccountId).toBe("123456789012");
+      // The durable P-030 intent must retain the source-approved lifecycle
+      // quotation; its SHA alone cannot reconstruct renewal obligations
+      // once the process and provider quote observer are gone.
+      expect(run.financialEffect?.request.supplierLifecycleQuote).toEqual({
+        renewal: "manual",
+        additionalCommittedRenewalCents: 0,
+        additionalExitChargeCents: 0,
+        cancellationRouteDocumented: false,
+        source: "synthetic supplier contract",
+      });
       expect(calls).toHaveLength(1);
       const repeat = await executeReviewedProviderProcurement(db.raw, {
         scope, policyDecisionId: decisionId, dependencies: deps,

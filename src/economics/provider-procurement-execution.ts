@@ -367,6 +367,24 @@ export async function executeReviewedProviderProcurement(
     taskId: scope.taskId,
     pathId: scope.pathId,
     economicScenarioHash: args.economicScenarioHash,
+    // Preserve the supplier-quoted contract exposure at the sole P-030
+    // financial intent owner. A hash alone cannot answer post-retirement
+    // renewal/exit questions after the trusted observation is gone. These
+    // are APPROVED QUOTE TERMS, not an executed cancellation, supplier bill
+    // or evidence of actual renewal. Missing source remains UNKNOWN.
+    supplierLifecycleQuote: scenario.cost.lifecycleTerms
+      ? {
+          renewal: scenario.cost.lifecycleTerms.renewal,
+          additionalCommittedRenewalCents:
+            scenario.cost.lifecycleTerms.additionalCommittedRenewalCents,
+          additionalExitChargeCents:
+            scenario.cost.lifecycleTerms.additionalExitChargeCents,
+          cancellationRouteDocumented:
+            (scenario.cost.lifecycleTerms.cancellationRouteEvidence ?? [])
+              .some(entry => typeof entry === "string" && entry.trim()),
+          source: scenario.cost.lifecycleTerms.source,
+        }
+      : null,
   };
   // Recalculate free provider-account funding after all locally known
   // obligations against the source observation. This is a single local SQLite
