@@ -713,6 +713,8 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
       artifacts: semanticArtifacts,
     };
 
+    const ssmCommandWindow = observedSsmCommandWindow(invocation);
+
     return {
       result: semanticResult,
       evidence: [
@@ -728,6 +730,11 @@ export class AwsEc2TaskExecutor implements EnvironmentTaskExecutor {
         commandId: invocation.CommandId ?? null,
         instanceId,
         responseCode: invocation.ResponseCode ?? null,
+        // SSM observes its COMMAND, not the ABOS harness or billable CPU.
+        // Never infer a window from command timeout or TaskResult.duration.
+        ssmCommandWindow,
+        ssmCommandWindowAuthority: ssmCommandWindow
+          ? "aws_ssm_get_command_invocation_command_only" : "UNKNOWN",
         remoteArtifacts,
         collectedArtifacts,
         artifactCollectionState,
@@ -941,6 +948,28 @@ function stringArray(value: unknown): string[] {
         .map((entry) => entry.trim())
         .filter(Boolean)
     : [];
+}
+
+/**
+ * Verified at the existing AWS CLI SSM response boundary. A command may
+ * contain shell setup, bootstrap and marker output beyond the harness; even a
+ * genuine start/end is not Task CPU, account billing or an EC2 billing period.
+ */
+function observedSsmCommandWindow(invocation: {
+  Status?: string; CommandId?: string;
+  ExecutionStartDateTime?: string; ExecutionEndDateTime?: string;
+}): { commandId: string; startedAt: string; endedAt: string } | null {
+  if (invocation.Status !== "Success" || !invocation.CommandId ||
+      typeof invocation.ExecutionStartDateTime !== "string" ||
+      typeof invocation.ExecutionEndDateTime !== "string") return null;
+  const start = invocation.ExecutionStartDateTime;
+  const end = invocation.ExecutionEndDateTime;
+  const zone = /(?:Z|[+-]\\d{2}:\\d{2})$/iu;
+  if (!zone.test(start) || !zone.test(end)) return null;
+  const a = Date.parse(start);
+  const b = Date.parse(end);
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b < a) return null;
+  return { commandId: invocation.CommandId, startedAt: start, endedAt: end };
 }
 
 function parseTaskResult(stdout: string): TaskResult | null {
