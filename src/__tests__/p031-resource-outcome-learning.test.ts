@@ -159,6 +159,43 @@ describe("P-031 source-backed resource outcome → strategic planning (read-only
     } finally { db.close(); }
   });
 
+  it("keeps metering UNKNOWN when a P-018 reassignment lacks its P-013 snapshot", async () => {
+    const db = fixture();
+    try {
+      const store = new EnvironmentResourceStore(db.raw);
+      store.create({
+        id: "vm-gap", provider: "synthetic-cloud", externalId: "vm-gap",
+        type: "compute", goalId: "goal-a", taskId: "task-b", status: "running",
+        metadata: {
+          cpuUtilizationMetricStatus: "observed", cpuUtilizationAveragePct: 20,
+          cpuUtilizationObservedAt: "2026-10-16T15:05:00.000Z",
+          cpuUtilizationMetricSource: "synthetic-aggregate-average",
+        },
+      });
+      store.applyMutation("vm-gap", {
+        goalId: "goal-b", taskId: "task-foreign",
+      }, "reassign", "Move elsewhere");
+      store.applyMutation("vm-gap", {
+        goalId: "goal-a", taskId: "task-b",
+      }, "reassign", "Return to original task");
+      const events = store.listEvents("vm-gap");
+      expect(events).toHaveLength(3);
+      const deletion = db.raw.prepare(
+        "DELETE FROM evidence_events WHERE authority_type = 'environment_resource_event' AND authority_id = ?"
+      ).run(events[1]!.id);
+      expect(deletion.changes).toBe(1);
+      // The surviving join appears to show task-b continuously, but the
+      // canonical resource journal proves an unobserved intermediate event.
+      const context = await buildPlannerContext({ db: db.raw, goalId: "goal-a" });
+      const learned = context.adaptiveContext ?? "";
+      expect(learned).toContain("resource=vm-gap");
+      expect(learned).toContain("cpuSampleTaskTimeEvidence=UNKNOWN_MISSING_OR_INCOMPLETE_OWNER_JOURNAL");
+      expect(learned).toContain("Historical assignment journal incomplete or truncated");
+      expect(learned).not.toContain("cpuSampleTaskTimeEvidence=RECORDED_TIMESTAMP_OVERLAP_ONLY");
+      expect((db.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects").get() as { n: number }).n).toBe(0);
+    } finally { db.close(); }
+  });
+
   it("does not double count a single task actual across two bound resources", async () => {
     const db = fixture();
     try {
