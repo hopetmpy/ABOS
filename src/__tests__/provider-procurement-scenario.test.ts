@@ -116,6 +116,9 @@ describe("P-031 provider procurement scenario in P-030 treasury", () => {
       { unit: "credit_cent" },
       { accountId: "OTHER_ACCOUNT" },
       { validUntil: "2020-01-01T00:00:00Z" },
+      // Date.parse would normalize this nonexistent day to March 2, 2027.
+      { validUntil: "2027-02-30T00:00:00Z" },
+      { observedAt: "2026-02-30T00:00:00Z" },
       { validUntil: null },
       { observedAvailableCents: null },
     ]) {
