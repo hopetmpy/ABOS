@@ -644,6 +644,85 @@ describe("P-031 P-030-claimed AWS capacity mutation runtime, synthetic account o
     });
   }
 
+  it("does not retain financial commitments for source-proven already-running resume or recover", async () => {
+    for (const operation of ["resume", "recover"] as const) {
+      const { db, scope: baseline, args: original, registry } = setup();
+      try {
+        const scope: ProviderProcurementScope = {
+          ...baseline, operation, operationKey: "no-dispatch-" + operation,
+          provider: "aws", providerAccountId: "123456789012",
+          resourceId: "observed-running-" + operation,
+          externalId: "i-already-running",
+          region: "us-east-1", resourceShape: "t3.micro",
+        };
+        const quote = createScenario();
+        quote.provider = "aws"; quote.accountId = scope.providerAccountId;
+        quote.financing.accountId = scope.providerAccountId;
+        const authority = createAwsClaimedProvisionAuthority(db.raw);
+        const calls: string[][] = [];
+        const aws = new AwsEnvironmentProvider({
+          runner: async (_command, argv) => {
+            calls.push(argv);
+            if (argv[0] === "ec2" && argv[1] === "describe-instances") {
+              return {
+                stdout: JSON.stringify({
+                  InstanceId: scope.externalId,
+                  State: { Name: "running" }, InstanceType: "t3.micro",
+                }), stderr: "", exitCode: 0,
+              };
+            }
+            throw new Error("No AWS capacity mutation allowed in already-running case");
+          },
+          authorizeBillableMutation: authority.authorizeBillableMutation,
+        });
+        registry.register(aws);
+        const resources = new EnvironmentResourceStore(db.raw);
+        resources.create({
+          id: scope.resourceId, provider: "aws", externalId: scope.externalId,
+          type: "aws-ec2-instance", status: "suspended",
+          goalId: scope.goalId, taskId: scope.taskId, pathId: scope.pathId,
+          region: scope.region, metadata: { instanceType: "t3.micro" },
+        });
+        const lifecycle = new EnvironmentLifecycleManager(registry, resources);
+        const dependencies = createLifecycleProcurementDependencies(lifecycle, {
+          observeAuthenticatedEconomics: async () => quote,
+          resolveMutationRequest: async () => ({
+            externalId: scope.externalId!, region: scope.region,
+            targetInstanceType: scope.resourceShape,
+            source: "trusted-synthetic-observer",
+            evidence: ["EC2 identity and quoted shape match."],
+          }),
+        }, authority);
+        const tool = createEnvironmentTools(registry, {
+          getTrustedProcurementDependencies: () => dependencies,
+        }).find(t => t.name === "environment_procurement_execute")!;
+        const input = {
+          ...original, operation, operation_key: scope.operationKey,
+          provider: scope.provider,
+          provider_account_id: scope.providerAccountId,
+          resource_id: scope.resourceId, external_id: scope.externalId,
+          region: scope.region, resource_shape: scope.resourceShape,
+          policy_decision_id: exactP010Decision(db, scope, quote),
+        };
+        const result = JSON.parse(await tool.execute(input, { db } as any));
+        expect(result.status).toBe("rejected");
+        expect(result.dispatched).toBe(false);
+        expect(result.financialEffectState).toBe("rejected");
+        expect(result.supplierSettlement).toBe("UNKNOWN");
+        expect(resources.get(scope.resourceId)?.status).toBe("running");
+        expect(resources.get(scope.resourceId)?.metadata.mutationExternalEffectNotDispatched)
+          .toBe(true);
+        expect(calls.every(c => c[1] === "describe-instances")).toBe(true);
+        expect(calls).toHaveLength(1);
+        const replay = JSON.parse(await tool.execute(input, { db } as any));
+        expect(replay.status).toBe("not_dispatched");
+        expect(calls).toHaveLength(1);
+        expect(db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get())
+          .toMatchObject({ n: 0 });
+      } finally { db.close(); }
+    }
+  });
+
   it("rejects an unproven target identity before AWS billable mutation", async () => {
     const { db, scope: baseline, args: original, registry } = setup();
     try {

@@ -188,6 +188,8 @@ export interface EnvironmentProvisionResult {
 }
 
 export interface EnvironmentMutationResult {
+  /** Independently observed absence of an external capacity mutation; not an invoice/refund assertion. */
+  externalMutationDispatched?: false;
   status?: EnvironmentResourceStatus;
   providerState?: string | null;
   actualCostCents?: number;

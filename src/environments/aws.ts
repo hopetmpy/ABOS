@@ -1526,6 +1526,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
       return {
         status: "running", providerState: "running",
         evidence: [`AWS EC2 resume observed ${instanceId} already running; no paid start was dispatched.`],
+        externalMutationDispatched: false,
       };
     }
     if (state !== "stopped" || !observed.instance?.InstanceType) {
@@ -1629,6 +1630,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         status: "running",
         providerState: state,
         evidence: [`AWS EC2 recovery observed ${instanceId} already running; no mutation was required.`],
+        externalMutationDispatched: false,
       };
     }
 
