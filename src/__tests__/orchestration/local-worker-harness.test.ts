@@ -8,6 +8,7 @@ import { LocalWorkerPool } from "../../orchestration/local-worker.js";
 import type { PlannerOutput } from "../../orchestration/planner.js";
 import type { TaskNode, TaskResult } from "../../orchestration/task-graph.js";
 import { getTaskById } from "../../state/database.js";
+import { getEvidenceByAuthority } from "../../observability/evidence.js";
 import { createInMemoryDb } from "./test-db.js";
 import { createTestConfig, createTestIdentity, MockConwayClient } from "../mocks.js";
 
@@ -174,6 +175,10 @@ describe("orchestration/LocalWorkerPool harness integration", () => {
 
     const row = getTaskById(db, task.id);
     expect(row?.status).toBe("completed");
+    expect(row?.startedAt).toBeTruthy();
+    expect(getEvidenceByAuthority(db, "task_graph", task.id).map(e => e.eventType)).toEqual([
+      "task.local_harness_execution_started", "task.attempt_outcome_recorded",
+    ]);
     expect(row?.result).toMatchObject({ success: true, output: "completed by harness" });
     expect(SuccessHarness.capturedContext?.budget.maxTurns).toBe(7);
     expect(SuccessHarness.capturedContext?.allowedEditRoot).toBe(process.cwd());
@@ -195,6 +200,10 @@ describe("orchestration/LocalWorkerPool harness integration", () => {
 
     const row = getTaskById(db, task.id);
     expect(row?.status).toBe("failed");
+    expect(row?.startedAt).toBeTruthy();
+    expect(getEvidenceByAuthority(db, "task_graph", task.id).map(e => e.eventType)).toEqual([
+      "task.local_harness_execution_started", "task.attempt_outcome_recorded",
+    ]);
     expect(row?.result).toMatchObject({ success: false, output: "failed by harness" });
   });
 
