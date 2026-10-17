@@ -26,6 +26,7 @@ export class LifecycleProcurementNotDispatchedError extends Error {
 }
 
 export interface TrustedLifecycleProcurementSource {
+  issuePolicyDecision?: ProviderProcurementExecutionDependencies["issuePolicyDecision"];
   observeAuthenticatedEconomics:
     ProviderProcurementExecutionDependencies["observeAuthenticatedEconomics"];
   observeAuthenticatedResourceFit?:
@@ -46,6 +47,7 @@ export function createLifecycleProcurementDependencies(
   source: TrustedLifecycleProcurementSource,
 ): ProviderProcurementExecutionDependencies {
   return {
+    issuePolicyDecision: source.issuePolicyDecision,
     observeAuthenticatedEconomics: source.observeAuthenticatedEconomics,
     observeAuthenticatedResourceFit: source.observeAuthenticatedResourceFit,
     dispatch: async (scope, authorized) => {

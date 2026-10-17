@@ -433,6 +433,99 @@ describe("P-031 agent environment_procurement_execute runtime route", () => {
     } finally { db.close(); }
   });
 
+  it("lets a trusted host issue exact P-010 authority only after source-verified supplier economics", async () => {
+    const { db, registry, scope, args } = setup();
+    try {
+      const quote = createScenario();
+      const order: string[] = [];
+      const dispatch = vi.fn(async () => ({
+        status: "usable" as const,
+        providerEffectId: "synthetic-policy-issued-resource",
+        evidence: ["No real provider dispatch."],
+      }));
+      const issuePolicyDecision = vi.fn(async (
+        requestedScope: Readonly<ProviderProcurementScope>,
+        observed: Readonly<ProviderProcurementScenarioInput>,
+      ) => {
+        order.push("policy");
+        expect(order).toEqual(["economics", "policy"]);
+        expect(requestedScope).toEqual(scope);
+        expect(observed).toEqual(quote);
+        return exactP010Decision(db, scope, quote);
+      });
+      const tool = createEnvironmentTools(registry, {
+        getTrustedProcurementDependencies: () => ({
+          observeAuthenticatedEconomics: async () => {
+            order.push("economics");
+            return quote;
+          },
+          issuePolicyDecision,
+          dispatch,
+          verifyResourceUsability: async () => ({
+            usable: true, resourceId: scope.resourceId,
+            evidence: ["Synthetic independent resource observation."],
+          }),
+        }),
+      }).find(t => t.name === "environment_procurement_execute")!;
+      expect(tool.parameters.required as string[]).not.toContain("policy_decision_id");
+      const first = JSON.parse(await tool.execute(args, { db } as any));
+      expect(first.status).toBe("usable");
+      expect(first.dispatched).toBe(true);
+      expect(first.financialEffectState).toBe("pending");
+      expect(first.supplierSettlement).toBe("UNKNOWN");
+      expect(dispatch).toHaveBeenCalledTimes(1);
+      expect(issuePolicyDecision).toHaveBeenCalledTimes(1);
+      const again = JSON.parse(await tool.execute(args, { db } as any));
+      expect(again.status).toBe("not_dispatched");
+      expect(again.dispatched).toBe(false);
+      expect(issuePolicyDecision).toHaveBeenCalledTimes(1);
+      expect(dispatch).toHaveBeenCalledTimes(1);
+      expect(db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get())
+        .toMatchObject({ n: 0 });
+    } finally { db.close(); }
+  });
+
+  it("does not treat an issuer claim or default-allow as a real P-010 procurement authority", async () => {
+    const { db, registry, args, scope } = setup();
+    try {
+      const quote = createScenario();
+      const dispatch = vi.fn(async () => ({
+        status: "usable" as const, evidence: ["must not run"],
+      }));
+      const emptyPolicyEngine = new PolicyEngine(db.raw, []);
+      const policyTool = {
+        name: PROVIDER_PROCUREMENT_POLICY_TOOL,
+        description: "Synthetic policy authority without positive rule",
+        category: "financial" as const,
+        riskLevel: "dangerous" as const,
+        parameters: { type: "object", properties: {} },
+        execute: async () => "",
+      };
+      const tool = createEnvironmentTools(registry, {
+        getTrustedProcurementDependencies: () => ({
+          observeAuthenticatedEconomics: async () => quote,
+          issuePolicyDecision: async (requestScope, observed) => {
+            const request: PolicyRequest = {
+              tool: policyTool,
+              args: procurementPolicyArgs(requestScope, observed),
+              context: {} as any,
+              turnContext: { inputSource: "agent", turnToolCallCount: 1 },
+            };
+            const decision = emptyPolicyEngine.evaluate(request);
+            emptyPolicyEngine.persistDecision(decision, request);
+            return decision.id!;
+          },
+          dispatch,
+        }),
+      }).find(t => t.name === "environment_procurement_execute")!;
+      const result = await tool.execute(args, { db } as any);
+      expect(result).toContain("BLOCKED/UNKNOWN");
+      expect(dispatch).not.toHaveBeenCalled();
+      expect(db.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects").get())
+        .toMatchObject({ n: 0 });
+    } finally { db.close(); }
+  });
+
   it("rejects unknown providers and invalid scope before looking up any trusted adapter", async () => {
     const { db, registry, args } = setup();
     try {
