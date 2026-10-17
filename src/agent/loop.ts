@@ -114,6 +114,10 @@ import { AwsEnvironmentProvider } from "../environments/aws.js";
 import { AwsEc2TaskExecutor } from "../environments/aws-ec2-executor.js";
 import { createEnvironmentTools } from "../environments/tools.js";
 import type { ProviderProcurementExecutionDependencies } from "../economics/provider-procurement-execution.js";
+import {
+  createLifecycleProcurementDependencies,
+  type TrustedLifecycleProcurementSource,
+} from "../environments/procurement-lifecycle-adapter.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
 import { EnvironmentRetentionCoordinator } from "../environments/retention.js";
@@ -199,6 +203,14 @@ export interface AgentLoopOptions {
   getTrustedProcurementDependencies?: (
     providerId: string,
   ) => ProviderProcurementExecutionDependencies | null;
+  /**
+   * Optional trusted host finance/quote and provisioning spec; dispatch and
+   * independent health use the existing P-018 lifecycle within this run.
+   * This is NOT populated by AWS Budgets or model-provided cost claims.
+   */
+  getTrustedLifecycleProcurementSource?: (
+    providerId: string,
+  ) => TrustedLifecycleProcurementSource | null;
 }
 
 /**
@@ -374,7 +386,18 @@ export async function runAgentLoop(
         providerAccountId,
         unit,
       }),
-    getTrustedProcurementDependencies: options.getTrustedProcurementDependencies,
+    getTrustedProcurementDependencies: (providerId, operation) => {
+      const custom = options.getTrustedProcurementDependencies?.(providerId);
+      if (custom) return custom;
+      if (operation !== "provision" ||
+          !environmentRegistry.supportsOperation(providerId, "provision")) {
+        return null;
+      }
+      const source = options.getTrustedLifecycleProcurementSource?.(providerId);
+      return source
+        ? createLifecycleProcurementDependencies(environmentLifecycle, source)
+        : null;
+    },
   });
   const skillEvolutionTools = createSkillEvolutionTools();
   const skillEvolution = new SkillEvolutionEngine(db.raw);
