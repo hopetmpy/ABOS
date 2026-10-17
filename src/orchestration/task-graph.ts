@@ -283,7 +283,16 @@ export function assignTask(db: Database, taskId: string, agentAddress: string): 
  * not a parent dispatch, provider CPU bucket or remote execution timestamp.
  * TaskGraph owns the status; P-013 mirrors it as correlated evidence.
  */
-export function startLocalTaskExecution(db: Database, taskId: string, workerAddress: string): void {
+export interface ParentTaskObservationContext {
+  parentGoalId: string;
+  parentTaskId: string;
+  parentRetryCount: number;
+}
+
+export function startLocalTaskExecution(
+  db: Database, taskId: string, workerAddress: string,
+  origin?: ParentTaskObservationContext,
+): void {
   withTransaction(db, () => {
     const task = getTaskById(db, taskId);
     if (!task) throw new Error(`Task not found: ${taskId}`);
@@ -319,8 +328,11 @@ export function startLocalTaskExecution(db: Database, taskId: string, workerAddr
         recordedStartedAt: started,
         workerAddress,
         boundary: "local_harness_execute_invocation",
+        ...(origin ? { remoteParentTask: origin } : {}),
       },
-      provenance: { source: "LocalWorkerPool", scope: "local_worker_only" },
+      provenance: origin
+        ? { source: "StandaloneTaskWorker", scope: "remote_worker_process_local_sqlite" }
+        : { source: "LocalWorkerPool", scope: "local_worker_only" },
     });
   });
 }
@@ -334,7 +346,7 @@ export function startLocalTaskExecution(db: Database, taskId: string, workerAddr
 export function recordObservedHarnessExecutionSettled(
   db: Database, taskId: string, workerAddress: string,
   outcome: "returned" | "threw",
-  origin?: { parentGoalId: string; parentTaskId: string; parentRetryCount: number },
+  origin?: ParentTaskObservationContext,
 ): void {
   withTransaction(db, () => {
     const task = getTaskById(db, taskId);
