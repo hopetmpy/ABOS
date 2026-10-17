@@ -199,16 +199,19 @@ interface RecordedResourceAssignment {
   taskId: string | null;
   operation: string;
   observedAt: string;
+  fromStatus: string | null;
+  toStatus: string | null;
 }
 
 function recordedAssignmentHistory(
   db: Database, resourceId: string,
-): { observations: RecordedResourceAssignment[]; incomplete: boolean } | null {
+): { observations: RecordedResourceAssignment[]; events: RecordedResourceAssignment[]; incomplete: boolean } | null {
   try {
     const limit = 1024; // bounded model projection; saturation never implies no prior assignment
     const rows = db.prepare(`
       SELECT v.goal_id AS goalId, v.task_id AS taskId,
-             e.operation AS operation, e.created_at AS observedAt
+             e.operation AS operation, e.created_at AS observedAt,
+             e.from_status AS fromStatus, e.to_status AS toStatus
       FROM environment_resource_events e
       INNER JOIN evidence_events v
         ON v.authority_type = 'environment_resource_event'
@@ -224,7 +227,7 @@ function recordedAssignmentHistory(
       if (!previous || previous.goalId !== row.goalId ||
           previous.taskId !== row.taskId) transitions.push(row);
     }
-    return { observations: transitions, incomplete: rows.length === limit };
+    return { observations: transitions, events: rows, incomplete: rows.length === limit };
   } catch {
     return null; // Legacy/lean embeddings must preserve UNKNOWN.
   }
@@ -280,18 +283,24 @@ function describeResourceTaskMeteringTime(
     return "UNKNOWN_NO_SCOPED_TASK_OWNER_AT_SAMPLE";
 
   let task: {
-    goal_id: string; status: string;
+    goal_id: string; status: string; retry_count: number;
     started_at: string | null; completed_at: string | null;
   } | undefined;
   try {
     task = db.prepare(
-      "SELECT goal_id, status, started_at, completed_at FROM task_graph WHERE id = ?"
+      "SELECT goal_id, status, retry_count, started_at, completed_at FROM task_graph WHERE id = ?"
     ).get(snapshot.taskId) as typeof task;
   } catch {
     return "UNKNOWN_TASK_TIME_AUTHORITY_UNREADABLE";
   }
   if (!task || task.goal_id !== snapshot.goalId)
     return "UNKNOWN_TASK_OWNER_MISMATCH";
+  // failTask clears started_at/completed_at for retry; present row cannot
+  // reconstruct earlier execution intervals, even after retry succeeds.
+  if (!Number.isSafeInteger(task.retry_count) || task.retry_count < 0)
+    return "UNKNOWN_INVALID_TASK_RETRY_HISTORY";
+  if (task.retry_count > 0)
+    return "UNKNOWN_RETRIED_TASK_ATTEMPTS_NOT_RECONSTRUCTABLE";
   const started = recordedInstant(task.started_at);
   const completed = task.completed_at == null ? null : recordedInstant(task.completed_at);
   if (started === null || (task.completed_at != null && completed === null) ||
@@ -299,14 +308,45 @@ function describeResourceTaskMeteringTime(
       (!["running", "completed", "failed", "cancelled"].includes(task.status)) ||
       (task.status !== "running" && completed === null))
     return "UNKNOWN_INCOMPLETE_OR_INVALID_TASK_WINDOW";
+  // A CloudWatch --period request is a useful bound for ambiguity checks,
+  // NOT authority over the actual sample bucket start/end. For a source
+  // timestamp, any Task/owner boundary within one requested period in either
+  // direction may intersect the aggregate; do not assign that aggregate.
+  const providerPeriod =
+    metadata.cpuUtilizationMetricSource === "aws_cloudwatch_AWS/EC2_CPUUtilization_Average" &&
+    metadata.cpuUtilizationPeriodEvidence === "requested_only" &&
+    Number.isSafeInteger(metadata.cpuUtilizationRequestedPeriodSeconds) &&
+    (metadata.cpuUtilizationRequestedPeriodSeconds as number) > 0 &&
+    (metadata.cpuUtilizationRequestedPeriodSeconds as number) <= Number.MAX_SAFE_INTEGER / 1000
+      ? (metadata.cpuUtilizationRequestedPeriodSeconds as number) * 1000 : null;
+  if (providerPeriod !== null) {
+    if (Math.abs(sampleAt - started) <= providerPeriod ||
+        (completed !== null && Math.abs(sampleAt - completed) <= providerPeriod))
+      return "UNKNOWN_POSSIBLE_AGGREGATE_CROSSES_TASK_BOUNDARY";
+    // Revisit RAW resource events, not the compressed owner-transition list,
+    // so detach/reassignment/lifecycle discontinuities cannot be erased by
+    // later reassignment back to the same Task.
+    for (const event of history.events) {
+      const when = recordedInstant(event.observedAt);
+      if (when === null) return "UNKNOWN_INVALID_OWNER_EVENT_TIME";
+      if (Math.abs(sampleAt - when) > providerPeriod) continue;
+      if (event.goalId !== snapshot.goalId || event.taskId !== snapshot.taskId ||
+          (event.fromStatus !== event.toStatus &&
+            (event.fromStatus !== null || event.toStatus !== "running")))
+        return "UNKNOWN_POSSIBLE_AGGREGATE_CROSSES_OWNER_OR_LIFECYCLE_BOUNDARY";
+      if (event.operation === "reassign" || event.operation === "detach")
+        return "UNKNOWN_POSSIBLE_AGGREGATE_CROSSES_OWNER_OR_LIFECYCLE_BOUNDARY";
+    }
+  }
   if (sampleAt < started || (completed !== null && sampleAt > completed))
     return "OUTSIDE_RECORDED_TASK_WINDOW_NO_ATTRIBUTION";
 
-  // Provider aggregation start/end, per-process shares and billing windows
-  // are not present in this journal; a point match cannot prove CPU usage.
+  // Provider aggregation coverage, source-clock reliability, exclusivity
+  // and per-task metering remain unverified, regardless of timestamp match.
   return `RECORDED_TIMESTAMP_OVERLAP_ONLY task=${snapshot.taskId} ` +
     `metricAt=${metadata.cpuUtilizationObservedAt} taskStarted=${task.started_at} ` +
     `taskCompleted=${task.completed_at ?? "OPEN"} ` +
+    `metricRequestedPeriodSeconds=${providerPeriod === null ? "UNKNOWN" : providerPeriod / 1000} ` +
     "metricAggregateCoverage=UNKNOWN taskCpuShare=UNKNOWN providerBilledUsage=UNKNOWN";
 }
 
