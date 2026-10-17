@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0028.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / SOURCE_RETENTION_DESTROY_RESTART_RECONCILIATION_E3_GREEN / P005_LIVE_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / SOURCE_SUPPLIER_RENEWAL_QUOTE_RETENTION_E3_GREEN / P005_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-retention-restart-checkpoint
-Host-Head-At-Audit-Open: 5fea4a3b207c81e55f7c1f97c3ef2130a8e89b0e
-Last-Reconciled-Host-Head: 5fea4a3b207c81e55f7c1f97c3ef2130a8e89b0e
-Observed-Main-Head: 5fea4a3b207c81e55f7c1f97c3ef2130a8e89b0e
-Last-Product-Head: 5fea4a3b207c81e55f7c1f97c3ef2130a8e89b0e
-Last-Product-CI: exact main 5fea4a3b207c81e55f7c1f97c3ef2130a8e89b0e push 39012072562 — COMPLETE SUCCESS 8/8
+Current-Host-Branch: abos/p031-post-retirement-supplier-checkpoint
+Host-Head-At-Audit-Open: 97046cbbba71260825a36f1361b96a28221ad1d3
+Last-Reconciled-Host-Head: 97046cbbba71260825a36f1361b96a28221ad1d3
+Observed-Main-Head: 97046cbbba71260825a36f1361b96a28221ad1d3
+Last-Product-Head: 97046cbbba71260825a36f1361b96a28221ad1d3
+Last-Product-CI: exact main 97046cbbba71260825a36f1361b96a28221ad1d3 push 39013142850 — COMPLETE SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
 Last-Completed-CI: 38766126322 — SUCCESS 8/8
@@ -769,3 +769,16 @@ NEXT_ELIGIBLE_WORK: investigate source-backed goal/task requirements to derive c
 - Tests: positive compatible duration; longer source-covered duration; UNKNOWN, insufficient, expired, foreign resource/shape, missing source, period count mismatch; code also corrects the earlier timezone offset suffix regex in the independent resource-fit observation. PR head `7115438b1a6c04e93626770fd7735cb3ed56fbca`: push run `38948044189` SUCCESS 8/8; PR run `38948083951` SUCCESS 8/8. Squash merged `main a48d3aa34fcecf8689335ff7d0d74293f4684d36` and exact-main push run `38948525316` COMPLETE SUCCESS 8/8 (Node22/24, Windows22/24, integrity/security/public distribution).
 - E3 source/CI only: `usageCoverage` is an externally authenticated supplier quote *interface*, not proof of a real AWS account, real bill, provisioning, actual utilization, cancellation, auto-renewal cancellation, refund or profit. The trusted supplier callback is not wired into a LIVE funded provider account; P-005 E5/E6 remain UNKNOWN. No purchase, wallet operation or provider account mutation was made.
 - P-031 EN_EJECUCIÓN; P-032 PLANIFICADO; next evidence-backed work: **separate auto-renewal/early-cancellation/retirement obligations and actual provider invoice/released billing exposure from usage-coverage time**. Audit existing P-018 retention/lifecycle and P-030 financial effects; add code only where source semantics require it, keeping UNKNOWN explicit and avoiding fixed monetary/manual approval rules. Retain provider-funded LIVE frontier under P-005.
+
+
+### P-031 — verified post-retirement supplier lifecycle quotations (2026-10-17)
+
+- Product PR #181 merged main `97046cbbba71260825a36f1361b96a28221ad1d3`; exact main CI run `39013142850` SUCCESS 8/8. Supplier-quoted renewal/exit obligations are now durable in existing P-030 financial intent and visible on retired P-018 resource, even for completed initial purchases.
+- Source/economic boundary remains open: physical resource release proves neither supplier contract cancellation nor final bill/refund. Trusted provider-authenticated post-release contract state and actual provider funding/price/issuer are not supplied by ordinary CLI. No E5/E6 economic claim. P-031 EN_EJECUCIÓN, P-032 PLANIFICADO, P-005 LIVE UNKNOWN.
+- State and next source-eligible audit in `continuity/C0028.md`: existing P-018/P-030 ownership first; narrow post-retirement supplier-observation reconciliation if genuine source gap, with no duplicate money authority or inferred cancellation.
+
+
+### P-031 — supplier contract observation PR #182 (2026-10-17)
+
+- Initial PR #182 source head `d4e995be19c4414a539dd297121806240ef37f4e` CI `39048473885` SUCCESS 8/8. Follow-up source hardening and documentation are pending final exact-HEAD CI; do not claim integrated on this checkpoint. Details and scope in `continuity/C0028.md`.
+- Existing P-018 lifecycle owner now has an optional host-only supplier contract observer (not provisioned in default CLI); P-030 financial effects untouched. Model arguments never become supplier account receipt; independent cancellation/renewal/invoice observation is neither actual payment nor refund. P-031 EN_EJECUCIÓN, P-005 LIVE UNKNOWN, P-032 PLANIFICADO.

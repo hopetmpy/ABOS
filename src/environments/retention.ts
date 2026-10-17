@@ -4,9 +4,31 @@ import type { EnvironmentRegistry } from "./registry.js";
 import type { EnvironmentLifecycleManager } from "./lifecycle.js";
 import type { EnvironmentResource } from "./types.js";
 import {
+  getFinancialEffectByOperationKey,
   listFinancialEffectsByStates,
   listUnresolvedFinancialEffects,
 } from "../economics/financial-effects.js";
+
+/** Only a trusted host can supply this read-only, provider-authenticated receipt. */
+export interface TrustedSupplierContractScope {
+  provider: string;
+  providerAccountId: string;
+  resourceId: string;
+  externalResourceId: string;
+  operationKey: string;
+}
+export interface TrustedSupplierContractReceipt extends TrustedSupplierContractScope {
+  source: string;
+  observedAt: string;
+  validUntil: string;
+  evidence: string[];
+  cancellation: "cancelled" | "active" | "unknown";
+  autoRenewal: "disabled" | "enabled" | "unknown";
+  finalInvoice: "finalized" | "outstanding" | "unknown";
+}
+export type TrustedSupplierContractObserver = (
+  scope: Readonly<TrustedSupplierContractScope>,
+) => Promise<TrustedSupplierContractReceipt | null>;
 
 export interface EnvironmentRetentionSweepResult {
   evaluated: number;
@@ -16,6 +38,7 @@ export interface EnvironmentRetentionSweepResult {
   pendingObservation: number;
   unavailable: number;
   artifactHolds: number;
+  supplierObservations: number;
   evidence: string[];
 }
 
@@ -40,6 +63,7 @@ export class EnvironmentRetentionCoordinator {
     private readonly db: Database,
     private readonly registry: EnvironmentRegistry,
     private readonly lifecycle: EnvironmentLifecycleManager,
+    private readonly trustedSupplierObserver?: (provider: string) => TrustedSupplierContractObserver | null,
   ) {}
 
   async sweep(): Promise<EnvironmentRetentionSweepResult> {
@@ -51,6 +75,7 @@ export class EnvironmentRetentionCoordinator {
       pendingObservation: 0,
       unavailable: 0,
       artifactHolds: 0,
+      supplierObservations: 0,
       evidence: [],
     };
 
@@ -248,7 +273,119 @@ export class EnvironmentRetentionCoordinator {
       result.pendingObservation += 1;
     }
 
+    // Physical resources are excluded from normal destruction once terminated.
+    // Their supplier obligations are independent: observe those separately.
+    await this.observeRetiredSupplierContracts(result);
     return result;
+  }
+
+  private async observeRetiredSupplierContracts(result: EnvironmentRetentionSweepResult): Promise<void> {
+    if (!this.trustedSupplierObserver) return;
+    const now = Date.now();
+    for (const resource of this.lifecycle.resources.list({ includeTerminated: true })) {
+      if (resource.status !== "terminated" ||
+          resource.metadata.retentionReleaseState !== "released" ||
+          !resource.externalId) continue;
+      const quotes = resource.metadata.retentionBillingLifecycleQuotes;
+      if (!Array.isArray(quotes) || quotes.length === 0) continue;
+      let observer: TrustedSupplierContractObserver | null;
+      try { observer = this.trustedSupplierObserver(resource.provider); }
+      catch {
+        result.evidence.push("Trusted supplier observer factory unavailable; physical cleanup remains independent.");
+        continue;
+      }
+      if (!observer) continue;
+      for (const item of quotes) {
+        if (!item || typeof item !== "object" || Array.isArray(item) ||
+            typeof item.operationKey !== "string") continue;
+        const until = typeof item.supplierStatusValidUntil === "string"
+          ? Date.parse(item.supplierStatusValidUntil) : NaN;
+        if (Number.isFinite(until) && until > now) continue;
+        const effect = getFinancialEffectByOperationKey(this.db, item.operationKey);
+        if (!effect || effect.effectKind !== "provider_resource_procurement" ||
+            effect.provider !== resource.provider ||
+            effect.request.resourceId !== resource.id ||
+            !["dispatching", "pending", "unknown", "reconciliation_required", "completed"]
+              .includes(effect.state)) continue;
+        const account = effect.request.providerAccountId;
+        if (typeof account !== "string" || !account.trim()) continue;
+        const scope: TrustedSupplierContractScope = {
+          provider: resource.provider,
+          providerAccountId: account,
+          resourceId: resource.id,
+          externalResourceId: resource.externalId,
+          operationKey: effect.operationKey,
+        };
+        let receipt: TrustedSupplierContractReceipt | null;
+        try { receipt = await observer(scope); }
+        catch {
+          result.evidence.push("Trusted supplier contract read unavailable; prior evidence preserved.");
+          continue;
+        }
+        if (!receipt) continue;
+        const observedAt = Date.parse(receipt.observedAt);
+        const validUntil = Date.parse(receipt.validUntil);
+        const receivedAt = Date.now();
+        const explicit = (v: unknown): v is string => typeof v === "string" &&
+          /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(v);
+        const match = receipt.provider === scope.provider &&
+          receipt.providerAccountId === scope.providerAccountId &&
+          receipt.resourceId === scope.resourceId &&
+          receipt.externalResourceId === scope.externalResourceId &&
+          receipt.operationKey === scope.operationKey;
+        const states = ["cancelled", "active", "unknown"].includes(receipt.cancellation) &&
+          ["disabled", "enabled", "unknown"].includes(receipt.autoRenewal) &&
+          ["finalized", "outstanding", "unknown"].includes(receipt.finalInvoice);
+        if (!match || !states || typeof receipt.source !== "string" ||
+            !receipt.source.trim() || !Array.isArray(receipt.evidence) ||
+            !receipt.evidence.some(e => typeof e === "string" && e.trim()) ||
+            !explicit(receipt.observedAt) || !explicit(receipt.validUntil) ||
+            !Number.isFinite(observedAt) || !Number.isFinite(validUntil) ||
+            observedAt > receivedAt || validUntil <= receivedAt || validUntil <= observedAt) {
+          result.evidence.push("Supplier receipt scope, status or provenance invalid; no financial change.");
+          continue;
+        }
+        // Async provider reads never overwrite a newer observation or changed owner.
+        const current = this.lifecycle.resources.get(resource.id);
+        const oldQuotes = current?.metadata.retentionBillingLifecycleQuotes;
+        if (!current || current.status !== "terminated" ||
+            current.metadata.retentionReleaseState !== "released" ||
+            current.externalId !== scope.externalResourceId ||
+            !Array.isArray(oldQuotes)) continue;
+        const prior = oldQuotes.find(x => x && typeof x === "object" &&
+          x.operationKey === scope.operationKey);
+        if (!prior) continue;
+        const previousAt = typeof prior.supplierStatusObservedAt === "string"
+          ? Date.parse(prior.supplierStatusObservedAt) : NaN;
+        if (Number.isFinite(previousAt) && previousAt >= observedAt) continue;
+        const updated = oldQuotes.map(x => x && typeof x === "object" &&
+          x.operationKey === scope.operationKey
+          ? {
+              ...x,
+              supplierCancellationStatus: receipt.cancellation,
+              supplierAutoRenewalStatus: receipt.autoRenewal,
+              supplierFinalInvoiceStatus: receipt.finalInvoice,
+              supplierStatusSource: receipt.source,
+              supplierStatusObservedAt: receipt.observedAt,
+              supplierStatusValidUntil: receipt.validUntil,
+            } : x);
+        this.lifecycle.resources.applyMutation(current.id, {
+          metadata: {
+            retentionBillingLifecycleQuotes: updated,
+            retentionBillingReconciliation: "unverified_after_resource_release",
+          },
+          evidence: [
+            "Independent supplier observation of cancellation=" + receipt.cancellation +
+              ", autoRenewal=" + receipt.autoRenewal + ", finalInvoice=" + receipt.finalInvoice +
+              ", source=" + receipt.source + ", observedAt=" + receipt.observedAt + ".",
+            ...receipt.evidence,
+            "Supplier contract status does not settle P-030 financial effects, prove payment/refund or guarantee zero future bills.",
+          ],
+        }, "retention_supplier_contract_observation",
+        "Provider contract state independently observed; monetary settlement remains separate.");
+        result.supplierObservations += 1;
+      }
+    }
   }
 
   private async holdForArtifactCollection(
