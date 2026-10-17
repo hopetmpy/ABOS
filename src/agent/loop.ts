@@ -121,7 +121,7 @@ import {
 } from "../environments/procurement-lifecycle-adapter.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
-import { EnvironmentRetentionCoordinator } from "../environments/retention.js";
+import { EnvironmentRetentionCoordinator, type TrustedSupplierContractObserver } from "../environments/retention.js";
 import { EnvironmentMigrationStore } from "../environments/mobility-store.js";
 import { EnvironmentMobilityCoordinator } from "../environments/mobility.js";
 import { ContinuityAssembler } from "../environments/continuity-assembler.js";
@@ -212,6 +212,10 @@ export interface AgentLoopOptions {
   getTrustedLifecycleProcurementSource?: (
     providerId: string,
   ) => TrustedLifecycleProcurementSource | null;
+  /** Optional read-only authenticated provider contract observer after physical release. */
+  getTrustedSupplierContractObserver?: (
+    providerId: string,
+  ) => TrustedSupplierContractObserver | null;
 }
 
 /**
@@ -279,6 +283,7 @@ export async function runAgentLoop(
     db.raw,
     environmentRegistry,
     environmentLifecycle,
+    options.getTrustedSupplierContractObserver,
   );
 
   // Establish canonical ownership for the already-present host.
