@@ -174,6 +174,7 @@ function makeTaskResultInboxEntry(goalId: string, taskId: string) {
       taskId,
       content: JSON.stringify({
         taskId,
+        assignmentMessageId: "msg-1",
         result: {
           success: true,
           output: "done",
@@ -280,7 +281,7 @@ describe("integration/plan-execute-flow", () => {
         .run(taskId, goalId, "Task 1", "Do the thing", "pending", "generalist", 1, "[]", 0, 0, new Date().toISOString());
       setState(db, { phase: "executing", goalId, replanCount: 0, failedTaskId: null, failedError: null });
       mocks.agentTracker.getIdle.mockReturnValue([{ address: "0xchild", name: "Worker", role: "generalist", status: "healthy" }]);
-      mocks.messaging.processInbox.mockResolvedValue([{ success: true, message: { id: "m2", type: "task_result", from: "0xchild", to: "0xparent", goalId, taskId, content: JSON.stringify({ taskId, result: { success: false, output: "error: something broke", artifacts: [], costCents: 10, duration: 50 } }), priority: "normal", requiresResponse: false, expiresAt: null, createdAt: new Date().toISOString() }, handledBy: "test" }]);
+      mocks.messaging.processInbox.mockResolvedValue([{ success: true, message: { id: "m2", type: "task_result", from: "0xchild", to: "0xparent", goalId, taskId, content: JSON.stringify({ taskId, assignmentMessageId: "msg-1", result: { success: false, output: "error: something broke", artifacts: [], costCents: 10, duration: 50 } }), priority: "normal", requiresResponse: false, expiresAt: null, createdAt: new Date().toISOString() }, handledBy: "test" }]);
       expect((await makeOrchestrator(db, mocks).tick()).phase).toBe("replanning");
     });
 
@@ -312,7 +313,7 @@ describe("integration/plan-execute-flow", () => {
         .run(taskId, goalId, "Task 1", "Do the thing", "pending", "generalist", 1, "[]", 0, 0, new Date().toISOString());
       setState(db, { phase: "executing", goalId, replanCount: 3, failedTaskId: null, failedError: null });
       mocks.agentTracker.getIdle.mockReturnValue([{ address: "0xchild", name: "Worker", role: "generalist", status: "healthy" }]);
-      mocks.messaging.processInbox.mockResolvedValue([{ success: true, message: { id: "m3", type: "task_result", from: "0xchild", to: "0xparent", goalId, taskId, content: JSON.stringify({ taskId, result: { success: false, output: "fatal failure", artifacts: [], costCents: 0, duration: 0 } }), priority: "normal", requiresResponse: false, expiresAt: null, createdAt: new Date().toISOString() }, handledBy: "test" }]);
+      mocks.messaging.processInbox.mockResolvedValue([{ success: true, message: { id: "m3", type: "task_result", from: "0xchild", to: "0xparent", goalId, taskId, content: JSON.stringify({ taskId, assignmentMessageId: "msg-1", result: { success: false, output: "fatal failure", artifacts: [], costCents: 0, duration: 0 } }), priority: "normal", requiresResponse: false, expiresAt: null, createdAt: new Date().toISOString() }, handledBy: "test" }]);
       const result = await makeOrchestrator(db, mocks, { maxReplans: 3 }).tick();
       expect(result.phase).toBe("replanning");
       expect((db.prepare("SELECT status FROM goals WHERE id = ?").get(goalId) as { status: string }).status).toBe("active");
