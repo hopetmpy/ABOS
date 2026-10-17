@@ -1553,7 +1553,31 @@ function isCurrentColonyAssignmentResult(
   try {
     const row = db.prepare("SELECT value FROM kv WHERE key = ?")
       .get(COLONY_ASSIGNMENT_KEY_PREFIX + task.id) as { value: string } | undefined;
-    if (!row) return assignmentMessageId === null;
+    if (!row) {
+      // Some canonical Colony callers dispatch before constructing an
+      // Orchestrator. The existing P-009 event_stream already records the
+      // actual sent assignment ID and recipient; reuse that observation,
+      // without inventing a second authority for historical execution.
+      const observations = db.prepare(
+        "SELECT content FROM event_stream WHERE type = 'action' AND task_id = ? AND goal_id = ? ORDER BY rowid DESC LIMIT 32",
+      ).all(task.id, task.goalId) as { content: string }[];
+      for (const observed of observations) {
+        let sent: Record<string, unknown>;
+        try {
+          sent = JSON.parse(observed.content) as Record<string, unknown>;
+        } catch { continue; }
+        if (sent.action !== "message_sent" || sent.messageType !== "task_assignment") continue;
+        // This journal records a message send but not its retry generation.
+        // After a retry, only the explicit generation-bound KV receipt is
+        // sufficient to authorize a late result.
+        return task.retryCount === 0 &&
+          assignmentMessageId !== null &&
+          sent.messageId === assignmentMessageId &&
+          typeof sent.to === "string" &&
+          sameAgentAddress(sent.to, sourceAddress);
+      }
+      return task.retryCount === 0 && assignmentMessageId === null;
+    }
     const receipt = JSON.parse(row.value) as Record<string, unknown>;
     return typeof assignmentMessageId === "string" &&
       receipt.messageId === assignmentMessageId &&
