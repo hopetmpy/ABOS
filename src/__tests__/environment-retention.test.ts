@@ -219,7 +219,7 @@ describe("EnvironmentRetentionCoordinator", () => {
         providerEffectId: "mock-settlement-receipt-1",
         providerStatus: "synthetic-settlement",
         evidence: ["Synthetic settlement for the initial purchase only."],
-      }, () => "synthetic-accounting-reference");
+      }, () => null);
 
       const sweep = await new EnvironmentRetentionCoordinator(db, registry, lifecycle)
         .sweep();
