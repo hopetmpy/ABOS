@@ -1066,9 +1066,9 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
           cpuUtilizationAveragePct: null,
           cpuUtilizationObservedAt: null,
           cpuUtilizationMetricStatus: "unknown",
-                cpuUtilizationMetricSource: null,
-                cpuUtilizationRequestedPeriodSeconds: null,
-                cpuUtilizationPeriodEvidence: "unknown",
+          cpuUtilizationMetricSource: null,
+          cpuUtilizationRequestedPeriodSeconds: null,
+          cpuUtilizationPeriodEvidence: "unknown",
         };
         evidence.push("AWS CPU utilization UNKNOWN: instance is not running; no measured idle CPU inferred.");
       }
@@ -2201,9 +2201,9 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         cpuUtilizationAveragePct: null,
         cpuUtilizationObservedAt: null,
         cpuUtilizationMetricStatus: "unknown",
-                cpuUtilizationMetricSource: null,
-                cpuUtilizationRequestedPeriodSeconds: null,
-                cpuUtilizationPeriodEvidence: "unknown",
+        cpuUtilizationMetricSource: null,
+        cpuUtilizationRequestedPeriodSeconds: null,
+        cpuUtilizationPeriodEvidence: "unknown",
       } as Record<string, unknown>,
       evidence: `AWS CloudWatch CPU utilization UNKNOWN: ${reason}. No size/retirement decision inferred.`,
     });
@@ -2254,7 +2254,7 @@ export class AwsEnvironmentProvider implements EnvironmentProvider {
         cpuUtilizationRequestedPeriodSeconds: requestedPeriodSeconds,
         cpuUtilizationPeriodEvidence: "requested_only",
       },
-      evidence: `AWS CloudWatch measured CPUUtilization Average=${latest.average}% observedAt=${observedAt}; requestedPeriod=${requestedPeriodSeconds}s (provider bucket bounds UNKNOWN); CPU alone is not total capacity, Task share or invoice evidence.`,
+      evidence: `AWS CloudWatch measured CPUUtilization Average=${latest.average}% observedAt=${observedAt}; requestedPeriod=${requestedPeriodSeconds}s (provider bucket bounds UNKNOWN); CPU alone is not total capacity or invoice evidence, nor Task share.`,
     };
   }
 
