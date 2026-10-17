@@ -305,8 +305,8 @@ describe("P-031 agent environment_procurement_execute runtime route", () => {
         },
         async health() {
           return {
-            healthy: false, status: "degraded",
-            evidence: ["Unhealthy resource requires P-018 recovery."],
+            healthy: false, status: "running",
+            evidence: ["Provider says running but confirms unhealthy: no false usability."],
           };
         },
       });
