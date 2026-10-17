@@ -955,7 +955,7 @@ export class Orchestrator {
           const taskNode = taskRowToTaskNode(taskRow);
           await this.handleFailure(taskNode, err.message);
           const latest = getTaskById(this.params.db, taskNode.id);
-          if (taskRow.status !== "failed" && latest?.status === "failed") {
+          if (latest?.status === "failed") {
             counters.tasksFailed += 1;
           }
         }
@@ -966,7 +966,7 @@ export class Orchestrator {
       const taskNode = taskRowToTaskNode(taskRow);
       await this.handleFailure(taskNode, event.error ?? event.result.output);
       const latest = getTaskById(this.params.db, taskNode.id);
-      if (taskRow.status !== "failed" && latest?.status === "failed") {
+      if (latest?.status === "failed") {
         counters.tasksFailed += 1;
       }
     }
