@@ -43,6 +43,7 @@ export async function updateSoul(
 
     // Load current soul or create default
     let current = loadCurrentSoul(db, resolvedPath);
+    const existing = current;
     if (!current) {
       current = createDefaultSoul(
         updates.corePurpose || "No purpose set.",
@@ -60,8 +61,7 @@ export async function updateSoul(
       "name", "address", "creator", "bornAt",
       "constitutionHash", "genesisPromptOriginal",
     ] as const;
-    const existing = loadCurrentSoul(db, resolvedPath);
-    const forbidden = immutable.filter(field =>
+    const forbidden: string[] = immutable.filter(field =>
       Object.hasOwn(updates, field) &&
       (source === "agent" || source === "reflection" ||
         (existing !== null && updates[field] !== existing[field]))
