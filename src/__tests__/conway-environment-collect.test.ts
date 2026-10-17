@@ -8,6 +8,10 @@ import {
 import type { EnvironmentResource } from "../environments/types.js";
 import { getHomeDir } from "../platform/home.js";
 import { createConwayClient } from "../conway/client.js";
+import { EnvironmentRegistry } from "../environments/registry.js";
+import { EnvironmentResourceStore } from "../environments/resource-store.js";
+import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
+import { createTestDb } from "./mocks.js";
 
 function resource(
   goalId: string,
@@ -61,6 +65,80 @@ describe("ConwayEnvironmentProvider collect", () => {
       apiUrl: "https://api.conway.tech", apiKey: "test-key", sandboxId: "source-test",
     }), fetcher };
   }
+
+  it("does not turn missing Conway inventory membership into a verified absence or cleared P-018 mutation", async () => {
+    const provider = new ConwayEnvironmentProvider({
+      getCreditsBalance: async () => 500,
+      listSandboxes: async () => [],
+    });
+    const direct = await provider.reconcile!(resource("goal-a", {
+      externalId: "sbx-not-listed",
+    }));
+    expect(direct.action).toBe("mark_unknown");
+    expect(direct.actualExists).toBeNull();
+    expect(direct.resource.status).toBe("unknown");
+    expect(direct.evidence?.join(" ")).toContain("existence remains UNKNOWN");
+    const health = await provider.health!(resource("goal-a", {
+      externalId: "sbx-not-listed",
+    }));
+    expect(health.healthy).toBeNull();
+    expect(health.status).toBe("unknown");
+
+    const db = createTestDb();
+    try {
+      const registry = new EnvironmentRegistry();
+      registry.register(provider);
+      const resources = new EnvironmentResourceStore(db.raw);
+      resources.create({
+        id: "resource-conway-uncertain", provider: "conway",
+        externalId: "sbx-not-listed", type: "conway-sandbox",
+        status: "unknown",
+        metadata: {
+          mutationNeedsReconciliation: true,
+          mutationUncertainOperation: "recover",
+        },
+      });
+      const lifecycle = new EnvironmentLifecycleManager(registry, resources);
+      const after = await lifecycle.reconcile("resource-conway-uncertain");
+      expect(after.status).toBe("unknown");
+      expect(after.metadata.actualExists).toBeNull();
+      expect(after.metadata.mutationNeedsReconciliation).toBe(true);
+      expect(after.metadata.mutationUncertainOperation).toBe("recover");
+      const checked = await lifecycle.health("resource-conway-uncertain");
+      expect(checked.status).toBe("unknown");
+      expect(checked.metadata.mutationNeedsReconciliation).toBe(true);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("treats partial Conway provider inventory as reconciliation UNKNOWN rather than absent", async () => {
+    const { client } = clientForInventory({
+      sandboxes: [], count: 0, source: "workers_fallback_blocked",
+    });
+    const provider = new ConwayEnvironmentProvider(client);
+    const db = createTestDb();
+    try {
+      const registry = new EnvironmentRegistry();
+      registry.register(provider);
+      const resources = new EnvironmentResourceStore(db.raw);
+      resources.create({
+        id: "resource-conway-incomplete", provider: "conway",
+        externalId: "sbx-existing", type: "conway-sandbox",
+        status: "unknown", metadata: {
+          mutationNeedsReconciliation: true,
+          mutationUncertainOperation: "destroy",
+        },
+      });
+      const after = await new EnvironmentLifecycleManager(registry, resources)
+        .reconcile("resource-conway-incomplete");
+      expect(after.status).toBe("unknown");
+      expect(after.metadata.mutationNeedsReconciliation).toBe(true);
+      expect(after.metadata.actualExists).not.toBe(false);
+    } finally {
+      db.close();
+    }
+  });
 
   it("reads Conway's documented data list as actual owned-provider inventory, not zero resources", async () => {
     const { client, fetcher } = clientForInventory({ data: [
