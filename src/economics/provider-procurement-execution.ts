@@ -31,6 +31,7 @@ import {
 import { getReviewedTaskPathReceipt } from "../orchestration/orchestrator.js";
 import { getTaskById } from "../state/database.js";
 import type { TaskResourceNeed } from "../environments/types.js";
+import { isExplicitInstant } from "../environments/time-evidence.js";
 
 export const PROVIDER_PROCUREMENT_POLICY_TOOL = "p031_provider_procurement";
 
@@ -205,8 +206,8 @@ function requireObservedResourceFit(
       fit.resourceShape !== scope.resourceShape ||
       !source || !evidence.length ||
       !Number.isFinite(observedAt) || !Number.isFinite(validUntil) ||
-      !/(?:Z|[+-]\d{2}:\d{2})$/.test(fit.observedAt) ||
-      !/(?:Z|[+-]\d{2}:\d{2})$/.test(fit.validUntil) ||
+      !isExplicitInstant(fit.observedAt) ||
+      !isExplicitInstant(fit.validUntil) ||
       observedAt > now.getTime() || validUntil <= now.getTime() ||
       validUntil <= observedAt ||
       !observed || typeof observed !== "object" || Array.isArray(observed) ||
