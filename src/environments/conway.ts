@@ -265,14 +265,21 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
             `cheapest fitting Conway tier=${tier.name} monthlyCents=${tier.monthlyCents}`,
           );
 
-          if (
-            requirements.expectedDurationMs != null &&
-            requirements.expectedDurationMs >= 0
-          ) {
+          if (Number.isSafeInteger(requirements.expectedDurationMs) &&
+              (requirements.expectedDurationMs ?? 0) > 0 &&
+              Number.isSafeInteger(tier.monthlyCents) &&
+              tier.monthlyCents >= 0) {
             const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
-            estimatedCostCents = Math.ceil(
-              tier.monthlyCents * (requirements.expectedDurationMs / thirtyDaysMs),
+            const priced = Math.ceil(
+              tier.monthlyCents * (requirements.expectedDurationMs! / thirtyDaysMs),
             );
+            if (Number.isSafeInteger(priced) && priced >= 0) {
+              estimatedCostCents = priced;
+            } else {
+              evidence.push(
+                "Conway prorated amount exceeds exact safe integer representation; estimated cost UNKNOWN.",
+              );
+            }
           }
         } else if (pricing.length > 0) {
           evidence.push("No currently advertised Conway pricing tier fits the requested shape.");
