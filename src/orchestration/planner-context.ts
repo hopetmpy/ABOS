@@ -365,6 +365,61 @@ function describeResourceTaskMeteringTime(
     "metricAggregateCoverage=UNKNOWN taskCpuShare=UNKNOWN providerBilledUsage=UNKNOWN";
 }
 
+/**
+ * Existing P-013 is the evidence authority for observed local worker starts
+ * and parent TaskGraph outcomes. The result is a bounded, read-only context
+ * hint: it does NOT reconstruct complete historical attempts, prove a remote
+ * worker interval, or allocate provider utilization, billed cost or ROI.
+ */
+function describeRecordedLocalTaskAttempts(db: Database, taskId: string): string {
+  try {
+    const maxEvents = 32;
+    const rows = db.prepare(`
+      SELECT event_type AS eventType, payload_json AS payloadJson
+      FROM evidence_events
+      WHERE authority_type = 'task_graph' AND authority_id = ?
+        AND epistemic_status = 'observation'
+        AND event_type IN ('task.local_harness_execution_started', 'task.attempt_outcome_recorded')
+      ORDER BY sequence DESC LIMIT ?
+    `).all(taskId, maxEvents + 1) as { eventType: string; payloadJson: string }[];
+    if (rows.length === 0) return "UNKNOWN_NO_TASK_ATTEMPT_EVENT_EVIDENCE";
+    if (rows.length > maxEvents)
+      return "PARTIAL_EVENT_HISTORY_TRUNCATED_NO_COMPLETE_ATTEMPT_COUNTS";
+    let localStarts = 0;
+    let parentOutcomes = 0;
+    let scheduledRetries = 0;
+    let unknownStartOutcomes = 0;
+    for (const row of rows) {
+      const parsed: unknown = JSON.parse(row.payloadJson);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+        return "UNKNOWN_INVALID_TASK_ATTEMPT_EVIDENCE";
+      const payload = parsed as Record<string, unknown>;
+      if (row.eventType === "task.local_harness_execution_started") {
+        if (payload.boundary !== "local_harness_execute_invocation" ||
+            typeof payload.recordedStartedAt !== "string" ||
+            !Number.isFinite(Date.parse(payload.recordedStartedAt)))
+          return "UNKNOWN_INVALID_TASK_ATTEMPT_EVIDENCE";
+        localStarts++;
+      } else {
+        if (!["completed", "failed"].includes(String(payload.outcome)) ||
+            typeof payload.retryScheduled !== "boolean" ||
+            (payload.recordedStartedAt !== null &&
+              (typeof payload.recordedStartedAt !== "string" ||
+                !Number.isFinite(Date.parse(payload.recordedStartedAt)))))
+          return "UNKNOWN_INVALID_TASK_ATTEMPT_EVIDENCE";
+        parentOutcomes++;
+        if (payload.retryScheduled) scheduledRetries++;
+        if (payload.recordedStartedAt === null) unknownStartOutcomes++;
+      }
+    }
+    return `RECORDED_EVENTS_ONLY localWorkerStarts=${localStarts} parentTaskOutcomes=${parentOutcomes} ` +
+      `retryScheduled=${scheduledRetries} outcomesWithUnknownStart=${unknownStartOutcomes} ` +
+      "fullHistoryCoverage=UNKNOWN remoteWorkerPhysicalTime=UNKNOWN providerCpuShare=UNKNOWN providerBilledCost=UNKNOWN";
+  } catch {
+    return "UNKNOWN_TASK_ATTEMPT_EVIDENCE_UNREADABLE";
+  }
+}
+
 function describeResourceOutcomeLinks(db: Database, goalId?: string): string | null {
   let resources: ReturnType<EnvironmentResourceStore["list"]>;
   try {
@@ -471,6 +526,10 @@ function describeResourceOutcomeLinks(db: Database, goalId?: string): string | n
             ? String(matchingTask.estimated_cost_cents) : "UNKNOWN";
     const history = recordedAssignmentHistory(db, resource.id);
     const meteringTime = describeResourceTaskMeteringTime(db, history, resource, goalId);
+    const taskAttemptEvidence = matchingTask
+      ? duplicateTaskCost ? `REFERENCE_ONLY:${matchingTask.id}`
+        : describeRecordedLocalTaskAttempts(db, matchingTask.id)
+      : "UNKNOWN_NO_SCOPED_TASK";
     const assignments = history?.observations.filter(row =>
       row.taskId && (!goalId || row.goalId === goalId)
     ) ?? [];
@@ -495,7 +554,7 @@ function describeResourceOutcomeLinks(db: Database, goalId?: string): string | n
       `unresolvedLocalProviderIntents=${outstanding}; supplierFinalBilling=UNKNOWN; ` +
       `historicalAssignments=${history === null || history.observations.length === 0 ? "UNKNOWN" : historicalLines.length} ` +
       `reassignmentAfterScopedGoal=${detachedOrReassigned}; ` +
-      `cpuSampleTaskTimeEvidence=${meteringTime}` +
+      `cpuSampleTaskTimeEvidence=${meteringTime}; localTaskAttemptEvidence=${taskAttemptEvidence}` +
       (historicalLines.length ? "\n  " + historicalLines.join("\n  ") : "") +
       (history && (history.incomplete || assignments.length > historicalLines.length)
         ? "\n  Historical assignment journal incomplete or truncated for planner context; enumerate P-018/P-013 for full sequence." : "");
@@ -510,6 +569,7 @@ function describeResourceOutcomeLinks(db: Database, goalId?: string): string | n
       : []),
     ...(!historicalLookupAvailable
       ? ["Historical P-013/P-018 assignment index is unavailable; earlier owner changes are UNKNOWN."] : []),
+    "P-013 local worker attempt events are partial historical observations, not remote workload or provider usage metrics. " +
     "Assignment event timestamps and Task start/end dates support only conservative point-time compatibility, " +
       "not continuous allocation intervals, provider CPU aggregate bucket boundaries, attribution of utilization during a Task, or cost shares. " +
       "Repeated Task costs are references, not multiple resource expenses. CPU alone cannot establish idleness, " +
