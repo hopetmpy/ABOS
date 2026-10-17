@@ -1,5 +1,6 @@
 import type { Database } from "better-sqlite3";
 import type { TaskResourceNeed } from "../environments/types.js";
+import { appendEvidenceEvent, correlationIdFor } from "../observability/evidence.js";
 import { ulid } from "ulid";
 import {
   getGoalById,
@@ -277,6 +278,86 @@ export function assignTask(db: Database, taskId: string, agentAddress: string): 
   });
 }
 
+/**
+ * P-031: records the local worker's actual harness invocation boundary,
+ * not a parent dispatch, provider CPU bucket or remote execution timestamp.
+ * TaskGraph owns the status; P-013 mirrors it as correlated evidence.
+ */
+export function startLocalTaskExecution(db: Database, taskId: string, workerAddress: string): void {
+  withTransaction(db, () => {
+    const task = getTaskById(db, taskId);
+    if (!task) throw new Error(`Task not found: ${taskId}`);
+    if (task.status !== "assigned" ||
+        (task.assignedTo !== null && task.assignedTo !== workerAddress)) {
+      throw new Error(`Task ${taskId} is not assigned to local worker ${workerAddress}`);
+    }
+    // A stale pre-existing start cannot be promoted to a fresh worker sample.
+    if (task.startedAt !== null) {
+      throw new Error(`Task ${taskId} has an unverified prior start timestamp`);
+    }
+    // Tests and recovery may supply an assigned Task without a selected worker.
+    // Claim ownership atomically with the local execution start; never steal
+    // an assignment from a different worker.
+    if (task.assignedTo === null) {
+      db.prepare("UPDATE task_graph SET assigned_to = ? WHERE id = ?")
+        .run(workerAddress, taskId);
+    }
+    updateTaskStatus(db, taskId, "running");
+    const started = getTaskById(db, taskId)?.startedAt;
+    if (!started) throw new Error(`Task ${taskId} running start was not persisted`);
+    appendEvidenceEvent(db, {
+      correlationId: correlationIdFor("goal", task.goalId),
+      eventType: "task.local_harness_execution_started",
+      domain: "orchestration",
+      authorityType: "task_graph",
+      authorityId: taskId,
+      goalId: task.goalId,
+      taskId,
+      epistemicStatus: "observation",
+      payload: {
+        retryCountAtStart: task.retryCount,
+        recordedStartedAt: started,
+        workerAddress,
+        boundary: "local_harness_execute_invocation",
+      },
+      provenance: { source: "LocalWorkerPool", scope: "local_worker_only" },
+    });
+  });
+}
+
+function recordTaskOutcomeEvidence(
+  db: Database,
+  task: ReturnType<typeof getTaskById> & {},
+  outcome: "completed" | "failed",
+  retryScheduled: boolean,
+  recordedAt: string,
+): void {
+  appendEvidenceEvent(db, {
+    correlationId: correlationIdFor("goal", task.goalId),
+    eventType: "task.attempt_outcome_recorded",
+    domain: "orchestration",
+    authorityType: "task_graph",
+    authorityId: task.id,
+    goalId: task.goalId,
+    taskId: task.id,
+    epistemicStatus: "observation",
+    createdAt: recordedAt,
+    payload: {
+      retryCountBeforeOutcome: task.retryCount,
+      statusBeforeOutcome: task.status,
+      outcome,
+      retryScheduled,
+      recordedStartedAt: task.startedAt ?? null,
+      outcomeRecordedAt: recordedAt,
+      // A result received by the parent is not a physical worker-stop clock.
+      durationAuthority: "UNKNOWN",
+      providerCpuShare: "UNKNOWN",
+      providerBilledCost: "UNKNOWN",
+    },
+    provenance: { source: "task_graph", scope: "parent_lifecycle_observation" },
+  });
+}
+
 export function completeTask(db: Database, taskId: string, result: TaskResult): void {
   withTransaction(db, () => {
     const task = getTaskById(db, taskId);
@@ -294,6 +375,7 @@ export function completeTask(db: Database, taskId: string, result: TaskResult): 
       // unless the canonical lifecycle recorded started_at independently.
       "UPDATE task_graph SET result = ?, actual_cost_cents = ? WHERE id = ?",
     ).run(JSON.stringify(result), result.costCents, taskId);
+    recordTaskOutcomeEvidence(db, task, "completed", false, new Date().toISOString());
 
     unblockReadyBlockedTasks(db);
     refreshGoalStatus(db, task.goalId);
@@ -320,6 +402,9 @@ export function failTask(db: Database, taskId: string, error: string, shouldRetr
     };
 
     const canRetry = shouldRetry && task.retryCount < task.maxRetries;
+    // Persist the prior recorded start and retry index before the current row
+    // is cleared for the next attempt. This is NOT workload metering.
+    recordTaskOutcomeEvidence(db, task, "failed", canRetry, new Date().toISOString());
     if (canRetry) {
       const nextStatus: TaskStatus = areDependenciesSatisfied(db, task.dependencies)
         ? "pending"

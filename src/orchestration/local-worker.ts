@@ -15,7 +15,8 @@ import { createLogger } from "../observability/logger.js";
 import type { HarnessContext, WorkerInferenceClient } from "../agent/harness-types.js";
 import { buildWisdomFromGoal, createBudgetFromTask } from "../agent/harness-types.js";
 import { HarnessRegistry } from "../agent/harness-registry.js";
-import { completeTask, failTask } from "./task-graph.js";
+import { completeTask, failTask, startLocalTaskExecution } from "./task-graph.js";
+import { getTaskById } from "../state/database.js";
 import type { TaskNode, TaskResult } from "./task-graph.js";
 import { AgentWorkspace } from "./workspace.js";
 import type {
@@ -55,6 +56,8 @@ export interface WorkerExecutionOptions {
   workerId?: string;
   abortSignal?: AbortSignal;
   executionContinuation?: ExecutionContinuationContext;
+  /** Invoked after initialization, immediately before local harness execution. */
+  onExecutionStart?: () => void | Promise<void>;
 }
 
 /**
@@ -123,6 +126,7 @@ export async function executeTaskWithHarness(
   );
 
   await harness.initialize(task, context);
+  await options.onExecutionStart?.();
   return harness.execute();
 }
 
@@ -159,12 +163,14 @@ export class LocalWorkerPool {
           },
         );
         try {
-          failTask(
-            this.config.db,
-            task.id,
-            `Worker crashed: ${error instanceof Error ? error.message : String(error)}`,
-            true,
-          );
+          if (this.isCurrentWorkerTask(workerId, task, true)) {
+            failTask(
+              this.config.db,
+              task.id,
+              `Worker crashed: ${error instanceof Error ? error.message : String(error)}`,
+              true,
+            );
+          }
         } catch {
           // Task may already be in a terminal state.
         }
@@ -199,6 +205,20 @@ export class LocalWorkerPool {
     this.activeWorkers.clear();
   }
 
+  /**
+   * A late result must not complete/fail a replacement worker's assignment
+   * or a later retry of the same Task. This compares TaskGraph ownership and
+   * retry generation, not an inferred provider execution interval.
+   */
+  private isCurrentWorkerTask(workerId: string, task: TaskNode, allowAssigned: boolean): boolean {
+    const current = getTaskById(this.config.db, task.id);
+    return Boolean(current &&
+      current.retryCount === task.metadata.retryCount &&
+      (current.status === "running" || (allowAssigned && current.status === "assigned")) &&
+      (current.assignedTo === `local://${workerId}` ||
+        (allowAssigned && current.status === "assigned" && current.assignedTo === null)));
+  }
+
   private async runWorker(
     workerId: string,
     task: TaskNode,
@@ -210,7 +230,17 @@ export class LocalWorkerPool {
         workerId,
         abortSignal: signal,
         executionContinuation,
+        onExecutionStart: () => startLocalTaskExecution(
+          this.config.db, task.id, `local://${workerId}`,
+        ),
       });
+
+      if (!this.isCurrentWorkerTask(workerId, task, false)) {
+        logger.warn("Ignored result from obsolete local worker assignment", {
+          workerId, taskId: task.id,
+        });
+        return;
+      }
 
       if (result.success) {
         completeTask(this.config.db, task.id, result);
@@ -246,7 +276,9 @@ export class LocalWorkerPool {
       logger.error(
         `[WORKER ${workerId}] Harness execution failed: ${message}`,
       );
-      failTask(this.config.db, task.id, message, true);
+      if (this.isCurrentWorkerTask(workerId, task, true)) {
+        failTask(this.config.db, task.id, message, true);
+      }
     }
   }
 }

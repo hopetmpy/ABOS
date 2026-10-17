@@ -8,6 +8,7 @@ import { LocalWorkerPool } from "../../orchestration/local-worker.js";
 import type { PlannerOutput } from "../../orchestration/planner.js";
 import type { TaskNode, TaskResult } from "../../orchestration/task-graph.js";
 import { getTaskById } from "../../state/database.js";
+import { getEvidenceByAuthority } from "../../observability/evidence.js";
 import { createInMemoryDb } from "./test-db.js";
 import { createTestConfig, createTestIdentity, MockConwayClient } from "../mocks.js";
 
@@ -174,6 +175,10 @@ describe("orchestration/LocalWorkerPool harness integration", () => {
 
     const row = getTaskById(db, task.id);
     expect(row?.status).toBe("completed");
+    expect(row?.startedAt).toBeTruthy();
+    expect(getEvidenceByAuthority(db, "task_graph", task.id).map(e => e.eventType)).toEqual([
+      "task.local_harness_execution_started", "task.attempt_outcome_recorded",
+    ]);
     expect(row?.result).toMatchObject({ success: true, output: "completed by harness" });
     expect(SuccessHarness.capturedContext?.budget.maxTurns).toBe(7);
     expect(SuccessHarness.capturedContext?.allowedEditRoot).toBe(process.cwd());
@@ -195,6 +200,10 @@ describe("orchestration/LocalWorkerPool harness integration", () => {
 
     const row = getTaskById(db, task.id);
     expect(row?.status).toBe("failed");
+    expect(row?.startedAt).toBeTruthy();
+    expect(getEvidenceByAuthority(db, "task_graph", task.id).map(e => e.eventType)).toEqual([
+      "task.local_harness_execution_started", "task.attempt_outcome_recorded",
+    ]);
     expect(row?.result).toMatchObject({ success: false, output: "failed by harness" });
   });
 
@@ -219,6 +228,52 @@ describe("orchestration/LocalWorkerPool harness integration", () => {
     SlowHarness.release?.();
     await waitFor(async () => pool.getActiveCount() === 0);
     expect(pool.getActiveCount()).toBe(0);
+  });
+
+  it("ignores a completed result from a superseded local worker after reassignment", async () => {
+    registry.register("custom-slow", SlowHarness);
+    const pool = createPool();
+    const task = insertTask(db, {
+      id: "task-reassignment-race",
+      goalId: "goal-1",
+      agentRole: "custom-slow",
+      status: "assigned",
+      assignedTo: "local://original-worker",
+      maxRetries: 1,
+    });
+    const inFlight = (pool as any).runWorker(
+      "original-worker", task, new AbortController().signal,
+    ) as Promise<void>;
+    await waitFor(async () => SlowHarness.release !== null);
+    const started = getTaskById(db, task.id);
+    expect(started?.status).toBe("running");
+    db.prepare(
+      "UPDATE task_graph SET status = 'assigned', assigned_to = ?, started_at = NULL WHERE id = ?",
+    ).run("local://replacement-worker", task.id);
+    SlowHarness.release?.();
+    await inFlight;
+    const after = getTaskById(db, task.id);
+    expect(after?.status).toBe("assigned");
+    expect(after?.assignedTo).toBe("local://replacement-worker");
+    expect(after?.result).toBeNull();
+    expect(getEvidenceByAuthority(db, "task_graph", task.id).map(e => e.eventType))
+      .toEqual(["task.local_harness_execution_started"]);
+  });
+
+  it("rejects a stale local worker before execution without failing the new owner", async () => {
+    registry.register("custom-success", SuccessHarness);
+    const pool = createPool();
+    const task = insertTask(db, {
+      id: "task-stale-on-start", goalId: "goal-1",
+      agentRole: "custom-success", status: "assigned",
+      assignedTo: "local://replacement-worker", maxRetries: 1,
+    });
+    await (pool as any).runWorker(
+      "obsolete-worker", task, new AbortController().signal,
+    );
+    expect(getTaskById(db, task.id)?.status).toBe("assigned");
+    expect(getTaskById(db, task.id)?.assignedTo).toBe("local://replacement-worker");
+    expect(getEvidenceByAuthority(db, "task_graph", task.id)).toHaveLength(0);
   });
 
   it("gives orchestrator-role harnesses a 50-turn default budget", async () => {
