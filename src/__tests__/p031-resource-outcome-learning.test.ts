@@ -265,6 +265,100 @@ describe("P-031 source-backed resource outcome → strategic planning (read-only
     } finally { db.close(); }
   });
 
+
+  it("retains a 300s CloudWatch request as requested-only evidence without inferring metered coverage", async () => {
+    const db = fixture();
+    try {
+      db.raw.prepare("UPDATE task_graph SET started_at = ?, completed_at = ? WHERE id = 'task-b'")
+        .run("2026-10-16T15:00:00.000Z", "2026-10-16T15:30:00.000Z");
+      const store = new EnvironmentResourceStore(db.raw);
+      store.create({
+        id: "aws-wide-window", provider: "aws", externalId: "i-wide",
+        type: "aws-ec2-instance", goalId: "goal-a", taskId: "task-b", status: "running",
+        metadata: {
+          cpuUtilizationMetricStatus: "observed", cpuUtilizationAveragePct: 42,
+          cpuUtilizationObservedAt: "2026-10-16T15:10:00.000Z",
+          cpuUtilizationMetricSource: "aws_cloudwatch_AWS/EC2_CPUUtilization_Average",
+          cpuUtilizationRequestedPeriodSeconds: 300,
+          cpuUtilizationPeriodEvidence: "requested_only",
+        },
+      });
+      const id = store.listEvents("aws-wide-window")[0].id;
+      db.raw.prepare("UPDATE environment_resource_events SET created_at = ? WHERE id = ?")
+        .run("2026-10-16T14:50:00.000Z", id);
+      const output = (await buildPlannerContext({ db: db.raw, goalId: "goal-a" })).adaptiveContext ?? "";
+      expect(output).toContain("cpuSampleTaskTimeEvidence=RECORDED_TIMESTAMP_OVERLAP_ONLY task=task-b");
+      expect(output).toContain("metricRequestedPeriodSeconds=300 metricAggregateCoverage=UNKNOWN");
+      expect(output).toContain("taskCpuShare=UNKNOWN providerBilledUsage=UNKNOWN");
+      expect(output).not.toContain("taskCpuShare=42%");
+    } finally { db.close(); }
+  });
+
+  it("rejects near-boundary CloudWatch aggregates and round-trip resource reassignment", async () => {
+    const db = fixture();
+    try {
+      db.raw.prepare("UPDATE task_graph SET started_at = ?, completed_at = ? WHERE id = 'task-b'")
+        .run("2026-10-16T15:00:00.000Z", "2026-10-16T15:30:00.000Z");
+      const store = new EnvironmentResourceStore(db.raw);
+      store.create({
+        id: "aws-changing-window", provider: "aws", externalId: "i-changing",
+        type: "aws-ec2-instance", goalId: "goal-a", taskId: "task-b", status: "running",
+        metadata: {
+          cpuUtilizationMetricStatus: "observed", cpuUtilizationAveragePct: 19,
+          cpuUtilizationObservedAt: "2026-10-16T15:02:00.000Z",
+          cpuUtilizationMetricSource: "aws_cloudwatch_AWS/EC2_CPUUtilization_Average",
+          cpuUtilizationRequestedPeriodSeconds: 300, cpuUtilizationPeriodEvidence: "requested_only",
+        },
+      });
+      const created = store.listEvents("aws-changing-window")[0].id;
+      db.raw.prepare("UPDATE environment_resource_events SET created_at = ? WHERE id = ?")
+        .run("2026-10-16T14:50:00.000Z", created);
+      let out = (await buildPlannerContext({ db: db.raw, goalId: "goal-a" })).adaptiveContext ?? "";
+      expect(out).toContain("cpuSampleTaskTimeEvidence=UNKNOWN_POSSIBLE_AGGREGATE_CROSSES_TASK_BOUNDARY");
+
+      store.applyMutation("aws-changing-window", {
+        taskId: "task-a", metadata: { cpuUtilizationObservedAt: "2026-10-16T15:10:00.000Z" },
+      }, "reassign", "Synthetic split");
+      store.applyMutation("aws-changing-window", { taskId: "task-b" }, "reassign", "Synthetic return");
+      const events = store.listEvents("aws-changing-window").slice(1);
+      for (const [i, event] of events.entries()) {
+        db.raw.prepare("UPDATE environment_resource_events SET created_at = ? WHERE id = ?")
+          .run(i === 0 ? "2026-10-16T15:08:00.000Z" : "2026-10-16T15:09:00.000Z", event.id);
+      }
+      out = (await buildPlannerContext({ db: db.raw, goalId: "goal-a" })).adaptiveContext ?? "";
+      expect(out).toContain("cpuSampleTaskTimeEvidence=UNKNOWN_POSSIBLE_AGGREGATE_CROSSES_OWNER_OR_LIFECYCLE_BOUNDARY");
+      expect(out).not.toContain("taskCpuShare=19%");
+      expect(store.listEvents("aws-changing-window")).toHaveLength(3);
+    } finally { db.close(); }
+  });
+
+  it("does not treat final retry timestamps as complete multi-attempt execution evidence", async () => {
+    const db = fixture();
+    try {
+      db.raw.prepare("UPDATE task_graph SET retry_count = 1, started_at = ?, completed_at = ? WHERE id = 'task-b'")
+        .run("2026-10-16T15:00:00.000Z", "2026-10-16T15:30:00.000Z");
+      const store = new EnvironmentResourceStore(db.raw);
+      store.create({
+        id: "aws-retry", provider: "aws", externalId: "i-retry",
+        type: "aws-ec2-instance", goalId: "goal-a", taskId: "task-b", status: "running",
+        metadata: {
+          cpuUtilizationMetricStatus: "observed", cpuUtilizationAveragePct: 13,
+          cpuUtilizationObservedAt: "2026-10-16T15:10:00.000Z",
+          cpuUtilizationMetricSource: "aws_cloudwatch_AWS/EC2_CPUUtilization_Average",
+          cpuUtilizationRequestedPeriodSeconds: 300, cpuUtilizationPeriodEvidence: "requested_only",
+        },
+      });
+      const id = store.listEvents("aws-retry")[0].id;
+      db.raw.prepare("UPDATE environment_resource_events SET created_at = ? WHERE id = ?")
+        .run("2026-10-16T14:50:00.000Z", id);
+      const output = (await buildPlannerContext({ db: db.raw, goalId: "goal-a" })).adaptiveContext ?? "";
+      expect(output).toContain("cpuSampleTaskTimeEvidence=UNKNOWN_RETRIED_TASK_ATTEMPTS_NOT_RECONSTRUCTABLE");
+      expect(output).not.toContain("cpuSampleTaskTimeEvidence=RECORDED_TIMESTAMP_OVERLAP_ONLY");
+      expect(output).toContain("supplierFinalBilling=UNKNOWN");
+      expect((db.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects").get() as {n:number}).n).toBe(0);
+    } finally { db.close(); }
+  });
+
   it("does not invent economic outcome learning from Goals and Tasks without any owned resource", async () => {
     const db = fixture();
     try {
