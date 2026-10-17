@@ -88,6 +88,16 @@ export interface ProviderResourceFitObservation {
 }
 
 export interface ProviderProcurementExecutionDependencies {
+  /**
+   * Optional trusted host P-010 issuer. Receives the exact source-observed
+   * scenario only AFTER P-030 review and returns a PERSISTED policy decision.
+   * The existing strict receipt verifier rejects default-allow, denial,
+   * mismatched scope and unrecorded decisions; this grants no implicit funds.
+   */
+  issuePolicyDecision?: (
+    scope: Readonly<ProviderProcurementScope>,
+    scenario: Readonly<ProviderProcurementScenarioInput>,
+  ) => Promise<string>;
   /** Implementations authenticate origin, scope, freshness and financial data. */
   observeAuthenticatedEconomics: (
     scope: Readonly<ProviderProcurementScope>,
@@ -225,18 +235,21 @@ export async function executeReviewedProviderProcurement(
   db: Database.Database,
   input: {
     scope: ProviderProcurementScope;
-    policyDecisionId: string;
+    policyDecisionId?: string;
     dependencies: ProviderProcurementExecutionDependencies;
     now?: Date;
   },
 ): Promise<ProviderProcurementExecutionResult> {
-  const { scope, policyDecisionId, dependencies } = input;
+  const { scope, dependencies } = input;
+  const suppliedPolicyDecisionId = input.policyDecisionId?.trim() ?? null;
+  if (input.policyDecisionId !== undefined && !suppliedPolicyDecisionId) {
+    throw new Error("P-010 supplied procurement decision ID cannot be blank.");
+  }
   const now = input.now ?? new Date();
   const required = [
     scope.operationKey, scope.operation, scope.provider,
     scope.providerAccountId, scope.unit, scope.goalId, scope.taskId,
     scope.pathId, scope.resourceId, scope.region, scope.resourceShape,
-    policyDecisionId,
   ];
   if (required.some(x => typeof x !== "string" || !x.trim())) {
     throw new Error("Procurement requires a complete operation, account, resource and policy scope.");
@@ -253,7 +266,8 @@ export async function executeReviewedProviderProcurement(
     const stored = previous.request;
     const matches = previous.provider === scope.provider &&
       previous.unit === scope.unit &&
-      previous.policyDecisionId === policyDecisionId &&
+      !!previous.policyDecisionId &&
+      previous.policyDecisionId === (suppliedPolicyDecisionId ?? previous.policyDecisionId) &&
       stored.providerAccountId === scope.providerAccountId &&
       stored.operation === scope.operation &&
       stored.resourceId === scope.resourceId &&
@@ -331,6 +345,15 @@ export async function executeReviewedProviderProcurement(
     throw new Error("P-030 provider scenario lacks funded, fully quoted or risk-reviewed commitment.");
   }
   const args = procurementPolicyArgs(scope, scenario);
+  // An agent need not guess a future policy receipt. A trusted P-010 issuer
+  // can evaluate this exact sourced quotation after the economic review.
+  // Persisted positive rule evidence is still mandatory before any P-030
+  // financial effect is claimed or any provider action can be dispatched.
+  const policyDecisionId = suppliedPolicyDecisionId ??
+    (await dependencies.issuePolicyDecision?.(scope, scenario)) ?? "";
+  if (typeof policyDecisionId !== "string" || !policyDecisionId.trim()) {
+    throw new Error("P-010 trusted procurement decision issuer UNAVAILABLE.");
+  }
   requirePolicyReceipt(db, policyDecisionId, args);
   const amount = review.totalProposedCommitmentCents;
   // The idempotency key is a dispatch identity, NOT a part of the economic
