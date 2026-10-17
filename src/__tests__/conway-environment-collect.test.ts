@@ -49,6 +49,56 @@ describe("ConwayEnvironmentProvider collect", () => {
     }
   });
 
+  it("reads an exact Conway native credit balance without inventing USD liquidity, account ID or procurement authority", async () => {
+    const observation = vi.fn(async () => 1_245);
+    const provider = new ConwayEnvironmentProvider({
+      getCreditsBalance: observation,
+    });
+    const result = await provider.observeEconomics();
+    expect(observation).toHaveBeenCalledTimes(1);
+    expect(result.provider).toBe("conway");
+    expect(result.status).toBe("partial");
+    expect(result.accountId).toBeNull();
+    expect(result.nativeCreditBalance).toMatchObject({
+      unit: "conway_credit_cent",
+      observedBalanceCents: 1_245,
+      accountScope: "authenticated_client_unattributed",
+    });
+    expect(result.nativeCreditBalance?.observedAt).toBeTruthy();
+    expect(result.spendableLiquidityUsdCents).toBeNull();
+    expect(result.recurringCommitmentUsdCents).toBeNull();
+    expect(result.procurementAuthority).toBe("not_established");
+    expect(result.evidence.join(" ")).toContain("UNKNOWN");
+  });
+
+  it("preserves Conway credit debt rather than converting negative native units to free capital", async () => {
+    const provider = new ConwayEnvironmentProvider({
+      getCreditsBalance: async () => -120,
+    });
+    const result = await provider.observeEconomics();
+    expect(result.nativeCreditBalance?.observedBalanceCents).toBe(-120);
+    expect(result.nativeCreditBalance?.unit).toBe("conway_credit_cent");
+    expect(result.spendableLiquidityUsdCents).toBeNull();
+    expect(result.procurementAuthority).toBe("not_established");
+  });
+
+  it("reports unknown instead of zero or false liquidity on denied or malformed Conway balance", async () => {
+    for (const getCreditsBalance of [
+      async () => Number.NaN,
+      async () => Number.MAX_SAFE_INTEGER + 1,
+      async () => { throw new Error("Private Conway provider credential failure"); },
+    ]) {
+      const provider = new ConwayEnvironmentProvider({ getCreditsBalance });
+      const result = await provider.observeEconomics();
+      expect(result.status).toBe("unknown");
+      expect(result.nativeCreditBalance).toBeUndefined();
+      expect(result.accountId).toBeNull();
+      expect(result.spendableLiquidityUsdCents).toBeNull();
+      expect(result.procurementAuthority).toBe("not_established");
+      expect(result.evidence.join(" ")).not.toContain("Private Conway");
+    }
+  });
+
   it("keeps prorated Conway monthly pricing partial and its charged unit UNKNOWN", async () => {
     const provider = new ConwayEnvironmentProvider({
       getCreditsBalance: async () => 100,
