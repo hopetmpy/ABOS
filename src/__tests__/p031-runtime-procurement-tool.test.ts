@@ -5,7 +5,8 @@ import { createEnvironmentTools } from "../environments/tools.js";
 import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { createLifecycleProcurementDependencies } from "../environments/procurement-lifecycle-adapter.js";
-import { AwsEc2ProcurementNotDispatchedError } from "../environments/aws.js";
+import { AwsEc2ProcurementNotDispatchedError, AwsEnvironmentProvider } from "../environments/aws.js";
+import { createAwsClaimedProvisionAuthority } from "../environments/aws-procurement-authority.js";
 import { PolicyEngine } from "../agent/policy-engine.js";
 import { createTestDb } from "./mocks.js";
 import { insertGoal, insertTask } from "../state/database.js";
@@ -538,6 +539,189 @@ describe("P-031 agent environment_procurement_execute runtime route", () => {
       expect(await tool.execute({ ...args, operation: "charge_anything",
         policy_decision_id: "id" }, { db } as any)).toContain("BLOCKED");
       expect(getTrustedProcurementDependencies).not.toHaveBeenCalled();
+    } finally { db.close(); }
+  });
+});
+
+describe("P-031 AWS real lifecycle secondary gate, synthetic account only", () => {
+  it("accepts exactly the P-030-claimed P-010-reviewed EC2 operation and refuses raw lifecycle bypass after the permit closes", async () => {
+    const { db, scope: base, registry, args: original } = setup();
+    try {
+      const scope: ProviderProcurementScope = {
+        ...base, provider: "aws", providerAccountId: "123456789012",
+        resourceId: "aws-claimed-resource-1", region: "us-east-1",
+        resourceShape: "t3.small",
+      };
+      const quote = createScenario();
+      quote.provider = "aws";
+      quote.accountId = scope.providerAccountId;
+      quote.financing.accountId = scope.providerAccountId;
+      const authority = createAwsClaimedProvisionAuthority(db.raw);
+      const calls: string[][] = [];
+      const runner = vi.fn(async (_command: string, argv: string[]) => {
+        calls.push(argv);
+        const success = (stdout = "") => ({ exitCode: 0, stdout, stderr: "" });
+        if (argv[0] === "sts") return success(JSON.stringify({ Account: scope.providerAccountId }));
+        if (argv[0] === "ec2" && argv[1] === "run-instances") {
+          return success(JSON.stringify({
+            InstanceId: "i-claimed-1", State: { Name: "pending" },
+            ImageId: "ami-synthetic-1", InstanceType: scope.resourceShape,
+          }));
+        }
+        if (argv[0] === "ec2" && argv[1] === "wait") return success();
+        if (argv[0] === "ec2" && argv[1] === "describe-instances") {
+          return success(JSON.stringify({
+            InstanceId: "i-claimed-1", State: { Name: "running" },
+            ImageId: "ami-synthetic-1", InstanceType: scope.resourceShape,
+          }));
+        }
+        if (argv[0] === "ssm") return success(JSON.stringify({ InstanceInformationList: [] }));
+        throw new Error("Unrecognized synthetic AWS runner command");
+      });
+      const aws = new AwsEnvironmentProvider({
+        runner, defaultRegion: scope.region, defaultImageId: "ami-synthetic-1",
+        defaultInstanceType: scope.resourceShape,
+        authorizeNewProvision: authority.authorizeNewProvision,
+      });
+      registry.register(aws);
+      const lifecycle = new EnvironmentLifecycleManager(
+        registry, new EnvironmentResourceStore(db.raw),
+      );
+      const prepared = {
+        resourceType: "ec2",
+        retentionPolicy: "until_goal_complete" as const,
+        requiredCapabilities: ["remote compute"],
+        metadata: { instanceType: scope.resourceShape },
+      };
+      // Same resource ID or apparent budget cannot supply the one-shot
+      // provider mandate without the canonical financial dispatch claim.
+      await expect(aws.provision({
+        ...prepared, resourceId: scope.resourceId, region: scope.region,
+        goalId: scope.goalId, taskId: scope.taskId, pathId: scope.pathId,
+      })).rejects.toBeInstanceOf(AwsEc2ProcurementNotDispatchedError);
+      expect(calls.filter(argv => argv[1] === "run-instances")).toHaveLength(0);
+
+      const source = {
+        observeAuthenticatedEconomics: async () => quote,
+        issuePolicyDecision: async () => exactP010Decision(db, scope, quote),
+        resolveProvisionRequest: async () => prepared,
+      };
+      const dependencies = createLifecycleProcurementDependencies(lifecycle, source, authority);
+      const tool = createEnvironmentTools(registry, {
+        getTrustedProcurementDependencies: provider =>
+          provider === "aws" ? dependencies : null,
+      }).find(item => item.name === "environment_procurement_execute")!;
+      const input = {
+        ...original, provider: scope.provider,
+        provider_account_id: scope.providerAccountId,
+        resource_id: scope.resourceId, region: scope.region,
+        resource_shape: scope.resourceShape,
+      };
+      const result = JSON.parse(await tool.execute(input, { db } as any));
+      expect(result.status).toBe("usable");
+      expect(result.dispatched).toBe(true);
+      expect(result.financialEffectState).toBe("pending");
+      expect(result.supplierSettlement).toBe("UNKNOWN");
+      expect(calls.filter(argv => argv[0] === "ec2" && argv[1] === "run-instances"))
+        .toHaveLength(1);
+      const owned = lifecycle.resources.get(scope.resourceId);
+      expect(owned?.externalId).toBe("i-claimed-1");
+      expect(owned?.metadata.procurementAccountId).toBe(scope.providerAccountId);
+      expect(owned?.metadata.procurementPolicyDecisionId).toBeTruthy();
+
+      const replay = JSON.parse(await tool.execute(input, { db } as any));
+      expect(replay.status).toBe("not_dispatched");
+      await expect(aws.provision({
+        ...prepared, resourceId: scope.resourceId, region: scope.region,
+        goalId: scope.goalId, taskId: scope.taskId, pathId: scope.pathId,
+      })).rejects.toBeInstanceOf(AwsEc2ProcurementNotDispatchedError);
+      expect(calls.filter(argv => argv[0] === "ec2" && argv[1] === "run-instances"))
+        .toHaveLength(1);
+      expect(db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get())
+        .toMatchObject({ n: 0 });
+    } finally { db.close(); }
+  });
+
+  it("releases a P-030 intent as rejected when the second AWS mandate cannot match trusted resource shape", async () => {
+    const { db, scope: original, registry, args } = setup();
+    try {
+      const scope: ProviderProcurementScope = {
+        ...original, provider: "aws", providerAccountId: "123456789012",
+        region: "us-east-1", resourceShape: "t3.small",
+      };
+      const quote = createScenario();
+      quote.provider = "aws"; quote.accountId = scope.providerAccountId;
+      quote.financing.accountId = scope.providerAccountId;
+      const externalProvision = vi.fn(async () => ({
+        externalId: "must-never-exist", status: "ready" as const,
+      }));
+      registry.register({
+        id: "aws",
+        inspect: async () => ({
+          id: "aws", label: "Synthetic AWS secondary preflight",
+          availability: "available" as const,
+          capabilities: ["compute"], evidence: ["test"], constraints: [],
+          observedAt: new Date().toISOString(),
+        }),
+        provision: externalProvision,
+      } as any);
+      const authority = createAwsClaimedProvisionAuthority(db.raw);
+      const lifecycle = new EnvironmentLifecycleManager(
+        registry, new EnvironmentResourceStore(db.raw),
+      );
+      const dependencies = createLifecycleProcurementDependencies(lifecycle, {
+        observeAuthenticatedEconomics: async () => quote,
+        issuePolicyDecision: async () => exactP010Decision(db, scope, quote),
+        resolveProvisionRequest: async () => ({
+          resourceType: "ec2",
+          retentionPolicy: "until_goal_complete" as const,
+          requiredCapabilities: ["remote compute"],
+          metadata: { instanceType: "t3.micro" }, // stale host specification
+        }),
+      }, authority);
+      const tool = createEnvironmentTools(registry, {
+        getTrustedProcurementDependencies: () => dependencies,
+      }).find(t => t.name === "environment_procurement_execute")!;
+      const result = JSON.parse(await tool.execute({
+        ...args, provider: "aws", provider_account_id: scope.providerAccountId,
+        region: scope.region, resource_shape: scope.resourceShape,
+      }, { db } as any));
+      expect(result.status).toBe("rejected");
+      expect(result.dispatched).toBe(false);
+      expect(result.financialEffectState).toBe("rejected");
+      expect(result.supplierSettlement).toBe("UNKNOWN");
+      expect(externalProvision).not.toHaveBeenCalled();
+    } finally { db.close(); }
+  });
+
+  it("rejects a forged AWS secondary mandate without a matching live P-030 dispatch claim", async () => {
+    const { db, scope: original } = setup();
+    try {
+      const authority = createAwsClaimedProvisionAuthority(db.raw);
+      const scope = {
+        ...original, provider: "aws", providerAccountId: "123456789012",
+        region: "us-east-1", resourceShape: "t3.small",
+      };
+      const quote = createScenario();
+      quote.provider = "aws"; quote.accountId = scope.providerAccountId;
+      quote.financing.accountId = scope.providerAccountId;
+      const prepared = {
+        resourceId: scope.resourceId, resourceType: "ec2",
+        retentionPolicy: "until_goal_complete" as const,
+        requiredCapabilities: ["remote compute"],
+        region: scope.region, goalId: scope.goalId, taskId: scope.taskId,
+        pathId: scope.pathId, metadata: { instanceType: scope.resourceShape },
+      };
+      await expect(authority.withClaimedProvision(
+        scope, { policyDecisionId: "unpersisted", amountCents: 450, unit: "usd_cent" },
+        quote, prepared, async () => "should not run",
+      )).rejects.toThrow("mandate");
+      expect(authority.authorizeNewProvision({
+        request: prepared, accountId: scope.providerAccountId,
+        region: scope.region, instanceType: scope.resourceShape,
+      }).allowed).toBe(false);
+      expect(db.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects").get())
+        .toMatchObject({ n: 0 });
     } finally { db.close(); }
   });
 });

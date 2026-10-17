@@ -10,6 +10,7 @@ import type {
   ProviderProcurementExecutionDependencies,
   ProviderProcurementScope,
 } from "../economics/provider-procurement-execution.js";
+import type { ProviderProcurementScenarioInput } from "../economics/treasury-scenario.js";
 import type { EnvironmentProvisionRequest } from "./types.js";
 import type { EnvironmentLifecycleManager } from "./lifecycle.js";
 
@@ -42,13 +43,32 @@ export interface TrustedLifecycleProcurementSource {
     "resourceId" | "goalId" | "taskId" | "pathId" | "region">>;
 }
 
+export interface ClaimedProvisionAuthority {
+  withClaimedProvision<T>(
+    scope: Readonly<ProviderProcurementScope>,
+    authorization: Readonly<{ policyDecisionId: string; amountCents: number; unit: string }>,
+    scenario: Readonly<ProviderProcurementScenarioInput>,
+    request: EnvironmentProvisionRequest,
+    action: () => Promise<T>,
+  ): Promise<T>;
+}
+
 export function createLifecycleProcurementDependencies(
   lifecycle: EnvironmentLifecycleManager,
   source: TrustedLifecycleProcurementSource,
+  authority?: ClaimedProvisionAuthority,
 ): ProviderProcurementExecutionDependencies {
+  // The very same source quotation observed and approved by P-030 is passed
+  // to the secondary provider gate. A WeakMap avoids retaining rejected
+  // operations or inventing a second persistent economic ledger.
+  const observedQuotes = new WeakMap<object, ProviderProcurementScenarioInput>();
   return {
     issuePolicyDecision: source.issuePolicyDecision,
-    observeAuthenticatedEconomics: source.observeAuthenticatedEconomics,
+    observeAuthenticatedEconomics: async (scope) => {
+      const scenario = await source.observeAuthenticatedEconomics(scope);
+      observedQuotes.set(scope, scenario);
+      return scenario;
+    },
     observeAuthenticatedResourceFit: source.observeAuthenticatedResourceFit,
     dispatch: async (scope, authorized) => {
       if (scope.operation !== "provision") {
@@ -81,7 +101,7 @@ export function createLifecycleProcurementDependencies(
           "Host provisioning specification unavailable or invalid before provider dispatch.",
         );
       }
-      const owned = await lifecycle.provision(scope.provider, {
+      const request: EnvironmentProvisionRequest = {
         ...prepared,
         resourceId: scope.resourceId,
         region: scope.region,
@@ -95,7 +115,24 @@ export function createLifecycleProcurementDependencies(
           ...(prepared.selectionEvidence ?? []),
           "P-030 financial dispatch already claimed; P-018 owns provider resource identity and lifecycle.",
         ],
-      });
+      };
+      const provision = () => lifecycle.provision(scope.provider, request);
+      // The secondary AWS provider gate never trusts model/task metadata as
+      // approval. Its temporary mandate exists only around this P-030-claimed
+      // lifecycle call, and is cleared after success OR unknown failure.
+      const quoted = observedQuotes.get(scope);
+      let owned: Awaited<ReturnType<EnvironmentLifecycleManager["provision"]>>;
+      try {
+        owned = authority
+          ? quoted
+            ? await authority.withClaimedProvision(scope, authorized, quoted, request, provision)
+            : (() => { throw new LifecycleProcurementNotDispatchedError(
+                "Supplier quotation has no matching trusted P-030 observation in this attempt.",
+              ); })()
+          : await provision();
+      } finally {
+        observedQuotes.delete(scope);
+      }
       const stateUsable = owned.status === "ready" || owned.status === "running";
       return {
         status: stateUsable && !!owned.externalId ? "usable" : "pending",
