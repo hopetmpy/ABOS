@@ -314,8 +314,17 @@ export class EnvironmentLifecycleManager {
             ? "degraded"
             : "unknown";
 
+      const reportedStatus = result.status ?? fallbackStatus;
+      // A supplier can report "running" while explicitly observing that
+      // workload health is false/unknown. Runtime state is not proof of
+      // usability. Keep both facts in the same P-018 resource authority.
+      const verifiedStatus =
+        (reportedStatus === "ready" || reportedStatus === "running") &&
+        result.healthy !== true
+          ? result.healthy === false ? "degraded" : "unknown"
+          : reportedStatus;
       return this.resources.recordHealth(resourceId, {
-        status: result.status ?? fallbackStatus,
+        status: verifiedStatus,
         providerState: result.providerState,
         evidence: result.evidence,
         metadata: result.metadata,
