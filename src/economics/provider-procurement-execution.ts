@@ -296,13 +296,14 @@ export async function executeReviewedProviderProcurement(
   const quantifiedNeed = plannedNeed?.minimumCapacity &&
     Object.keys(plannedNeed.minimumCapacity).length > 0 ? plannedNeed : null;
   let fitEvidence: string[] = [];
+  let observedFit: ProviderResourceFitObservation | null = null;
   if (quantifiedNeed) {
     if (!dependencies.observeAuthenticatedResourceFit) {
       throw new Error(
         "P-031 independent resource capacity evidence unavailable for quantified Task demand; no billable dispatch.",
       );
     }
-    const observedFit = await dependencies.observeAuthenticatedResourceFit(
+    observedFit = await dependencies.observeAuthenticatedResourceFit(
       scope, quantifiedNeed,
     );
     fitEvidence = requireObservedResourceFit(scope, quantifiedNeed, observedFit, now);
@@ -392,6 +393,35 @@ export async function executeReviewedProviderProcurement(
   // transaction with the durable P-030 intent claim; it cannot authorize an
   // external AWS balance or prove real supplier invoices.
   const stage = db.transaction(() => {
+    // Supplier observation and P-010 issuance are asynchronous. A previously
+    // fresh financing snapshot, resource fit or priced term may have EXPIRED
+    // before this atomic economic claim. Only the trusted test clock is fixed;
+    // the production runtime must read the actual time again at dispatch.
+    const claimNow = input.now ?? new Date();
+    if (quantifiedNeed && observedFit) {
+      requireObservedResourceFit(scope, quantifiedNeed, observedFit, claimNow);
+    }
+    if (plannedNeed?.expectedResourceDurationMs != null) {
+      const coverage = assessQuotedResourceUsageCoverage(scenario, {
+        resourceId: scope.resourceId,
+        resourceShape: scope.resourceShape,
+        expectedResourceDurationMs: plannedNeed.expectedResourceDurationMs,
+      }, claimNow);
+      if (!coverage.ready) {
+        throw new Error(
+          "P-031 supplier priced usage evidence expired before financial dispatch claim.",
+        );
+      }
+    }
+    const freshReview = assessProviderProcurementScenario(scenario, claimNow);
+    if (freshReview.status !== "review_ready" ||
+        freshReview.totalProposedCommitmentCents !== amount ||
+        freshReview.freeAfterProposalAndContingencyCents === null ||
+        freshReview.freeAfterProposalAndContingencyCents < 0) {
+      throw new Error(
+        "P-030 financing or contract quote expired before financial dispatch claim.",
+      );
+    }
     // A P-025 route can be cancelled, rejected or rebound while a trusted
     // provider is asynchronously observing economics. Early provenance
     // rejects invalid requests cheaply; this transactional check ensures
@@ -450,7 +480,7 @@ export async function executeReviewedProviderProcurement(
     const netReview = assessProviderProcurementScenario({
       ...scenario,
       existingCommitmentsCents: Number(combined),
-    }, now);
+    }, claimNow);
     if (netReview.status !== "review_ready" ||
         netReview.freeAfterProposalAndContingencyCents === null ||
         netReview.freeAfterProposalAndContingencyCents < 0) {
