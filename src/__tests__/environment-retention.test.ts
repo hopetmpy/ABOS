@@ -648,6 +648,147 @@ describe("EnvironmentRetentionCoordinator", () => {
     }
   });
 
+
+  it("recovers a durable destroy_requested crash by observing first, never replaying the destroy blindly", async () => {
+    const db = createDb();
+    try {
+      insertGoal(db, "goal-crash", "completed");
+      let destroyCalls = 0;
+      let reconcileCalls = 0;
+      const registry = new EnvironmentRegistry();
+      registry.register(provider({
+        // Initially the host cannot obtain a trustworthy provider result.
+        reconcile: undefined,
+        destroy: async () => {
+          destroyCalls++;
+          return { status: "terminated" };
+        },
+      }));
+      const resource = new EnvironmentResourceStore(db);
+      const beforeCrash = new EnvironmentLifecycleManager(registry, resource);
+      const owned = beforeCrash.adopt({
+        provider: "cloud", externalId: "vm-durable-destroy",
+        type: "compute", status: "running", providerState: "running",
+        goalId: "goal-crash", retentionPolicy: "until_goal_complete",
+      });
+      // Simulate process death at the exact boundary AFTER the intent has
+      // been committed but BEFORE the lifecycle/provider call begins.
+      beforeCrash.destroy = async () => {
+        throw new Error("simulated process exit after durable destroy_requested");
+      };
+      await expect(new EnvironmentRetentionCoordinator(db, registry, beforeCrash)
+        .sweep()).rejects.toThrow("simulated process exit");
+      expect(resource.get(owned.id)?.metadata.retentionReleaseState)
+        .toBe("destroy_requested");
+      expect(typeof resource.get(owned.id)?.metadata.retentionDestroyFingerprint)
+        .toBe("string");
+      expect(destroyCalls).toBe(0);
+
+      // A new coordinator and lifecycle have no in-process memory of the
+      // interrupted attempt; the durable resource record is authoritative.
+      const restarted = new EnvironmentLifecycleManager(
+        registry, new EnvironmentResourceStore(db),
+      );
+      const held = await new EnvironmentRetentionCoordinator(db, registry, restarted)
+        .sweep();
+      expect(held.destroyAttempts).toBe(0);
+      expect(held.pendingObservation).toBe(1);
+      expect(destroyCalls).toBe(0);
+      expect(restarted.resources.get(owned.id)?.metadata.retentionReleaseState)
+        .toBe("destroy_requested");
+
+      // After an independently observed provider absence there is nothing
+      // to destroy. Local cleanup is completed without a duplicate command
+      // or an invented invoice, cancellation or refund.
+      registry.register(provider({
+        destroy: async () => {
+          destroyCalls++;
+          throw new Error("No second destructive call allowed.");
+        },
+        reconcile: async (current) => {
+          reconcileCalls++;
+          return {
+            resource: { ...current, status: "unknown" },
+            actualExists: false, action: "provider-verified-absence",
+            evidence: ["Independently observed remote resource absent."],
+          };
+        },
+      }));
+      const observed = await new EnvironmentRetentionCoordinator(db, registry, restarted)
+        .sweep();
+      expect(observed.released).toBe(1);
+      expect(observed.destroyAttempts).toBe(0);
+      expect(reconcileCalls).toBe(1);
+      expect(destroyCalls).toBe(0);
+      const released = restarted.resources.get(owned.id)!;
+      expect(released.status).toBe("terminated");
+      expect(released.metadata.retentionReleaseState).toBe("released");
+      expect(released.metadata.retentionBillingReconciliation)
+        .toBe("unverified_after_resource_release");
+      expect((await new EnvironmentRetentionCoordinator(db, registry, restarted)
+        .sweep()).released).toBe(0);
+    } finally { db.close(); }
+  });
+
+  it("holds a crash-recovered destroy intent when its prior fingerprint is missing", async () => {
+    const db = createDb();
+    try {
+      insertGoal(db, "goal-missing-destroy-receipt", "completed");
+      let destroys = 0;
+      let observations = 0;
+      const registry = new EnvironmentRegistry();
+      registry.register(provider({
+        destroy: async () => {
+          destroys++;
+          return { status: "terminated" };
+        },
+        reconcile: async (resource) => {
+          observations++;
+          return {
+            resource: {
+              ...resource, status: "running", providerState: "running",
+            },
+            actualExists: true,
+            action: "still-running",
+            evidence: ["Observed provider resource still present."],
+          };
+        },
+      }));
+      const original = new EnvironmentLifecycleManager(
+        registry, new EnvironmentResourceStore(db),
+      );
+      const owned = original.adopt({
+        provider: "cloud", externalId: "vm-corrupt-destroy-intent",
+        type: "compute", goalId: "goal-missing-destroy-receipt",
+        status: "running", retentionPolicy: "until_goal_complete",
+      });
+      original.destroy = async () => {
+        throw new Error("simulated exit before provider call");
+      };
+      await expect(new EnvironmentRetentionCoordinator(db, registry, original)
+        .sweep()).rejects.toThrow("simulated exit");
+      // The intent remains on disk, but its comparison evidence is corrupt
+      // or unavailable. A later health observation cannot establish a
+      // changed pre-dispatch baseline without the original fingerprint.
+      original.resources.applyMutation(owned.id, {
+        metadata: { retentionDestroyFingerprint: null },
+      }, "fixture_corrupt_recovery");
+      const restarted = new EnvironmentLifecycleManager(
+        registry, new EnvironmentResourceStore(db),
+      );
+      const recovery = new EnvironmentRetentionCoordinator(db, registry, restarted);
+      const first = await recovery.sweep();
+      expect(first.pendingObservation).toBe(1);
+      expect(first.destroyAttempts).toBe(0);
+      expect(first.evidence.join(" ")).toContain("missing");
+      expect(await recovery.sweep()).toMatchObject({
+        destroyAttempts: 0, pendingObservation: 1,
+      });
+      expect(observations).toBe(2);
+      expect(destroys).toBe(0);
+    } finally { db.close(); }
+  });
+
   it("preserves an eligible resource when destroy capability is currently unavailable", async () => {
     const db = createDb();
     try {
