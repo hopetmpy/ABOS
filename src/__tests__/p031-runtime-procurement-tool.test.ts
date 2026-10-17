@@ -5,6 +5,7 @@ import { createEnvironmentTools } from "../environments/tools.js";
 import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { createLifecycleProcurementDependencies } from "../environments/procurement-lifecycle-adapter.js";
+import { AwsEc2ProcurementNotDispatchedError } from "../environments/aws.js";
 import { PolicyEngine } from "../agent/policy-engine.js";
 import { createTestDb } from "./mocks.js";
 import { insertGoal, insertTask } from "../state/database.js";
@@ -338,6 +339,98 @@ describe("P-031 agent environment_procurement_execute runtime route", () => {
     } finally {
       db.close();
     }
+  });
+
+  it("releases P-030 unknown exposure on source-proven host preflight rejection without a provider call", async () => {
+    const { db, registry, scope, args } = setup();
+    try {
+      const quote = createScenario();
+      const policyDecisionId = exactP010Decision(db, scope, quote);
+      const provision = vi.fn();
+      registry.register({
+        id: "synthetic",
+        async inspect() {
+          return {
+            id: "synthetic", label: "Synthetic provider", availability: "available",
+            capabilities: [], constraints: [], evidence: ["test"], observedAt: new Date().toISOString(),
+          };
+        },
+        provision,
+      } as any);
+      const lifecycle = new EnvironmentLifecycleManager(
+        registry, new EnvironmentResourceStore(db.raw),
+      );
+      const deps = createLifecycleProcurementDependencies(lifecycle, {
+        observeAuthenticatedEconomics: async () => quote,
+        resolveProvisionRequest: async () => {
+          throw new Error("Synthetic host specification missing before dispatch");
+        },
+      });
+      const tool = createEnvironmentTools(registry, {
+        getTrustedProcurementDependencies: () => deps,
+      }).find(t => t.name === "environment_procurement_execute")!;
+      const input = { ...args, policy_decision_id: policyDecisionId };
+      const result = JSON.parse(await tool.execute(input, { db } as any));
+      expect(result.dispatched).toBe(false);
+      expect(result.status).toBe("rejected");
+      expect(result.financialEffectState).toBe("rejected");
+      expect(lifecycle.resources.list()).toHaveLength(0);
+      expect(provision).not.toHaveBeenCalled();
+      const again = JSON.parse(await tool.execute(input, { db } as any));
+      expect(again.dispatched).toBe(false);
+      expect(provision).not.toHaveBeenCalled();
+      expect(db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get())
+        .toMatchObject({ n: 0 });
+    } finally { db.close(); }
+  });
+
+  it("distinguishes a trusted AWS-style pre-dispatch provider denial from an unknown response", async () => {
+    const { db, registry, scope, args } = setup();
+    try {
+      const quote = createScenario();
+      const policyDecisionId = exactP010Decision(db, scope, quote);
+      const provision = vi.fn(async () => {
+        throw new AwsEc2ProcurementNotDispatchedError(
+          "Synthetic AWS gate rejected authorization before run-instances",
+        );
+      });
+      registry.register({
+        id: "synthetic",
+        async inspect() {
+          return {
+            id: "synthetic", label: "Synthetic AWS gate", availability: "available",
+            capabilities: [], constraints: [], evidence: ["test"], observedAt: new Date().toISOString(),
+          };
+        },
+        provision,
+      });
+      const lifecycle = new EnvironmentLifecycleManager(
+        registry, new EnvironmentResourceStore(db.raw),
+      );
+      const deps = createLifecycleProcurementDependencies(lifecycle, {
+        observeAuthenticatedEconomics: async () => quote,
+        resolveProvisionRequest: async () => ({
+          resourceType: "test-only-ec2", requiredCapabilities: ["compute"],
+          retentionPolicy: "ephemeral",
+        }),
+      });
+      const tool = createEnvironmentTools(registry, {
+        getTrustedProcurementDependencies: () => deps,
+      }).find(t => t.name === "environment_procurement_execute")!;
+      const outcome = JSON.parse(await tool.execute({
+        ...args, policy_decision_id: policyDecisionId,
+      }, { db } as any));
+      expect(outcome.dispatched).toBe(false);
+      expect(outcome.status).toBe("rejected");
+      expect(outcome.financialEffectState).toBe("rejected");
+      const owned = lifecycle.resources.get(scope.resourceId)!;
+      expect(owned.status).toBe("failed");
+      expect(owned.externalId).toBeNull();
+      expect(owned.metadata.provisionExternalEffectNotDispatched).toBe(true);
+      expect(provision).toHaveBeenCalledTimes(1);
+      expect(db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get())
+        .toMatchObject({ n: 0 });
+    } finally { db.close(); }
   });
 
   it("rejects unknown providers and invalid scope before looking up any trusted adapter", async () => {
