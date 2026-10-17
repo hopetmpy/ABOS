@@ -51,6 +51,10 @@ import {
   type TaskResult,
 } from "./task-graph.js";
 import { executeTaskWithHarness } from "./local-worker.js";
+import {
+  claimStandaloneTaskAttempt,
+  persistStandaloneTaskResult,
+} from "./standalone-task-receipt.js";
 import type { ExecutionContinuationContext } from "../environments/continuity.js";
 import {
   parseTaskExecutionPayload,
@@ -107,6 +111,14 @@ export async function executeStandaloneTask(
   const db = createDatabase(resolvePath(config.dbPath));
 
   try {
+    // Claim the exact transported retry generation BEFORE bootstrapping any
+    // harness, tools or inference. If a previous run was interrupted, its
+    // possible effects are UNKNOWN and execution must not replay blindly.
+    const attemptClaim = claimStandaloneTaskAttempt(
+      db.raw, incomingTask, options.executionContinuation,
+    );
+    if (attemptClaim.kind === "replay") return attemptClaim.result;
+
     const createdAt =
       db.getIdentity("createdAt") ||
       new Date().toISOString();
@@ -310,21 +322,22 @@ export async function executeStandaloneTask(
       );
     }
 
-    if (result.success) {
-      completeTask(
-        db.raw,
-        mirrorTask.id,
-        result,
+    // Mirror terminal state and transport replay receipt must be atomic.
+    // A crash between them cannot claim a cached success while the mirror
+    // remains unfinished, or leave an untraceable repeated execution.
+    db.raw.transaction(() => {
+      if (result.success) {
+        completeTask(db.raw, mirrorTask.id, result);
+      } else {
+        failTask(
+          db.raw, mirrorTask.id,
+          result.output || "Remote Task reported failure.", false,
+        );
+      }
+      persistStandaloneTaskResult(
+        db.raw, incomingTask, attemptClaim.key, attemptClaim.fingerprint, result,
       );
-    } else {
-      failTask(
-        db.raw,
-        mirrorTask.id,
-        result.output ||
-          "Remote Task reported failure.",
-        false,
-      );
-    }
+    })();
 
     return result;
   } finally {
