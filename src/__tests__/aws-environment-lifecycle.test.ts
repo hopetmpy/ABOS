@@ -819,6 +819,39 @@ describe("AwsEnvironmentProvider lifecycle", () => {
     expect(sourced.metadata?.hourlyCostUnit).toBe("usd_cent");
   });
 
+  it("preserves UNKNOWN AWS compute-only estimate for malformed duration or nonrepresentable cents", async () => {
+    const aws = new AwsEnvironmentProvider({
+      defaultRegion: "us-east-1",
+      runner: async (_command, args) => {
+        if (args[0] === "ec2" && args[1] === "describe-instances") {
+          return ok(JSON.stringify([]));
+        }
+        throw new Error("Unexpected AWS supplier query " + args.join(" "));
+      },
+    });
+    for (const duration of [0, -100, NaN, Infinity, 1.25,
+      Number.MAX_SAFE_INTEGER + 1]) {
+      const result = await aws.estimate({
+        requiredCapabilities: [], expectedDurationMs: duration,
+        metadata: { hourlyCostCents: 2, hourlyCostUnit: "usd_cent" },
+      });
+      expect(result.estimatedCostCents).toBeNull();
+      expect(result.costCoverage).toBe("unknown");
+      expect(result.costUnit).toBeNull();
+    }
+    const overflow = await aws.estimate({
+      requiredCapabilities: [], expectedDurationMs: Number.MAX_SAFE_INTEGER,
+      metadata: {
+        hourlyCostCents: Number.MAX_SAFE_INTEGER,
+        hourlyCostUnit: "usd_cent",
+      },
+    });
+    expect(overflow.estimatedCostCents).toBeNull();
+    expect(overflow.costCoverage).toBe("unknown");
+    expect(overflow.costUnit).toBeNull();
+    expect(overflow.evidence?.join(" ")).toContain("exact safe integer");
+  });
+
   it("refuses to accrue an untyped hourly rate as USD and preserves sourced USD estimate", async () => {
     const provider = new AwsEnvironmentProvider({
       defaultRegion: "us-east-1",
