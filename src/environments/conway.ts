@@ -585,10 +585,12 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
     const sandbox = sandboxes.find((entry) => entry.id === externalId);
     if (!sandbox) {
       return {
-        healthy: false,
+        healthy: null,
         status: "unknown",
         providerState: "not_observed",
-        evidence: [`Conway sandbox ${externalId} was not returned by provider inventory.`],
+        evidence: [
+          `Conway sandbox ${externalId} was not returned by provider inventory; not observed is not verified unhealthy, absent or destroyed.`,
+        ],
       };
     }
 
@@ -634,10 +636,10 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
           providerState: "not_observed",
           updatedAt: new Date().toISOString(),
         },
-        actualExists: false,
+        actualExists: null,
         action: "mark_unknown",
         evidence: [
-          `Conway inventory did not return resource ${resource.externalId}; absence is not treated as verified destruction.`,
+          `Conway inventory did not return resource ${resource.externalId}; existence remains UNKNOWN, not verified destruction or resolved mutation.`,
         ],
       };
     }
