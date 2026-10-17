@@ -103,6 +103,41 @@ describe("Environment Execution & Lifecycle v2", () => {
     } finally { db.close(); }
   });
 
+  it("does not promote running/provider-ready labels when independent health is false or unknown", async () => {
+    const db = createDb();
+    try {
+      const registry = new EnvironmentRegistry();
+      let healthy: boolean | null = false;
+      const provider: EnvironmentProvider = {
+        id: "contradictory-provider",
+        inspect: async () => ({
+          id: "contradictory-provider", label: "Contradictory provider",
+          availability: "available", capabilities: [], constraints: [],
+          evidence: [], observedAt: new Date().toISOString(),
+        }),
+        health: async () => ({
+          healthy, status: "running", evidence: ["Provider says running; health independently unknown/unhealthy."],
+        }),
+      };
+      registry.register(provider);
+      const resources = new EnvironmentResourceStore(db);
+      const resource = resources.create({
+        provider: provider.id, type: "vm", externalId: "physical-instance-1",
+        status: "running", capabilities: ["compute"],
+      });
+      const lifecycle = new EnvironmentLifecycleManager(registry, resources);
+      const unhealthy = await lifecycle.health(resource.id);
+      expect(unhealthy.status).toBe("degraded");
+      healthy = null;
+      const unknown = await lifecycle.health(resource.id);
+      expect(unknown.status).toBe("unknown");
+      healthy = true;
+      const recovered = await lifecycle.health(resource.id);
+      expect(recovered.status).toBe("running");
+      expect(recovered.lastHealthCheck).not.toBeNull();
+    } finally { db.close(); }
+  });
+
   it("persists ownership before provisioning and records lifecycle evidence", async () => {
     const db = createDb();
     try {
