@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0029.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / GOAL_RESOURCE_LIFECYCLE_E3_PR_GREEN / P005_LIVE_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / HISTORY_RECONCILED_E3_MAIN_GREEN / P005_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-integrated-journey-reconciliation
-Host-Head-At-Audit-Open: 250dd0bca9da71b9601fbcb47c21ef75ce86f1ee
-Last-Reconciled-Host-Head: 709e27bccb47e0e7fe0b492f0a9472471e27cda0
-Observed-Main-Head: 250dd0bca9da71b9601fbcb47c21ef75ce86f1ee
-Last-Product-Head: 250dd0bca9da71b9601fbcb47c21ef75ce86f1ee
-Last-Product-CI: exact main 709e27bccb47e0e7fe0b492f0a9472471e27cda0 push 39063092270 — COMPLETE SUCCESS 8/8
+Current-Host-Branch: abos/p031-source-reconciliation-recovery-20261017
+Host-Head-At-Audit-Open: 180b79842af7dc5f68689662a4756ac2da8c9439
+Last-Reconciled-Host-Head: 180b79842af7dc5f68689662a4756ac2da8c9439
+Observed-Main-Head: 180b79842af7dc5f68689662a4756ac2da8c9439
+Last-Product-Head: 180b79842af7dc5f68689662a4756ac2da8c9439
+Last-Product-CI: exact main 180b79842af7dc5f68689662a4756ac2da8c9439 push 39069820580 — COMPLETE SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
 Last-Completed-CI: 38766126322 — SUCCESS 8/8
@@ -28,6 +28,15 @@ ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
 ProjectOps-PR: 30
 Master-Plan-PR: 31
 Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
+
+
+## P-031 — Último estado verificable y punto de reanudación (2026-10-17)
+
+- SOURCE/CI: `main 180b79842af7dc5f68689662a4756ac2da8c9439` VERIFICADO tras PR #204, ejecución GitHub Actions de evento `push` `39069820580` **COMPLETE/SUCCESS 8/8** (Linux Node22/24, Windows22/24, distribución Node22/24, security, integridad). No inferir E5/E6 de esos tests; no repetir CI sólo para recuperar una observación existente.
+- INTEGRACIÓN: PR #96–#204 relacionados con P-031 revisados por historia y pruebas; los PR #203 y #204 están fusionados, no quedan PR abiertos al checkpoint. La existencia de ramas squash históricas NO es un merge pendiente. No cambiar PLAN ni marcar P-031 HECHO por un merge de código/documentación.
+- DECISIÓN: `NO_CHANGE` sobre mecanismos ya implementados de adquisición con autoridad, dimensionamiento/reuso, P-030 tesorería, renovación/exit *cotizados*, observación posterior al retiro, cleanup/recovery y aprendizaje P-025. El PR #107 ya probaba un ciclo económico/físico y el PR #203 añadió el binding de Orchestrator; evitar volver a crear pruebas equivalentes sin defecto.
+- FRONTERA ABIERTA: operación contractual auténtica de renovación/cancelación y conciliación de factura/pago/reembolso, además de proveedor/cuenta, precio y financiación reales, siguen sin demostración. El host CLI normal no inyecta fuente económica y autoridad de compra autenticadas; los adapters opcionales E3 no prueban proveedores LIVE. P-005 E5/E6 continúa UNKNOWN. No asumir que AWS EC2 terminate cancela todo contrato, ni que Conway `deleteSandbox` realiza eliminación.
+- SIGUIENTE PUNTO: contrastar solamente criterios de cierre P-031 no cubiertos por source real y verificar capacidad contractual específica del proveedor si existe conexión autorizada. Cuando falte cuenta/fondos/contrato verificable, registrar `UNKNOWN / P-005` y continuar sólo rutas source independientes justificadas. El cuadro de propietarios, cobertura y no-duplicación está en `continuity/C0029.md` al principio. P-032 PLANIFICADO, no activado.
 
 ## Autoridad operativa
 
