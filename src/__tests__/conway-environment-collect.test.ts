@@ -180,6 +180,8 @@ describe("ConwayEnvironmentProvider collect", () => {
     [{ data: [{}] }, "unidentifiable"],
     [{ data: [], count: 2 }, "incomplete"],
     [{ data: [{ id: "sbx-one" }], next_cursor: "cursor" }, "incomplete"],
+    [{ data: [{ id: "sbx-duplicate", status: "running" },
+      { id: "sbx-duplicate", status: "stopped" }], count: 2 }, "repeats"],
     [{ data: [], has_more: true }, "incomplete"],
     [{ sandboxes: [], count: 0, source: "workers_fallback_blocked" }, "incomplete"],
     [{ data: [], partial: true }, "incomplete"],
