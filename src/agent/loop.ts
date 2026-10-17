@@ -233,6 +233,7 @@ export async function runAgentLoop(
   const awsProcurementAuthority = createAwsClaimedProvisionAuthority(db.raw);
   const awsEnvironment = new AwsEnvironmentProvider({
     authorizeNewProvision: awsProcurementAuthority.authorizeNewProvision,
+    authorizeBillableMutation: awsProcurementAuthority.authorizeBillableMutation,
   });
   environmentRegistry.register(new LocalEnvironmentProvider(localBrowserRuntime));
   environmentRegistry.register(new ConwayEnvironmentProvider(conway));
@@ -398,8 +399,8 @@ export async function runAgentLoop(
     getTrustedProcurementDependencies: (providerId, operation) => {
       const custom = options.getTrustedProcurementDependencies?.(providerId);
       if (custom) return custom;
-      if (operation !== "provision" ||
-          !environmentRegistry.supportsOperation(providerId, "provision")) {
+      if (!["provision", "resize", "resume", "recover"].includes(operation ?? "") ||
+          !environmentRegistry.supportsOperation(providerId, operation!)) {
         return null;
       }
       const source = options.getTrustedLifecycleProcurementSource?.(providerId);
