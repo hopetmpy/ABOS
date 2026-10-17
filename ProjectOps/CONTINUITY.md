@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0028.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / SOURCE_AWS_P030_CLAIMED_MANDATE_E3_MAIN_GREEN / P005_LIVE_UNKNOWN
+Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / SOURCE_RETENTION_DESTROY_RESTART_RECONCILIATION_E3_GREEN / P005_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-aws-mandate-checkpoint
-Host-Head-At-Audit-Open: 662c8ec5d6e9fcc43a9f7cedf305b195e6d27094
-Last-Reconciled-Host-Head: 662c8ec5d6e9fcc43a9f7cedf305b195e6d27094
-Observed-Main-Head: 662c8ec5d6e9fcc43a9f7cedf305b195e6d27094
-Last-Product-Head: 662c8ec5d6e9fcc43a9f7cedf305b195e6d27094
-Last-Product-CI: exact main 662c8ec5d6e9fcc43a9f7cedf305b195e6d27094 push 39009826708 — COMPLETE SUCCESS 8/8
+Current-Host-Branch: abos/p031-retention-restart-checkpoint
+Host-Head-At-Audit-Open: 5fea4a3b207c81e55f7c1f97c3ef2130a8e89b0e
+Last-Reconciled-Host-Head: 5fea4a3b207c81e55f7c1f97c3ef2130a8e89b0e
+Observed-Main-Head: 5fea4a3b207c81e55f7c1f97c3ef2130a8e89b0e
+Last-Product-Head: 5fea4a3b207c81e55f7c1f97c3ef2130a8e89b0e
+Last-Product-CI: exact main 5fea4a3b207c81e55f7c1f97c3ef2130a8e89b0e push 39012072562 — COMPLETE SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
 Last-Completed-CI: 38766126322 — SUCCESS 8/8
