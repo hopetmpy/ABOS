@@ -66,6 +66,26 @@ describe("P-031 Conway authenticated GET-only diagnostic", () => {
     expect(JSON.stringify(report)).not.toContain("sandbox-a");
   });
 
+  it("does not turn duplicated provider sandbox identifiers into a complete inventory", async () => {
+    const report = await probeConwayAccountReadOnly({
+      getCreditsBalance: async () => 200,
+      listSandboxes: async () => [
+        { id: "same-sandbox", status: "running", region: "us-east",
+          vcpu: 1, memoryMb: 512, diskGb: 5, createdAt: "" },
+        { id: "same-sandbox", status: "stopped", region: "us-east",
+          vcpu: 1, memoryMb: 512, diskGb: 5, createdAt: "" },
+      ],
+      getCreditsPricing: async () => [],
+    });
+    expect(report.inventory).toMatchObject({
+      status: "unknown", providerListedSandboxCount: null,
+      reportedRunningCount: null, abosOwnedReusableCount: null,
+      failureKind: "read_failed",
+    });
+    expect(report.purchaseAuthority).toBe("not_established");
+    expect(report.verifiedFreeFunds).toBeNull();
+  });
+
   it("does not promote a negative balance or a synthetic supplier list into capital and owned inventory", async () => {
     const reads = {
       getCreditsBalance: vi.fn(async () => -120),

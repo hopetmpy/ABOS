@@ -343,6 +343,10 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
           (total as number) < raw.length || (total as number) > raw.length))) {
       throw new Error("Conway sandbox inventory is incomplete/unavailable; resource existence UNKNOWN.");
     }
+    // A repeated provider ID is an ambiguous snapshot, not two resources.
+    // In particular, conflicting duplicate statuses must never be selected
+    // arbitrarily by P-018 health/reconciliation or counted as spare capacity.
+    const seenSandboxIds = new Set<string>();
     return raw.map((item: unknown): SandboxInfo => {
       if (!item || typeof item !== "object" || Array.isArray(item)) {
         throw new Error("Conway sandbox inventory has an invalid entry; resource existence UNKNOWN.");
@@ -352,6 +356,10 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
       if (typeof id !== "string" || !id.trim()) {
         throw new Error("Conway sandbox inventory has an unidentifiable resource; existence UNKNOWN.");
       }
+      if (seenSandboxIds.has(id)) {
+        throw new Error("Conway sandbox inventory repeats a resource identifier; existence UNKNOWN.");
+      }
+      seenSandboxIds.add(id);
       const numeric = (value: unknown) => typeof value === "number" &&
         Number.isSafeInteger(value) && value >= 0 ? value : 0;
       return {

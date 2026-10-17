@@ -117,7 +117,10 @@ export async function probeConwayAccountReadOnly(
 
   if (inventoryResult.status === "fulfilled" &&
       Array.isArray(inventoryResult.value) &&
-      inventoryResult.value.every(s => typeof s?.id === "string" && s.id.trim())) {
+      inventoryResult.value.every(s => typeof s?.id === "string" && s.id.trim()) &&
+      // The diagnostic can accept a different ConwayReadOnlySource than the
+      // canonical HTTP client. Never count repeated IDs as distinct inventory.
+      new Set(inventoryResult.value.map(s => s.id)).size === inventoryResult.value.length) {
     report.inventory.status = "observed";
     report.inventory.providerListedSandboxCount = inventoryResult.value.length;
     report.inventory.reportedRunningCount = inventoryResult.value.filter(
