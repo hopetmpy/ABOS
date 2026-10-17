@@ -339,8 +339,11 @@ function describeResourceTaskMeteringTime(
         return "UNKNOWN_POSSIBLE_AGGREGATE_CROSSES_OWNER_OR_LIFECYCLE_BOUNDARY";
     }
   }
+  // A sample timestamp outside a Task window does NOT prove that the
+  // underlying aggregate excludes that Task. Even the AWS period field is
+  // merely the CLI-requested interval, not provider-confirmed coverage.
   if (sampleAt < started || (completed !== null && sampleAt > completed))
-    return "OUTSIDE_RECORDED_TASK_WINDOW_NO_ATTRIBUTION";
+    return "UNKNOWN_SAMPLE_POINT_OUTSIDE_TASK_WINDOW_AGGREGATION_UNVERIFIED";
 
   // Provider aggregation coverage, source-clock reliability, exclusivity
   // and per-task metering remain unverified, regardless of timestamp match.
