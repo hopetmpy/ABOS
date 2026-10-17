@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { getHomeDir } from "../platform/home.js";
 import type {
   EnvironmentCollectionResult,
+  EnvironmentEconomicObservation,
   EnvironmentEstimate,
   EnvironmentHealthResult,
   EnvironmentPreparationResult,
@@ -81,6 +82,60 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
       this.collect = async (resource) =>
         this.collectSandboxArtifacts(resource);
     }
+  }
+
+  /**
+   * Read-only provider-native funding observation over the same uncached
+   * authenticated Conway client already used by survival/treasury.
+   * The balance API does not attest the external account ID, reservations,
+   * pending spends, invoice settlement or USD conversion. No P-010 permit.
+   */
+  async observeEconomics(): Promise<EnvironmentEconomicObservation> {
+    const observedAt = new Date().toISOString();
+    const base: EnvironmentEconomicObservation = {
+      provider: this.id,
+      status: "unknown",
+      accountId: null,
+      observedAt,
+      budgets: [],
+      spendableLiquidityUsdCents: null,
+      recurringCommitmentUsdCents: null,
+      procurementAuthority: "not_established",
+      evidence: [
+        "Conway native credits are not AWS USD, spendable wallet cash, externally settled revenue or P-010 provider procurement authority.",
+        "The authenticated client does not expose a verified provider account identifier, pending obligations or reserves through this balance response.",
+      ],
+    };
+    try {
+      const observed = await this.conway.getCreditsBalance();
+      if (!Number.isSafeInteger(observed)) {
+        base.evidence.push(
+          "Conway balance is not an exact safe integer; provider-native funding UNKNOWN.",
+        );
+        return base;
+      }
+      const receivedAt = new Date().toISOString();
+      base.nativeCreditBalance = {
+        unit: "conway_credit_cent",
+        observedBalanceCents: observed,
+        accountScope: "authenticated_client_unattributed",
+        observedAt: receivedAt,
+        evidence: [
+          "The live configured Conway client returned the native credit-cent balance; local receipt time only, upstream provider timestamp/finality not certified.",
+          "Observed provider balance is NOT free after outstanding P-030 commitments, not cross-unit USD funding and not an authorization to procure.",
+        ],
+      };
+      base.status = "partial";
+      base.observedAt = receivedAt;
+      base.evidence.push(
+        "Provider-native Conway credits observed; exact external provider account identity, settlement and unreserved amount remain UNKNOWN.",
+      );
+    } catch {
+      base.evidence.push(
+        "Conway authenticated credit balance unavailable; no zero balance or funding inferred.",
+      );
+    }
+    return base;
   }
 
   async inspect(): Promise<EnvironmentSnapshot> {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EnvironmentRegistry } from "../environments/registry.js";
+import { ConwayEnvironmentProvider } from "../environments/conway.js";
 import { EnvironmentSelector } from "../environments/selector.js";
 import { createEnvironmentTools } from "../environments/tools.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
@@ -224,6 +225,38 @@ describe("environment_economic_evidence tool", () => {
     expect(failed).not.toContain("sensitive secret");
     expect(await tool.execute({ environment: "missing" }, {} as any))
       .toContain("BLOCKED");
+  });
+});
+
+describe("P-031 authenticated Conway native financing visibility", () => {
+  it("exposes Conway native credit cents through ordinary evidence tool without making them AWS cash", async () => {
+    const registry = new EnvironmentRegistry();
+    registry.register(new ConwayEnvironmentProvider({
+      getCreditsBalance: async () => 795,
+    }));
+    const tool = createEnvironmentTools(registry).find(
+      x => x.name === "environment_economic_evidence",
+    )!;
+    const output = JSON.parse(await tool.execute(
+      { environment: "conway" }, {} as any,
+    ));
+    expect(output.accountId).toBeNull();
+    expect(output.status).toBe("partial");
+    expect(output.nativeCreditBalance).toMatchObject({
+      unit: "conway_credit_cent",
+      observedBalanceCents: 795,
+      accountScope: "authenticated_client_unattributed",
+    });
+    expect(output.spendableLiquidityUsdCents).toBeNull();
+    expect(output.procurementAuthority).toBe("not_established");
+
+    const review = createEnvironmentTools(registry).find(
+      x => x.name === "environment_procurement_review",
+    )!;
+    const refused = await review.execute(
+      { environment: "conway", unit: "conway_credit_cent" }, {} as any,
+    );
+    expect(refused).toContain("account identity is not observed");
   });
 });
 
