@@ -60,7 +60,7 @@ describe("ConwayEnvironmentProvider collect", () => {
     expect(result.status).toBe("partial");
     expect(result.accountId).toBeNull();
     expect(result.nativeCreditBalance).toMatchObject({
-      unit: "conway_credit_cent",
+      unit: "credit_cent",
       observedBalanceCents: 1_245,
       accountScope: "authenticated_client_unattributed",
     });
@@ -77,7 +77,7 @@ describe("ConwayEnvironmentProvider collect", () => {
     });
     const result = await provider.observeEconomics();
     expect(result.nativeCreditBalance?.observedBalanceCents).toBe(-120);
-    expect(result.nativeCreditBalance?.unit).toBe("conway_credit_cent");
+    expect(result.nativeCreditBalance?.unit).toBe("credit_cent");
     expect(result.spendableLiquidityUsdCents).toBeNull();
     expect(result.procurementAuthority).toBe("not_established");
   });

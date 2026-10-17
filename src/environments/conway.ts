@@ -116,7 +116,7 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
       }
       const receivedAt = new Date().toISOString();
       base.nativeCreditBalance = {
-        unit: "conway_credit_cent",
+        unit: "credit_cent",
         observedBalanceCents: observed,
         accountScope: "authenticated_client_unattributed",
         observedAt: receivedAt,

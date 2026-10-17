@@ -243,7 +243,7 @@ describe("P-031 authenticated Conway native financing visibility", () => {
     expect(output.accountId).toBeNull();
     expect(output.status).toBe("partial");
     expect(output.nativeCreditBalance).toMatchObject({
-      unit: "conway_credit_cent",
+      unit: "credit_cent",
       observedBalanceCents: 795,
       accountScope: "authenticated_client_unattributed",
     });
@@ -254,7 +254,7 @@ describe("P-031 authenticated Conway native financing visibility", () => {
       x => x.name === "environment_procurement_review",
     )!;
     const refused = await review.execute(
-      { environment: "conway", unit: "conway_credit_cent" }, {} as any,
+      { environment: "conway", unit: "credit_cent" }, {} as any,
     );
     expect(refused).toContain("account identity is not observed");
   });
