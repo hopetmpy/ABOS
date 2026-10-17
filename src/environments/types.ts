@@ -302,6 +302,19 @@ export interface EnvironmentEconomicObservation {
     }>;
     evidence: string[];
   };
+  /**
+   * Authenticated provider-native balance on a client bound to an account
+   * whose external account identifier was NOT observed. This is NOT free
+   * funds: pending obligations, reservations and credits of another currency
+   * remain separate P-030 questions. Never derive USD from this value.
+   */
+  nativeCreditBalance?: {
+    unit: "conway_credit_cent";
+    observedBalanceCents: number;
+    accountScope: "authenticated_client_unattributed";
+    observedAt: string;
+    evidence: string[];
+  };
   /** No budget value, AWS credit or observed account spend proves general available cash. */
   spendableLiquidityUsdCents: null;
   recurringCommitmentUsdCents: null;
