@@ -4,24 +4,24 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
-Active-Plan: P-031
-Active-Segment: continuity/C0029.md
-Active-Intervention: P031_RESOURCE_ACQUISITION_REINVESTMENT — EN_EJECUCIÓN / HISTORY_RECONCILED_E3_MAIN_GREEN / P005_LIVE_UNKNOWN
+Active-Plan: P-032
+Active-Segment: continuity/C0030.md
+Active-Intervention: P032_SOUL_SELF_MODEL — AUDIT_OPEN / P031_SOURCE_E3_MAIN_GREEN / P005_LIVE_UNKNOWN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-source-reconciliation-recovery-20261017
-Host-Head-At-Audit-Open: 180b79842af7dc5f68689662a4756ac2da8c9439
-Last-Reconciled-Host-Head: 180b79842af7dc5f68689662a4756ac2da8c9439
-Observed-Main-Head: 180b79842af7dc5f68689662a4756ac2da8c9439
-Last-Product-Head: 180b79842af7dc5f68689662a4756ac2da8c9439
-Last-Product-CI: exact main 180b79842af7dc5f68689662a4756ac2da8c9439 push 39069820580 — COMPLETE SUCCESS 8/8
-Last-Completed-Plan: P-030
-Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
-Last-Completed-CI: 38766126322 — SUCCESS 8/8
+Current-Host-Branch: abos/p031-close-e3-open-p032-20261017
+Host-Head-At-Audit-Open: 9033ce0b9e40bb3a275f3c23f44c27518bd0f2c2
+Last-Reconciled-Host-Head: 9033ce0b9e40bb3a275f3c23f44c27518bd0f2c2
+Observed-Main-Head: 9033ce0b9e40bb3a275f3c23f44c27518bd0f2c2
+Last-Product-Head: 9033ce0b9e40bb3a275f3c23f44c27518bd0f2c2
+Last-Product-CI: exact main 9033ce0b9e40bb3a275f3c23f44c27518bd0f2c2 push 39076067564 — COMPLETE SUCCESS 8/8
+Last-Completed-Plan: P-031
+Last-Completed-Merge: 9033ce0b9e40bb3a275f3c23f44c27518bd0f2c2
+Last-Completed-CI: 39076067564 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -30,7 +30,20 @@ Master-Plan-PR: 31
 Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
-## P-031 — Último estado verificable y punto de reanudación (2026-10-17)
+
+## P-031 — Cierre SOURCE/E3 y apertura de P-032 (2026-10-17)
+
+**Autoridad vigente:** `main 9033ce0b9e40bb3a275f3c23f44c27518bd0f2c2`, exact-main push CI `39076067564` COMPLETE SUCCESS **8/8**; PR #206 squash merged, 0 PR abiertos al cierre de la intervención. Este checkpoint sustituye como estado vivo el histórico `P-031 EN_EJECUCIÓN` conservado debajo.
+
+**Criterios source E3 satisfechos mediante autoridades existentes:** P-025 Goal/Task materializado y necesidad de recursos; P-018 inventario, evaluación tamaño/reuso, lifecycle y retention/recovery; P-030 liquidez/commitments/reserva y efectos financieros auditables; P-010 autorización explícita; selección/cotización de uso/lead-time; P-031 ejecución de compra con fuente/dispatch/health suministradas por host confiable; ausencia de doble despacho tras replay/reinicio; correlación uso/Task/outcome hacia planificación futura. Evidencia: PR #96, #107, #123, #139, #144, #148, #173, #177, #179, #181, #182, #184, #203 y suite `src/__tests__/p031-*.test.ts`. Esta lista es de propietarios/cobertura, no una invitación a reimplementar.
+
+**Último finding HARD corregido:** PR #206 `main 9033ce0b9e40bb3a275f3c23f44c27518bd0f2c2` impide una compra con funding, fit o priced usage vencidos durante callbacks async de proveedor/emisor P-010. Antes, `now` se capturaba al principio; ahora las tres evidencias se revalidan con hora actual en la transacción que reclama el efecto económico P-030. Tres regresiones adversariales en la suite existente; CI exacta `39076067564` 8/8. No se emitió una operación financiera ni se verificó un proveedor real.
+
+**Decisión de clasificación:** P-031 **HECHO para SOURCE_COMPLETE / E3_MAIN_GREEN**, igual que el criterio de cierre de P-030: el host confiable puede inyectar economía y despacho real bajo permisos observados, pero el ejecutable CLI estándar NO trae credenciales, fondos, emisor contractual ni issuer P-010 de una cuenta tercera. La integración genérica de P-018 soporta provision/resize/resume/recover; las operaciones contractuales `renew` y `cancel` exigen interfaz y autoridad auténticas propias del proveedor, no se consideran ejecutadas por un mock ni por `destroy` físico. Pago, renovación/cancelación contractual, facturas/reembolsos, rentabilidad/ROI, fondos y duración sostenida de servicio siguen **P-005 E5/E6 UNKNOWN**, sin promoción desde E3. No hay evidencia de ingresos comerciales producidos.
+
+**Transición:** P-032 `AUDIT_OPEN` / `EN_EJECUCIÓN`, activo en `continuity/C0030.md`; el siguiente trabajo es auditar `src/soul/`, self-model/constitution/genesis, `src/memory/`, `src/intelligence/`, hijos `src/replication/`, consumidores/tests antes de crear nada. P-031 no se reabre por ausencia de LIVE; cualquier bug posterior se rastrea por dueño real y se registra, sin deshacer estado source ni duplicar módulos.
+
+## P-031 — Registro histórico anterior al cierre (2026-10-17)
 
 - SOURCE/CI: `main 180b79842af7dc5f68689662a4756ac2da8c9439` VERIFICADO tras PR #204, ejecución GitHub Actions de evento `push` `39069820580` **COMPLETE/SUCCESS 8/8** (Linux Node22/24, Windows22/24, distribución Node22/24, security, integridad). No inferir E5/E6 de esos tests; no repetir CI sólo para recuperar una observación existente.
 - INTEGRACIÓN: PR #96–#204 relacionados con P-031 revisados por historia y pruebas; los PR #203 y #204 están fusionados, no quedan PR abiertos al checkpoint. La existencia de ramas squash históricas NO es un merge pendiente. No cambiar PLAN ni marcar P-031 HECHO por un merge de código/documentación.
