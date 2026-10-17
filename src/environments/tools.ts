@@ -268,19 +268,19 @@ export function createEnvironmentTools(
         region: { type: "string" },
         resource_shape: { type: "string" },
         external_id: { type: "string", description: "Optional known existing provider resource identity." },
-        policy_decision_id: { type: "string", description: "Previously persisted exact P-010 financial policy decision ID." },
+        policy_decision_id: { type: "string", description: "Optional existing exact P-010 receipt; otherwise a trusted host P-010 issuer must produce the decision after the verified quote." },
       },
       required: [
         "operation_key", "operation", "provider", "provider_account_id",
         "unit", "goal_id", "task_id", "path_id", "resource_id",
-        "region", "resource_shape", "policy_decision_id",
+        "region", "resource_shape",
       ],
     },
     execute: async (args, context) => {
       const values = [
         "operation_key", "operation", "provider", "provider_account_id",
         "unit", "goal_id", "task_id", "path_id", "resource_id",
-        "region", "resource_shape", "policy_decision_id",
+        "region", "resource_shape",
       ] as const;
       // Scope is a request, not a financial authority. Reject malformed
       // values before asking a provider to observe or mutate anything.
@@ -298,6 +298,10 @@ export function createEnvironmentTools(
       if (args.external_id !== undefined &&
           (typeof args.external_id !== "string" || !args.external_id.trim())) {
         return "BLOCKED: malformed external resource identity.";
+      }
+      if (args.policy_decision_id !== undefined &&
+          (typeof args.policy_decision_id !== "string" || !args.policy_decision_id.trim())) {
+        return "BLOCKED: malformed existing P-010 policy decision ID.";
       }
       let dependencies: ProviderProcurementExecutionDependencies | null = null;
       try {
@@ -328,7 +332,8 @@ export function createEnvironmentTools(
       try {
         const result = await executeReviewedProviderProcurement(context.db.raw, {
           scope,
-          policyDecisionId: (args.policy_decision_id as string).trim(),
+          policyDecisionId: typeof args.policy_decision_id === "string"
+            ? args.policy_decision_id.trim() : undefined,
           dependencies,
         });
         // The result is a P-030 intent/Task usability outcome, not a receipt
