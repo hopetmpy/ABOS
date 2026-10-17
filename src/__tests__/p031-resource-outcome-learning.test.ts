@@ -177,6 +177,94 @@ describe("P-031 source-backed resource outcome → strategic planning (read-only
     } finally { db.close(); }
   });
 
+  it("reports task/CPU time overlap as point compatibility only, never measured work or billed allocation", async () => {
+    const db = fixture();
+    try {
+      db.raw.prepare("UPDATE task_graph SET started_at = ?, completed_at = ? WHERE id = 'task-b'")
+        .run("2026-10-16T15:00:00.000Z", "2026-10-16T15:10:00.000Z");
+      const inventory = new EnvironmentResourceStore(db.raw);
+      inventory.create({
+        id: "vm-metered", provider: "synthetic-cloud", externalId: "vm-metered",
+        type: "compute", goalId: "goal-a", taskId: "task-b", status: "running",
+        metadata: {
+          cpuUtilizationAveragePct: 42,
+          cpuUtilizationMetricStatus: "observed",
+          cpuUtilizationObservedAt: "2026-10-16T15:05:00.000Z",
+          cpuUtilizationMetricSource: "synthetic-aggregate-average",
+        },
+      });
+      // Construct a coherent synthetic historical journal, not a LIVE metric.
+      const event = inventory.listEvents("vm-metered")[0];
+      db.raw.prepare("UPDATE environment_resource_events SET created_at = ? WHERE id = ?")
+        .run("2026-10-16T14:59:00.000Z", event.id);
+      db.raw.prepare(
+        "UPDATE evidence_events SET created_at = ? WHERE authority_type = 'environment_resource_event' AND authority_id = ?"
+      ).run("2026-10-16T14:59:00.000Z", event.id);
+      const context = await buildPlannerContext({ db: db.raw, goalId: "goal-a" });
+      const learning = context.adaptiveContext ?? "";
+      expect(learning).toContain("cpuSampleTaskTimeEvidence=RECORDED_TIMESTAMP_OVERLAP_ONLY task=task-b");
+      expect(learning).toContain("metricAggregateCoverage=UNKNOWN taskCpuShare=UNKNOWN providerBilledUsage=UNKNOWN");
+      expect(learning).toContain("not continuous allocation intervals");
+      expect(learning).not.toContain("taskCpuShare=42%");
+      expect((db.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects").get() as { n: number }).n)
+        .toBe(0);
+    } finally { db.close(); }
+  });
+
+  it("rejects CPU samples outside the task window and at ambiguous assignment boundaries", async () => {
+    const db = fixture();
+    try {
+      db.raw.prepare("UPDATE task_graph SET started_at = ?, completed_at = ? WHERE id = 'task-b'")
+        .run("2026-10-16T15:00:00.000Z", "2026-10-16T15:10:00.000Z");
+      const inventory = new EnvironmentResourceStore(db.raw);
+      inventory.create({
+        id: "vm-window", provider: "synthetic-cloud", externalId: "vm-window",
+        type: "compute", goalId: "goal-a", taskId: "task-b", status: "running",
+        metadata: {
+          cpuUtilizationAveragePct: 15, cpuUtilizationMetricStatus: "observed",
+          cpuUtilizationObservedAt: "2026-10-16T15:20:00.000Z",
+        },
+      });
+      const event = inventory.listEvents("vm-window")[0];
+      db.raw.prepare("UPDATE environment_resource_events SET created_at = ? WHERE id = ?")
+        .run("2026-10-16T15:00:00.000Z", event.id);
+      let learning = (await buildPlannerContext({ db: db.raw, goalId: "goal-a" })).adaptiveContext ?? "";
+      expect(learning).toContain("cpuSampleTaskTimeEvidence=OUTSIDE_RECORDED_TASK_WINDOW_NO_ATTRIBUTION");
+      inventory.applyMutation("vm-window", {
+        metadata: { cpuUtilizationObservedAt: "2026-10-16T15:00:00.000Z" },
+      }, "synthetic-sample", "Timestamp tests only");
+      learning = (await buildPlannerContext({ db: db.raw, goalId: "goal-a" })).adaptiveContext ?? "";
+      expect(learning).toContain("cpuSampleTaskTimeEvidence=UNKNOWN_SAMPLE_AT_OWNER_BOUNDARY");
+    } finally { db.close(); }
+  });
+
+  it("preserves UNKNOWN when task start/end evidence is absent and when the sample predates ownership", async () => {
+    const db = fixture();
+    try {
+      const inventory = new EnvironmentResourceStore(db.raw);
+      inventory.create({
+        id: "vm-unknown-window", provider: "synthetic-cloud", externalId: "vm-unknown-window",
+        type: "compute", goalId: "goal-a", taskId: "task-b", status: "running",
+        metadata: {
+          cpuUtilizationAveragePct: 3, cpuUtilizationMetricStatus: "observed",
+          cpuUtilizationObservedAt: "2026-10-16T15:05:00.000Z",
+        },
+      });
+      const event = inventory.listEvents("vm-unknown-window")[0];
+      db.raw.prepare("UPDATE environment_resource_events SET created_at = ? WHERE id = ?")
+        .run("2026-10-16T15:00:00.000Z", event.id);
+      let learning = (await buildPlannerContext({ db: db.raw, goalId: "goal-a" })).adaptiveContext ?? "";
+      expect(learning).toContain("cpuSampleTaskTimeEvidence=UNKNOWN_INCOMPLETE_OR_INVALID_TASK_WINDOW");
+      db.raw.prepare("UPDATE task_graph SET started_at = ?, completed_at = ? WHERE id = 'task-b'")
+        .run("2026-10-16T15:00:00.000Z", "2026-10-16T15:10:00.000Z");
+      db.raw.prepare("UPDATE environment_resource_events SET created_at = ? WHERE id = ?")
+        .run("2026-10-16T15:07:00.000Z", event.id);
+      learning = (await buildPlannerContext({ db: db.raw, goalId: "goal-a" })).adaptiveContext ?? "";
+      expect(learning).toContain("cpuSampleTaskTimeEvidence=UNKNOWN_SAMPLE_BEFORE_RECORDED_OWNER");
+      expect(learning).not.toContain("taskCpuShare=3%");
+    } finally { db.close(); }
+  });
+
   it("does not invent economic outcome learning from Goals and Tasks without any owned resource", async () => {
     const db = fixture();
     try {
