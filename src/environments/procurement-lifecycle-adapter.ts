@@ -161,6 +161,12 @@ export function createLifecycleProcurementDependencies(
         } finally {
           observedQuotes.delete(scope);
         }
+        if (changed.metadata.mutationExternalEffectNotDispatched === true &&
+            changed.metadata.mutationExternalEffectOperation === scope.operation) {
+          throw new LifecycleProcurementNotDispatchedError(
+            "P-018 provider observed that the capacity change needed no billable dispatch; P-030 intent must not hold supplier funds.",
+          );
+        }
         return {
           status: changed.status === "unknown" ? "unknown" : "pending",
           providerEffectId: changed.externalId,
