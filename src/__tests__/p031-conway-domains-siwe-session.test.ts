@@ -263,3 +263,154 @@ describe("P-031 Conway Domains SIWS uses the existing Solana identity", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 });
+
+function fixtureOwnedResponse(url: string) {
+  if (url.endsWith("/domains")) return json({
+    domains: [{ id: "dom_fixture", domain: "mysite.io",
+      status: "Active", expiresAt: "2027-02-13T00:00:00Z" }],
+  });
+  return json({
+    transactions: [{ id: "txn_fixture", domainId: "dom_fixture",
+      type: "registration", amount: 43.75, currency: "USD",
+      status: "completed", createdAt: "2026-02-13T00:00:00Z" }],
+  });
+}
+
+describe("P-031 host-owned Conway Domains inventory tool and JWT scope", () => {
+  it("authenticates EVM once and reuses only its private session for authenticated account and inventory GET", async () => {
+    const login = provider();
+    const fetcher = vi.fn(async (url: string, options: RequestInit) => {
+      expect(new URL(url).origin).toBe("https://api.conway.domains");
+      expect(new Headers(options.headers).has("X-PAYMENT")).toBe(false);
+      if (url.endsWith("/domains") || url.endsWith("/transactions")) {
+        expect(options.method).toBe("GET");
+        expect(options.redirect).toBe("error");
+        expect(new Headers(options.headers).get("Authorization"))
+          .toBe("Bearer synthetic.JWT.signature");
+        return fixtureOwnedResponse(url);
+      }
+      return login(url, options);
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const tool = createBuiltinTools("fixture").find(t => t.name === "conway_domains_owned_resources")!;
+    expect(tool).toBeDefined();
+    expect(tool.riskLevel).toBe("caution");
+    expect(tool.parameters).toMatchObject({ properties: {} });
+    const result = JSON.parse(await tool.execute({}, {
+      identity: {
+        chainType: "evm", address: controlled,
+        account: { address: controlled, signMessage: signer.signMessage },
+      },
+    } as any));
+    expect(fetcher).toHaveBeenCalledTimes(6);
+    expect(result).toMatchObject({
+      status: "observed",
+      account: { status: "wallet_match", walletAddress: controlled.toLowerCase() },
+      domains: [{ domain: "mysite.io" }],
+      transactions: [{ amountUsdCents: 4375 }],
+      financialSettlementEstablished: false,
+      purchaseAuthority: "not_established",
+    });
+    expect(JSON.stringify(result)).not.toContain("synthetic.JWT.signature");
+    expect(JSON.stringify(result)).not.toContain("0x" + "aa".repeat(65));
+  });
+
+  it("signs Solana SIWS with the existing ChainIdentity, never the unrelated EVM stub", async () => {
+    const login = solanaProvider();
+    const fetcher = vi.fn(async (url: string, opts: RequestInit) => {
+      if (url.endsWith("/domains") || url.endsWith("/transactions")) {
+        expect(opts.method).toBe("GET");
+        expect(new Headers(opts.headers).get("Authorization"))
+          .toBe("Bearer synthetic.solana.JWT");
+        return fixtureOwnedResponse(url);
+      }
+      return login(url, opts);
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const tool = createBuiltinTools("fixture").find(t => t.name === "conway_domains_owned_resources")!;
+    const result = JSON.parse(await tool.execute({}, {
+      identity: {
+        chainType: "solana", address: solanaWallet.address,
+        chainIdentity: solanaWallet,
+        account: { address: solanaWallet.address, signMessage: vi.fn(() => {
+          throw new Error("wrong chain signer");
+        }) },
+      },
+    } as any));
+    expect(fetcher).toHaveBeenCalledTimes(6);
+    expect(result).toMatchObject({
+      status: "observed", account: { status: "wallet_match",
+        walletAddress: solanaWallet.address, walletType: "solana" },
+      domains: [{ domain: "mysite.io" }],
+      financialSettlementEstablished: false,
+    });
+    expect(JSON.stringify(result)).not.toContain("synthetic.solana.JWT");
+  });
+
+  it("never requests inventory for an authenticated supplier account with a different EVM wallet", async () => {
+    const fetcher = vi.fn(async (url: string, opts: RequestInit) => {
+      if (url.endsWith("/auth/me")) {
+        return json({ id: "private-foreign-user",
+          wallet_address: unrelated, wallet_type: "evm" });
+      }
+      if (url.endsWith("/domains") || url.endsWith("/transactions")) {
+        throw new Error("Foreign account inventory must not be requested");
+      }
+      return provider()(url, opts);
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const tool = createBuiltinTools("fixture").find(t => t.name === "conway_domains_owned_resources")!;
+    const result = JSON.parse(await tool.execute({}, {
+      identity: { chainType: "evm", address: controlled,
+        account: { address: controlled, signMessage: signer.signMessage } },
+    } as any));
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(result).toMatchObject({
+      status: "unavailable", domains: null, transactions: null,
+      account: { status: "wallet_mismatch", providerAccountId: null },
+      financialSettlementEstablished: false,
+    });
+    expect(JSON.stringify(result)).not.toContain("private-foreign-user");
+    expect(JSON.stringify(result)).not.toContain(unrelated);
+  });
+
+  it("never logs in when the host wallet is absent, mismatched or wrong-chain", async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    const tool = createBuiltinTools("fixture").find(t => t.name === "conway_domains_owned_resources")!;
+    for (const identity of [
+      { chainType: "evm", address: controlled, account: { address: unrelated } },
+      { chainType: "solana", address: otherSolanaWallet.address,
+        chainIdentity: solanaWallet },
+    ]) {
+      const result = JSON.parse(await tool.execute({}, { identity } as any));
+      expect(result).toMatchObject({
+        status: "unavailable",
+        financialSettlementEstablished: false,
+        purchaseAuthority: "not_established",
+      });
+    }
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("keeps transaction outages partial, without falsely reconciling payment", async () => {
+    const login = provider();
+    const fetcher = vi.fn(async (url: string, opts: RequestInit) => {
+      if (url.endsWith("/domains")) return fixtureOwnedResponse(url);
+      if (url.endsWith("/transactions")) return json({ error: "sensitive" }, 503);
+      return login(url, opts);
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const tool = createBuiltinTools("fixture").find(t => t.name === "conway_domains_owned_resources")!;
+    const result = JSON.parse(await tool.execute({}, {
+      identity: { chainType: "evm", address: controlled,
+        account: { address: controlled, signMessage: signer.signMessage } },
+    } as any));
+    expect(result).toMatchObject({
+      status: "partial", domains: [{ domain: "mysite.io" }],
+      transactions: null, financialSettlementEstablished: false,
+    });
+    expect(JSON.stringify(result)).not.toContain("sensitive");
+    expect(fetcher).toHaveBeenCalledTimes(6);
+  });
+});
