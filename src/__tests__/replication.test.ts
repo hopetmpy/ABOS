@@ -161,6 +161,26 @@ describe("spawnChild", () => {
     expect(createSandbox).not.toHaveBeenCalled();
   });
 
+  it("does not purchase another sandbox when prior failed-child inventory is UNKNOWN", async () => {
+    db.raw.exec(MIGRATION_V7);
+    db.insertChild({
+      id: "failed-existing-child", name: "failed",
+      address: validAddress, sandboxId: "possibly-billed-prior",
+      genesisPrompt: "prior child", fundedAmountCents: 0,
+      status: "failed", createdAt: new Date().toISOString(),
+    });
+    const list = vi.spyOn(conway, "listSandboxes")
+      .mockRejectedValue(new Error("Supplier inventory timeout"));
+    const created = vi.spyOn(conway, "createSandbox");
+    await expect(spawnChild(
+      conway, identity, db, genesis, new ChildLifecycle(db.raw),
+      { maxChildren: 3, childSandboxMemoryMb: 1024 },
+    )).rejects.toThrow(/replacement acquisition UNKNOWN/);
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(created).not.toHaveBeenCalled();
+    expect(db.getChildById("failed-existing-child")?.status).toBe("failed");
+  });
+
   it("uses childSandboxMemoryMb from the runtime config when selecting a sandbox tier", async () => {
     vi.spyOn(conway, "exec").mockImplementation(async (command: string) => {
       if (command.includes("--init")) {

@@ -312,6 +312,13 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
       memory_mb: options.memoryMb || 512,
       disk_gb: options.diskGb || 5,
       region: options.region,
+    }, {
+      // P-031: a sandbox CREATE may incur charges. The shared HTTP client
+      // otherwise retries 502/timeouts and the Conway wrapper retries 404.
+      // Neither supplier idempotency nor no-dispatch can be inferred from a
+      // lost response: never create a second sandbox automatically.
+      retries: 0,
+      retries404: 0,
     });
     return {
       id: result.id || result.sandbox_id,
@@ -648,6 +655,12 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     const result = await request("POST", "/v1/domains/register", {
       domain,
       years,
+    }, {
+      // Domain registrations may bill or create irreversible ownership.
+      // Reconciled P-030 operations, not hidden client transport retries,
+      // must decide if a second attempt is legitimate.
+      retries: 0,
+      retries404: 0,
     });
     return {
       domain: result.domain || domain,

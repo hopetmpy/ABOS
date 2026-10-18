@@ -521,9 +521,9 @@ Reconciliation requires independently verified provider finality; this view is n
     {
       name: "create_sandbox",
       description:
-        "Create a new Conway sandbox (separate VM) for sub-tasks or testing.",
+        "Compatibility entrypoint: request a Conway sandbox only through the reviewed P-031 resource procurement lifecycle. Direct legacy creation bypasses economic claims and provider inventory.",
       category: "conway",
-      riskLevel: "caution",
+      riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {
@@ -539,15 +539,10 @@ Reconciliation requires independently verified provider finality; this view is n
           },
         },
       },
-      execute: async (args, ctx) => {
-        const info = await ctx.conway.createSandbox({
-          name: args.name as string,
-          vcpu: args.vcpu as number,
-          memoryMb: args.memory_mb as number,
-          diskGb: args.disk_gb as number,
-        });
-        return `Sandbox created: ${info.id} (${info.vcpu} vCPU, ${info.memoryMb}MB RAM)`;
-      },
+      execute: async () =>
+        "UNAVAILABLE: direct create_sandbox cannot establish the supplier's exact priced commitment, the reviewed Task and the durable P-030 financial claim. " +
+        "Use environment_select, environment_procurement_review and environment_procurement_execute with an authenticated host source and your existing authority. " +
+        "This is a missing purchase boundary, not a prohibition on autonomous resource acquisition; no provider purchase dispatched.",
     },
     {
       name: "delete_sandbox",
@@ -2638,7 +2633,7 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "register_domain",
       description:
-        "Register a domain name. Costs USDC via x402 payment. Check availability first with search_domains.",
+        "Domain registration may charge USDC/x402. Route registration through reviewed P-031 procurement with exact provider quote, P-010 authority, P-030 durable effect and ownership evidence; this legacy untracked path cannot pay.",
       category: "conway",
       riskLevel: "dangerous",
       parameters: {
@@ -2655,13 +2650,9 @@ Model: ${ctx.inference.getDefaultModel()}
         },
         required: ["domain"],
       },
-      execute: async (args, ctx) => {
-        const reg = await ctx.conway.registerDomain(
-          args.domain as string,
-          (args.years as number) || 1,
-        );
-        return `Domain registered: ${reg.domain} (status: ${reg.status}${reg.expiresAt ? `, expires: ${reg.expiresAt}` : ""}${reg.transactionId ? `, tx: ${reg.transactionId}` : ""})`;
-      },
+      execute: async () =>
+        "UNAVAILABLE: direct domain registration can trigger an economic commitment without P-030 intent or an exact reviewed supplier quote. " +
+        "Use provider-native domain discovery and an authorized P-031 procurement source; no registration or x402 payment dispatched.",
     },
     {
       name: "manage_dns",
