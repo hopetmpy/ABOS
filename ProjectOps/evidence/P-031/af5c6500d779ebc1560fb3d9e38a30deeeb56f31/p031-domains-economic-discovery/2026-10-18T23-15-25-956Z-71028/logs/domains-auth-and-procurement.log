@@ -1,0 +1,84 @@
+Command: pnpm exec vitest run src/__tests__/p031-conway-domains-purchase-evidence.test.ts src/__tests__/p031-conway-domains-account-proof.test.ts src/__tests__/p031-conway-domains-siwe-session.test.ts src/__tests__/p031-authorized-procurement-execution.test.ts src/__tests__/p031-conway-secondary-procurement-gate.test.ts src/__tests__/p031-conway-credit-history.test.ts src/__tests__/p031-conway-account-read-probe.test.ts src/__tests__/p031-runtime-procurement-tool.test.ts src/__tests__/p030-x402-service-purchase.test.ts src/__tests__/p030-topup-http-claims.test.ts src/__tests__/p030-financial-effects.test.ts src/__tests__/p031-provider-account-exposure.test.ts src/__tests__/p031-goal-resource-lifecycle-journey.test.ts
+Started: 2026-10-18T23:15:42.353Z
+Exit code: 1
+Signal: none
+Execution error: none
+--- STDOUT ---
+
+ RUN  v4.1.11 /workspace/ABOS
+
+{"timestamp":"2026-10-18T23:15:46.876Z","level":"error","module":"orchestration.orchestrator.strategic","message":"Strategic orchestration tick failed","context":{"phase":"plan_review","goalId":"01M58MSG1QDS1E2CXB6C9X2J70"},"error":{"message":"ENOENT: no such file or directory, mkdir '/home/agent/.abos/workspace/01M58MSG1QDS1E2CXB6C9X2J70/outputs'","stack":"Error: ENOENT: no such file or directory, mkdir '/home/agent/.abos/workspace/01M58MSG1QDS1E2CXB6C9X2J70/outputs'\n    at Object.mkdirSync (node:fs:1370:26)\n    at new AgentWorkspace (/workspace/ABOS/src/orchestration/workspace.ts:53:8)\n    at Orchestrator.buildStrategicPlannerContext (/workspace/ABOS/src/orchestration/orchestrator.ts:927:18)\n    at Orchestrator.buildStrategicReviewContext (/workspace/ABOS/src/orchestration/orchestrator.ts:845:39)\n    at Orchestrator.handleStrategicReview (/workspace/ABOS/src/orchestration/orchestrator.ts:696:38)\n    at Orchestrator.tick (/workspace/ABOS/src/orchestration/orchestrator.ts:234:27)\n    at /workspace/ABOS/src/__tests__/p031-goal-resource-lifecycle-journey.test.ts:122:34\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20","code":"ENOENT"}}
+ ❯ src/__tests__/p031-goal-resource-lifecycle-journey.test.ts (1 test | 1 failed) 45ms
+     × preserves Task demand and economic authority across provision, replay, restart and retirement 43ms
+{"timestamp":"2026-10-18T23:15:47.381Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-18T23:15:47.382Z","level":"info","module":"topup","message":"Credit topup HTTP accepted: 5 USD tier; credits reported=UNKNOWN (not verified settlement)"}
+{"timestamp":"2026-10-18T23:15:47.383Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-18T23:15:47.383Z","level":"info","module":"topup","message":"Credit topup HTTP accepted: 5 USD tier; credits reported=UNKNOWN (not verified settlement)"}
+{"timestamp":"2026-10-18T23:15:47.383Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-18T23:15:47.383Z","level":"info","module":"topup","message":"Credit topup HTTP accepted: 5 USD tier; credits reported=UNKNOWN (not verified settlement)"}
+{"timestamp":"2026-10-18T23:15:47.383Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-18T23:15:47.383Z","level":"info","module":"topup","message":"Credit topup HTTP accepted: 5 USD tier; credits reported=UNKNOWN (not verified settlement)"}
+{"timestamp":"2026-10-18T23:15:47.384Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-18T23:15:47.384Z","level":"info","module":"topup","message":"Credit topup HTTP accepted: 5 USD tier; credits reported=0 (not verified settlement)"}
+{"timestamp":"2026-10-18T23:15:47.384Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-18T23:15:47.384Z","level":"info","module":"topup","message":"Credit topup HTTP accepted: 5 USD tier; credits reported=500 (not verified settlement)"}
+{"timestamp":"2026-10-18T23:15:47.386Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-18T23:15:47.386Z","level":"error","module":"topup","message":"Credit topup failed: HTTP transport dropped"}
+
+ Test Files  1 failed | 12 passed (13)
+      Tests  1 failed | 143 passed (144)
+   Start at  23:15:42
+   Duration  6.58s (transform 2.25s, setup 0ms, import 4.95s, tests 8.72s, environment 1ms)
+
+
+--- STDERR ---
+(node:71164) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:71176) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:71206) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:71205) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:71212) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:71229) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:71237) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:71245) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:71253) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:71261) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:71269) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:71277) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:71285) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:71293) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:71301) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/p031-goal-resource-lifecycle-journey.test.ts > P-031 real owner chain, synthetic Goal through resource retirement > preserves Task demand and economic authority across provision, replay, restart and retirement
+AssertionError: expected 'failed' to be 'executing' // Object.is equality
+
+Expected: "executing"
+Received: "failed"
+
+ ❯ src/__tests__/p031-goal-resource-lifecycle-journey.test.ts:122:49
+    120|         config: { disableSpawn: true },
+    121|       });
+    122|       expect((await orchestrator.tick()).phase).toBe("executing");
+       |                                                 ^
+    123|       const materialized = getTasksByGoal(db.raw, goal.id);
+    124|       expect(materialized).toHaveLength(3);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
