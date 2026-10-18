@@ -180,6 +180,7 @@ export function createLifecycleProcurementDependencies(
             contract.providerAccountId !== scope.providerAccountId ||
             !contract.contractId?.trim() ||
             contract.externalResourceId !== scope.externalId ||
+            contract.contractId !== scope.contractId ||
             contract.region !== scope.region ||
             contract.resourceShape !== scope.resourceShape ||
             !contract.source?.trim() ||
