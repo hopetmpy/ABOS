@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
+import { EnvironmentRetentionCoordinator } from "../environments/retention.js";
 import { EnvironmentRegistry } from "../environments/registry.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { EnvironmentSelector } from "../environments/selector.js";
@@ -308,5 +309,106 @@ describe("environment lifecycle agent tools", () => {
     } finally {
       db.close();
     }
+  });
+});
+
+
+describe("P-031 manual provider resource retirement through the existing P-018 coordinator", () => {
+  it("exposes one resource-scoped destructive tool, preserving other resources and billing uncertainty", async () => {
+    const db = createDb();
+    try {
+      const registry = new EnvironmentRegistry();
+      const deleted: string[] = [];
+      registry.register({
+        id: "fixture-cloud",
+        inspect: async () => ({
+          id: "fixture-cloud", label: "Synthetic fixture",
+          availability: "available", capabilities: [], evidence: [],
+          constraints: [], observedAt: new Date().toISOString(),
+        }),
+        destroy: async resource => {
+          deleted.push(resource.externalId!);
+          return {
+            status: "terminated", evidence: ["Synthetic provider deletion acknowledgement"],
+          };
+        },
+      });
+      const resources = new EnvironmentResourceStore(db);
+      const owned = resources.create({
+        id: "exact-owned-resource", provider: "fixture-cloud",
+        externalId: "remote-selected", type: "compute",
+        status: "running", retentionPolicy: "manual_retention",
+      });
+      resources.create({
+        id: "unrelated-resource", provider: "fixture-cloud",
+        externalId: "remote-other", type: "compute",
+        status: "running", retentionPolicy: "manual_retention",
+      });
+      const lifecycle = new EnvironmentLifecycleManager(registry, resources);
+      const retention = new EnvironmentRetentionCoordinator(db, registry, lifecycle);
+      const tools = createEnvironmentTools(registry, {
+        lifecycle, getRetention: () => retention,
+      });
+      const retire = tools.find(tool => tool.name === "environment_resource_retire")!;
+      expect(retire.riskLevel).toBe("dangerous");
+      expect(await retire.execute({ resource_id: "unknown" }, {} as any))
+        .toContain("UNAVAILABLE");
+      expect(deleted).toHaveLength(0);
+      const result = JSON.parse(await retire.execute(
+        { resource_id: owned.id }, {} as any,
+      ));
+      expect(result.resource.status).toBe("terminated");
+      expect(result.resource.metadata.retentionReleaseState).toBe("released");
+      expect(result.sweep.released).toBe(1);
+      expect(deleted).toEqual(["remote-selected"]);
+      expect(resources.get("unrelated-resource")?.status).toBe("running");
+      const repeat = JSON.parse(await retire.execute(
+        { resource_id: owned.id }, {} as any,
+      ));
+      expect(repeat.status).toBe("ALREADY_RELEASED");
+      expect(deleted).toHaveLength(1);
+    } finally { db.close(); }
+  });
+
+  it("does not bypass an owned child's terminal-state authority or Goal-managed retention", async () => {
+    const db = createDb();
+    try {
+      const registry = new EnvironmentRegistry();
+      let destroys = 0;
+      registry.register({
+        id: "fixture-cloud",
+        inspect: async () => ({
+          id: "fixture-cloud", label: "Synthetic fixture",
+          availability: "available", capabilities: [], evidence: [],
+          constraints: [], observedAt: new Date().toISOString(),
+        }),
+        destroy: async () => {
+          destroys++;
+          return { status: "terminated", evidence: ["fixture destroy"] };
+        },
+      });
+      const store = new EnvironmentResourceStore(db);
+      store.create({
+        id: "child-resource", provider: "fixture-cloud",
+        externalId: "sbx-child", type: "compute",
+        retentionPolicy: "manual_retention", status: "running",
+        metadata: { childId: "child-1" },
+      });
+      store.create({
+        id: "goal-managed-resource", provider: "fixture-cloud",
+        externalId: "vm-goal", type: "compute",
+        retentionPolicy: "until_goal_complete", status: "running",
+      });
+      const lifecycle = new EnvironmentLifecycleManager(registry, store);
+      const tool = createEnvironmentTools(registry, {
+        lifecycle, getRetention: () =>
+          new EnvironmentRetentionCoordinator(db, registry, lifecycle),
+      }).find(item => item.name === "environment_resource_retire")!;
+      expect(await tool.execute({ resource_id: "child-resource" }, {} as any))
+        .toContain("cleanup_child");
+      expect(await tool.execute({ resource_id: "goal-managed-resource" }, {} as any))
+        .toContain("BLOCKED");
+      expect(destroys).toBe(0);
+    } finally { db.close(); }
   });
 });

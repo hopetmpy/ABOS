@@ -2350,6 +2350,35 @@ Model: ${ctx.inference.getDefaultModel()}
       },
     },
     {
+      name: "cleanup_child",
+      description: "Retire one stopped/failed child through existing P-018 ownership, artifact and restart-safe cleanup. Irreversible supplier removal requires an exactly bound child sandbox.",
+      category: "replication",
+      riskLevel: "dangerous",
+      parameters: {
+        type: "object",
+        properties: {
+          child_id: { type: "string", description: "Exact canonical child lifecycle ID." },
+        },
+        required: ["child_id"],
+      },
+      execute: async (args, ctx) => {
+        if (typeof args.child_id !== "string" || !args.child_id.trim()) {
+          return "BLOCKED: exact child_id required.";
+        }
+        const { ChildLifecycle } = await import("../replication/lifecycle.js");
+        const { SandboxCleanup } = await import("../replication/cleanup.js");
+        const lifecycle = new ChildLifecycle(ctx.db.raw);
+        await new SandboxCleanup(ctx.conway, lifecycle, ctx.db.raw)
+          .cleanup(args.child_id.trim());
+        return JSON.stringify({
+          childId: args.child_id.trim(),
+          state: lifecycle.getCurrentState(args.child_id.trim()),
+          event: lifecycle.getHistory(args.child_id.trim()).at(-1) ?? null,
+          note: "Physical release is not a supplier invoice settlement or credit refund.",
+        }, null, 2);
+      },
+    },
+    {
       name: "prune_dead_children",
       description: "Clean up dead/failed children and their sandboxes only after canonical P-018 physical release; may perform irreversible provider DELETE.",
       category: "replication",
@@ -2370,11 +2399,12 @@ Model: ${ctx.inference.getDefaultModel()}
 
         const lifecycle = new ChildLifecycle(ctx.db.raw);
         const cleanup = new SandboxCleanup(ctx.conway, lifecycle, ctx.db.raw);
-        const pruned = await pruneDeadChildren(
-          ctx.db,
-          cleanup,
-          (args.keep_last as number) || 5,
-        );
+        const keepLast = args.keep_last === undefined ? 5 : args.keep_last;
+        if (typeof keepLast !== "number" || !Number.isSafeInteger(keepLast) ||
+            keepLast < 0) {
+          return "BLOCKED: keep_last must be a nonnegative whole number.";
+        }
+        const pruned = await pruneDeadChildren(ctx.db, cleanup, keepLast);
         return `Pruned ${pruned} dead children.`;
       },
     },

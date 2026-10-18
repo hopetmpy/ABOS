@@ -388,6 +388,7 @@ export async function runAgentLoop(
   const environmentTools = createEnvironmentTools(environmentRegistry, {
     selector: environmentSelector,
     lifecycle: environmentLifecycle,
+    getRetention: () => environmentRetention,
     getMobility: () => environmentMobility,
     getReviewedTaskPath: (taskId) => getReviewedTaskPathReceipt(db.raw, taskId),
     getProviderAccountFinancialExposure: (providerId, providerAccountId, unit) =>
