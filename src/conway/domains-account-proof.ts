@@ -88,7 +88,7 @@ export async function observeConwayDomainsAuthenticatedAccount(
       walletType: expectedWalletType, purchaseAuthority: "not_established",
       financingUnit: null,
       evidence: [
-        "The supplier's authenticated GET /auth/me returned a wallet matching the host's pre-existing controlled EVM wallet address.",
+        "The supplier's authenticated GET /auth/me returned a wallet matching the host's pre-existing controlled wallet on the expected chain.",
         "Identity match is not funding, payment authorization, wallet-signature approval, purchase amount, an invoice or a validated x402 order quote.",
       ],
     };
