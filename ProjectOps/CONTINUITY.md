@@ -34,6 +34,13 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
 
+
+## P-031 — read-only Domains inventory + transaction source patch, PHYSICAL PENDING (2026-10-18)
+
+- **SOURCE IMPLEMENTED / NOT YET TESTED:** official Conway Domains `GET /domains` / `GET /transactions` provide provider-owned inventory and USD transaction references relevant to lifecycle/reconciliation after a possibly pending 202 payment. Added `src/conway/domains-owned-inventory.ts`, a host-only GET observer requiring existing trusted JWT callback, exact controlled EVM/Solana wallet and `/auth/me` ownership match before further read; returns independent partial/UNKNOWN for invalid/unavailable feeds, bounded sanitized records, `financialSettlementEstablished:false`, `purchaseAuthority:not_established`. No provider POST, payment, transaction ledger mutation, JWT persistence or exposure as model-supplied credential. Corrected EVM-only proof note for Solana. Six new adversarial tests in the existing Domains account-proof suite. This source is **not yet wired into the default agent CLI**, and has **no physical PASS** pending Codex on exact new HEAD.
+- **BOUNDARY/NEXT:** run Codex grouped `p031-domains-economic-discovery` against final exact source SHA, reconcile evidence/hashes; then trace host-injected JWT lifecycle and provider-specific order preflight under P-025/P-010/P-030 without inadvertent paid POST or double dispatch. The 138/138 PASS of `6df7225c` belongs only to that older source. P-031 EN_EJECUCIÓN, P-032 PARCIAL, P-005 E5/E6 separate, `main` unmerged. Details in `continuity/C0030.md`.
+
+
 ## P-031 — Conway Domains x402 v2 Codex E3 verified (2026-10-18)
 
 - **GIT_AUDITED / E3_SYNTHETIC_PASS:** source exact `6df7225c63f6fa8d7cd17f3bc4d1d96cf8ddd68e` → evidencia remota `ba07c7f86a9c49ea5262e5295f0e3ac8cf7e6153`, único commit posterior con ocho archivos exclusivamente de evidencia, **7/7** hashes SHA-256 recalculados independientemente; ejecución Codex Cloud `p031-domains-economic-discovery` con integridad ProjectOps, protocolo **6/6**, typecheck, build y Vitest **138/138 en 13/13 archivos PASS**. Auditoría: `ProjectOps/evidence/P-031/audits/6df7225c-domains-x402-v2.md` + índice `ProjectOps/EVIDENCE.md`. Sin pagos, registro de dominio, proveedor LIVE ni GitHub Actions ejecutadas por Codex.
