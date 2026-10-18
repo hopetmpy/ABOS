@@ -107,6 +107,31 @@ describe("P-031 Conway authenticated credit history, read-only and incomplete by
     expect(JSON.stringify(report)).not.toContain("private-fixture-key");
   });
 
+  it("does not suppress independently requested history when provider balance data is malformed", async () => {
+    const fetcher = vi.fn(async (url: string) => {
+      const path = new URL(url).pathname;
+      return path === "/v1/credits/balance"
+        ? payload({ balance_cents: "not-a-number" })
+        : path === "/v1/credits/history"
+          ? payload({ transactions: [
+              { type: "inference", amount_cents: -8, balance_after_cents: 492,
+                timestamp: "2026-10-18T01:00:00Z" },
+            ] })
+          : (() => { throw new Error("Unexpected endpoint"); })();
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const observed = await new ConwayEnvironmentProvider(client()).observeEconomics({
+      includeConwayCreditHistory: true,
+    });
+    expect(observed.status).toBe("unknown");
+    expect(observed.nativeCreditBalance).toBeUndefined();
+    expect(observed.nativeCreditHistory).toMatchObject({
+      status: "observed_page", entries: [{ type: "inference", amountCents: -8 }],
+    });
+    expect(observed.procurementAuthority).toBe("not_established");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
   it("passes opt-in through existing environment economic evidence tool without authorizing procurement", async () => {
     const fetcher = vi.fn(async (url: string) => {
       const endpoint = new URL(url).pathname;
