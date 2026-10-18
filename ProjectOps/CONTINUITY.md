@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0030.md
-Active-Intervention: P031_DOD_REOPEN — EN_EJECUCIÓN / E3_BASELINE_PRESERVED_CONTRACT_LIFECYCLE_SOURCE_GAP
+Active-Intervention: P031_CONTRACT_LIFECYCLE — EN_EJECUCIÓN / SOURCE_E3_CONTRACT_BOUNDARIES_INTEGRATED_DOD_OPEN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-dod-reopen-20261017
-Host-Head-At-Audit-Open: 8f4c1cb3cf46e43aec572797a49fc1f7dcccc215
-Last-Reconciled-Host-Head: 8f4c1cb3cf46e43aec572797a49fc1f7dcccc215
-Observed-Main-Head: 8f4c1cb3cf46e43aec572797a49fc1f7dcccc215
-Last-Product-Head: 8f4c1cb3cf46e43aec572797a49fc1f7dcccc215
-Last-Product-CI: exact main 8f4c1cb3cf46e43aec572797a49fc1f7dcccc215 push 39077634123 — COMPLETE SUCCESS 8/8
+Current-Host-Branch: abos/p031-source-contract-checkpoint-20261017
+Host-Head-At-Audit-Open: a8ba5ed154a8be4654cb0026ca626bfab109540e
+Last-Reconciled-Host-Head: a8ba5ed154a8be4654cb0026ca626bfab109540e
+Observed-Main-Head: a8ba5ed154a8be4654cb0026ca626bfab109540e
+Last-Product-Head: a8ba5ed154a8be4654cb0026ca626bfab109540e
+Last-Product-CI: exact main a8ba5ed154a8be4654cb0026ca626bfab109540e push 39084009996 — IN_PROGRESS at checkpoint; exact PR 212 CI 39083831729 SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
 Last-Completed-CI: 38766126322 — SUCCESS 8/8
@@ -31,6 +31,13 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
 
+
+## P-031 — Source contract operations and post-retirement reconciliation (2026-10-17)
+
+- Source PR #211 https://github.com/hopetmpy/ABOS/pull/211 merged main `b2607583c0176e7c8fc7fdd2492ee873ae94a4e4` with exact PR CI 39083414052 SUCCESS 8/8. Exact-main push CI 39083644926 SUCCESS 8/8. Trusted supplier source now supports `renew/cancel` under canonical P-025 reviewed Task, P-010 exact account/contract/policy and P-030 durable financial claim; contract operations on finished resources may use a new authorized Task. Prevent overlapping unresolved renew/cancel; no physical destroy or provider acknowledgment inferred as invoice settlement.
+- Source PR #212 https://github.com/hopetmpy/ABOS/pull/212 merged main `a8ba5ed154a8be4654cb0026ca626bfab109540e`, exact PR CI 39083831729 SUCCESS 8/8. Its separate exact-main CI 39084009996 still IN_PROGRESS at this checkpoint. P-018 retention re-discovers later P-030 contract operations after physical release, matches independently observed contractId and stores read-only supplier cancellation/auto-renew/final-invoice status; financial effect stays independently pending/unknown until observed provider settlement. Synthetic regression verifies wrong-contract rejection, post-release cleanup, replay/restart and outstanding invoice without fictional payment.
+- **Not completed:** no concrete supplier contract renewal/cancellation API/credentials/contract/funding configured by default CLI, nor E5/E6 price/invoice/refund/ROI evidence. P-005 covers external LIVE, but source P-031 remains EN_EJECUCIÓN until original DoD is re-audited against available provider semantics, autonomous resource acquisition and contract cleanup without substituting injected mocks for provider integration. P-032 remains PARCIAL.
+- **NEXT_ELIGIBLE_WORK:** compare actual provider-native contract operations/terms for AWS, Conway and discovered suppliers, including absence of cancellable contracts vs physical release; reconcile lifecycle and P-030 effects under real supplier capabilities where source/permissions allow. Otherwise preserve UNKNOWN/unavailable without invention, then recheck exact original DoD and P-005 boundary. No parallel money, policy or lifecycle engine.
 
 ## P-031 — Reapertura por DoD incompleto, preservando E3 (2026-10-17)
 
