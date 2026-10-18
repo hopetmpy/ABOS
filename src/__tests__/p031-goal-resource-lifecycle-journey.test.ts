@@ -6,6 +6,9 @@
  * No LIVE provider, external credentials, spend or business deliverable.
  */
 import { describe, expect, it, vi } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { createTestDb } from "./mocks.js";
 import { createGoal } from "../orchestration/task-graph.js";
 import { getTasksByGoal } from "../state/database.js";
@@ -30,6 +33,12 @@ import { getFinancialEffectByOperationKey } from "../economics/financial-effects
 
 describe("P-031 real owner chain, synthetic Goal through resource retirement", () => {
   it("preserves Task demand and economic authority across provision, replay, restart and retirement", async () => {
+    // The strategic planner creates a real AgentWorkspace under HOME. Keep
+    // the fixture isolated: never depend on an unrelated Codex/CI user HOME
+    // being present, writable or unaffected by other workspace cleanups.
+    const testHome = fs.mkdtempSync(path.join(os.tmpdir(), "abos-p031-goal-home-"));
+    const originalHome = process.env.HOME;
+    process.env.HOME = testHome;
     const db = createTestDb();
     let provisions = 0;
     let destructions = 0;
@@ -120,6 +129,7 @@ describe("P-031 real owner chain, synthetic Goal through resource retirement", (
         config: { disableSpawn: true },
       });
       expect((await orchestrator.tick()).phase).toBe("executing");
+      expect(fs.existsSync(path.join(testHome, ".abos", "workspace", goal.id, "outputs"))).toBe(true);
       const materialized = getTasksByGoal(db.raw, goal.id);
       expect(materialized).toHaveLength(3);
       const computeTask = materialized.find(t => t.title === "Provision qualified compute")!;
@@ -363,7 +373,15 @@ describe("P-031 real owner chain, synthetic Goal through resource retirement", (
       expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions")
         .get() as { n: number }).n).toBe(0);
     } finally {
-      db.close();
+      try {
+        db.close();
+      } finally {
+        if (originalHome === undefined) delete process.env.HOME;
+        else process.env.HOME = originalHome;
+        // Only this test-owned directory can be removed. Never touch the
+        // host account workspace or another agent\'s persistent state.
+        fs.rmSync(testHome, { recursive: true, force: true });
+      }
     }
   });
 });
