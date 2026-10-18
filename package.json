@@ -50,7 +50,9 @@
     "test:financial": "vitest run --testNamePattern 'financial|spend|treasury'",
     "test:ci": "vitest run --reporter=verbose",
     "clean": "rm -rf dist && pnpm -r clean",
-    "test:diagnose": "vitest run --reporter=default --reporter=hanging-process"
+    "test:diagnose": "vitest run --reporter=default --reporter=hanging-process",
+    "evidence:gate": "node scripts/codex-evidence-gate.mjs",
+    "test:evidence": "node --test scripts/codex-evidence-gate.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "2.2.0",
