@@ -94,6 +94,8 @@ function digest(payload: string): string {
  */
 export function bindConwayDomainsRegistration402(input: {
   account: ConwayDomainsAccountProof;
+  expectedControlledWalletAddress: string;
+  expectedControlledWalletType: "evm" | "solana";
   plannedRequest: unknown;
   submittedBody: string;
   httpStatus: number;
@@ -121,7 +123,12 @@ export function bindConwayDomainsRegistration402(input: {
   const a = input.account;
   if (!a || a.provider !== "conway-domains" ||
       a.status !== "wallet_match" || !a.providerAccountId ||
-      !a.walletAddress || !a.walletType) return base;
+      !a.walletAddress || !a.walletType ||
+      a.walletType !== input.expectedControlledWalletType ||
+      typeof input.expectedControlledWalletAddress !== "string" ||
+      (a.walletType === "evm"
+        ? a.walletAddress.toLowerCase() !== input.expectedControlledWalletAddress.toLowerCase()
+        : a.walletAddress !== input.expectedControlledWalletAddress)) return base;
   const account = { accountId: a.providerAccountId, walletType: a.walletType };
   const planned = normalizeRegistrationBody(input.plannedRequest);
   let submitted: ConwayDomainsRegistrationBody | null = null;
