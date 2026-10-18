@@ -1252,7 +1252,7 @@ describe("P-031 supplier contract lifecycle under the existing P-010/P-030 claim
       await expect(executeReviewedProviderProcurement(h.db.raw, {
         scope: cancellation, policyDecisionId: policy(h.db, cancellation, h.quote),
         dependencies: createLifecycleProcurementDependencies(h.lifecycle, source),
-      })).rejects.toThrow(/pending financial/i);
+      })).rejects.toThrow(/overlaps unresolved intent/i);
       expect(invocations).toBe(1);
     } finally { h.db.close(); }
   });
