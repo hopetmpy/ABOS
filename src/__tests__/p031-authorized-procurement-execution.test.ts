@@ -1227,6 +1227,74 @@ describe("P-031 supplier contract lifecycle under the existing P-010/P-030 claim
   });
 
 
+  it("permits a newly reviewed cleanup Task to cancel an owned contract after its original Goal completes", async () => {
+    const h = contractFixture("cancel", "terminated");
+    try {
+      const originalGoalId = h.scope.goalId;
+      const originalTaskId = h.scope.taskId;
+      h.db.raw.prepare("UPDATE task_graph SET status = 'completed' WHERE id = ?")
+        .run(originalTaskId);
+      h.db.raw.prepare("UPDATE goals SET status = 'completed' WHERE id = ?")
+        .run(originalGoalId);
+
+      // The original route is no longer active and must not authorize an
+      // unrelated supplier mutation after the service has completed.
+      await expect(executeReviewedProviderProcurement(h.db.raw, {
+        scope: h.scope,
+        dependencies: {
+          observeAuthenticatedEconomics: async () => h.quote,
+          dispatch: async () => { throw new Error("must not run"); },
+        },
+      })).rejects.toThrow(/reviewed materialization receipt/i);
+
+      const newGoal = insertGoal(h.db.raw, {
+        title: "Clean up supplier obligations",
+        description: "Cancel billed contract from the completed service",
+      });
+      const newTask = insertTask(h.db.raw, {
+        goalId: newGoal, title: "Cancel retained subscription",
+        description: "Observe contract and stop recurring supplier obligations",
+      });
+      const paths = new AdaptiveStore(h.db.raw);
+      const path = paths.getOrCreatePath({
+        goalId: newGoal, hypothesis: "Confirmed resource retired but contract still billed",
+        strategy: "Verify supplier contract, then request authorized cancellation",
+        assumptions: ["Account and contract independently authenticated"],
+        requiredCapabilities: ["contract-cancellation"],
+        sequence: ["observe", "authorize", "cancel", "verify"],
+        expectedOutcome: "Supplier cancellation reconciled",
+      });
+      paths.bindTask({ goalId: newGoal, taskId: newTask, pathId: path.id });
+      paths.setPathStatus(path.id, "selected");
+      h.db.raw.prepare(
+        "INSERT OR REPLACE INTO kv (key, value, updated_at) VALUES (?, ?, datetime('now'))",
+      ).run(`orchestrator.review_feedback.${newGoal}`,
+        `approved and materialized; materialized_path=${path.id}`);
+      h.scope.goalId = newGoal;
+      h.scope.taskId = newTask;
+      h.scope.pathId = path.id;
+      let dispatched = 0;
+      const source = {
+        observeAuthenticatedEconomics: async () => h.quote,
+        resolveContractOperation: async () => h.target(),
+        dispatchContractOperation: async () => {
+          dispatched++;
+          return { status: "pending" as const, evidence: ["Fixture requested contract cleanup."] };
+        },
+      };
+      const result = await executeReviewedProviderProcurement(h.db.raw, {
+        scope: h.scope,
+        policyDecisionId: policy(h.db, h.scope, h.quote),
+        dependencies: createLifecycleProcurementDependencies(h.lifecycle, source),
+      });
+      expect(result.dispatched).toBe(true);
+      expect(result.status).toBe("pending");
+      expect(dispatched).toBe(1);
+      expect(h.store.get(h.scope.resourceId)?.goalId).toBe(originalGoalId);
+      expect(h.store.get(h.scope.resourceId)?.status).toBe("terminated");
+    } finally { h.db.close(); }
+  });
+
   it("blocks concurrent opposite supplier contract actions across different operation keys", async () => {
     const h = contractFixture("renew");
     try {
