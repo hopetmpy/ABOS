@@ -33,6 +33,14 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
 
+
+## P-031 — Conway Domains x402 v2 Codex E3 verified (2026-10-18)
+
+- **GIT_AUDITED / E3_SYNTHETIC_PASS:** source exact `6df7225c63f6fa8d7cd17f3bc4d1d96cf8ddd68e` → evidencia remota `ba07c7f86a9c49ea5262e5295f0e3ac8cf7e6153`, único commit posterior con ocho archivos exclusivamente de evidencia, **7/7** hashes SHA-256 recalculados independientemente; ejecución Codex Cloud `p031-domains-economic-discovery` con integridad ProjectOps, protocolo **6/6**, typecheck, build y Vitest **138/138 en 13/13 archivos PASS**. Auditoría: `ProjectOps/evidence/P-031/audits/6df7225c-domains-x402-v2.md` + índice `ProjectOps/EVIDENCE.md`. Sin pagos, registro de dominio, proveedor LIVE ni GitHub Actions ejecutadas por Codex.
+- **BOUNDARY:** parser puro x402 v2 fuente validado: preview de `accepts[].amount` micro-USDC, recipient/token/red con rechazos adversariales, sin network/signing/dispatch, sin cotización vinculante ni emisor P-010/P-030. La proveedor-compatibilidad y contratación exacta en cuenta real sigue UNKNOWN. No traspasar PASS del SHA probado a los commits siguientes o a `main`; P-005 retiene E5/E6.
+- **NEXT_ELIGIBLE_WORK:** auditar el contrato autenticado/concreto `POST /domains/register` y los productores-consumidores de authority; sólo una ruta host autorizada y recuperable debería obtener 402 específico y condicionar cualquier compra, con chequeos anti-replay e inventario. Conservar P-031 EN_EJECUCIÓN, P-032 PARCIAL; no repetir batería sin modificación material de source. Ver `continuity/C0030.md`.
+
+
 ## P-031 — passive Conway Domains x402 v2 parsing, source pending physical acceptance (2026-10-18)
 
 - **SOURCE_PATCHED / PHYSICAL_PENDING:** supplier docs prove a domain registration 402 has `accepts[].amount` atomic USDC in x402 v2, whereas generic `src/conway/x402.ts` only understands `maxAmountRequired`. Added pure, non-dispatching `inspectConwayDomainsX402Version2` in `src/conway/domains-purchase-evidence.ts` instead of broadening the generic paid `x402Fetch` side effects. Parses validated Base-USDC 402 preview only, never binds a final quote/account, signs or buys. Five adversarial tests appended to existing Domains purchase evidence suite. No typecheck, build or Vitest PASS claimed on this new code.
