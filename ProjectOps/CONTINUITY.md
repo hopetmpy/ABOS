@@ -31,6 +31,14 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
 
+
+## P-031 — Conway Domains SIWE+SIWS Codex E3 verified (2026-10-18)
+
+- **GIT_AUDITED / E3_SYNTHETIC_PASS:** Codex Cloud ran exact source `c55db34484d9a243fdec5eeac7b7617cc9d6033c` → evidence `de1f5cc2bc069dedd4700c1448a47cf2d1c08ca0`, one additional evidence-only commit with 8 files and **7/7 independent SHA-256 hashes** verified; 5 commands PASS: ProjectOps integrity, protocol **6/6**, typecheck, build and Vitest **133/133 tests in 13/13 files**, including all five new SIWS/Solana cases. Runner reports synthetic fixture, zero external provider operations and no GitHub Actions. `ProjectOps/evidence/P-031/audits/c55db344-domains-siws.md` is indexed in `ProjectOps/EVIDENCE.md`.
+- **NO LIVE CLAIM:** EVM SIWE/Solana SIWS flows and wallet-account comparison demonstrated with synthetic provider fixtures only. Provider-native SIWS wire compatibility, authenticated account/session, exact multi-year x402 order quote, funds/contract, P-010 issuer, payment, settlement, resource usability and ROI remain UNKNOWN/not observed. This E3 is on the exact source only and is not `main` CI or external P-005 E5/E6. `P-031 EN_EJECUCIÓN`, `P-032 PARCIAL`.
+- **NEXT_ELIGIBLE_WORK:** examine supplier/host-specific authenticated account and no-side-effect order-quote discovery for domains and Conway Cloud, without an unreviewed billable registration POST, without duplicate financial authority, and without repeating the same synthetic suite before source changes. Read `continuity/C0030.md` for scope and recovery.
+
+
 ## P-031 — SIWS support with existing controlled Solana wallet, source pending Codex (2026-10-18)
 
 - **SOURCE IMPLEMENTED / PHYSICAL PENDING:** following official Conway Domains SIWS `/auth/solana/nonce` and `/auth/solana/verify` interface, `domains-account-proof.ts` now matches supplier account to controlled `evm` or `solana` wallet without false authority; `domains-siwe-session.ts` reuses ABOS `ChainIdentity` + `buildSiwsMessage/verifySiwsSignature` to make an ephemeral Solana login and subsequent `/auth/me` observation; `tools-core.ts` routes existing `conway_domains_account_proof` by matching chain/address/signer, no new model credentials. Five adversarial SIWS cases added to existing Vitest file, **not yet executed**. No registration, payment, financial effect or new wallet, and no default ability to acquire domains.
