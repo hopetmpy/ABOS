@@ -11,6 +11,8 @@ import { createConwayClient } from "../conway/client.js";
 import { EnvironmentRegistry } from "../environments/registry.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
+import { EnvironmentRetentionCoordinator } from "../environments/retention.js";
+import { insertGoal } from "../state/database.js";
 import { createTestDb } from "./mocks.js";
 
 function resource(
@@ -65,6 +67,112 @@ describe("ConwayEnvironmentProvider collect", () => {
       apiUrl: "https://api.conway.tech", apiKey: "test-key", sandboxId: "source-test",
     }), fetcher };
   }
+
+  it("sends exactly one native DELETE with no retry and treats 204 as physical deletion only", async () => {
+    const fetcher = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetcher);
+    const client = createConwayClient({
+      apiUrl: "https://api.conway.tech", apiKey: "fixture-key",
+      sandboxId: "local-fixture",
+    });
+    await client.deleteSandbox("sbx_abc123");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const [url, options] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://api.conway.tech/v1/sandboxes/sbx_abc123");
+    expect(options.method).toBe("DELETE");
+    expect(options.headers).toMatchObject({
+      Authorization: "fixture-key",
+    });
+    await expect(client.deleteSandbox("../foreign")).rejects.toThrow(/valid exact sandbox ID/);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not silently succeed or automatically retry a failed Conway DELETE", async () => {
+    const fetcher = vi.fn(async () => new Response("unknown", { status: 500 }));
+    vi.stubGlobal("fetch", fetcher);
+    const client = createConwayClient({
+      apiUrl: "https://api.conway.tech", apiKey: "fixture-key",
+      sandboxId: "local-fixture",
+    });
+    await expect(client.deleteSandbox("sbx_abc123")).rejects.toThrow(/500/);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("exposes a real Conway destroy capability only when present and releases via P-018 retention", async () => {
+    const db = createTestDb();
+    try {
+      const deleteSandbox = vi.fn(async () => undefined);
+      const provider = new ConwayEnvironmentProvider({
+        getCreditsBalance: async () => 0, deleteSandbox,
+      });
+      const unavailable = new ConwayEnvironmentProvider({
+        getCreditsBalance: async () => 0,
+      });
+      const registry = new EnvironmentRegistry();
+      registry.register(provider);
+      expect(registry.supportsOperation("conway", "destroy")).toBe(true);
+      const other = new EnvironmentRegistry();
+      other.register(unavailable);
+      expect(other.supportsOperation("conway", "destroy")).toBe(false);
+      const goalId = insertGoal(db.raw, {
+        title: "Dispose unused temporary VM", description: "Task completed",
+      });
+      db.raw.prepare("UPDATE goals SET status = 'completed' WHERE id = ?").run(goalId);
+      const resources = new EnvironmentResourceStore(db.raw);
+      const owned = resources.create({
+        id: "test-owned-conway-vm", provider: "conway", type: "conway-sandbox",
+        externalId: "sbx_retire123", goalId, status: "running",
+        retentionPolicy: "until_goal_complete",
+      });
+      const lifecycle = new EnvironmentLifecycleManager(registry, resources);
+      const sweep = new EnvironmentRetentionCoordinator(db.raw, registry, lifecycle);
+      const result = await sweep.sweep();
+      expect(result.released).toBe(1);
+      expect(deleteSandbox).toHaveBeenCalledExactlyOnceWith("sbx_retire123");
+      expect(resources.get(owned.id)?.status).toBe("terminated");
+      expect(resources.get(owned.id)?.metadata.retentionReleaseState).toBe("released");
+      expect(resources.get(owned.id)?.metadata.retentionBillingReconciliation)
+        .toBe("unverified_after_resource_release");
+      await sweep.sweep();
+      expect(deleteSandbox).toHaveBeenCalledTimes(1);
+    } finally { db.close(); }
+  });
+
+  it("keeps an uncertain Conway DELETE in P-018 observation hold instead of blindly deleting twice", async () => {
+    const db = createTestDb();
+    try {
+      const deleteSandbox = vi.fn(async () => { throw new Error("Conway DELETE timeout"); });
+      const registry = new EnvironmentRegistry();
+      registry.register(new ConwayEnvironmentProvider({
+        getCreditsBalance: async () => 0, deleteSandbox,
+      }));
+      const goalId = insertGoal(db.raw, {
+        title: "Retire Conway after failed task", description: "Physical outcome uncertain",
+      });
+      db.raw.prepare("UPDATE goals SET status = 'completed' WHERE id = ?").run(goalId);
+      const resources = new EnvironmentResourceStore(db.raw);
+      const owned = resources.create({
+        id: "test-unknown-conway-delete", provider: "conway", type: "conway-sandbox",
+        externalId: "sbx_unknown", goalId, status: "running",
+        retentionPolicy: "until_goal_complete",
+      });
+      const lifecycle = new EnvironmentLifecycleManager(registry, resources);
+      const sweeper = new EnvironmentRetentionCoordinator(db.raw, registry, lifecycle);
+      const first = await sweeper.sweep();
+      expect(first.destroyAttempts).toBe(1);
+      expect(first.pendingObservation).toBeGreaterThan(0);
+      expect(deleteSandbox).toHaveBeenCalledTimes(1);
+      expect(resources.get(owned.id)?.status).toBe("unknown");
+      const restarted = new EnvironmentRetentionCoordinator(
+        db.raw, registry,
+        new EnvironmentLifecycleManager(registry, new EnvironmentResourceStore(db.raw)),
+      );
+      await restarted.sweep();
+      expect(deleteSandbox).toHaveBeenCalledTimes(1);
+      expect(resources.get(owned.id)?.metadata.retentionReleaseState)
+        .toBe("pending_observation");
+    } finally { db.close(); }
+  });
 
   it("does not turn missing Conway inventory membership into a verified absence or cleared P-018 mutation", async () => {
     const provider = new ConwayEnvironmentProvider({

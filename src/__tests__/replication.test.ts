@@ -13,6 +13,7 @@ import {
   spawnChild,
 } from "../replication/spawn.js";
 import { SandboxCleanup } from "../replication/cleanup.js";
+import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { ChildHealthMonitor } from "../replication/health.js";
 import { ChildLifecycle } from "../replication/lifecycle.js";
 import { pruneDeadChildren } from "../replication/lineage.js";
@@ -550,7 +551,7 @@ describe("SandboxCleanup", () => {
     db.close();
   });
 
-  it("transitions to cleaned_up even though sandbox deletion is disabled", async () => {
+  it("does not falsely mark a child cleaned_up when its provider sandbox has not been released", async () => {
     lifecycle.initChild("child-1", "test-child", "sandbox-1", "test prompt");
     lifecycle.transition("child-1", "sandbox_created", "created");
     lifecycle.transition("child-1", "runtime_ready", "ready");
@@ -561,12 +562,11 @@ describe("SandboxCleanup", () => {
     lifecycle.transition("child-1", "stopped", "stopped");
 
     const cleanup = new SandboxCleanup(conway, lifecycle, db.raw);
-    await cleanup.cleanup("child-1");
-
-    expect(lifecycle.getCurrentState("child-1")).toBe("cleaned_up");
+    await expect(cleanup.cleanup("child-1")).rejects.toThrow(/not verified by P-018/i);
+    expect(lifecycle.getCurrentState("child-1")).toBe("stopped");
   });
 
-  it("transitions to cleaned_up when sandbox deletion succeeds", async () => {
+  it("marks cleaned_up only after P-018 verified physical sandbox release", async () => {
     lifecycle.initChild("child-2", "test-child", "sandbox-2", "test prompt");
     lifecycle.transition("child-2", "sandbox_created", "created");
     lifecycle.transition("child-2", "runtime_ready", "ready");
@@ -576,9 +576,14 @@ describe("SandboxCleanup", () => {
     lifecycle.transition("child-2", "healthy", "healthy");
     lifecycle.transition("child-2", "stopped", "stopped");
 
+    const resources = new EnvironmentResourceStore(db.raw);
+    resources.create({
+      id: "owned-conway-child-sandbox", provider: "conway", type: "conway-sandbox",
+      externalId: "sandbox-2", status: "terminated",
+      metadata: { retentionReleaseState: "released" },
+    });
     const cleanup = new SandboxCleanup(conway, lifecycle, db.raw);
     await cleanup.cleanup("child-2");
-
     expect(lifecycle.getCurrentState("child-2")).toBe("cleaned_up");
   });
 });
