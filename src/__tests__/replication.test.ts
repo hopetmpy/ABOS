@@ -23,6 +23,7 @@ import {
   MockInferenceClient,
   createTestDb,
   createTestIdentity,
+  createTestConfig,
 } from "./mocks.js";
 import type { AbosDatabase, GenesisConfig } from "../types.js";
 import { MIGRATION_V7 } from "../state/schema.js";
