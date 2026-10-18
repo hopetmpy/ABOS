@@ -11,6 +11,7 @@ import {
   ensureChildRuntimeRunning,
   isValidWalletAddress,
   spawnChild,
+  findProcuredChildSandboxForTask,
 } from "../replication/spawn.js";
 import { SandboxCleanup } from "../replication/cleanup.js";
 import { createBuiltinTools } from "../agent/tools.js";
@@ -311,6 +312,73 @@ describe("spawnChild", () => {
       { maxChildren: 3, childSandboxMemoryMb: 1024 },
     )).rejects.toThrow(/requires P-031/);
     expect(created).not.toHaveBeenCalled();
+  });
+
+  it("discovers Task-owned P-031 capacity by exact Goal, Task and selected strategic path", () => {
+    const procurement = procuredSandbox(2048);
+    const task = {
+      id: "task-fixture", goalId: "goal-fixture",
+      strategicPathId: "path-fixture",
+    };
+    expect(findProcuredChildSandboxForTask(db, task, 1024))
+      .toEqual(procurement);
+    expect(findProcuredChildSandboxForTask(db, {
+      ...task, id: "other-task",
+    }, 1024)).toBeNull();
+    expect(findProcuredChildSandboxForTask(db, {
+      ...task, goalId: "other-goal",
+    }, 1024)).toBeNull();
+    expect(findProcuredChildSandboxForTask(db, {
+      ...task, strategicPathId: "unreviewed-path",
+    }, 1024)).toBeNull();
+    expect(findProcuredChildSandboxForTask(db, task, 4096)).toBeNull();
+  });
+
+  it("refuses a Task resource when P-030 supplier identity is mismatched or owner already claimed", () => {
+    const procurement = procuredSandbox(2048);
+    const task = {
+      id: "task-fixture", goalId: "goal-fixture",
+      strategicPathId: "path-fixture",
+    };
+    expect(findProcuredChildSandboxForTask(db, task, 1024))
+      .toEqual(procurement);
+    db.raw.prepare(
+      "UPDATE financial_effects SET provider_effect_id = ? WHERE operation_key = ?",
+    ).run("different-supplier-resource", procurement.operationKey);
+    expect(findProcuredChildSandboxForTask(db, task, 1024)).toBeNull();
+    db.raw.prepare(
+      "UPDATE financial_effects SET provider_effect_id = ? WHERE operation_key = ?",
+    ).run("preprocured-synthetic-sandbox", procurement.operationKey);
+    new EnvironmentResourceStore(db.raw).applyMutation(
+      procurement.resourceId,
+      { metadata: { childId: "already-claimed" } },
+      "fixture_child_claim", "Existing child owns this sandbox.",
+    );
+    expect(findProcuredChildSandboxForTask(db, task, 1024)).toBeNull();
+  });
+
+  it("lets the delegated Task use its acquired sandbox without new purchase or repeated claim", async () => {
+    const procurement = procuredSandbox(2048);
+    const task = { id: "task-fixture", goalId: "goal-fixture", strategicPathId: "path-fixture" };
+    const resolved = findProcuredChildSandboxForTask(db, task, 1024);
+    expect(resolved).toEqual(procurement);
+    const create = vi.spyOn(conway, "createSandbox");
+    vi.spyOn(conway, "exec").mockImplementation(async command =>
+      command.includes("--init")
+        ? { stdout: `Wallet initialized: ${validAddress}`, stderr: "", exitCode: 0 }
+        : { stdout: "ok", stderr: "", exitCode: 0 },
+    );
+
+    const child = await spawnChild(
+      conway, identity, db, genesis, new ChildLifecycle(db.raw),
+      { maxChildren: 3, childSandboxMemoryMb: 1024 }, resolved!,
+    );
+    expect(child.status).toBe("wallet_verified");
+    expect(child.sandboxId).toBe("preprocured-synthetic-sandbox");
+    expect(create).not.toHaveBeenCalled();
+    expect(findProcuredChildSandboxForTask(db, task, 1024)).toBeNull();
+    expect(new EnvironmentResourceStore(db.raw).get(procurement.resourceId)
+      ?.metadata.childId).toBe(child.id);
   });
 
   it("bootstraps an independently healthy P-031 acquired sandbox without another purchase", async () => {
