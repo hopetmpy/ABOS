@@ -17,7 +17,11 @@ import type {
 import { DEFAULT_CONFIG, MAX_CHILDREN } from "../types.js";
 import { ChildLifecycle } from "./lifecycle.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
-import { getFinancialEffectByOperationKey } from "../economics/financial-effects.js";
+import {
+  getFinancialEffectByOperationKey,
+  listFinancialEffectsByStates,
+} from "../economics/financial-effects.js";
+import type { TaskNode } from "../orchestration/task-graph.js";
 import { ulid } from "ulid";
 import { propagateConstitution, verifyConstitution } from "./constitution.js";
 import { writeFamilyKnowledgeBundle } from "./family-knowledge.js";
@@ -89,6 +93,64 @@ async function materializeRequiredBootstrap(
 export interface ProcuredChildSandbox {
   resourceId: string;
   operationKey: string;
+}
+
+/**
+ * Locate a previously purchased, physically observed Conway sandbox for this
+ * exact delegated Task. This is an inventory lookup, never a purchase or a
+ * claim of free provider credit. The canonical P-018/P-030 bootstrap claim
+ * checks the same evidence again in a transaction before touching the child.
+ *
+ * A Task may be associated with several historical procurement attempts.
+ * Only a still-owned, healthy, adequately sized provision with the matching
+ * policy-backed financial effect can be selected. Other valid resources can
+ * still be reused by other paths; UNKNOWN does not mean impossible.
+ */
+export function findProcuredChildSandboxForTask(
+  db: AbosDatabase,
+  task: Pick<TaskNode, "id" | "goalId" | "strategicPathId">,
+  requiredMemoryMb: number,
+): ProcuredChildSandbox | null {
+  const resources = new EnvironmentResourceStore(db.raw);
+  const matchingEffects = listFinancialEffectsByStates(db.raw, ["pending", "completed"])
+    .filter(effect =>
+      effect.effectKind === "provider_resource_procurement" &&
+      effect.provider === "conway" &&
+      !!effect.policyDecisionId &&
+      effect.request.operation === "provision" &&
+      effect.request.goalId === task.goalId &&
+      effect.request.taskId === task.id,
+    );
+  if (matchingEffects.length === 0) return null;
+
+  for (const resource of resources.list({ provider: "conway", taskId: task.id })) {
+    if (resource.goalId !== task.goalId ||
+        (task.strategicPathId && resource.pathId !== task.strategicPathId) ||
+        resource.type !== "conway-sandbox" ||
+        !resource.externalId || !resource.lastHealthCheck ||
+        !["ready", "running"].includes(resource.status) ||
+        resource.metadata.childId ||
+        resource.metadata.provisionNeedsReconciliation === true ||
+        resource.metadata.mutationNeedsReconciliation === true ||
+        resource.metadata.artifactCollectionState === "pending" ||
+        ["released", "destroy_requested", "pending_observation", "artifact_hold"]
+          .includes(String(resource.metadata.retentionReleaseState ?? "")) ||
+        typeof resource.metadata.memoryMb !== "number" ||
+        !Number.isFinite(resource.metadata.memoryMb) ||
+        resource.metadata.memoryMb < requiredMemoryMb ||
+        db.getChildren().some(child =>
+          child.sandboxId === resource.externalId && child.status !== "cleaned_up")) {
+      continue;
+    }
+    const effect = matchingEffects.find(candidate =>
+      candidate.providerEffectId === resource.externalId &&
+      candidate.request.resourceId === resource.id &&
+      candidate.request.pathId === resource.pathId &&
+      candidate.request.region === resource.region
+    );
+    if (effect) return { resourceId: resource.id, operationKey: effect.operationKey };
+  }
+  return null;
 }
 
 /**
