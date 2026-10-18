@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { checkBundle } from "./codex-evidence-gate.mjs";
+import { checkBundle, publicationFiles } from "./codex-evidence-gate.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const evidenceRoot = join(root, "ProjectOps", "evidence");
@@ -69,4 +69,25 @@ test("ABOS evidence rejects incomplete SHA-256 listing", t => {
 
 test("ABOS evidence rejects directories outside its exact root", () => {
   assert.throws(() => checkBundle("../"), /outside ProjectOps\/evidence/);
+});
+
+
+test("ABOS publication explicitly stages ignored logs and excludes unexecuted commands", () => {
+  const files = publicationFiles(
+    "ProjectOps/evidence/P-031/" + source + "/p031-child/run-1",
+    {
+      steps: [
+        { name: "typecheck", status: "PASS", logFile: "logs/typecheck.log" },
+        { name: "build", status: "FAIL", logFile: "logs/build.log" },
+        { name: "external", status: "NOT_EXECUTED", logFile: "logs/external.log" },
+      ],
+    },
+  );
+  assert.deepEqual(files, [
+    "ProjectOps/evidence/P-031/" + source + "/p031-child/run-1/RUN.json",
+    "ProjectOps/evidence/P-031/" + source + "/p031-child/run-1/EVIDENCE.md",
+    "ProjectOps/evidence/P-031/" + source + "/p031-child/run-1/SHA256SUMS.txt",
+    "ProjectOps/evidence/P-031/" + source + "/p031-child/run-1/logs/typecheck.log",
+    "ProjectOps/evidence/P-031/" + source + "/p031-child/run-1/logs/build.log",
+  ]);
 });
