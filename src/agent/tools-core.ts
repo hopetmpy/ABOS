@@ -2078,8 +2078,11 @@ Model: ${ctx.inference.getDefaultModel()}
           );
         } catch (err: any) {
           // Auto-topup on 402 insufficient credits and retry once
-          const is402 = err?.status === 402 ||
-            err?.message?.includes("INSUFFICIENT_CREDITS");
+          // A procured P-018 sandbox is already bound to one child identity. A
+          // second spawn after bootstrap failure cannot safely claim it, even
+          // if an unrelated topup succeeds; recovery must resume that child.
+          const is402 = !procurement && (err?.status === 402 ||
+            err?.message?.includes("INSUFFICIENT_CREDITS"));
           if (is402) {
             const COOLDOWN_MS = 60_000;
             const last = ctx.db.getKV("last_sandbox_topup_attempt");
