@@ -29,6 +29,11 @@ ProjectOps-PR: 30
 Master-Plan-PR: 31
 Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
+## P-031 — Conway supplier POST second P-030 mandate (2026-10-18)
+
+- **SOURCE IN GIT / PHYSICAL PENDING:** `src/environments/conway-procurement-authority.ts` binds a Conway supplier provisioning POST to an active exact P-030 financial dispatch, P-010 policy receipt ID, verified-in-source account/region/task/path/shape scope, and supplier-derived finite quote/financing windows. `src/agent/loop.ts` installs this second gate for trusted-host Conway `provision` only. It never itself issues payment or fabricates wallet credits, and current distributed CLI still has no trusted supplier economic quote adapter. Existing P-025/P-010/P-030/P-018 owners and AWS paths preserved.
+- **NEXT:** Codex `p031-conway-claimed-provision` grouped synthetic physical suite (12 Vitest files + integrity/protocol/typecheck/build) on latest exact HEAD and remote evidence audit, then genuine account/supplier quote source discovery. Source static review does NOT constitute physical PASS. Active segment `continuity/C0030.md` has detail; P-031 EN_EJECUCIÓN, no main merge, P-005 LIVE E5/E6 separate.
+
 ## P-031 — x402 HEAD grouped E3 physical PASS (2026-10-18)
 
 - **INTEGRATION VERIFIED IN E3**: source `b5f9de732e44d106f9c73141bacff958cc389ab6`, evidence `b28b94312cd8971a5643853f44dba976ee39112a`, 152/152 tests / 12/12 suites, evidence protocol 6/6, ProjectOps integrity/typecheck/build PASS; eight files first evidence commit with direct source parent, 7/7 SHA-256 independently recalculated. Audit `ProjectOps/evidence/P-031/audits/b5f9de73-x402-preflight.md`; `ProjectOps/EVIDENCE.md` updated. Exact SHA only, no LIVE, no payments, no Actions.
