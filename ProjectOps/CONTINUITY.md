@@ -29,6 +29,14 @@ ProjectOps-PR: 30
 Master-Plan-PR: 31
 Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
+
+## P-031 — Conway Domains Codex evidence independently audited (2026-10-18)
+
+- **E3 PHYSICAL PASS / GIT_AUDITED:** source exact `acbbb8a7ffcfd5dcf5b291a2d0401d71cd54bfb4` (rama `abos/p031-child-verified-resource-20261018`) → commit de evidencia `9e8f54024f4ec158d9c4f6a25ead3efe60d2fd12`, un commit por delante del source con únicamente ocho archivos de expediente; siete payload/logs recalculados **7/7 SHA-256**, protocolo **6/6**, ProjectOps integrity, typecheck, build y Vitest **128/128 tests en 13/13 archivos PASS** (Node 22.23.3 / pnpm 10.28.1, Linux). Auditoría: `ProjectOps/evidence/P-031/audits/acbbb8a7-domains-economic-discovery.md`, indexada en `ProjectOps/EVIDENCE.md`. Sin operaciones financieras LIVE, dominios comprados ni GitHub Actions ejecutadas por Codex.
+- **BOUNDARY:** se acredita únicamente disponibilidad y pricing públicos sintéticos, cuenta/SIWE EVM simulada y regresiones económicas/autoridad. No hay prueba de autenticación proveedor real, cotización same-body de registro y años, x402 USDC cobrable, financiación, policy issuer P-010 ni invoice/ROI. USD público, wallet asociada y éxito de tests NO implican autoridad de compra o dinero. `P-031 EN_EJECUCIÓN`; `P-032 PARCIAL`; `P-005 E5/E6` separado; source sin fusionar en `main`.
+- **NEXT_ELIGIBLE_WORK:** auditar owners y host wiring de identidad/cotización Conway Domains (y rutas alternatives) para obtener cuenta autenticada controlada y respuesta específica de proveedor bajo autorización; si source demostrablemente carece de preflight idempotente, corregir owner P-031/P-030 sin POST facturable oculto, con pruebas adversariales agrupadas únicamente ante nuevo source. Contrastar DoD original antes de promover estado.
+
+
 ## P-031 — Conway Domains account + public price discovery (2026-10-18)
 
 - **SOURCE IMPLEMENTED / E3 PHYSICAL PENDING:** discovered a second Conway vendor API `api.conway.domains` with documented public exact-name availability (GET `/domains/check`) and TLD registration/renewal pricing (GET `/domains/pricing`), and separate SIWE/SIWS authenticated account `GET /auth/me` using a domain-scoped JWT. Added `src/conway/domains-purchase-evidence.ts`, read-only agent tool `conway_domain_purchase_evidence` and `src/conway/domains-account-proof.ts` accepting host-owned session token callback and controlled EVM wallet address. Public price != actual multi-year/premium payable order, Domains wallet/account != Cloud API-key account, wallet identity != available x402 funds/P-010 authorization. Legacy `register_domain` remains inactive; no supplier purchase or hidden signed HTTP POST.
