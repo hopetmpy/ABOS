@@ -128,6 +128,24 @@ describe("spawnChild", () => {
   const validAddress = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
   const zeroAddress = "0x" + "0".repeat(40);
 
+  // Respect the actual foreign keys of environment_resources: this is a
+  // synthetic reviewed route fixture, not a live Goal/Task/P-010 issuer.
+  const seedRoute = (goalId: string, taskId: string, pathId: string) => {
+    const now = new Date().toISOString();
+    db.raw.prepare(
+      "INSERT INTO goals (id, title, description, status, created_at) VALUES (?, ?, ?, 'active', ?)",
+    ).run(goalId, "Fixture goal", "Physical tests for already-procured child compute", now);
+    db.raw.prepare(
+      "INSERT INTO task_graph (id, goal_id, title, description, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)",
+    ).run(taskId, goalId, "Fixture task", "Prepare owned Conway child sandbox", now);
+    db.raw.prepare(
+      "INSERT INTO adaptive_paths (id, goal_id, signature, hypothesis, strategy, expected_outcome, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    ).run(pathId, goalId, "synthetic-procurement-" + pathId,
+      "Previously reviewed exact provision can bootstrap child",
+      "Reuse owned resource without a second purchase",
+      "Valid child bootstrap", now, now);
+  };
+
   // Synthetic P-031/P-018 source for existing child-bootstrap tests. No
   // supplier purchase occurs in spawnChild; these records model a previous
   // verified economic claim and a healthy owned Conway resource.
@@ -136,6 +154,7 @@ describe("spawnChild", () => {
     const resourceId = "preprocured-child-fixture";
     const operationKey = "preprocured-child-fixture-op";
     const sandboxId = "preprocured-synthetic-sandbox";
+    seedRoute("goal-fixture", "task-fixture", "path-fixture");
     resources.create({
       id: resourceId, provider: "conway", externalId: sandboxId,
       type: "conway-sandbox", goalId: "goal-fixture", taskId: "task-fixture",
@@ -300,6 +319,7 @@ describe("spawnChild", () => {
     const operationKey = "p031-child-provision";
     const sandboxId = "p031-existing-sandbox";
     const created = vi.spyOn(conway, "createSandbox");
+    seedRoute("goal-1", "task-1", "path-1");
     resources.create({
       id: resourceId, provider: "conway", externalId: sandboxId,
       type: "conway-sandbox", goalId: "goal-1", taskId: "task-1",
@@ -350,6 +370,7 @@ describe("spawnChild", () => {
 
   it("refuses a fabricated P-018 resource lacking its P-030 effect", async () => {
     const resources = new EnvironmentResourceStore(db.raw);
+    seedRoute("goal", "task", "path");
     resources.create({
       id: "unpaid-resource", provider: "conway", externalId: "untracked-sandbox",
       type: "conway-sandbox", goalId: "goal", taskId: "task",
