@@ -19,6 +19,10 @@ import {
   observeConwayDomainsAuthenticatedAccount,
   type ConwayDomainsAccountProof,
 } from "./domains-account-proof.js";
+import {
+  observeConwayDomainsOwnedResources,
+  type ConwayDomainsOwnedResourceSnapshot,
+} from "./domains-owned-inventory.js";
 
 export interface TrustedEvmLoginSigner {
   /** Pre-existing ABOS wallet supplied by trusted host, never model args. */
@@ -48,8 +52,9 @@ async function postAuth(path:
     ? payload : null;
 }
 
-export async function authenticateConwayDomainsControlledEvmWallet(
+async function signInEvm(
   wallet: TrustedEvmLoginSigner,
+  onVerifiedSession?: (token: string) => Promise<void>,
 ): Promise<ConwayDomainsAccountProof> {
   // Use the same fail-closed response contract as the read-only supplier
   // identity helper; intentionally do not create or persist a JWT.
@@ -84,9 +89,13 @@ export async function authenticateConwayDomainsControlledEvmWallet(
       Record<string, unknown> | null;
     const access = result?.access_token;
     if (typeof access !== "string" || !access.trim()) return unknown();
-    return await observeConwayDomainsAuthenticatedAccount(
+    const account = await observeConwayDomainsAuthenticatedAccount(
       async () => access, wallet.address,
     );
+    if (account.status === "wallet_match" && onVerifiedSession) {
+      await onVerifiedSession(access);
+    }
+    return account;
   } catch {
     // Do not expose nonce/JWT, SIWE signature, supplier error payloads or
     // token-bearing network exception text to any agent/log.
@@ -100,8 +109,9 @@ export async function authenticateConwayDomainsControlledEvmWallet(
  * is ephemeral and can only be used for same-wallet account observation.
  * The provider's actual SIWS message dialect is unverified until LIVE E5.
  */
-export async function authenticateConwayDomainsControlledSolanaWallet(
+async function signInSolana(
   wallet: ChainIdentity,
+  onVerifiedSession?: (token: string) => Promise<void>,
 ): Promise<ConwayDomainsAccountProof> {
   const unknown = () => observeConwayDomainsAuthenticatedAccount(
     async () => null, wallet?.address ?? "", "solana",
@@ -140,11 +150,69 @@ export async function authenticateConwayDomainsControlledSolanaWallet(
     }) as Record<string, unknown> | null;
     const access = verified?.access_token;
     if (typeof access !== "string" || !access.trim()) return unknown();
-    return await observeConwayDomainsAuthenticatedAccount(
+    const account = await observeConwayDomainsAuthenticatedAccount(
       async () => access, wallet.address, "solana",
     );
+    if (account.status === "wallet_match" && onVerifiedSession) {
+      await onVerifiedSession(access);
+    }
+    return account;
   } catch {
     // Never log a SIWS message, signature, JWT, nonce or supplier error body.
     return unknown();
   }
+}
+
+/**
+ * Public sign-in/proof remains the same; no token is returned or persisted.
+ * The callback in the private sign-in owner allows another fixed host-only
+ * read to consume a short-lived token within the same successful handshake.
+ */
+export async function authenticateConwayDomainsControlledEvmWallet(
+  wallet: TrustedEvmLoginSigner,
+): Promise<ConwayDomainsAccountProof> {
+  return signInEvm(wallet);
+}
+
+export async function authenticateConwayDomainsControlledSolanaWallet(
+  wallet: ChainIdentity,
+): Promise<ConwayDomainsAccountProof> {
+  return signInSolana(wallet);
+}
+
+async function unknownInventory(
+  walletAddress: string,
+  walletType: "evm" | "solana",
+  account: ConwayDomainsAccountProof,
+): Promise<ConwayDomainsOwnedResourceSnapshot> {
+  const empty = await observeConwayDomainsOwnedResources(
+    async () => null, walletAddress, walletType,
+  );
+  return { ...empty, account };
+}
+
+/** Read supplier-owned inventory/transactions with the existing EVM wallet. */
+export async function observeConwayDomainsControlledEvmResources(
+  wallet: TrustedEvmLoginSigner,
+): Promise<ConwayDomainsOwnedResourceSnapshot> {
+  let observation: ConwayDomainsOwnedResourceSnapshot | null = null;
+  const account = await signInEvm(wallet, async token => {
+    observation = await observeConwayDomainsOwnedResources(
+      async () => token, wallet.address, "evm",
+    );
+  });
+  return observation ?? unknownInventory(wallet?.address ?? "", "evm", account);
+}
+
+/** Read supplier-owned inventory/transactions with the existing Solana wallet. */
+export async function observeConwayDomainsControlledSolanaResources(
+  wallet: ChainIdentity,
+): Promise<ConwayDomainsOwnedResourceSnapshot> {
+  let observation: ConwayDomainsOwnedResourceSnapshot | null = null;
+  const account = await signInSolana(wallet, async token => {
+    observation = await observeConwayDomainsOwnedResources(
+      async () => token, wallet.address, "solana",
+    );
+  });
+  return observation ?? unknownInventory(wallet?.address ?? "", "solana", account);
 }
