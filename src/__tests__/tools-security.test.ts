@@ -61,7 +61,8 @@ describe("Tool Risk Level Classification", () => {
     write_file: "caution",
     expose_port: "caution",
     remove_port: "caution",
-    create_sandbox: "caution",
+    // A sandbox is a potentially billable supplier acquisition.
+    create_sandbox: "dangerous",
     review_upstream_changes: "caution",
     modify_heartbeat: "caution",
     sleep: "caution",
@@ -539,6 +540,43 @@ describe("delete_sandbox self-preservation", () => {
       ctx,
     );
     expect(result).toContain("BLOCKED: direct Conway sandbox DELETE");
+  });
+});
+
+describe("P-031 legacy material acquisitions do not bypass canonical procurement", () => {
+  it("preserves the discovery tool but never dispatches a hidden billable sandbox create", async () => {
+    const tools = createBuiltinTools("parent-sandbox");
+    const create = tools.find(t => t.name === "create_sandbox")!;
+    const db = createTestDb();
+    try {
+      const conway = new MockConwayClient();
+      const createSpy = vi.spyOn(conway, "createSandbox");
+      const result = await create.execute(
+        { name: "business-service", vcpu: 1, memory_mb: 512, disk_gb: 5 },
+        { db, conway, identity: createTestIdentity(),
+          config: createTestConfig(), inference: new MockInferenceClient() } as any,
+      );
+      expect(result).toContain("environment_procurement_execute");
+      expect(createSpy).not.toHaveBeenCalled();
+      expect(create.riskLevel).toBe("dangerous");
+    } finally { db.close(); }
+  });
+
+  it("cannot register a paid supplier domain through the untracked legacy tool", async () => {
+    const tools = createBuiltinTools("parent-sandbox");
+    const register = tools.find(t => t.name === "register_domain")!;
+    const db = createTestDb();
+    try {
+      const conway = new MockConwayClient();
+      const spy = vi.spyOn(conway, "registerDomain");
+      const result = await register.execute(
+        { domain: "test-business.example", years: 1 },
+        { db, conway, identity: createTestIdentity(),
+          config: createTestConfig(), inference: new MockInferenceClient() } as any,
+      );
+      expect(result).toContain("P-031 procurement");
+      expect(spy).not.toHaveBeenCalled();
+    } finally { db.close(); }
   });
 });
 
