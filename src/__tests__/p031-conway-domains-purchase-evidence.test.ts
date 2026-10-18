@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { observeConwayDomainPurchaseEvidence, inspectConwayDomainsX402Version2 } from "../conway/domains-purchase-evidence.js";
 import { createBuiltinTools } from "../agent/tools.js";
+import { bindConwayDomainsRegistration402 } from "../conway/domains-order-binding.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -241,5 +242,136 @@ describe("P-031 supplier native x402 v2 402 inspection (no payment)", () => {
       });
       expect(result.evidence.join(" ")).toContain("do not retry");
     }
+  });
+});
+
+const scopedEvmAccount = {
+  provider: "conway-domains" as const,
+  status: "wallet_match" as const,
+  providerAccountId: "usr_owned_1",
+  walletAddress: "0x1111111111111111111111111111111111111111",
+  walletType: "evm" as const,
+  purchaseAuthority: "not_established" as const,
+  financingUnit: null,
+  evidence: ["Fixture-only supplier account, not real ownership."],
+};
+const proposedRegistration = {
+  domain: "mysite.io", years: 2, privacy: true,
+  nameservers: ["ns1.example.com", "ns2.example.com"],
+};
+function bindFixture(overrides: Record<string, unknown> = {}) {
+  return bindConwayDomainsRegistration402({
+    account: scopedEvmAccount,
+    expectedControlledWalletAddress: scopedEvmAccount.walletAddress,
+    expectedControlledWalletType: "evm",
+    plannedRequest: proposedRegistration,
+    submittedBody: JSON.stringify(proposedRegistration),
+    httpStatus: 402,
+    payload: validConwayDomains402,
+    ...overrides,
+  });
+}
+
+describe("P-031 exact registration body/402 candidate binding (pure)", () => {
+  it("binds domain/years/privacy/nameservers and atomic USDC to a scoped candidate without any financial authority", () => {
+    const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);
+    const result = bindFixture();
+    expect(result).toMatchObject({
+      provider: "conway-domains", status: "scoped_candidate",
+      accountId: "usr_owned_1", walletType: "evm",
+      request: proposedRegistration,
+      requirement: {
+        network: "eip155:8453", amountMicroUsdc: "43750000",
+        policyAmountCents: 4375,
+      },
+      authenticatedOrderQuoteEstablished: false,
+      financialIntentPrepared: false,
+      paymentAuthorized: false, purchaseDispatched: false,
+    });
+    expect(result.candidateFingerprint).toMatch(/^[0-9a-f]{64}$/);
+    expect(result.requestBodySha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(result.evidence.join(" ")).toContain("UNKNOWN");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("rejects any body mismatch: years, privacy, domain or nameserver ordering", () => {
+    const changes: Record<string, unknown>[] = [
+      { years: 1 }, { years: 10 }, { privacy: false },
+      { domain: "other.io" },
+      { nameservers: ["ns2.example.com", "ns1.example.com"] },
+    ];
+    for (const change of changes) {
+      const result = bindFixture({
+        submittedBody: JSON.stringify({ ...proposedRegistration, ...change }),
+      });
+      expect(result).toMatchObject({
+        status: "unavailable", reason: "body_mismatch",
+        request: null, requirement: null,
+        paymentAuthorized: false, purchaseDispatched: false,
+      });
+    }
+  });
+
+  it("rejects unknown extra parameters, malformed domains, invalid years, duplicate nameservers and oversized body", () => {
+    const malformed: unknown[] = [
+      { ...proposedRegistration, promotionCode: "wrong-owner" },
+      { ...proposedRegistration, domain: "MYsite.io" },
+      { ...proposedRegistration, years: 0 },
+      { ...proposedRegistration, years: 11 },
+      { ...proposedRegistration, nameservers: ["ns1.example.com", "ns1.example.com"] },
+      { ...proposedRegistration, privacy: "true" },
+    ];
+    for (const wrong of malformed) {
+      expect(bindFixture({ plannedRequest: wrong }).reason).toBe("body_invalid");
+    }
+    expect(bindFixture({ submittedBody: "{broken" }).reason).toBe("body_invalid");
+    expect(bindFixture({ submittedBody: " ".repeat(9000) }).reason).toBe("body_invalid");
+  });
+
+  it("rejects a foreign wallet/account or unsupported Solana wallet for Base EVM x402", () => {
+    expect(bindFixture({
+      expectedControlledWalletAddress: "0x2222222222222222222222222222222222222222",
+    }).reason).toBe("wallet_unverified");
+    expect(bindFixture({
+      account: { ...scopedEvmAccount, status: "wallet_mismatch",
+        providerAccountId: null, walletAddress: null, walletType: null },
+    }).reason).toBe("wallet_unverified");
+    expect(bindFixture({
+      account: { ...scopedEvmAccount, walletType: "solana" },
+      expectedControlledWalletType: "solana",
+    }).reason).toBe("unsupported_wallet_route");
+  });
+
+  it("rejects a non-402 response or malformed/duplicate provider requirements", () => {
+    expect(bindFixture({ httpStatus: 202 }).reason).toBe("not_a_supported_402");
+    expect(bindFixture({ httpStatus: 201 }).reason).toBe("not_a_supported_402");
+    expect(bindFixture({
+      payload: { x402Version: 2, accepts: [] },
+    }).reason).toBe("not_a_supported_402");
+    expect(bindFixture({
+      payload: { ...validConwayDomains402,
+        accepts: [...validConwayDomains402.accepts, ...validConwayDomains402.accepts] },
+    }).reason).toBe("not_a_supported_402");
+  });
+
+  it("distinguishes amount, recipient, account and actual transmitted body bytes in fingerprint", () => {
+    const baseline = bindFixture();
+    const amount = bindFixture({ payload: {
+      ...validConwayDomains402,
+      accepts: [{ ...validConwayDomains402.accepts[0], amount: "43760000" }],
+    } });
+    const account = bindFixture({ account: {
+      ...scopedEvmAccount, providerAccountId: "usr_owned_2",
+    } });
+    const spaced = bindFixture({
+      submittedBody: JSON.stringify(proposedRegistration, null, 2),
+    });
+    for (const candidate of [amount, account, spaced]) {
+      expect(candidate.status).toBe("scoped_candidate");
+      expect(candidate.candidateFingerprint).not.toBe(baseline.candidateFingerprint);
+    }
+    expect(spaced.request).toEqual(baseline.request);
+    expect(spaced.requestBodySha256).not.toBe(baseline.requestBodySha256);
+    expect(bindFixture().candidateFingerprint).toBe(baseline.candidateFingerprint);
   });
 });
