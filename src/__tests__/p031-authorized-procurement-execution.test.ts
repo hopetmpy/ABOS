@@ -1107,6 +1107,7 @@ describe("P-031 supplier contract lifecycle under the existing P-010/P-030 claim
     scope.operation = operation;
     scope.operationKey = "p031-contract-" + operation;
     scope.externalId = "supplier-vm";
+    scope.contractId = "contract-service-11";
     const store = new EnvironmentResourceStore(db.raw);
     store.create({
       id: scope.resourceId, provider: scope.provider,
@@ -1195,7 +1196,7 @@ describe("P-031 supplier contract lifecycle under the existing P-010/P-030 claim
   });
 
   it("rejects mismatched, expired or unavailable supplier contract preflight with zero provider mutations", async () => {
-    for (const defective of ["account", "stale", "handler", "external"] as const) {
+    for (const defective of ["account", "contract", "stale", "handler", "external"] as const) {
       const h = contractFixture("renew");
       try {
         let invoked = 0;
@@ -1205,6 +1206,7 @@ describe("P-031 supplier contract lifecycle under the existing P-010/P-030 claim
           resolveContractOperation: defective === "handler" ? undefined : async () => ({
             ...h.target(),
             ...(defective === "account" ? { providerAccountId: "foreign-account" } : {}),
+            ...(defective === "contract" ? { contractId: "unapproved-contract" } : {}),
             ...(defective === "stale" ? { validUntil: new Date(Date.now() - 1000).toISOString() } : {}),
           }),
           dispatchContractOperation: async () => {
@@ -1222,6 +1224,56 @@ describe("P-031 supplier contract lifecycle under the existing P-010/P-030 claim
         expect(result.financialEffect?.state).toBe("rejected");
       } finally { h.db.close(); }
     }
+  });
+
+
+  it("blocks concurrent opposite supplier contract actions across different operation keys", async () => {
+    const h = contractFixture("renew");
+    try {
+      let invocations = 0;
+      const source = {
+        observeAuthenticatedEconomics: async () => h.quote,
+        resolveContractOperation: async (scope: ProviderProcurementScope) => ({
+          ...h.target(), operation: scope.operation as "renew" | "cancel",
+        }),
+        dispatchContractOperation: async () => {
+          invocations++;
+          return { status: "pending" as const, evidence: ["Supplier callback not yet final."] };
+        },
+      };
+      const renewed = await executeReviewedProviderProcurement(h.db.raw, {
+        scope: h.scope, policyDecisionId: policy(h.db, h.scope, h.quote),
+        dependencies: createLifecycleProcurementDependencies(h.lifecycle, source),
+      });
+      expect(renewed.status).toBe("pending");
+      const cancellation: ProviderProcurementScope = {
+        ...h.scope, operation: "cancel", operationKey: "p031-cancel-after-unsettled-renewal",
+      };
+      await expect(executeReviewedProviderProcurement(h.db.raw, {
+        scope: cancellation, policyDecisionId: policy(h.db, cancellation, h.quote),
+        dependencies: createLifecycleProcurementDependencies(h.lifecycle, source),
+      })).rejects.toThrow(/pending financial/i);
+      expect(invocations).toBe(1);
+    } finally { h.db.close(); }
+  });
+
+  it("rejects a contract action with no P-010-bound supplier contract ID before provider observation", async () => {
+    const h = contractFixture("cancel");
+    try {
+      h.scope.contractId = null;
+      let observations = 0;
+      await expect(executeReviewedProviderProcurement(h.db.raw, {
+        scope: h.scope,
+        dependencies: {
+          observeAuthenticatedEconomics: async () => {
+            observations++;
+            return h.quote;
+          },
+          dispatch: async () => { throw new Error("must never dispatch"); },
+        },
+      })).rejects.toThrow(/exact supplier contract/i);
+      expect(observations).toBe(0);
+    } finally { h.db.close(); }
   });
 
   it("records ambiguous supplier callback as UNKNOWN and never repeats the contract operation", async () => {
