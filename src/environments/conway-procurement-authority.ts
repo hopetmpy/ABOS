@@ -86,6 +86,7 @@ function exactProvisionScope(
     quote.resourceId === scope.resourceId &&
     quote.resourceShape === scope.resourceShape &&
     !!quote.source.trim() &&
+    Array.isArray(quote.evidence) &&
     quote.evidence.some(v => typeof v === "string" && !!v.trim()) &&
     Number.isFinite(observedAt) && observedAt <= now &&
     Number.isFinite(quotedUntil) && quotedUntil > now && quotedUntil > observedAt &&
@@ -112,6 +113,9 @@ export function createConwayClaimedProvisionAuthority(
   db: Database.Database,
 ): ClaimedProvisionAuthority {
   const inFlight = new Set<string>();
+  // One provider POST maximum per operation per live host. Durable P-030
+  // idempotency additionally protects restarts and disconnected attempts.
+  const consumed = new Set<string>();
   return {
     async withClaimedProvision<T>(
       scope: Readonly<ProviderProcurementScope>,
@@ -120,7 +124,7 @@ export function createConwayClaimedProvisionAuthority(
       request: EnvironmentProvisionRequest,
       action: () => Promise<T>,
     ): Promise<T> {
-      if (inFlight.has(scope.operationKey) ||
+      if (inFlight.has(scope.operationKey) || consumed.has(scope.operationKey) ||
           !exactProvisionScope(db, scope, authorized, scenario, request)) {
         throw new LifecycleProcurementNotDispatchedError(
           "Conway provision lacks an active exact P-030 claim, supplier-quoted shape, authenticated account financing or fresh contract; no provider POST dispatched.",
@@ -135,6 +139,9 @@ export function createConwayClaimedProvisionAuthority(
             "Conway financial claim changed before provisioning; no POST dispatched.",
           );
         }
+        // A timeout or lost supplier response is uncertain, not permission to
+        // repeat an already dispatched financial operation.
+        consumed.add(scope.operationKey);
         return await action();
       } finally {
         inFlight.delete(scope.operationKey);
