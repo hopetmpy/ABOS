@@ -3166,6 +3166,36 @@ Model: ${ctx.inference.getDefaultModel()}
       },
     },
 
+    // ── x402 Read-Only Payment Discovery ──
+    {
+      name: "x402_price_probe",
+      description:
+        "Perform one read-only HTTP HEAD preflight for a GET service URL and report x402 " +
+        "payment requirements, if any. Does not sign or pay. A HEAD probe cannot " +
+        "quote POST sandbox creation or establish a binding contract, account, funds " +
+        "or P-010 procurement authorization.",
+      category: "conway",
+      riskLevel: "caution",
+      parameters: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "HTTPS service URL to inspect with HEAD." },
+          method: {
+            type: "string",
+            description: "Intended operation method (only GET preflight is currently supported).",
+          },
+        },
+        required: ["url"],
+      },
+      execute: async (args) => {
+        const { probeX402ReadOnly } = await import("../conway/x402.js");
+        const inspected = await probeX402ReadOnly(
+          args.url as string, typeof args.method === "string" ? args.method : "GET",
+        );
+        return JSON.stringify(inspected, null, 2);
+      },
+    },
+
     // ── x402 Payment Tool ──
     {
       name: "x402_fetch",
