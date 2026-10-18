@@ -29,6 +29,13 @@ ProjectOps-PR: 30
 Master-Plan-PR: 31
 Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
+## P-031 — segundo Codex / publicación directa verificada — 2026-10-18
+
+- `f202619811238528034d1d16d62ae2fa3793177b` fuente ejecutada; evidencia remota final `7235a87c734704ca10e6fa8197dbae84e2af6c66`, parent directo fuente, **siete archivos en primer commit** (incluidos cuatro logs antes ignorados), **6/6 hashes recalculados**. El expediente demuestra físicamente typecheck, build, ProjectOps Integrity y P-031/P-029/replicación **140/140 tests PASS en 12/12 archivos**. Registro derivado: `ProjectOps/evidence/P-031/audits/f2026198-p031-child.md`; índice `ProjectOps/EVIDENCE.md`.
+- `scripts/codex-evidence-gate.mjs:publish` corregido y respaldado por evidencia: selección explícita + `git add -f` acotado a los artefactos verificados; no se modificó el ignore global, no hubo segundo commit, no hubo Actions ni operaciones LIVE ejecutadas por el runner. Captura de protocolo 6 PASS es evidencia de conversación, no paso incluido en `RUN.json`.
+- `P-031 EN_EJECUCIÓN` por DoD económica no cerrada. **NEXT_ELIGIBLE_WORK:** auditoría/solución de integración proveedor/host Conway y recursos autónomos sin compras ocultas, separando `SOURCE` de `P-005 LIVE`; conservar rama sin merge hasta reconciliación de DoD. No repetir en bucle la batería ya verificada en el mismo SHA.
+
+
 ## P-031 — evidencia Codex auditada / 2026-10-18
 
 - Git remoto: source exacto `e05856f7c9bea17408028ee1fecdbe713b292548`, expediente en rama `evidence/p-031/e05856f7/p031-child/2026-10-18T14-32-35-403Z-30067`, commit final `1305624649b80cc25621c357f6bb7f00cec35819`. Independientemente verificados **6/6 hashes SHA256** (RUN, EVIDENCE y cuatro logs) y descendencia Git: parent del primer evidence commit = source. Evidencia física acotada **P-031/P-029 PASS 140/140 tests, 12/12 archivos, typecheck/build/ProjectOps integrity PASS**. Auditoría derivada: `ProjectOps/evidence/P-031/audits/e05856f7-p031-child.md`; índice `ProjectOps/EVIDENCE.md`.
