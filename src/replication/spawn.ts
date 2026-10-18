@@ -653,17 +653,17 @@ async function findReusableSandbox(
       { cause: error },
     );
   }
-  const running = new Map(
+  const runningIds = new Set(
     remoteSandboxes.filter(sandbox =>
       sandbox.status === "running" &&
       typeof sandbox.memoryMb === "number" &&
       Number.isFinite(sandbox.memoryMb) &&
       sandbox.memoryMb >= requiredMemoryMb,
-    ).map(sandbox => [sandbox.id, sandbox]),
+    ).map(sandbox => sandbox.id),
   );
   const resources = new EnvironmentResourceStore(db.raw);
   for (const child of failedChildren) {
-    if (!running.has(child.sandboxId)) continue;
+    if (!runningIds.has(child.sandboxId)) continue;
     const owned = resources.findByExternalId("conway", child.sandboxId);
     if (!owned || owned.type !== "conway-sandbox" ||
         owned.metadata.childId !== child.id ||
