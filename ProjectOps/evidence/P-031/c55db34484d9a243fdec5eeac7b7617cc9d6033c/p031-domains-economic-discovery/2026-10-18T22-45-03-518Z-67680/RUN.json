@@ -1,0 +1,113 @@
+{
+  "schema": "abos.codex.physical-evidence.v1",
+  "module": "P-031",
+  "profile": "p031-domains-economic-discovery",
+  "sourceCommit": "c55db34484d9a243fdec5eeac7b7617cc9d6033c",
+  "sourceBranch": "detached",
+  "runner": "CODEX_CLOUD_MANUAL",
+  "fixture": "SYNTHETIC_NO_EXTERNAL_SPEND",
+  "startedAt": "2026-10-18T22:45:03.518Z",
+  "finishedAt": "2026-10-18T22:45:30.428Z",
+  "status": "PASS",
+  "blockedReason": null,
+  "environment": {
+    "node": "v22.23.3",
+    "pnpm": "10.28.1",
+    "platform": "linux"
+  },
+  "externalOperationsExecutedByRunner": false,
+  "githubActionsExecutedByRunner": false,
+  "steps": [
+    {
+      "name": "projectops-integrity",
+      "command": [
+        "node",
+        "scripts/projectops-integrity-verify.mjs"
+      ],
+      "timeoutMs": 120000,
+      "startedAt": "2026-10-18T22:45:03.826Z",
+      "durationMs": 64,
+      "exitCode": 0,
+      "signal": null,
+      "status": "PASS",
+      "error": null,
+      "logFile": "logs/projectops-integrity.log"
+    },
+    {
+      "name": "evidence-gate-tests",
+      "command": [
+        "node",
+        "--test",
+        "scripts/codex-evidence-gate.test.mjs"
+      ],
+      "timeoutMs": 120000,
+      "startedAt": "2026-10-18T22:45:03.890Z",
+      "durationMs": 137,
+      "exitCode": 0,
+      "signal": null,
+      "status": "PASS",
+      "error": null,
+      "logFile": "logs/evidence-gate-tests.log"
+    },
+    {
+      "name": "typecheck",
+      "command": [
+        "pnpm",
+        "typecheck"
+      ],
+      "timeoutMs": 300000,
+      "startedAt": "2026-10-18T22:45:04.027Z",
+      "durationMs": 7156,
+      "exitCode": 0,
+      "signal": null,
+      "status": "PASS",
+      "error": null,
+      "logFile": "logs/typecheck.log"
+    },
+    {
+      "name": "build",
+      "command": [
+        "pnpm",
+        "build"
+      ],
+      "timeoutMs": 300000,
+      "startedAt": "2026-10-18T22:45:11.183Z",
+      "durationMs": 9186,
+      "exitCode": 0,
+      "signal": null,
+      "status": "PASS",
+      "error": null,
+      "logFile": "logs/build.log"
+    },
+    {
+      "name": "domains-auth-and-procurement",
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "src/__tests__/p031-conway-domains-purchase-evidence.test.ts",
+        "src/__tests__/p031-conway-domains-account-proof.test.ts",
+        "src/__tests__/p031-conway-domains-siwe-session.test.ts",
+        "src/__tests__/p031-authorized-procurement-execution.test.ts",
+        "src/__tests__/p031-conway-secondary-procurement-gate.test.ts",
+        "src/__tests__/p031-conway-credit-history.test.ts",
+        "src/__tests__/p031-conway-account-read-probe.test.ts",
+        "src/__tests__/p031-runtime-procurement-tool.test.ts",
+        "src/__tests__/p030-x402-service-purchase.test.ts",
+        "src/__tests__/p030-topup-http-claims.test.ts",
+        "src/__tests__/p030-financial-effects.test.ts",
+        "src/__tests__/p031-provider-account-exposure.test.ts",
+        "src/__tests__/p031-goal-resource-lifecycle-journey.test.ts"
+      ],
+      "timeoutMs": 900000,
+      "startedAt": "2026-10-18T22:45:20.369Z",
+      "durationMs": 10057,
+      "exitCode": 0,
+      "signal": null,
+      "status": "PASS",
+      "error": null,
+      "logFile": "logs/domains-auth-and-procurement.log"
+    }
+  ]
+}
