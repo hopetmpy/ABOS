@@ -126,24 +126,24 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
         base.evidence.push(
           "Conway balance is not an exact safe integer; provider-native funding UNKNOWN.",
         );
-        return base;
+      } else {
+        const receivedAt = new Date().toISOString();
+        base.nativeCreditBalance = {
+          unit: "credit_cent",
+          observedBalanceCents: observed,
+          accountScope: "authenticated_client_unattributed",
+          observedAt: receivedAt,
+          evidence: [
+            "The live configured Conway client returned the native credit-cent balance; local receipt time only, upstream provider timestamp/finality not certified.",
+            "Observed provider balance is NOT free after outstanding P-030 commitments, not cross-unit USD funding and not an authorization to procure.",
+          ],
+        };
+        base.status = "partial";
+        base.observedAt = receivedAt;
+        base.evidence.push(
+          "Provider-native Conway credits observed; exact external provider account identity, settlement and unreserved amount remain UNKNOWN.",
+        );
       }
-      const receivedAt = new Date().toISOString();
-      base.nativeCreditBalance = {
-        unit: "credit_cent",
-        observedBalanceCents: observed,
-        accountScope: "authenticated_client_unattributed",
-        observedAt: receivedAt,
-        evidence: [
-          "The live configured Conway client returned the native credit-cent balance; local receipt time only, upstream provider timestamp/finality not certified.",
-          "Observed provider balance is NOT free after outstanding P-030 commitments, not cross-unit USD funding and not an authorization to procure.",
-        ],
-      };
-      base.status = "partial";
-      base.observedAt = receivedAt;
-      base.evidence.push(
-        "Provider-native Conway credits observed; exact external provider account identity, settlement and unreserved amount remain UNKNOWN.",
-      );
     } catch {
       base.evidence.push(
         "Conway authenticated credit balance unavailable; no zero balance or funding inferred.",
