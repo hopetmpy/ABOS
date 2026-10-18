@@ -73,9 +73,9 @@ no hay catálogo cerrado de capacidades del producto ni otro scheduler.
    node scripts/codex-evidence-gate.mjs publish ProjectOps/evidence/P-031/<SHA-40>/p031-child/<RUN-ID>
    ```
    Publica un commit de **solo evidencia** en una rama `evidence/*`. No
-   requiere pulsar un botón del navegador cuando el push funciona. También
-   existe `run-publish` para entornos sintéticos que ya garantizan revisión
-   de contenido; el flujo recomendado es `run → verify/review → publish`.
+   requiere pulsar un botón del navegador cuando el push funciona. El runner
+   separa intencionalmente `run` de `publish` para permitir revisión de logs;
+   Codex puede completar ambas acciones en su mismo bloque, sin usuario.
 6. ChatGPT lee desde Git el expediente, verifica SHA de fuente, commit de
    evidencia, integridad, comandos y límites; añade auditoría/índice, corrige
    source si corresponde y actualiza la autoridad CONTINUITY sólo tras
