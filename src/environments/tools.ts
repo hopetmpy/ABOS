@@ -272,7 +272,8 @@ export function createEnvironmentTools(
         resource_id: { type: "string", description: "Canonical P-018 resource ID." },
         region: { type: "string" },
         resource_shape: { type: "string" },
-        external_id: { type: "string", description: "Optional known existing provider resource identity." },
+        external_id: { type: "string", description: "Exact known external resource identity (required for contract operations)." },
+        contract_id: { type: "string", description: "Exact supplier contract ID required for renew/cancel; host must independently verify the contract." },
         policy_decision_id: { type: "string", description: "Optional existing exact P-010 receipt; otherwise a trusted host P-010 issuer must produce the decision after the verified quote." },
       },
       required: [
@@ -304,6 +305,10 @@ export function createEnvironmentTools(
           (typeof args.external_id !== "string" || !args.external_id.trim())) {
         return "BLOCKED: malformed external resource identity.";
       }
+      if (args.contract_id !== undefined &&
+          (typeof args.contract_id !== "string" || !args.contract_id.trim())) {
+        return "BLOCKED: malformed supplier contract identity.";
+      }
       if (args.policy_decision_id !== undefined &&
           (typeof args.policy_decision_id !== "string" || !args.policy_decision_id.trim())) {
         return "BLOCKED: malformed existing P-010 policy decision ID.";
@@ -333,6 +338,8 @@ export function createEnvironmentTools(
         resourceShape: (args.resource_shape as string).trim(),
         ...(typeof args.external_id === "string" ?
           { externalId: args.external_id.trim() } : {}),
+        ...(typeof args.contract_id === "string" ?
+          { contractId: args.contract_id.trim() } : {}),
       };
       try {
         const result = await executeReviewedProviderProcurement(context.db.raw, {
