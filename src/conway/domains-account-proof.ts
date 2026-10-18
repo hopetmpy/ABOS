@@ -8,13 +8,14 @@
  * exact domain order price, signed x402 authorization or purchasing rights.
  */
 import { isAddress } from "viem";
+import { isValidSolanaAddress } from "../identity/chain.js";
 
 export interface ConwayDomainsAccountProof {
   provider: "conway-domains";
   status: "wallet_match" | "wallet_mismatch" | "unavailable";
   providerAccountId: string | null;
   walletAddress: string | null;
-  walletType: "evm" | null;
+  walletType: "evm" | "solana" | null;
   purchaseAuthority: "not_established";
   financingUnit: null;
   evidence: string[];
@@ -23,6 +24,7 @@ export interface ConwayDomainsAccountProof {
 export async function observeConwayDomainsAuthenticatedAccount(
   getTrustedSessionToken: () => Promise<string | null>,
   expectedControlledWalletAddress: string,
+  expectedWalletType: "evm" | "solana" = "evm",
 ): Promise<ConwayDomainsAccountProof> {
   const unknown: ConwayDomainsAccountProof = {
     provider: "conway-domains", status: "unavailable",
@@ -33,8 +35,10 @@ export async function observeConwayDomainsAuthenticatedAccount(
       "This does not determine supplier pricing, x402 wallet balances, liquidity, funding reservation, policy rights or a final contract.",
     ],
   };
-  if (typeof getTrustedSessionToken !== "function" ||
-      !isAddress(expectedControlledWalletAddress)) return unknown;
+  const validWallet = expectedWalletType === "evm"
+    ? isAddress(expectedControlledWalletAddress)
+    : isValidSolanaAddress(expectedControlledWalletAddress);
+  if (typeof getTrustedSessionToken !== "function" || !validWallet) return unknown;
 
   try {
     const token = await getTrustedSessionToken();
@@ -57,12 +61,16 @@ export async function observeConwayDomainsAuthenticatedAccount(
     const raw: unknown = await response.json();
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return unknown;
     const account = raw as Record<string, unknown>;
-    if (account.wallet_type !== "evm" ||
+    if (account.wallet_type !== expectedWalletType ||
         typeof account.id !== "string" || !account.id.trim() ||
         typeof account.wallet_address !== "string" ||
-        !isAddress(account.wallet_address)) return unknown;
-    if (account.wallet_address.toLowerCase() !==
-        expectedControlledWalletAddress.toLowerCase()) {
+        !(expectedWalletType === "evm"
+          ? isAddress(account.wallet_address)
+          : isValidSolanaAddress(account.wallet_address))) return unknown;
+    const addressMatches = expectedWalletType === "evm"
+      ? account.wallet_address.toLowerCase() === expectedControlledWalletAddress.toLowerCase()
+      : account.wallet_address === expectedControlledWalletAddress;
+    if (!addressMatches) {
       // Never return a different wallet ID or the raw remote account ID.
       return {
         ...unknown, status: "wallet_mismatch",
@@ -75,8 +83,9 @@ export async function observeConwayDomainsAuthenticatedAccount(
     return {
       provider: "conway-domains", status: "wallet_match",
       providerAccountId: account.id,
-      walletAddress: account.wallet_address.toLowerCase(),
-      walletType: "evm", purchaseAuthority: "not_established",
+      walletAddress: expectedWalletType === "evm"
+        ? account.wallet_address.toLowerCase() : account.wallet_address,
+      walletType: expectedWalletType, purchaseAuthority: "not_established",
       financingUnit: null,
       evidence: [
         "The supplier's authenticated GET /auth/me returned a wallet matching the host's pre-existing controlled EVM wallet address.",
