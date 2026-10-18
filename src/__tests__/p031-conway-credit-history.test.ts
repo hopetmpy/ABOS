@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createConwayClient } from "../conway/client.js";
 import { ConwayEnvironmentProvider } from "../environments/conway.js";
+import { EnvironmentRegistry } from "../environments/registry.js";
+import { createEnvironmentTools } from "../environments/tools.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -103,6 +105,33 @@ describe("P-031 Conway authenticated credit history, read-only and incomplete by
     expect(report.spendableLiquidityUsdCents).toBeNull();
     expect(JSON.stringify(report)).not.toContain("supplier-secret-txn");
     expect(JSON.stringify(report)).not.toContain("private-fixture-key");
+  });
+
+  it("passes opt-in through existing environment economic evidence tool without authorizing procurement", async () => {
+    const fetcher = vi.fn(async (url: string) => {
+      const endpoint = new URL(url).pathname;
+      return endpoint === "/v1/credits/balance"
+        ? payload({ balance_cents: 400 })
+        : endpoint === "/v1/credits/history"
+          ? payload({ transactions: [
+              { id: "not-for-LLM", type: "inference", amount_cents: -2,
+                balance_after_cents: 400, created_at: "2026-10-18T02:00:00Z" },
+            ] })
+          : (() => { throw new Error("Unexpected tool provider request"); })();
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const registry = new EnvironmentRegistry();
+    registry.register(new ConwayEnvironmentProvider(client()));
+    const tool = createEnvironmentTools(registry).find(t =>
+      t.name === "environment_economic_evidence")!;
+    const output = await tool.execute({
+      environment: "conway", include_conway_credit_history: true,
+    }, {} as any);
+    expect(output).toContain("observed_page");
+    expect(output).toContain("not_established");
+    expect(output).not.toContain("not-for-LLM");
+    expect(output).not.toContain("private-fixture-key");
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
   it("preserves UNKNOWN if the history endpoint fails without hiding independently observed balance", async () => {
