@@ -13,6 +13,8 @@
  */
 import { SiweMessage } from "siwe";
 import { isAddress } from "viem";
+import { isValidSolanaAddress, type ChainIdentity } from "../identity/chain.js";
+import { buildSiwsMessage, verifySiwsSignature } from "../identity/siws.js";
 import {
   observeConwayDomainsAuthenticatedAccount,
   type ConwayDomainsAccountProof,
@@ -24,7 +26,9 @@ export interface TrustedEvmLoginSigner {
   signMessage(input: { message: string }): Promise<string>;
 }
 
-async function postAuth(path: "/auth/nonce" | "/auth/verify",
+async function postAuth(path:
+  | "/auth/nonce" | "/auth/verify"
+  | "/auth/solana/nonce" | "/auth/solana/verify",
   body?: Readonly<{ message: string; signature: string }>): Promise<unknown> {
   const response = await fetch(`https://api.conway.domains${path}`, {
     method: "POST",
@@ -86,6 +90,61 @@ export async function authenticateConwayDomainsControlledEvmWallet(
   } catch {
     // Do not expose nonce/JWT, SIWE signature, supplier error payloads or
     // token-bearing network exception text to any agent/log.
+    return unknown();
+  }
+}
+
+/**
+ * The same provider supports SIWS on its Solana-specific nonce/verify path.
+ * The existing ABOS ChainIdentity owns the Ed25519 signer; the returned JWT
+ * is ephemeral and can only be used for same-wallet account observation.
+ * The provider's actual SIWS message dialect is unverified until LIVE E5.
+ */
+export async function authenticateConwayDomainsControlledSolanaWallet(
+  wallet: ChainIdentity,
+): Promise<ConwayDomainsAccountProof> {
+  const unknown = () => observeConwayDomainsAuthenticatedAccount(
+    async () => null, wallet?.address ?? "", "solana",
+  );
+  if (!wallet || wallet.chainType !== "solana" ||
+      !isValidSolanaAddress(wallet.address) ||
+      typeof wallet.signMessage !== "function") return unknown();
+
+  try {
+    const nonceData = await postAuth("/auth/solana/nonce") as
+      Record<string, unknown> | null;
+    const nonce = nonceData?.nonce;
+    if (typeof nonce !== "string" || !/^[A-Za-z0-9]{8,128}$/.test(nonce)) {
+      return unknown();
+    }
+
+    const message = buildSiwsMessage({
+      domain: "api.conway.domains",
+      address: wallet.address,
+      statement: "Sign in to Conway Domains to verify the agent's own account.",
+      uri: "https://api.conway.domains",
+      nonce,
+      issuedAt: new Date().toISOString(),
+      chainId: "mainnet",
+    });
+    const signature = await wallet.signMessage(message);
+    // Do not trust a host wrapper merely because it returned a string:
+    // verify that its actual signer controls this Solana public key.
+    if (typeof signature !== "string" ||
+        !verifySiwsSignature(message, signature, wallet.address)) {
+      return unknown();
+    }
+
+    const verified = await postAuth("/auth/solana/verify", {
+      message, signature,
+    }) as Record<string, unknown> | null;
+    const access = verified?.access_token;
+    if (typeof access !== "string" || !access.trim()) return unknown();
+    return await observeConwayDomainsAuthenticatedAccount(
+      async () => access, wallet.address, "solana",
+    );
+  } catch {
+    // Never log a SIWS message, signature, JWT, nonce or supplier error body.
     return unknown();
   }
 }
