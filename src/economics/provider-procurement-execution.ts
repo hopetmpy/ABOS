@@ -37,7 +37,7 @@ export const PROVIDER_PROCUREMENT_POLICY_TOOL = "p031_provider_procurement";
 
 export interface ProviderProcurementScope {
   operationKey: string;
-  operation: "provision" | "resize" | "resume" | "recover" | "renew" | "other";
+  operation: "provision" | "resize" | "resume" | "recover" | "renew" | "cancel" | "other";
   provider: string;
   providerAccountId: string;
   unit: string;

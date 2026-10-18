@@ -262,7 +262,7 @@ export function createEnvironmentTools(
       type: "object",
       properties: {
         operation_key: { type: "string", description: "Stable idempotency key for this exact acquisition attempt." },
-        operation: { type: "string", description: "provision, resize, resume, recover, renew, or other." },
+        operation: { type: "string", description: "provision, resize, resume, recover, renew, cancel, or other. Contract operations require trusted supplier authority." },
         provider: { type: "string", description: "Registered provider identifier." },
         provider_account_id: { type: "string" },
         unit: { type: "string", description: "Exact provider account monetary unit." },
@@ -296,7 +296,7 @@ export function createEnvironmentTools(
       const provider = (args.provider as string).trim();
       if (!registry.get(provider)) return "UNAVAILABLE: provider is not registered.";
       const operation = (args.operation as string).trim();
-      if (!["provision", "resize", "resume", "recover", "renew", "other"]
+      if (!["provision", "resize", "resume", "recover", "renew", "cancel", "other"]
         .includes(operation)) {
         return "BLOCKED: unsupported procurement operation.";
       }

@@ -5,6 +5,7 @@ import { EnvironmentRegistry } from "../environments/registry.js";
 import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { EnvironmentRetentionCoordinator } from "../environments/retention.js";
+import { createLifecycleProcurementDependencies } from "../environments/procurement-lifecycle-adapter.js";
 import { createTestDb } from "./mocks.js";
 import { insertGoal, insertTask } from "../state/database.js";
 import type { TaskResourceNeed } from "../environments/types.js";
@@ -1097,5 +1098,157 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
       expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n)
         .toBe(0);
     } finally { db.close(); }
+  });
+});
+
+describe("P-031 supplier contract lifecycle under the existing P-010/P-030 claim", () => {
+  function contractFixture(operation: "renew" | "cancel", initialStatus: "running" | "terminated" = "running") {
+    const { db, scope } = setup();
+    scope.operation = operation;
+    scope.operationKey = "p031-contract-" + operation;
+    scope.externalId = "supplier-vm";
+    const store = new EnvironmentResourceStore(db.raw);
+    store.create({
+      id: scope.resourceId, provider: scope.provider,
+      externalId: scope.externalId, type: "synthetic-service",
+      goalId: scope.goalId, taskId: scope.taskId, pathId: scope.pathId,
+      region: scope.region, status: initialStatus,
+      metadata: initialStatus === "terminated" ? { retentionReleaseState: "released" } : {},
+    });
+    const quote = scenario();
+    const lifecycle = new EnvironmentLifecycleManager(new EnvironmentRegistry(), store);
+    const target = () => ({
+      operation, provider: scope.provider, providerAccountId: scope.providerAccountId,
+      contractId: "contract-service-11", externalResourceId: scope.externalId!,
+      region: scope.region, resourceShape: scope.resourceShape,
+      observedAt: new Date(Date.now() - 1000).toISOString(),
+      validUntil: new Date(Date.now() + 60_000).toISOString(),
+      source: "synthetic authenticated supplier contract API",
+      evidence: ["Fixture contract owned by matching supplier account."],
+    });
+    return { db, scope, store, quote, lifecycle, target };
+  }
+
+  it("dispatches only authenticated, owned renewal and leaves settlement UNKNOWN across restart/replay", async () => {
+    const h = contractFixture("renew");
+    try {
+      const dispatches: string[] = [];
+      const source = {
+        observeAuthenticatedEconomics: async () => h.quote,
+        resolveContractOperation: async () => h.target(),
+        dispatchContractOperation: async (
+          scope: ProviderProcurementScope,
+          authorized: { policyDecisionId: string },
+        ) => {
+          dispatches.push(scope.operationKey + ":" + authorized.policyDecisionId);
+          return {
+            status: "usable" as const, providerEffectId: "renew-11",
+            evidence: ["Synthetic provider accepted renewal; no real supplier contact."],
+          };
+        },
+      };
+      const decision = policy(h.db, h.scope, h.quote);
+      const deps = createLifecycleProcurementDependencies(h.lifecycle, source);
+      const first = await executeReviewedProviderProcurement(h.db.raw, {
+        scope: h.scope, policyDecisionId: decision, dependencies: deps,
+      });
+      expect(first.dispatched).toBe(true);
+      expect(first.status).toBe("pending");
+      expect(first.financialEffect?.state).toBe("pending");
+      expect(dispatches).toHaveLength(1);
+      const restarted = new EnvironmentLifecycleManager(
+        new EnvironmentRegistry(), new EnvironmentResourceStore(h.db.raw),
+      );
+      const replay = await executeReviewedProviderProcurement(h.db.raw, {
+        scope: h.scope, policyDecisionId: decision,
+        dependencies: createLifecycleProcurementDependencies(restarted, source),
+      });
+      expect(replay.dispatched).toBe(false);
+      expect(replay.status).toBe("not_dispatched");
+      expect(dispatches).toHaveLength(1);
+      expect(h.store.get(h.scope.resourceId)?.status).toBe("running");
+    } finally { h.db.close(); }
+  });
+
+  it("allows supplier contract cancellation after physical retirement without pretending billing stopped", async () => {
+    const h = contractFixture("cancel", "terminated");
+    try {
+      let invoked = 0;
+      const source = {
+        observeAuthenticatedEconomics: async () => h.quote,
+        resolveContractOperation: async () => h.target(),
+        dispatchContractOperation: async () => {
+          invoked++;
+          return { status: "pending" as const, evidence: ["Synthetic supplier cancellation submitted."] };
+        },
+      };
+      const first = await executeReviewedProviderProcurement(h.db.raw, {
+        scope: h.scope, policyDecisionId: policy(h.db, h.scope, h.quote),
+        dependencies: createLifecycleProcurementDependencies(h.lifecycle, source),
+      });
+      expect(first.dispatched).toBe(true);
+      expect(first.status).toBe("pending");
+      expect(first.financialEffect?.state).toBe("pending");
+      expect(invoked).toBe(1);
+      expect(h.store.get(h.scope.resourceId)?.status).toBe("terminated");
+    } finally { h.db.close(); }
+  });
+
+  it("rejects mismatched, expired or unavailable supplier contract preflight with zero provider mutations", async () => {
+    for (const defective of ["account", "stale", "handler", "external"] as const) {
+      const h = contractFixture("renew");
+      try {
+        let invoked = 0;
+        if (defective === "external") h.scope.externalId = "other-resource";
+        const source = {
+          observeAuthenticatedEconomics: async () => h.quote,
+          resolveContractOperation: defective === "handler" ? undefined : async () => ({
+            ...h.target(),
+            ...(defective === "account" ? { providerAccountId: "foreign-account" } : {}),
+            ...(defective === "stale" ? { validUntil: new Date(Date.now() - 1000).toISOString() } : {}),
+          }),
+          dispatchContractOperation: async () => {
+            invoked++;
+            return { status: "usable" as const, evidence: ["Should not be called."] };
+          },
+        };
+        const result = await executeReviewedProviderProcurement(h.db.raw, {
+          scope: h.scope, policyDecisionId: policy(h.db, h.scope, h.quote),
+          dependencies: createLifecycleProcurementDependencies(h.lifecycle, source),
+        });
+        expect(result.dispatched).toBe(false);
+        expect(result.status).toBe("rejected");
+        expect(invoked).toBe(0);
+        expect(result.financialEffect?.state).toBe("rejected");
+      } finally { h.db.close(); }
+    }
+  });
+
+  it("records ambiguous supplier callback as UNKNOWN and never repeats the contract operation", async () => {
+    const h = contractFixture("cancel", "terminated");
+    try {
+      let invocations = 0;
+      const source = {
+        observeAuthenticatedEconomics: async () => h.quote,
+        resolveContractOperation: async () => h.target(),
+        dispatchContractOperation: async () => {
+          invocations++;
+          throw new Error("Remote timeout after request possibly submitted");
+        },
+      };
+      const decision = policy(h.db, h.scope, h.quote);
+      const first = await executeReviewedProviderProcurement(h.db.raw, {
+        scope: h.scope, policyDecisionId: decision,
+        dependencies: createLifecycleProcurementDependencies(h.lifecycle, source),
+      });
+      expect(first.dispatched).toBe(true);
+      expect(first.status).toBe("unknown");
+      const replay = await executeReviewedProviderProcurement(h.db.raw, {
+        scope: h.scope, policyDecisionId: decision,
+        dependencies: createLifecycleProcurementDependencies(h.lifecycle, source),
+      });
+      expect(replay.dispatched).toBe(false);
+      expect(invocations).toBe(1);
+    } finally { h.db.close(); }
   });
 });
