@@ -13,7 +13,7 @@ const signer = {
   signMessage: vi.fn(async ({ message }: { message: string }) => {
     expect(message).toContain("api.conway.domains");
     expect(message).toContain(controlled);
-    expect(message).toContain("nonce-1234-ABCD");
+    expect(message).toContain("nonce1234ABCD");
     return `0x${"aa".repeat(65)}`;
   }),
 };
@@ -31,7 +31,7 @@ function provider() {
     if (url.endsWith("/auth/nonce")) {
       expect(options.method).toBe("POST");
       expect(options.body).toBeUndefined();
-      return json({ nonce: "nonce-1234-ABCD" });
+      return json({ nonce: "nonce1234ABCD" });
     }
     if (url.endsWith("/auth/verify")) {
       expect(options.method).toBe("POST");
