@@ -116,7 +116,7 @@ describe("P-031 Conway secondary host procurement gate", () => {
 
   it("is actually invoked by the existing trusted P-031 -> P-018 lifecycle adapter", async () => {
     const h = setup();
-    const providerProvision = vi.fn(async () => ({
+    const providerProvision = vi.fn(async (_provider: string, _request: EnvironmentProvisionRequest) => ({
       status: "ready" as const,
       externalId: "conway-sandbox-fixture-1",
       providerState: "running",
@@ -145,7 +145,7 @@ describe("P-031 Conway secondary host procurement gate", () => {
       status: "usable", providerEffectId: "conway-sandbox-fixture-1",
     });
     expect(providerProvision).toHaveBeenCalledTimes(1);
-    expect(providerProvision.mock.calls[0]?.[0]).toMatchObject({
+    expect(providerProvision.mock.calls[0]?.[1]).toMatchObject({
       resourceId: h.scope.resourceId,
       region: h.scope.region,
       metadata: { ...shape },
