@@ -668,24 +668,34 @@ async function findReusableSandbox(
   conway: ConwayClient,
   db: AbosDatabase,
 ): Promise<{ id: string } | null> {
+  const failedChildren = db.getChildren().filter(
+    child => child.status === "failed" && child.sandboxId,
+  );
+  if (failedChildren.length === 0) return null;
+
+  // A failed child with a durable sandbox ID is a possibly billable
+  // resource, not proof that a new sandbox must be purchased. An incomplete
+  // supplier inventory cannot distinguish reusable running capacity from
+  // an orphan. Keep this exact acquisition UNKNOWN and let P-018/provider
+  // reconciliation determine reality before any replacement purchase.
+  let remoteSandboxes: Awaited<ReturnType<ConwayClient["listSandboxes"]>>;
   try {
-    const failedChildren = db.getChildren().filter((c) => c.status === "failed" && c.sandboxId);
-    if (failedChildren.length === 0) return null;
-
-    const remoteSandboxes = await conway.listSandboxes();
-    const runningIds = new Set(
-      remoteSandboxes
-        .filter((s) => s.status === "running")
-        .map((s) => s.id),
+    remoteSandboxes = await conway.listSandboxes();
+  } catch (error) {
+    throw new Error(
+      "Conway sandbox inventory unavailable while failed children still own supplier IDs; " +
+      "replacement acquisition UNKNOWN until provider observation, no new sandbox dispatched.",
+      { cause: error },
     );
-
-    for (const child of failedChildren) {
-      if (runningIds.has(child.sandboxId)) {
-        return { id: child.sandboxId };
-      }
+  }
+  const runningIds = new Set(
+    remoteSandboxes.filter(sandbox => sandbox.status === "running")
+      .map(sandbox => sandbox.id),
+  );
+  for (const child of failedChildren) {
+    if (runningIds.has(child.sandboxId)) {
+      return { id: child.sandboxId };
     }
-  } catch {
-    // If listing fails, just create a new sandbox
   }
   return null;
 }
