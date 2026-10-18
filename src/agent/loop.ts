@@ -113,6 +113,7 @@ import { createStructuredBrowserTools } from "../browser/tools.js";
 import { ConwayEnvironmentProvider } from "../environments/conway.js";
 import { AwsEnvironmentProvider } from "../environments/aws.js";
 import { createAwsClaimedProvisionAuthority } from "../environments/aws-procurement-authority.js";
+import { createConwayClaimedProvisionAuthority } from "../environments/conway-procurement-authority.js";
 import { AwsEc2TaskExecutor } from "../environments/aws-ec2-executor.js";
 import { createEnvironmentTools } from "../environments/tools.js";
 import type { ProviderProcurementExecutionDependencies } from "../economics/provider-procurement-execution.js";
@@ -232,6 +233,7 @@ export async function runAgentLoop(
   const localBrowserRuntime = getLocalBrowserRuntime();
   const environmentRegistry = new EnvironmentRegistry();
   const awsProcurementAuthority = createAwsClaimedProvisionAuthority(db.raw);
+  const conwayProcurementAuthority = createConwayClaimedProvisionAuthority(db.raw);
   const awsEnvironment = new AwsEnvironmentProvider({
     authorizeNewProvision: awsProcurementAuthority.authorizeNewProvision,
     authorizeBillableMutation: awsProcurementAuthority.authorizeBillableMutation,
@@ -419,7 +421,10 @@ export async function runAgentLoop(
         ? createLifecycleProcurementDependencies(
             environmentLifecycle,
             source,
-            providerId === "aws" ? awsProcurementAuthority : undefined,
+            providerId === "aws" ? awsProcurementAuthority
+              : providerId === "conway" && operation === "provision"
+                ? conwayProcurementAuthority
+                : undefined,
           )
         : null;
     },
