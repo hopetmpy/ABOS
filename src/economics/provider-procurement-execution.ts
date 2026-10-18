@@ -48,6 +48,8 @@ export interface ProviderProcurementScope {
   region: string;
   resourceShape: string;
   externalId?: string | null;
+  /** Supplier contract identity, exact P-010 scope for renew/cancel. */
+  contractId?: string | null;
 }
 
 export interface ProviderProcurementDispatchOutcome {
@@ -137,6 +139,7 @@ export function procurementPolicyArgs(
   return {
     ...scope,
     externalId: scope.externalId ?? null,
+    contractId: scope.contractId ?? null,
     economicScenarioHash: createHash("sha256")
       .update(canonicalPolicyJson(scenario)).digest("hex"),
   };
@@ -255,6 +258,11 @@ export async function executeReviewedProviderProcurement(
   if (required.some(x => typeof x !== "string" || !x.trim())) {
     throw new Error("Procurement requires a complete operation, account, resource and policy scope.");
   }
+  if ((scope.operation === "renew" || scope.operation === "cancel") &&
+      (typeof scope.contractId !== "string" || !scope.contractId.trim() ||
+        typeof scope.externalId !== "string" || !scope.externalId.trim())) {
+    throw new Error("Contract operations require an exact supplier contract and external resource identity bound to P-010.");
+  }
   const reviewedPath = getReviewedTaskPathReceipt(db, scope.taskId);
   if (!reviewedPath || reviewedPath.goalId !== scope.goalId ||
       reviewedPath.pathId !== scope.pathId) {
@@ -277,7 +285,8 @@ export async function executeReviewedProviderProcurement(
       stored.pathId === scope.pathId &&
       stored.region === scope.region &&
       stored.resourceShape === scope.resourceShape &&
-      stored.externalId === (scope.externalId ?? null);
+      stored.externalId === (scope.externalId ?? null) &&
+      (stored.contractId ?? null) === (scope.contractId ?? null);
     if (!matches) {
       throw new Error("P-030 idempotency conflict: operation key already belongs to different provider/account/resource/policy economics.");
     }
@@ -452,8 +461,15 @@ export async function executeReviewedProviderProcurement(
           outstanding.unit !== scope.unit ||
           outstanding.request.providerAccountId !== scope.providerAccountId ||
           outstanding.request.resourceId !== scope.resourceId ||
-          outstanding.request.operation !== scope.operation ||
           outstanding.operationKey === scope.operationKey) continue;
+      // Renewal and cancellation of the same supplier resource cannot run
+      // concurrently: their contractual effects can contradict each other.
+      const bothContractOperations =
+        (scope.operation === "renew" || scope.operation === "cancel") &&
+        (outstanding.request.operation === "renew" ||
+          outstanding.request.operation === "cancel");
+      if (!bothContractOperations &&
+          outstanding.request.operation !== scope.operation) continue;
       throw new FinancialEffectIntentPendingError(
         scope.operationKey, outstanding.operationKey,
       );
