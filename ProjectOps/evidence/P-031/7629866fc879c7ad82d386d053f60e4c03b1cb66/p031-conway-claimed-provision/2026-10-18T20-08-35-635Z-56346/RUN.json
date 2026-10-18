@@ -1,0 +1,112 @@
+{
+  "schema": "abos.codex.physical-evidence.v1",
+  "module": "P-031",
+  "profile": "p031-conway-claimed-provision",
+  "sourceCommit": "7629866fc879c7ad82d386d053f60e4c03b1cb66",
+  "sourceBranch": "detached",
+  "runner": "CODEX_CLOUD_MANUAL",
+  "fixture": "SYNTHETIC_NO_EXTERNAL_SPEND",
+  "startedAt": "2026-10-18T20:08:35.635Z",
+  "finishedAt": "2026-10-18T20:09:01.432Z",
+  "status": "PASS",
+  "blockedReason": null,
+  "environment": {
+    "node": "v22.23.3",
+    "pnpm": "10.28.1",
+    "platform": "linux"
+  },
+  "externalOperationsExecutedByRunner": false,
+  "githubActionsExecutedByRunner": false,
+  "steps": [
+    {
+      "name": "projectops-integrity",
+      "command": [
+        "node",
+        "scripts/projectops-integrity-verify.mjs"
+      ],
+      "timeoutMs": 120000,
+      "startedAt": "2026-10-18T20:08:35.873Z",
+      "durationMs": 55,
+      "exitCode": 0,
+      "signal": null,
+      "status": "PASS",
+      "error": null,
+      "logFile": "logs/projectops-integrity.log"
+    },
+    {
+      "name": "evidence-gate-tests",
+      "command": [
+        "node",
+        "--test",
+        "scripts/codex-evidence-gate.test.mjs"
+      ],
+      "timeoutMs": 120000,
+      "startedAt": "2026-10-18T20:08:35.928Z",
+      "durationMs": 130,
+      "exitCode": 0,
+      "signal": null,
+      "status": "PASS",
+      "error": null,
+      "logFile": "logs/evidence-gate-tests.log"
+    },
+    {
+      "name": "typecheck",
+      "command": [
+        "pnpm",
+        "typecheck"
+      ],
+      "timeoutMs": 300000,
+      "startedAt": "2026-10-18T20:08:36.058Z",
+      "durationMs": 6141,
+      "exitCode": 0,
+      "signal": null,
+      "status": "PASS",
+      "error": null,
+      "logFile": "logs/typecheck.log"
+    },
+    {
+      "name": "build",
+      "command": [
+        "pnpm",
+        "build"
+      ],
+      "timeoutMs": 300000,
+      "startedAt": "2026-10-18T20:08:42.199Z",
+      "durationMs": 9697,
+      "exitCode": 0,
+      "signal": null,
+      "status": "PASS",
+      "error": null,
+      "logFile": "logs/build.log"
+    },
+    {
+      "name": "conway-procurement-gate",
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "src/__tests__/p031-conway-secondary-procurement-gate.test.ts",
+        "src/__tests__/p031-runtime-procurement-tool.test.ts",
+        "src/__tests__/p031-authorized-procurement-execution.test.ts",
+        "src/__tests__/p031-conway-billable-post-no-retry.test.ts",
+        "src/__tests__/p031-conway-account-read-probe.test.ts",
+        "src/__tests__/p031-conway-credit-history.test.ts",
+        "src/__tests__/p031-provider-account-exposure.test.ts",
+        "src/__tests__/p031-resource-decision-journey.test.ts",
+        "src/__tests__/p031-goal-resource-lifecycle-journey.test.ts",
+        "src/__tests__/p030-financial-effects.test.ts",
+        "src/__tests__/p030-credit-topup.test.ts",
+        "src/__tests__/replication.test.ts"
+      ],
+      "timeoutMs": 900000,
+      "startedAt": "2026-10-18T20:08:51.896Z",
+      "durationMs": 9534,
+      "exitCode": 0,
+      "signal": null,
+      "status": "PASS",
+      "error": null,
+      "logFile": "logs/conway-procurement-gate.log"
+    }
+  ]
+}
