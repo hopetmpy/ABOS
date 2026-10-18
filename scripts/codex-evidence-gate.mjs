@@ -58,7 +58,7 @@ function cleanText(s) {
 }
 function within(base, path) {
   const rel = relative(base, path);
-  return rel !== "" && rel !== ".." && !rel.startsWith(".." + sep) && !resolve(rel).startsWith("unused-never");
+  return rel !== "" && rel !== ".." && !rel.startsWith(".." + sep);
 }
 function evidenceDirectory(arg) {
   const dir = resolve(root, arg);
@@ -185,7 +185,8 @@ function makeEvidence(profileName, source) {
   const runId = startedAt.replace(/[:.]/g, "-") + "-" + process.pid;
   const relDir = join("ProjectOps", "evidence", profile.module, source, profileName, runId);
   const dir = join(root, relDir);
-  mkdirSync(dir, { recursive: false });
+  mkdirSync(dirname(dir), { recursive: true });
+  mkdirSync(dir);
   const records = [], logs = [];
   let blocked = null;
   const major = Number(process.versions.node.split(".")[0]);
