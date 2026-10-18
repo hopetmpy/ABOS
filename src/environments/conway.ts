@@ -7,6 +7,7 @@ import type {
   EnvironmentEconomicObservation,
   EnvironmentEstimate,
   EnvironmentHealthResult,
+  EnvironmentMutationResult,
   EnvironmentPreparationResult,
   EnvironmentProvider,
   EnvironmentProvisionResult,
@@ -56,6 +57,8 @@ export interface ConwayProbe {
     region?: string;
   }): Promise<ConwaySandboxProbeInfo>;
   listSandboxes?(): Promise<ConwaySandboxProbeInfo[]>;
+  /** Provider-native irreversible deletion, acknowledged only by 204. */
+  deleteSandbox?(targetId: string): Promise<void>;
   createScopedClient?(
     targetSandboxId: string,
   ): ConwaySandboxExecutionProbe;
@@ -66,6 +69,7 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
   readonly provision?: NonNullable<EnvironmentProvider["provision"]>;
   readonly health?: NonNullable<EnvironmentProvider["health"]>;
   readonly collect?: NonNullable<EnvironmentProvider["collect"]>;
+  readonly destroy?: NonNullable<EnvironmentProvider["destroy"]>;
   readonly reconcile?: NonNullable<EnvironmentProvider["reconcile"]>;
 
   constructor(private readonly conway: ConwayProbe) {
@@ -76,6 +80,12 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
     if (conway.listSandboxes) {
       this.health = async (resource) => this.healthSandbox(resource.externalId);
       this.reconcile = async (resource) => this.reconcileSandbox(resource);
+    }
+
+    // Advertise P-018 destroy only for a client with a real supplier
+    // mutation, never because a method name exists in a nominal interface.
+    if (conway.deleteSandbox) {
+      this.destroy = async (resource) => this.destroySandbox(resource);
     }
 
     if (conway.createScopedClient) {
@@ -574,6 +584,30 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
         artifactCollectionObservedAt:
           new Date().toISOString(),
       },
+    };
+  }
+
+  private async destroySandbox(
+    resource: Parameters<NonNullable<EnvironmentProvider["destroy"]>>[0],
+  ): Promise<EnvironmentMutationResult> {
+    if (!this.conway.deleteSandbox ||
+        resource.provider !== this.id ||
+        resource.type !== "conway-sandbox" ||
+        !resource.externalId?.trim()) {
+      throw new Error(
+        "Conway deletion requires an exact owned sandbox resource and a working supplier delete capability.",
+      );
+    }
+    // This call MUST perform a real remote DELETE and reject anything other
+    // than the documented 204; timeouts remain P-018 unknown, never success.
+    await this.conway.deleteSandbox(resource.externalId);
+    return {
+      status: "terminated",
+      providerState: "provider_delete_acknowledged",
+      evidence: [
+        `Conway provider acknowledged DELETE of sandbox ${resource.externalId}; physical resource released under P-018 retention.`,
+        "Provider deletion does not establish contract cancellation, invoice settlement, credit refund or no future charges.",
+      ],
     };
   }
 
