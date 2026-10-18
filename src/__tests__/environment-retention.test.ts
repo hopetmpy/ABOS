@@ -15,6 +15,7 @@ import { EnvironmentRetentionCoordinator } from "../environments/retention.js";
 import type { EnvironmentProvider } from "../environments/types.js";
 import {
   claimFinancialEffectDispatch,
+  recordFinancialEffectObservation,
   prepareFinancialEffect,
   getFinancialEffectByOperationKey,
   settleFinancialEffect,
@@ -403,6 +404,102 @@ describe("EnvironmentRetentionCoordinator", () => {
       expect(unavailable.supplierObservations).toBe(0);
       expect(unavailable.evidence.join(" ")).toContain("observer factory unavailable");
       expect(getFinancialEffectByOperationKey(db, key)?.state).toBe("completed");
+    } finally { db.close(); }
+  });
+
+  it("discovers a later cancellation intent for an already-retired resource and authenticates its exact supplier contract", async () => {
+    const db = createDb();
+    try {
+      insertGoal(db, "goal-late-contract", "completed");
+      const registry = new EnvironmentRegistry();
+      registry.register(provider());
+      const lifecycle = new EnvironmentLifecycleManager(registry, new EnvironmentResourceStore(db));
+      const resource = lifecycle.adopt({
+        provider: "cloud", externalId: "vm-late-contract",
+        type: "compute", goalId: "goal-late-contract",
+        status: "running", retentionPolicy: "until_goal_complete",
+      });
+      await new EnvironmentRetentionCoordinator(db, registry, lifecycle).sweep();
+      expect(lifecycle.resources.get(resource.id)?.status).toBe("terminated");
+
+      // A separate, newly authorized cleanup Task would have produced this
+      // durable P-030 operation AFTER the resource's physical termination.
+      const key = "later-cancellation-operation";
+      prepareFinancialEffect(db, {
+        operationKey: key, effectKind: "provider_resource_procurement",
+        provider: "cloud", amountCents: 0, unit: "usd_cent",
+        request: {
+          resourceId: resource.id, externalId: resource.externalId,
+          contractId: "supplier-contract-99", operation: "cancel",
+          providerAccountId: "supplier-account",
+        },
+        evidence: ["Synthetic P-010-reviewed contract cleanup; not actual billing."],
+      });
+      claimFinancialEffectDispatch(db, key);
+      recordFinancialEffectObservation(db, key, {
+        resolution: "pending",
+        evidence: ["Synthetic supplier callback pending independent observation."],
+      });
+      let reads = 0;
+      const wrong = await new EnvironmentRetentionCoordinator(
+        db, registry, lifecycle, () => async scope => {
+          reads++;
+          return {
+            ...scope, contractId: "different-contract",
+            source: "synthetic-contract-observer",
+            observedAt: new Date(Date.now() - 1000).toISOString(),
+            validUntil: new Date(Date.now() + 120_000).toISOString(),
+            evidence: ["Foreign supplier contract cannot authorize this outcome."],
+            cancellation: "cancelled", autoRenewal: "disabled",
+            finalInvoice: "finalized",
+          };
+        },
+      ).sweep();
+      expect(wrong.supplierObservations).toBe(0);
+      expect(reads).toBe(1);
+      const unverified = lifecycle.resources.get(resource.id)!;
+      const before = unverified.metadata.retentionBillingLifecycleQuotes as
+        Array<Record<string, unknown>>;
+      expect(before.find(x => x.operationKey === key)?.contractId).toBe("supplier-contract-99");
+      expect(before.find(x => x.operationKey === key)?.supplierCancellationStatus).toBe("UNKNOWN");
+
+      const authentic = async (scope: {
+        contractId?: string | null;
+        provider: string; providerAccountId: string;
+        resourceId: string; externalResourceId: string; operationKey: string;
+      }) => {
+        reads++;
+        return {
+          ...scope, source: "authenticated supplier contract read (synthetic)",
+          observedAt: new Date(Date.now() - 1000).toISOString(),
+          validUntil: new Date(Date.now() + 120_000).toISOString(),
+          evidence: ["Independent supplier contract cancelled; invoice not settled."],
+          cancellation: "cancelled" as const, autoRenewal: "disabled" as const,
+          finalInvoice: "outstanding" as const,
+        };
+      };
+      const observed = await new EnvironmentRetentionCoordinator(
+        db, registry, lifecycle, () => authentic,
+      ).sweep();
+      expect(observed.supplierObservations).toBe(1);
+      const current = lifecycle.resources.get(resource.id)!;
+      const quotes = current.metadata.retentionBillingLifecycleQuotes as
+        Array<Record<string, unknown>>;
+      expect(quotes.filter(x => x.operationKey === key)).toHaveLength(1);
+      expect(quotes.find(x => x.operationKey === key)?.supplierCancellationStatus).toBe("cancelled");
+      expect(quotes.find(x => x.operationKey === key)?.supplierFinalInvoiceStatus).toBe("outstanding");
+      expect(current.metadata.retentionBillingReconciliation).toBe("unverified_after_resource_release");
+      expect(getFinancialEffectByOperationKey(db, key)?.state).toBe("pending");
+      expect((db.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n).toBe(0);
+
+      const restarted = new EnvironmentLifecycleManager(
+        registry, new EnvironmentResourceStore(db),
+      );
+      const replay = await new EnvironmentRetentionCoordinator(
+        db, registry, restarted, () => authentic,
+      ).sweep();
+      expect(replay.supplierObservations).toBe(0);
+      expect(reads).toBe(2);
     } finally { db.close(); }
   });
 

@@ -17,6 +17,8 @@ export interface TrustedSupplierContractScope {
   resourceId: string;
   externalResourceId: string;
   operationKey: string;
+  /** Exact P-030-bound contract for renew/cancel; legacy provision may be unknown. */
+  contractId?: string | null;
 }
 export interface TrustedSupplierContractReceipt extends TrustedSupplierContractScope {
   source: string;
@@ -287,8 +289,52 @@ export class EnvironmentRetentionCoordinator {
       if (resource.status !== "terminated" ||
           resource.metadata.retentionReleaseState !== "released" ||
           !resource.externalId) continue;
-      const quotes = resource.metadata.retentionBillingLifecycleQuotes;
-      if (!Array.isArray(quotes) || quotes.length === 0) continue;
+      // Financial contract actions may be authorized AFTER a resource was
+      // physically retired (by a successor Task). The earlier retention
+      // snapshot cannot know about such later P-030 claims. Merge only
+      // canonical, actually dispatched contract intents; never synthesize a
+      // provider cancellation or mark an invoice paid.
+      const savedQuotes = Array.isArray(resource.metadata.retentionBillingLifecycleQuotes)
+        ? resource.metadata.retentionBillingLifecycleQuotes : [];
+      const recordedKeys = new Set(savedQuotes
+        .filter(item => item && typeof item === "object" && typeof item.operationKey === "string")
+        .map(item => item.operationKey));
+      const contractActions = listFinancialEffectsByStates(this.db, [
+        "dispatching", "pending", "unknown", "reconciliation_required", "completed",
+      ]).filter(effect =>
+        effect.effectKind === "provider_resource_procurement" &&
+        effect.provider === resource.provider &&
+        effect.request.resourceId === resource.id &&
+        effect.request.externalId === resource.externalId &&
+        (effect.request.operation === "renew" || effect.request.operation === "cancel") &&
+        typeof effect.request.contractId === "string" &&
+        effect.request.contractId.trim() &&
+        !recordedKeys.has(effect.operationKey),
+      ).map(effect => ({
+        operationKey: effect.operationKey,
+        contractId: effect.request.contractId as string,
+        financialEffectState: effect.state,
+        renewalQuoted: "unknown",
+        additionalCommittedRenewalCents: null,
+        additionalExitChargeCents: null,
+        cancellationRouteDocumented: false,
+        supplierCancellationStatus: "UNKNOWN",
+      }));
+      let quotes = savedQuotes;
+      if (contractActions.length > 0) {
+        const registered = this.lifecycle.resources.applyMutation(resource.id, {
+          metadata: {
+            retentionBillingLifecycleQuotes: [...savedQuotes, ...contractActions],
+            retentionBillingReconciliation: "unverified_after_resource_release",
+          },
+          evidence: [
+            "P-031 appended source-authenticated P-030 contract operation intent(s) after physical release. Supplier execution and billing settlement remain independently UNKNOWN.",
+          ],
+        }, "retention_supplier_contract_intent",
+        "New canonical P-030 contract operations require post-retirement supplier observation.");
+        quotes = registered.metadata.retentionBillingLifecycleQuotes as typeof savedQuotes;
+      }
+      if (quotes.length === 0) continue;
       let observer: TrustedSupplierContractObserver | null;
       try { observer = this.trustedSupplierObserver(resource.provider); }
       catch {
@@ -316,6 +362,8 @@ export class EnvironmentRetentionCoordinator {
           resourceId: resource.id,
           externalResourceId: resource.externalId,
           operationKey: effect.operationKey,
+          ...(typeof item.contractId === "string" && item.contractId.trim()
+            ? { contractId: item.contractId } : {}),
         };
         let receipt: TrustedSupplierContractReceipt | null;
         try { receipt = await observer(scope); }
@@ -333,7 +381,8 @@ export class EnvironmentRetentionCoordinator {
           receipt.providerAccountId === scope.providerAccountId &&
           receipt.resourceId === scope.resourceId &&
           receipt.externalResourceId === scope.externalResourceId &&
-          receipt.operationKey === scope.operationKey;
+          receipt.operationKey === scope.operationKey &&
+          (scope.contractId == null || receipt.contractId === scope.contractId);
         const states = ["cancelled", "active", "unknown"].includes(receipt.cancellation) &&
           ["disabled", "enabled", "unknown"].includes(receipt.autoRenewal) &&
           ["finalized", "outstanding", "unknown"].includes(receipt.finalInvoice);
@@ -583,6 +632,9 @@ export class EnvironmentRetentionCoordinator {
           ? value : null;
       return {
         operationKey: effect.operationKey,
+        ...((effect.request.operation === "renew" || effect.request.operation === "cancel") &&
+          typeof effect.request.contractId === "string" && effect.request.contractId.trim()
+          ? { contractId: effect.request.contractId } : {}),
         financialEffectState: effect.state,
         renewalQuoted: renewal,
         additionalCommittedRenewalCents:
