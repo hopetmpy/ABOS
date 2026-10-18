@@ -2610,6 +2610,40 @@ Model: ${ctx.inference.getDefaultModel()}
 
     // ── Domain Tools ──
     {
+      name: "conway_domains_account_proof",
+      description:
+        "Authenticate with Conway Domains using the agent's OWN existing EVM " +
+        "wallet (SIWE), then read back /auth/me to check supplier-account and " +
+        "wallet identity. This creates an ephemeral login session only; it " +
+        "does not pay, register domains, report free funds or authorize P-031 " +
+        "purchases. Never accepts wallet keys, JWTs or credentials as args.",
+      category: "conway",
+      riskLevel: "caution",
+      parameters: { type: "object", properties: {} },
+      execute: async (_args, ctx) => {
+        const wallet = ctx.identity.account;
+        if (ctx.identity.chainType === "solana" ||
+            !wallet?.signMessage ||
+            typeof wallet.address !== "string" ||
+            wallet.address.toLowerCase() !== ctx.identity.address.toLowerCase()) {
+          return JSON.stringify({
+            provider: "conway-domains", status: "unavailable",
+            purchaseAuthority: "not_established",
+            evidence: [
+              "The current host does not expose a matching controlled EVM signer for SIWE; SIWS is a separate provider-supported path, not a prohibition.",
+            ],
+          });
+        }
+        const { authenticateConwayDomainsControlledEvmWallet } =
+          await import("../conway/domains-siwe-session.js");
+        const result = await authenticateConwayDomainsControlledEvmWallet({
+          address: wallet.address,
+          signMessage: ({ message }) => wallet.signMessage({ message }),
+        });
+        return JSON.stringify(result, null, 2);
+      },
+    },
+    {
       name: "conway_domain_purchase_evidence",
       description:
         "Observe Conway Domains' PUBLIC specific-name availability and TLD " +
