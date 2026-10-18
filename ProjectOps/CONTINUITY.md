@@ -37,6 +37,12 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
 
+## P-031 — owned-session Domains E3 verified on exact source (2026-10-18)
+
+- **GIT_AUDITED / E3_SYNTHETIC_PASS:** Codex ran exact source `300f7c352c3d6d75eac984fd0d9b4b224724c9c8` → remote evidence `be5175e364399513fc0de5a2e0de5148ca195f2c`, one evidence-only commit with 8 files; independent SHA-256 **7/7**. Profile `p031-domains-economic-discovery` passed ProjectOps integrity, 6/6 protocol, typecheck, build, **149/149 Vitest in 13 files**; runner reports synthetic-only and no LIVE/Actions. Audit `ProjectOps/evidence/P-031/audits/300f7c35-domains-owned-session.md`, indexed in `ProjectOps/EVIDENCE.md`.
+- **BOUNDARY:** New tool `conway_domains_owned_resources` authenticated EVM/Solana wallet to synthetic supplier and consumed private JWT during same session for inventory/transactions; no payment authority, real account, ownership or settlement proven. Previous physical FAIL `af5c6500` preserved, fixed fixture regression PASS `d0d6951f` preserved. Do not promote to `main` or E5/E6.
+- **NEXT_ELIGIBLE_WORK:** map exact supplier order quote, financial-effect record, resource lifecycle and trusted runtime callbacks (P-010/P-030/P-018) before changing billable dispatch. P-031 EN_EJECUCIÓN; P-032 PARCIAL; main unmerged.
+
 ## P-031 — host-owned Domains inventory tool integrated, E3 physical pending (2026-10-18)
 
 - **SOURCE IMPLEMENTED / PHYSICAL PENDING:** Conway Domains documented SIWE/SIWS JWT sessions already existed for `conway_domains_account_proof`; separate `observeConwayDomainsOwnedResources` required a trusted JWT callback. Reused each existing verified-wallet sign-in via private host-only ephemeral session consumer in `src/conway/domains-siwe-session.ts` and exposed new read-only `conway_domains_owned_resources` tool in `src/agent/tools-core.ts` without model-supplied token/key/account. No second wallet or auth service. Inventory read only after account `/auth/me` wallet match; empty/partial/foreign results remain nonfinancial UNKNOWN. Five new adverse tests appended to existing SIWE/SIWS suite. No registration POST, signed x402, P-010 bypass, treasury changes or persistence of JWT. **New HEAD not yet physically tested.**
