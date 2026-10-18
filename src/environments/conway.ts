@@ -1,3 +1,4 @@
+import type { ConwayCreditHistoryPage } from "../types.js";
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -49,6 +50,7 @@ export interface ConwaySandboxExecutionProbe {
 export interface ConwayProbe {
   getCreditsBalance(): Promise<number>;
   getCreditsPricing?(): Promise<ConwayPricingProbeTier[]>;
+  getCreditsHistory?(limit?: number, offset?: number): Promise<ConwayCreditHistoryPage>;
   createSandbox?(options: {
     name?: string;
     vcpu?: number;
@@ -100,7 +102,9 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
    * The balance API does not attest the external account ID, reservations,
    * pending spends, invoice settlement or USD conversion. No P-010 permit.
    */
-  async observeEconomics(): Promise<EnvironmentEconomicObservation> {
+  async observeEconomics(
+    options: { includeConwayCreditHistory?: boolean } = {},
+  ): Promise<EnvironmentEconomicObservation> {
     const observedAt = new Date().toISOString();
     const base: EnvironmentEconomicObservation = {
       provider: this.id,
@@ -144,6 +148,57 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
       base.evidence.push(
         "Conway authenticated credit balance unavailable; no zero balance or funding inferred.",
       );
+    }
+    if (options.includeConwayCreditHistory) {
+      // An account-authenticated activity feed helps diagnose unexpected
+      // credit movements; it is not independent on-chain settlement or proof
+      // that a specific P-030 operation can safely be retried.
+      base.nativeCreditHistory = {
+        unit: "credit_cent",
+        status: "unavailable",
+        accountScope: "authenticated_client_unattributed",
+        offset: 0, limit: 20,
+        entries: [],
+        evidence: [
+          "Conway authenticated history was requested, but no complete bounded page was observed. Entries UNKNOWN.",
+        ],
+      };
+      if (this.conway.getCreditsHistory) {
+        try {
+          const page = await this.conway.getCreditsHistory(20, 0);
+          if (page?.completeness === "observed_page" &&
+              page.offset === 0 && page.limit === 20 &&
+              Array.isArray(page.entries) && page.entries.length <= 20 &&
+              page.entries.every(entry => entry &&
+                (entry.type === null || typeof entry.type === "string") &&
+                (entry.amountCents === null || Number.isSafeInteger(entry.amountCents)) &&
+                (entry.balanceAfterCents === null ||
+                  Number.isSafeInteger(entry.balanceAfterCents)) &&
+                (entry.createdAt === null || typeof entry.createdAt === "string"))) {
+            base.nativeCreditHistory = {
+              unit: "credit_cent",
+              status: "observed_page",
+              accountScope: "authenticated_client_unattributed",
+              offset: 0, limit: 20,
+              entries: page.entries.map(entry => ({
+                type: entry.type,
+                amountCents: entry.amountCents,
+                balanceAfterCents: entry.balanceAfterCents,
+                createdAt: entry.createdAt,
+              })),
+              evidence: [
+                "Conway returned one authenticated credit-history page; not the entire ledger.",
+                "History entries do NOT independently establish same-wallet x402 settlement, external account ownership, final invoices or free funds.",
+              ],
+            };
+          }
+        } catch {
+          // Provider response bodies may contain secrets; do not log errors.
+          base.nativeCreditHistory.evidence.push(
+            "History endpoint failed or returned an unrecognized shape. No zero transactions inferred.",
+          );
+        }
+      }
     }
     return base;
   }
