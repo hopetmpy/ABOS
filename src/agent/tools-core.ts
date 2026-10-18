@@ -2613,34 +2613,49 @@ Model: ${ctx.inference.getDefaultModel()}
       name: "conway_domains_account_proof",
       description:
         "Authenticate with Conway Domains using the agent's OWN existing EVM " +
-        "wallet (SIWE), then read back /auth/me to check supplier-account and " +
-        "wallet identity. This creates an ephemeral login session only; it " +
-        "does not pay, register domains, report free funds or authorize P-031 " +
-        "purchases. Never accepts wallet keys, JWTs or credentials as args.",
+        "(SIWE) or Solana (SIWS) wallet, then read /auth/me to verify supplier " +
+        "account ownership. Ephemeral login only: no payments, domain registration, " +
+        "free-funds claim or P-031 purchase authority. No model-supplied JWT or key.",
       category: "conway",
       riskLevel: "caution",
       parameters: { type: "object", properties: {} },
       execute: async (_args, ctx) => {
+        if (ctx.identity.chainType === "solana") {
+          const wallet = ctx.identity.chainIdentity;
+          if (!wallet || wallet.chainType !== "solana" ||
+              wallet.address !== ctx.identity.address ||
+              typeof wallet.signMessage !== "function") {
+            return JSON.stringify({
+              provider: "conway-domains", status: "unavailable",
+              purchaseAuthority: "not_established",
+              evidence: ["The host did not provide its matching controlled Solana signer; no provider login or purchase was attempted."],
+            });
+          }
+          const { authenticateConwayDomainsControlledSolanaWallet } =
+            await import("../conway/domains-siwe-session.js");
+          return JSON.stringify(
+            await authenticateConwayDomainsControlledSolanaWallet(wallet), null, 2,
+          );
+        }
+
         const wallet = ctx.identity.account;
-        if (ctx.identity.chainType === "solana" ||
-            !wallet?.signMessage ||
+        if (!wallet?.signMessage ||
             typeof wallet.address !== "string" ||
             wallet.address.toLowerCase() !== ctx.identity.address.toLowerCase()) {
           return JSON.stringify({
             provider: "conway-domains", status: "unavailable",
             purchaseAuthority: "not_established",
-            evidence: [
-              "The current host does not expose a matching controlled EVM signer for SIWE; SIWS is a separate provider-supported path, not a prohibition.",
-            ],
+            evidence: ["The host does not expose a matching controlled EVM signer for SIWE; no provider login or purchase was attempted."],
           });
         }
         const { authenticateConwayDomainsControlledEvmWallet } =
           await import("../conway/domains-siwe-session.js");
-        const result = await authenticateConwayDomainsControlledEvmWallet({
-          address: wallet.address,
-          signMessage: ({ message }) => wallet.signMessage({ message }),
-        });
-        return JSON.stringify(result, null, 2);
+        return JSON.stringify(
+          await authenticateConwayDomainsControlledEvmWallet({
+            address: wallet.address,
+            signMessage: ({ message }) => wallet.signMessage({ message }),
+          }), null, 2,
+        );
       },
     },
     {
