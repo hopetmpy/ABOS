@@ -1,0 +1,29 @@
+{
+  "schema": "abos.patch-validation.v1",
+  "sourceBase": "9af9e6b351c1e9089a3ae01b029cdd30db784c8f",
+  "branch": "abos/p031-child-verified-resource-20261018",
+  "node": "v22.23.3",
+  "pnpm": "10.28.1",
+  "attachment": "ABOS_P031_reconciliacion_recargas_v2.txt",
+  "attachmentSha256": "e60a43f5d39ae4a43b5de1a60d8a2da6e7b0f3f8d8af6f6a02cfa05aa4cf8210",
+  "sourceFileSha256": {
+    "src/heartbeat/tasks.ts": "3ae9e90b2453bda9e9c171e2cefa8dd41e81d0edef4973e3d3db877bfa5ee1ad",
+    "src/agent/loop.ts": "a0b2090b2e92d6d28aff3c8cdf3df7316144ca70b07d0079a901b1af2517adda",
+    "src/__tests__/heartbeat.test.ts": "78fbb04fb1bfc9eaa8aa5f9633959c7a55eee5fc51ca82cfe62deac4c6fe4b29"
+  },
+  "result": "PASS",
+  "tests": {
+    "files": 37,
+    "passed": 446,
+    "failed": 0,
+    "skipped": 0
+  },
+  "steps": {
+    "typecheck": 0,
+    "build": 0,
+    "projectops-integrity": 0,
+    "tests": 0
+  },
+  "noLive": true,
+  "noGitHubActions": true
+}

@@ -1,0 +1,854 @@
+(node:44608) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:44620) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.11 /workspace/ABOS
+
+(node:44663) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:44650) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:44653) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:44651) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/__tests__/replication.test.ts > isValidWalletAddress > accepts a valid 40-hex-char address with 0x prefix 3ms
+ ✓ src/__tests__/replication.test.ts > isValidWalletAddress > accepts uppercase hex characters 0ms
+ ✓ src/__tests__/replication.test.ts > isValidWalletAddress > accepts mixed-case hex characters 0ms
+ ✓ src/__tests__/replication.test.ts > isValidWalletAddress > rejects the zero address 0ms
+ ✓ src/__tests__/replication.test.ts > isValidWalletAddress > rejects addresses without 0x prefix 0ms
+ ✓ src/__tests__/replication.test.ts > isValidWalletAddress > rejects addresses that are too short 0ms
+ ✓ src/__tests__/replication.test.ts > isValidWalletAddress > rejects addresses that are too long 0ms
+ ✓ src/__tests__/replication.test.ts > isValidWalletAddress > rejects empty string 0ms
+ ✓ src/__tests__/replication.test.ts > isValidWalletAddress > rejects non-hex characters 1ms
+ ✓ src/__tests__/replication.test.ts > isValidWalletAddress > rejects 0x prefix alone 0ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > enforces maxChildren from the runtime config instead of an implicit DB property 47ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > does not purchase another sandbox when prior failed-child inventory is UNKNOWN 37ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > reuses only a healthy failed-child sandbox with exact P-018 ownership 45ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > refuses reuse when supplier inventory belongs to a different P-018 child 27ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > does not buy an unreviewed new child sandbox even with lifecycle enabled 25ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > discovers Task-owned P-031 capacity by exact Goal, Task and selected strategic path 55ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > refuses a Task resource when P-030 supplier identity is mismatched or owner already claimed 23ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > lets the delegated Task use its acquired sandbox without new purchase or repeated claim 30ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > bootstraps an independently healthy P-031 acquired sandbox without another purchase 24ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > rejects a funding snapshot that expires while the trusted P-010 issuer is awaited 92ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > rejects a resource fit that expires while provider economics are observed 65ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > refuses a fabricated P-018 resource lacking its P-030 effect 38ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > rejects a P-031 sandbox too small for child memory demand 22ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > runs child initialization from the ABOS repository root 23ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > validates wallet address before declaring child ready 35ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > fails spawn when ABOS child initialization exits nonzero 36ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > throws on zero address from init 29ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > throws when init returns no wallet address 38ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > fails closed when required constitution propagation cannot read the parent constitution 22ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > propagates error on exec failure without calling deleteSandbox 26ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > propagates error on wallet validation failure without calling deleteSandbox 22ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > does not mask original error if deleteSandbox also throws 31ms
+ ✓ src/__tests__/replication.test.ts > spawnChild > never creates or deletes a sandbox when procurement evidence is absent 20ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > rejects billed usage coverage that expires during trusted policy review 32ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > preserves authorized ability to acquire an independently verified correctly sized resource 55ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > does not buy an undersized or unverified shape even if the strategy, quote and policy are positive 200ms
+ ✓ src/__tests__/replication.test.ts > ensureChildRuntimeRunning > starts a funded child once and marks it healthy only after bootstrap plus process observation 21ms
+ ✓ src/__tests__/replication.test.ts > ensureChildRuntimeRunning > reuses an already-running verified child without launching a duplicate runtime 32ms
+ ✓ src/__tests__/replication.test.ts > ensureChildRuntimeRunning > refuses to start or promote a child when bootstrap verification fails 43ms
+ ✓ src/__tests__/replication.test.ts > ChildHealthMonitor > observes the runtime through the child's scoped sandbox and requires bootstrap truth 39ms
+ ✓ src/__tests__/replication.test.ts > ChildHealthMonitor > reports a running process as unhealthy when bootstrap evidence is invalid 48ms
+ ✓ src/__tests__/replication.test.ts > ChildHealthMonitor > reports a stopped process without inventing a zero child balance 19ms
+ ✓ src/__tests__/replication.test.ts > SandboxCleanup > refuses to mark a Conway child cleaned_up without canonical P-018 ownership 25ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > never charges for a shorter, stale, mismatched or unknown supplier billing interval 243ms
+ ✓ src/__tests__/replication.test.ts > SandboxCleanup > explicitly releases one owned manual-retention Conway sandbox, not every child 26ms
+ ✓ src/__tests__/replication.test.ts > SandboxCleanup > refuses same-external-id cleanup when P-018 ownership belongs to another child 42ms
+ ✓ src/__tests__/replication.test.ts > SandboxCleanup > does not retry an uncertain child DELETE or mark cleaned_up after restart 27ms
+{"timestamp":"2026-10-18T17:36:37.053Z","level":"error","module":"replication.lineage","message":"Failed to prune child stopped-0","error":{"message":"Supplier DELETE uncertain","stack":"Error: Supplier DELETE uncertain\n    at Object.<anonymous> (/workspace/ABOS/src/__tests__/replication.test.ts:1010:42)\n    at Object.Mock [as cleanup] (file:///workspace/ABOS/node_modules/.pnpm/@vitest+spy@4.1.11/node_modules/@vitest/spy/dist/index.js:332:34)\n    at Module.pruneDeadChildren (/workspace/ABOS/src/replication/lineage.ts:130:25)\n    at /workspace/ABOS/src/__tests__/replication.test.ts:1012:18\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20"}}
+{"timestamp":"2026-10-18T17:36:37.059Z","level":"error","module":"replication.lineage","message":"Failed to prune child stopped-1","error":{"message":"Supplier DELETE uncertain","stack":"Error: Supplier DELETE uncertain\n    at Object.<anonymous> (/workspace/ABOS/src/__tests__/replication.test.ts:1010:42)\n    at Object.Mock [as cleanup] (file:///workspace/ABOS/node_modules/.pnpm/@vitest+spy@4.1.11/node_modules/@vitest/spy/dist/index.js:332:34)\n    at Module.pruneDeadChildren (/workspace/ABOS/src/replication/lineage.ts:130:25)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at /workspace/ABOS/src/__tests__/replication.test.ts:1012:12"}}
+{"timestamp":"2026-10-18T17:36:37.060Z","level":"error","module":"replication.lineage","message":"Failed to prune child stopped-0","error":{"message":"Child sandbox release not verified by P-018; keep row for recovery.","stack":"Error: Child sandbox release not verified by P-018; keep row for recovery.\n    at Module.pruneDeadChildren (/workspace/ABOS/src/replication/lineage.ts:128:19)\n    at /workspace/ABOS/src/__tests__/replication.test.ts:1017:18\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"}}
+{"timestamp":"2026-10-18T17:36:37.060Z","level":"error","module":"replication.lineage","message":"Failed to prune child stopped-1","error":{"message":"Child sandbox release not verified by P-018; keep row for recovery.","stack":"Error: Child sandbox release not verified by P-018; keep row for recovery.\n    at Module.pruneDeadChildren (/workspace/ABOS/src/replication/lineage.ts:128:19)\n    at /workspace/ABOS/src/__tests__/replication.test.ts:1017:18\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"}}
+{"timestamp":"2026-10-18T17:36:37.080Z","level":"error","module":"replication.lineage","message":"Failed to prune child cleaned-1","error":{"message":"Child sandbox release not verified by P-018; keep row for recovery.","stack":"Error: Child sandbox release not verified by P-018; keep row for recovery.\n    at Module.pruneDeadChildren (/workspace/ABOS/src/replication/lineage.ts:128:19)\n    at /workspace/ABOS/src/__tests__/replication.test.ts:1031:18\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:2272:10)"}}
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > refuses billable dispatch when automatically renewed contract lacks an evidenced exit route 20ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > accepts longer supplier-priced use without applying an artificial duration ceiling 58ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > rechecks resource need after async verification before claiming any financial effect 24ms
+ ✓ src/__tests__/replication.test.ts > SandboxCleanup > exposes exact cleanup_child for a single stopped child without a prune threshold 26ms
+ ✓ src/__tests__/replication.test.ts > SandboxCleanup > marks a child cleaned_up only after canonical P-018 confirmed termination 37ms
+ ✓ src/__tests__/replication.test.ts > pruneDeadChildren > preserves child rows when cleanup fails or no canonical release exists 26ms
+ ✓ src/__tests__/replication.test.ts > pruneDeadChildren > prunes already-cleaned children only after P-018 recorded physical release 20ms
+{"timestamp":"2026-10-18T17:36:37.098Z","level":"error","module":"replication.lineage","message":"Failed to prune child wrong-0","error":{"message":"Child sandbox release not verified by P-018; keep row for recovery.","stack":"Error: Child sandbox release not verified by P-018; keep row for recovery.\n    at Module.pruneDeadChildren (/workspace/ABOS/src/replication/lineage.ts:128:19)\n    at /workspace/ABOS/src/__tests__/replication.test.ts:1047:18\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:2272:10)"}}
+{"timestamp":"2026-10-18T17:36:37.099Z","level":"error","module":"replication.lineage","message":"Failed to prune child wrong-1","error":{"message":"Child sandbox release not verified by P-018; keep row for recovery.","stack":"Error: Child sandbox release not verified by P-018; keep row for recovery.\n    at Module.pruneDeadChildren (/workspace/ABOS/src/replication/lineage.ts:128:19)\n    at /workspace/ABOS/src/__tests__/replication.test.ts:1047:18\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:2272:10)"}}
+ ✓ src/__tests__/replication.test.ts > pruneDeadChildren > preserves a child when a released resource with the same external ID belongs to someone else 19ms
+ ✓ src/__tests__/replication.test.ts > pruneDeadChildren > attempts sandbox cleanup for children with dead status 50ms
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > tick overlap prevention > prevents concurrent tick execution 1271ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > executes a reviewed+funded+explicitly authorized synthetic provider once, without claiming payment 39ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > serializes distinct keys for the SAME resource after concurrent external observations with changed quotes 32ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > blocks default P-010 allow with no explicit positive rule, even on an apparently funded account 43ms
+{"timestamp":"2026-10-18T17:36:37.205Z","level":"error","module":"heartbeat.scheduler","message":"Task 'slow_timeout' timeout: Task timed out after 25ms"}
+{"timestamp":"2026-10-18T17:36:37.207Z","level":"warn","module":"heartbeat.scheduler","message":"Task 'slow_timeout' completed after its timeout; durable timeout reconciled to success and pending retry suppressed"}
+(node:44719) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"timestamp":"2026-10-18T17:36:37.271Z","level":"error","module":"heartbeat.scheduler","message":"Task 'retry_budget' failure: failure-1"}
+{"timestamp":"2026-10-18T17:36:37.272Z","level":"error","module":"heartbeat.scheduler","message":"Task 'retry_budget' failure: failure-2"}
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > task timeout > aborts cooperatively and keeps the lease until the timed-out attempt actually settles 137ms
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > task timeout > treats maxRetries as retries after the initial attempt and consumes each retry slot 48ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > rejects policy deny and mismatch between policy-approved and requested account/resource terms 40ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > rejects strategy without a materialized P-025 path independently of funds or P-010 21ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > rechecks P-025 task route inside the funding claim after provider economics completes 101ms
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > schedule persistence > reads schedule from DB 63ms
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > schedule persistence > updates schedule fields 26ms
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > schedule persistence > persists across scheduler restarts 31ms
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > dedup key TTL and pruning > inserts and detects dedup keys 22ms
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > dedup key TTL and pruning > rejects duplicate keys 27ms
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > dedup key TTL and pruning > prunes expired dedup keys 37ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > rejects budgets, wrong account/currency, missing supplier components and underfunding 301ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 durable internal reserve authority > starts UNKNOWN without a reserve source; persists an earmark without sending money 52ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 durable internal reserve authority > prevents a caller's stale reserve input from bypassing durable authority 39ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > records UNKNOWN after a possible remote dispatch and never retries or invents settlement 29ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > validates actual P-018 mock resource ownership and health before operational success 30ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > exercises reviewed acquisition, independent health, artifact-safe retirement and unresolved provider billing 35ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > never upgrades supplier acceptance to resource-ready when P-018 verification is absent 23ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 durable internal reserve authority > supports independent reserves, revisions and release while preserving append-only operations 34ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 durable internal reserve authority > rejects duplicate operation identities with different terms and does not replay old changes 33ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 durable internal reserve authority > rolls back overcommit, unknown observed balance and duplicate debit before evidence materializes 33ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 durable internal reserve authority > refuses increases with active local task estimates without same-unit valuation 30ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > keeps supplier-accepted acquisition pending for another, failed or unverifiable resource 119ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 durable internal reserve authority > survives physical SQLite close/reopen and replays without double allocation 27ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 durable internal reserve authority > release is possible under missing balance but does not fabricate free liquidity 20ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 policy-catalog internal reserve action > can persist a real internal earmark from a protected tool call without moving credit 30ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 policy-catalog internal reserve action > rejects an unauthenticated tool-call identity and an outage-backed increase 24ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 persisted v22 upgrade > reopens legacy v22 state and materializes the v23 reserve authority without losing settled rows 25ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > holds successive separate-resource acquisitions against the same authenticated account funding snapshot 34ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > keeps post-snapshot settled obligations held until a newer authenticated balance is observed 33ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > holds an older intent settled after the funding snapshot instead of reusing already-spent liquidity 25ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > keeps unscoped late settlements UNKNOWN, even if their intents predate the observed balance 38ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 actual P-025 → P-023 prediction/outcome reuse > links only materialized review decisions and later P-023 path resolution, not revenue 40ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 actual P-025 → P-023 prediction/outcome reuse > does not invent a P-025 review from a caller assertion or backdate strategic outcomes 45ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 adaptive-context economic history persistence > keeps P-023 learning after a reserve is released, with no invented credit spend 33ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > excludes only completed charges with proven pre-snapshot settlement timestamps 23ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > holds unscoped provider obligations but excludes verified other-account/provider liabilities 26ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > rejects missing, invalid, future or stale funding timestamps before any durable purchase 81ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 P-025/P-023 cross-authority physical recovery > reopens actual SQLite and retains reviewed reserve decision plus later P-023 learning exactly once 55ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 causal reserve-funded Conway credit effects > binds reserve to a real locally reconciled credit effect and never treats it as LIVE P&L 44ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 causal reserve-funded Conway credit effects > counts unsettled reserved credits only once while preserving unrelated credit/USDC units 21ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 causal reserve-funded Conway credit effects > refuses unknown, empty or inactive reserve identity before provider dispatch 38ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 ambiguous provider outcome and corrupt local settlement > retains unknown reserve-backed transfer in exactly one pending obligation and never dispatches replay 23ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 ambiguous provider outcome and corrupt local settlement > does not count a completed linked effect when settled transaction amount later disagrees 22ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 independent reserve epochs across explicit release/reallocation > reuses completed historical credits only in their own cycle, not the replenished one 25ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 P-025 + P-030 + P-010 exact procurement execution chain > does not confuse provider rejection with a paid invoice 25ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 supplier contract lifecycle under the existing P-010/P-030 claim > dispatches only authenticated, owned renewal and leaves settlement UNKNOWN across restart/replay 45ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 supplier contract lifecycle under the existing P-010/P-030 claim > allows supplier contract cancellation after physical retirement without pretending billing stopped 25ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 supplier contract lifecycle under the existing P-010/P-030 claim > rejects mismatched, expired or unavailable supplier contract preflight with zero provider mutations 165ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 independent reserve epochs across explicit release/reallocation > never nets an old UNKNOWN transfer with a newly funded earmark 36ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 independent reserve epochs across explicit release/reallocation > preserves epoch through revisions without allowing reuse of committed capacity 28ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 release/reallocation cycle crash recovery and corrupted legacy epoch > preserves old UNKNOWN as independent from a new reserve across SQLite close/reopen 32ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 release/reallocation cycle crash recovery and corrupted legacy epoch > treats malformed legacy epoch as an unresolved capacity commitment, never as a free new cycle 32ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 supplier contract lifecycle under the existing P-010/P-030 claim > permits a newly reviewed cleanup Task to cancel an owned contract after its original Goal completes 24ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 supplier contract lifecycle under the existing P-010/P-030 claim > blocks concurrent opposite supplier contract actions across different operation keys 24ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 supplier contract lifecycle under the existing P-010/P-030 claim > rejects a contract action with no P-010-bound supplier contract ID before provider observation 21ms
+ ✓ src/__tests__/p031-authorized-procurement-execution.test.ts > P-031 supplier contract lifecycle under the existing P-010/P-030 claim > records ambiguous supplier callback as UNKNOWN and never repeats the contract operation 27ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 delayed Conway financial reconciliation versus changing reserve epochs > reconciles a formerly UNKNOWN old-cycle transfer once, without turning it into new-cycle free credits 24ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 delayed Conway financial reconciliation versus changing reserve epochs > releases an explicitly rejected credit intent without erasing history or requiring manual approval 24ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 stale Conway balance versus concurrent financial intents > detects a new financial-effect intent between local position and attempted reserve increase 21ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 stale Conway balance versus concurrent financial intents > protected catalog refresh rejects an observation invalidated during awaited provider GET 29ms
+ ✓ src/__tests__/p030-treasury-reserves.test.ts > P-030 stale Conway balance versus concurrent financial intents > persists source-labeled observation time and runtime identity without claiming provider ownership 21ms
+(node:44727) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:44733) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > wake requests > persists a wake event even when no host callback is attached 1129ms
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > check_social_inbox > returns shouldWake false when no social client 51ms
+{"timestamp":"2026-10-18T17:36:39.075Z","level":"error","module":"heartbeat.tasks","message":"Family knowledge inbox dispatch failed","error":{"message":"Family knowledge handler identity does not match the canonical local identity","stack":"Error: Family knowledge handler identity does not match the canonical local identity\n    at configureFamilyKnowledgePeerHandlers (/workspace/ABOS/src/replication/family-knowledge-query.ts:403:11)\n    at processFamilyKnowledgePeerInbox (/workspace/ABOS/src/replication/family-knowledge-query.ts:463:3)\n    at Object.check_social_inbox (/workspace/ABOS/src/heartbeat/tasks.ts:319:31)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at /workspace/ABOS/src/__tests__/heartbeat.test.ts:100:22\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"}}
+{"timestamp":"2026-10-18T17:36:39.114Z","level":"error","module":"heartbeat.tasks","message":"Family knowledge inbox dispatch failed","error":{"message":"Family knowledge handler identity does not match the canonical local identity","stack":"Error: Family knowledge handler identity does not match the canonical local identity\n    at configureFamilyKnowledgePeerHandlers (/workspace/ABOS/src/replication/family-knowledge-query.ts:403:11)\n    at processFamilyKnowledgePeerInbox (/workspace/ABOS/src/replication/family-knowledge-query.ts:463:3)\n    at Object.check_social_inbox (/workspace/ABOS/src/heartbeat/tasks.ts:319:31)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at /workspace/ABOS/src/__tests__/heartbeat.test.ts:151:7\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"}}
+{"timestamp":"2026-10-18T17:36:39.148Z","level":"error","module":"heartbeat.tasks","message":"Family knowledge inbox dispatch failed","error":{"message":"Family knowledge handler identity does not match the canonical local identity","stack":"Error: Family knowledge handler identity does not match the canonical local identity\n    at configureFamilyKnowledgePeerHandlers (/workspace/ABOS/src/replication/family-knowledge-query.ts:403:11)\n    at processFamilyKnowledgePeerInbox (/workspace/ABOS/src/replication/family-knowledge-query.ts:463:3)\n    at Object.check_social_inbox (/workspace/ABOS/src/heartbeat/tasks.ts:319:31)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at /workspace/ABOS/src/__tests__/heartbeat.test.ts:210:23\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"}}
+{"timestamp":"2026-10-18T17:36:39.149Z","level":"error","module":"heartbeat.tasks","message":"Family knowledge inbox dispatch failed","error":{"message":"Family knowledge handler identity does not match the canonical local identity","stack":"Error: Family knowledge handler identity does not match the canonical local identity\n    at configureFamilyKnowledgePeerHandlers (/workspace/ABOS/src/replication/family-knowledge-query.ts:403:11)\n    at processFamilyKnowledgePeerInbox (/workspace/ABOS/src/replication/family-knowledge-query.ts:463:3)\n    at Object.check_social_inbox (/workspace/ABOS/src/heartbeat/tasks.ts:319:31)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at /workspace/ABOS/src/__tests__/heartbeat.test.ts:214:23\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"}}
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > check_social_inbox > polls and wakes when messages found 57ms
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > check_social_inbox > preserves raw structured Social payload while keeping a sanitized conversational view 33ms
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > check_social_inbox > deduplicates messages 33ms
+{"timestamp":"2026-10-18T17:36:39.175Z","level":"error","module":"heartbeat.tasks","message":"Family knowledge inbox dispatch failed","error":{"message":"Family knowledge handler identity does not match the canonical local identity","stack":"Error: Family knowledge handler identity does not match the canonical local identity\n    at configureFamilyKnowledgePeerHandlers (/workspace/ABOS/src/replication/family-knowledge-query.ts:403:11)\n    at processFamilyKnowledgePeerInbox (/workspace/ABOS/src/replication/family-knowledge-query.ts:463:3)\n    at Object.check_social_inbox (/workspace/ABOS/src/heartbeat/tasks.ts:319:31)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at /workspace/ABOS/src/__tests__/heartbeat.test.ts:235:22\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"}}
+{"timestamp":"2026-10-18T17:36:39.198Z","level":"error","module":"heartbeat.tasks","message":"Family knowledge inbox dispatch failed","error":{"message":"Family knowledge handler identity does not match the canonical local identity","stack":"Error: Family knowledge handler identity does not match the canonical local identity\n    at configureFamilyKnowledgePeerHandlers (/workspace/ABOS/src/replication/family-knowledge-query.ts:403:11)\n    at processFamilyKnowledgePeerInbox (/workspace/ABOS/src/replication/family-knowledge-query.ts:463:3)\n    at Object.check_social_inbox (/workspace/ABOS/src/heartbeat/tasks.ts:319:31)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at /workspace/ABOS/src/__tests__/heartbeat.test.ts:266:22\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"}}
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > check_social_inbox > returns shouldWake false when no messages 25ms
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > check_social_inbox > does not wake when all messages are blocked by sanitizer 24ms
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > heartbeat_ping > records ping and does not wake on normal tier 35ms
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > heartbeat_ping > wakes on critical tier with distress signal 21ms
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > heartbeat_ping > wakes on dead tier with distress signal 27ms
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > check_credits > does not wake when tier unchanged 42ms
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > check_credits > wakes when tier drops to critical 24ms
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > check_credits > does not wake on first run (no previous tier) 20ms
+ ✓ src/__tests__/p031-runtime-procurement-tool.test.ts > P-031 agent environment_procurement_execute runtime route > advertises a financial-risk tool but dispatches nothing when a trusted host adapter is missing 48ms
+ ✓ src/__tests__/p031-runtime-procurement-tool.test.ts > P-031 agent environment_procurement_execute runtime route > runs the real P-025/P-010/P-030 economic engine through agent tool with a trusted synthetic adapter, then refuses duplicate effects 60ms
+ ✓ src/__tests__/p031-runtime-procurement-tool.test.ts > P-031 agent environment_procurement_execute runtime route > rejects missing exact P-010 policy provenance even with trusted economics and dispatch adapter 30ms
+ ✓ src/__tests__/p031-runtime-procurement-tool.test.ts > P-031 agent environment_procurement_execute runtime route > routes the actual agent catalog through host-backed P-018 provisioning and independently checked health 29ms
+ ✓ src/__tests__/p031-runtime-procurement-tool.test.ts > P-031 agent environment_procurement_execute runtime route > keeps P-018 unhealthy provision separate from paid settlement and does not re-dispatch 26ms
+ ✓ src/__tests__/p031-runtime-procurement-tool.test.ts > P-031 agent environment_procurement_execute runtime route > releases P-030 unknown exposure on source-proven host preflight rejection without a provider call 24ms
+{"timestamp":"2026-10-18T17:36:39.584Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+{"timestamp":"2026-10-18T17:36:39.597Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:39.604Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo hello\"})"}
+{"timestamp":"2026-10-18T17:36:39.610Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+ ✓ src/__tests__/p031-runtime-procurement-tool.test.ts > P-031 agent environment_procurement_execute runtime route > distinguishes a trusted AWS-style pre-dispatch provider denial from an unknown response 30ms
+ ✓ src/__tests__/p031-runtime-procurement-tool.test.ts > P-031 agent environment_procurement_execute runtime route > lets a trusted host issue exact P-010 authority only after source-verified supplier economics 26ms
+ ✓ src/__tests__/p031-runtime-procurement-tool.test.ts > P-031 agent environment_procurement_execute runtime route > does not treat an issuer claim or default-allow as a real P-010 procurement authority 24ms
+ ✓ src/__tests__/p031-runtime-procurement-tool.test.ts > P-031 agent environment_procurement_execute runtime route > rejects unknown providers and invalid scope before looking up any trusted adapter 34ms
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > check_usdc_balance > avoids repeated paid-credit retries while periodically restoring reconciliation notice 37ms
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > check_usdc_balance > does not wake when no USDC and enough credits 33ms
+ ✓ src/__tests__/p031-runtime-procurement-tool.test.ts > P-031 P-030-claimed AWS capacity mutation runtime, synthetic account only > binds resize to one exact P-010/P-030 claim and rejects a raw repeat 29ms
+ ✓ src/__tests__/p031-runtime-procurement-tool.test.ts > P-031 P-030-claimed AWS capacity mutation runtime, synthetic account only > binds resume to one exact P-010/P-030 claim and rejects a raw repeat 33ms
+ ✓ src/__tests__/p031-runtime-procurement-tool.test.ts > P-031 P-030-claimed AWS capacity mutation runtime, synthetic account only > binds recover to one exact P-010/P-030 claim and rejects a raw repeat 40ms
+ ✓ src/__tests__/p031-runtime-procurement-tool.test.ts > P-031 P-030-claimed AWS capacity mutation runtime, synthetic account only > does not retain financial commitments for source-proven already-running resume or recover 61ms
+ ✓ src/__tests__/p031-runtime-procurement-tool.test.ts > P-031 P-030-claimed AWS capacity mutation runtime, synthetic account only > rejects an unproven target identity before AWS billable mutation 58ms
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > wake requests > persists exactly one wake event and notifies the host callback once 1125ms
+ ✓ src/__tests__/p031-runtime-procurement-tool.test.ts > P-031 AWS real lifecycle secondary gate, synthetic account only > accepts exactly the P-030-claimed P-010-reviewed EC2 operation and refuses raw lifecycle bypass after the permit closes 73ms
+ ✓ src/__tests__/p031-runtime-procurement-tool.test.ts > P-031 AWS real lifecycle secondary gate, synthetic account only > releases a P-030 intent as rejected when the second AWS mandate cannot match trusted resource shape 38ms
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > wake event ordering and consumption > inserts and consumes wake events in order 136ms
+ ✓ src/__tests__/p031-runtime-procurement-tool.test.ts > P-031 AWS real lifecycle secondary gate, synthetic account only > rejects a forged AWS secondary mandate without a matching live P-030 dispatch claim 26ms
+{"timestamp":"2026-10-18T17:36:40.054Z","level":"info","module":"topup","message":"Bootstrap topup requires the protected policy-governed executor (minimum tier $5)."}
+{"timestamp":"2026-10-18T17:36:40.054Z","level":"warn","module":"heartbeat.tasks","message":"Auto-topup failed: Protected autonomous topup executor is unavailable; no payment was executed."}
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > wake event ordering and consumption > lists unconsumed events 123ms
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > wake event ordering and consumption > stores payload as JSON 79ms
+(node:44748) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"timestamp":"2026-10-18T17:36:40.145Z","level":"info","module":"loop","message":"[CYCLE LIMIT] 1 turns reached (max: 1). Forcing sleep."}
+{"timestamp":"2026-10-18T17:36:40.146Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > check_usdc_balance > wakes when has USDC but critically low credits 616ms
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > check_usdc_balance > does not wake when USDC below threshold 43ms
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > health_check > returns shouldWake false when sandbox is healthy 51ms
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > task lease acquisition and release > acquires and releases leases 58ms
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > task lease acquisition and release > clears expired leases 44ms
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > health_check > wakes when sandbox exec fails 33ms
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > health_check > wakes when sandbox exec throws 54ms
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > refresh_models > refreshes model registry from API 28ms
+ ✓ src/__tests__/heartbeat.test.ts > Heartbeat Tasks > shared tick context > all tasks receive the same tick context without redundant API calls 24ms
+(node:44756) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/__tests__/p031-resource-outcome-learning.test.ts > P-031 source-backed resource outcome → strategic planning (read-only) > connects owned, terminal and critical resources to Task/Goal evidence without inventing ROI or supplier settlement 134ms
+{"timestamp":"2026-10-18T17:36:40.674Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+{"timestamp":"2026-10-18T17:36:40.679Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:40.683Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"rm -rf ~/.abos\"})"}
+{"timestamp":"2026-10-18T17:36:40.684Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: ERROR: Policy denied: FORBIDDEN_COMMAND — Blocked: Delete .abos directory (pattern: rm\\s+(-rf?\\s+)?.*\\.abos)"}
+ ✓ src/__tests__/p031-resource-outcome-learning.test.ts > P-031 source-backed resource outcome → strategic planning (read-only) > does not turn missing task, zero default cost or invalid CPU into resource savings 43ms
+ ✓ src/__tests__/p031-resource-outcome-learning.test.ts > P-031 source-backed resource outcome → strategic planning (read-only) > preserves ordered task assignments after detach without turning event timestamps into usage intervals 45ms
+ ✓ src/__tests__/p031-resource-outcome-learning.test.ts > P-031 source-backed resource outcome → strategic planning (read-only) > keeps the previous Goal's event association after the resource moves to another Goal 35ms
+{"timestamp":"2026-10-18T17:36:40.692Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:40.696Z","level":"info","module":"loop","message":"[THOUGHT] OK."}
+{"timestamp":"2026-10-18T17:36:40.696Z","level":"info","module":"loop","message":"[IDLE] No pending inputs. Entering brief sleep."}
+{"timestamp":"2026-10-18T17:36:40.696Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > exec tool runs and is persisted 1142ms
+ ✓ src/__tests__/p030-financial-effects.test.ts > P-030 financial effect authority > reports mixed unsettled credit, USDC topup/service and unknown units without a fake balance 33ms
+ ✓ src/__tests__/p030-financial-effects.test.ts > P-030 financial effect authority > does not dispatch a second equivalent unresolved effect using another key 25ms
+ ✓ src/__tests__/p031-resource-outcome-learning.test.ts > P-031 source-backed resource outcome → strategic planning (read-only) > keeps metering UNKNOWN when a P-018 reassignment lacks its P-013 snapshot 37ms
+ ✓ src/__tests__/p031-resource-outcome-learning.test.ts > P-031 source-backed resource outcome → strategic planning (read-only) > reuses P-013 worker retry evidence in P-031 planning without inventing CPU cost or complete history 60ms
+ ✓ src/__tests__/p031-resource-outcome-learning.test.ts > P-031 source-backed resource outcome → strategic planning (read-only) > does not double count a single task actual across two bound resources 49ms
+ ✓ src/__tests__/p030-financial-effects.test.ts > P-030 financial effect authority > persists equivalent-intent protection across database restart 42ms
+ ✓ src/__tests__/p030-financial-effects.test.ts > P-030 financial effect authority > does not classify different economic purposes as the same intent 22ms
+ ✓ src/__tests__/p030-financial-effects.test.ts > P-030 financial effect authority > preserves financial_effects through v23 and its internal reserve migration 19ms
+ ✓ src/__tests__/p030-financial-effects.test.ts > P-030 financial effect authority > reuses the same durable operation key but rejects semantic drift 21ms
+ ✓ src/__tests__/p031-resource-outcome-learning.test.ts > P-031 source-backed resource outcome → strategic planning (read-only) > reports task/CPU time overlap as point compatibility only, never measured work or billed allocation 24ms
+ ✓ src/__tests__/p031-resource-outcome-learning.test.ts > P-031 source-backed resource outcome → strategic planning (read-only) > rejects CPU samples outside the task window and at ambiguous assignment boundaries 29ms
+ ✓ src/__tests__/p031-resource-outcome-learning.test.ts > P-031 source-backed resource outcome → strategic planning (read-only) > preserves UNKNOWN when task start/end evidence is absent and when the sample predates ownership 47ms
+ ✓ src/__tests__/p030-financial-effects.test.ts > P-030 financial effect authority > allows external dispatch exactly once, including across restart 41ms
+ ✓ src/__tests__/p030-financial-effects.test.ts > P-030 financial effect authority > keeps submitted/pending effects unresolved and unmaterialized 25ms
+ ✓ src/__tests__/p030-financial-effects.test.ts > P-030 financial effect authority > materializes an externally settled effect exactly once on replay 22ms
+ ✓ src/__tests__/p030-financial-effects.test.ts > P-030 financial effect authority > turns settled-provider/local-ledger failure into recoverable reconciliation 41ms
+{"timestamp":"2026-10-18T17:36:41.050Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $0.50"}
+{"timestamp":"2026-10-18T17:36:41.053Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: low_compute, connection: legacy/auto, model: gpt-5-mini)..."}
+{"timestamp":"2026-10-18T17:36:41.056Z","level":"info","module":"loop","message":"[THOUGHT] Low on credits."}
+{"timestamp":"2026-10-18T17:36:41.056Z","level":"info","module":"loop","message":"[IDLE] No pending inputs. Entering brief sleep."}
+{"timestamp":"2026-10-18T17:36:41.056Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > forbidden patterns blocked 550ms
+ ✓ src/__tests__/p031-resource-outcome-learning.test.ts > P-031 source-backed resource outcome → strategic planning (read-only) > retains a 300s CloudWatch request as requested-only evidence without inferring metered coverage 34ms
+ ✓ src/__tests__/p031-resource-outcome-learning.test.ts > P-031 source-backed resource outcome → strategic planning (read-only) > rejects near-boundary CloudWatch aggregates and round-trip resource reassignment 67ms
+ ✓ src/__tests__/p031-resource-outcome-learning.test.ts > P-031 source-backed resource outcome → strategic planning (read-only) > does not infer excluded AWS Task consumption from sample timestamps outside an unverified 300-second aggregate 35ms
+ ✓ src/__tests__/p030-financial-effects.test.ts > P-030 financial effect authority > rejects a changed provider transfer id before accounting materialization 30ms
+ ✓ src/__tests__/p030-financial-effects.test.ts > P-030 financial effect authority > never downgrades a rejected effect after late pending evidence 30ms
+ ✓ src/__tests__/p030-financial-effects.test.ts > P-030 financial effect authority > preserves provider-settled reconciliation state against stale observations 45ms
+ ✓ src/__tests__/p031-resource-outcome-learning.test.ts > P-031 source-backed resource outcome → strategic planning (read-only) > does not treat final retry timestamps as complete multi-attempt execution evidence 31ms
+ ✓ src/__tests__/p031-resource-outcome-learning.test.ts > P-031 source-backed resource outcome → strategic planning (read-only) > does not invent economic outcome learning from Goals and Tasks without any owned resource 35ms
+ ✓ src/__tests__/p030-financial-effects.test.ts > P-030 financial effect authority > prevents one provider receipt from settling two independent intents 37ms
+ ✓ src/__tests__/p030-financial-effects.test.ts > P-030 financial effect authority > does not silently round combined pending obligations beyond exact integer range 28ms
+ ✓ src/__tests__/p030-financial-effects.test.ts > P-030 financial effect authority > does not count rejected or completed effects as immobilized capital 32ms
+(node:44765) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:44764) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > task execution history recording > records successful execution 1107ms
+{"timestamp":"2026-10-18T17:36:41.381Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+{"timestamp":"2026-10-18T17:36:41.385Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:41.392Z","level":"info","module":"loop","message":"[TOOL] sleep({\"duration_seconds\":60,\"reason\":\"test\"})"}
+{"timestamp":"2026-10-18T17:36:41.394Z","level":"info","module":"loop","message":"[TOOL RESULT] sleep: Entering sleep mode for 60s. Reason: test. Heartbeat will continue."}
+{"timestamp":"2026-10-18T17:36:41.400Z","level":"info","module":"loop","message":"[SLEEP] Agent chose to sleep."}
+{"timestamp":"2026-10-18T17:36:41.401Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > low credits forces low-compute mode 359ms
+ ✓ src/__tests__/p030-treasury-projection.test.ts > P-030 treasury projection > preserves free liquidity and unvalued birth resources as unknown 67ms
+ ✓ src/__tests__/p030-treasury-projection.test.ts > P-030 treasury projection > keeps unresolved transfers immobilized without calling them expense or revenue 28ms
+ ✓ src/__tests__/p030-credit-transfer-adapter.test.ts > P-030 credit effect execution and reconciliation > submits once and waits for provider finality before writing a ledger movement 59ms
+ ✓ src/__tests__/p030-treasury-projection.test.ts > P-030 treasury projection > reports a delayed refund without double-counting it as spendable credits 33ms
+ ✓ src/__tests__/p030-treasury-projection.test.ts > P-030 treasury projection > keeps paid and imputed resources distinct without fabricating cash liquidity 34ms
+ ✓ src/__tests__/p030-treasury-projection.test.ts > P-030 treasury projection > requires compatible evidence before task estimates reduce free credits 21ms
+ ✓ src/__tests__/p030-treasury-projection.test.ts > P-030 treasury projection > calibrates task estimates against observed terminal costs without counting unknown defaults as zero 25ms
+ ✓ src/__tests__/p030-credit-transfer-adapter.test.ts > P-030 credit effect execution and reconciliation > recovers a pending provider receipt after restart without dispatching twice 52ms
+ ✓ src/__tests__/p030-credit-transfer-adapter.test.ts > P-030 credit effect execution and reconciliation > does not retry after a lost response and can reconcile later 39ms
+ ✓ src/__tests__/p030-credit-transfer-adapter.test.ts > P-030 credit effect execution and reconciliation > rejects a mismatched child identity and recipient before any external dispatch 50ms
+ ✓ src/__tests__/p030-treasury-projection.test.ts > P-030 treasury projection > automatically feeds measured economic errors into P-023 planner context without inventing spendable money 28ms
+ ✓ src/__tests__/p030-treasury-projection.test.ts > P-030 treasury projection > does not fabricate economic calibration when task outcomes are absent 30ms
+ ✓ src/__tests__/p030-treasury-projection.test.ts > P-030 treasury projection > does not convert corrupt active task-cost estimates into a fictitious zero 28ms
+ ✓ src/__tests__/p030-treasury-projection.test.ts > P-030 treasury projection > rejects a negative active cost even when larger positive costs hide it in SQL SUM 26ms
+ ✓ src/__tests__/p030-credit-transfer-adapter.test.ts > P-030 credit effect execution and reconciliation > preserves reconciliation-required state if a child wallet changes before settlement 28ms
+ ✓ src/__tests__/p030-credit-transfer-adapter.test.ts > P-030 credit effect execution and reconciliation > reconciles child funding exactly once without treating capital as expense 29ms
+ ✓ src/__tests__/p030-credit-transfer-adapter.test.ts > P-030 credit effect execution and reconciliation > does not settle when provider response omits or changes correlated terms: {"transferId":"provider-incomplete","status":"completed","amountCents":200} 49ms
+ ✓ src/__tests__/p030-treasury-projection.test.ts > P-030 treasury projection > refuses an inexact aggregate of individually valid treasury obligations 45ms
+ ✓ src/__tests__/p030-treasury-projection.test.ts > P-030 treasury projection > rejects duplicate resource allocations rather than inflating investment 27ms
+ ✓ src/__tests__/p030-treasury-projection.test.ts > P-030 source-owned compute/time resource investment > preserves UNKNOWN when provider resource usage is absent 32ms
+{"timestamp":"2026-10-18T17:36:41.940Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+{"timestamp":"2026-10-18T17:36:41.943Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:41.950Z","level":"info","module":"loop","message":"[THOUGHT] Nothing to do."}
+{"timestamp":"2026-10-18T17:36:41.954Z","level":"info","module":"loop","message":"[IDLE] No pending inputs. Entering brief sleep."}
+{"timestamp":"2026-10-18T17:36:41.954Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > sleep tool transitions state 345ms
+ ✓ src/__tests__/p030-treasury-projection.test.ts > P-030 source-owned compute/time resource investment > reports token and time lower bounds apart from external revenue, credits and cash expense 42ms
+ ✓ src/__tests__/p030-treasury-projection.test.ts > P-030 source-owned compute/time resource investment > excludes corrupt negative metrics instead of netting them against actual resource usage 27ms
+ ✓ src/__tests__/p030-treasury-projection.test.ts > P-030 minimal SQLite embeddings with no inference-cost schema > preserves UNKNOWN without creating a parallel sidecar or blocking existing orchestration 1ms
+ ✓ src/__tests__/p030-credit-transfer-adapter.test.ts > P-030 credit effect execution and reconciliation > does not settle when provider response omits or changes correlated terms: {"transferId":"provider-incomplete","status":"completed","toAddress":"0xrecipient"} 53ms
+ ✓ src/__tests__/p030-credit-transfer-adapter.test.ts > P-030 credit effect execution and reconciliation > does not settle when provider response omits or changes correlated terms: {"transferId":"provider-incomplete","status":"completed","toAddress":"0xrecipient","amountCents":201} 55ms
+(node:44793) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/__tests__/p030-credit-transfer-adapter.test.ts > P-030 credit effect execution and reconciliation > does not materialize a final-looking transfer response without a provider receipt ID 48ms
+ ✓ src/__tests__/p030-credit-transfer-adapter.test.ts > P-030 credit effect execution and reconciliation > refuses unrelated or incomplete injected final provider receipts 65ms
+ ✓ src/__tests__/p030-credit-transfer-adapter.test.ts > P-030 credit effect execution and reconciliation > refuses a final receipt if no external dispatch was durably claimed 46ms
+ ✓ src/__tests__/p030-credit-transfer-adapter.test.ts > P-030 credit effect execution and reconciliation > refuses externally inconsistent recipient or amount observations 53ms
+(node:44801) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"timestamp":"2026-10-18T17:36:42.434Z","level":"error","module":"heartbeat.scheduler","message":"Task 'failing_task' failure: Task failed intentionally"}
+{"timestamp":"2026-10-18T17:36:42.439Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+{"timestamp":"2026-10-18T17:36:42.445Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:42.452Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo awake\"})"}
+{"timestamp":"2026-10-18T17:36:42.453Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:42.464Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:42.471Z","level":"info","module":"loop","message":"[THOUGHT] Received the message."}
+{"timestamp":"2026-10-18T17:36:42.471Z","level":"info","module":"loop","message":"[IDLE] No pending inputs. Entering brief sleep."}
+{"timestamp":"2026-10-18T17:36:42.471Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > idle auto-sleep on no tool calls 553ms
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > task execution history recording > records failed execution 1155ms
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > TickContext building > fetches balance once and builds context 51ms
+{"timestamp":"2026-10-18T17:36:42.536Z","level":"error","module":"heartbeat.tick","message":"Failed to fetch credit balance","error":{"message":"API unavailable","stack":"Error: API unavailable\n    at MockConwayClient.conway.getCreditsBalance (/workspace/ABOS/src/__tests__/heartbeat-scheduler.test.ts:509:15)\n    at buildTickContext (/workspace/ABOS/src/heartbeat/tick-context.ts:53:34)\n    at /workspace/ABOS/src/__tests__/heartbeat-scheduler.test.ts:512:25\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20\n    at new Promise (<anonymous>)"}}
+ ✓ src/__tests__/p030-treasury-scenario.test.ts > P-030 evidence-based treasury scenarios > does not forbid full use of demonstrably free capital by an arbitrary percentage 38ms
+ ✓ src/__tests__/p030-treasury-scenario.test.ts > P-030 evidence-based treasury scenarios > does not infer bulk procurement from having a high balance 28ms
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > TickContext building > handles API failure gracefully 56ms
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > config consumption > uses defaultIntervalMs from config 40ms
+ ✓ src/__tests__/p030-treasury-scenario.test.ts > P-030 evidence-based treasury scenarios > allows exceptional spending to reach strategic review with contract and reserves evidence 42ms
+ ✓ src/__tests__/p030-treasury-scenario.test.ts > P-030 evidence-based treasury scenarios > retains unknown capital and insufficient contingency without inventing a reserve percentage 27ms
+ ✓ src/__tests__/p030-treasury-scenario.test.ts > P-030 evidence-based treasury scenarios > does not convert null risk exposure or alternative price into a zero-cost contingency 56ms
+ ✓ src/__tests__/p030-treasury-scenario.test.ts > P-030 evidence-based treasury scenarios > does not hide pre-existing credit insolvency behind a clamped zero available balance 33ms
+ ✓ src/__tests__/p030-treasury-scenario.test.ts > P-030 evidence-based treasury scenarios > keeps earmarked downside separate from spendable credit liquidity 22ms
+ ✓ src/__tests__/p030-treasury-scenario.test.ts > P-030 evidence-based treasury scenarios > seeks alternatives when scenario downside plus purchase exceeds observed free liquidity 57ms
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > YAML parse error logging > logs error when YAML fails to parse 204ms
+ ✓ src/__tests__/heartbeat-scheduler.test.ts > DurableScheduler > numeric config field zero values > preserves explicit zero for defaultIntervalMs and lowComputeMultiplier 41ms
+(node:44810) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/__tests__/p030-treasury-scenario.test.ts > P-030 evidence-based treasury scenarios > does not release earlier reserves on the strength of a narrow risk scenario 24ms
+ ✓ src/__tests__/p030-treasury-scenario.test.ts > P-030 evidence-based treasury scenarios > requires joint-risk evidence when multiple contingencies may coincide 35ms
+ ✓ src/__tests__/p030-treasury-scenario.test.ts > P-030 evidence-based treasury scenarios > can evaluate several contingencies when documented joint downside is supplied 41ms
+{"timestamp":"2026-10-18T17:36:42.996Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+{"timestamp":"2026-10-18T17:36:43.024Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:43.028Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo 0\"})"}
+{"timestamp":"2026-10-18T17:36:43.030Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:43.030Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo 1\"})"}
+{"timestamp":"2026-10-18T17:36:43.032Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:43.032Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo 2\"})"}
+{"timestamp":"2026-10-18T17:36:43.033Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:43.033Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo 3\"})"}
+{"timestamp":"2026-10-18T17:36:43.034Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:43.035Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo 4\"})"}
+{"timestamp":"2026-10-18T17:36:43.036Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:43.036Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo 5\"})"}
+{"timestamp":"2026-10-18T17:36:43.038Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:43.038Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo 6\"})"}
+{"timestamp":"2026-10-18T17:36:43.039Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:43.039Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo 7\"})"}
+{"timestamp":"2026-10-18T17:36:43.041Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:43.041Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo 8\"})"}
+ ✓ src/__tests__/p030-treasury-scenario.test.ts > P-030 evidence-based treasury scenarios > rejects unsupported oversizing despite a token future demand claim 48ms
+ ✓ src/__tests__/p030-treasury-scenario.test.ts > P-030 evidence-based treasury scenarios > accepts adequately evidenced future demand without an arbitrary spending cap 51ms
+ ✓ src/__tests__/p030-treasury-scenario.test.ts > P-030 evidence-based treasury scenarios > permits source-backed bundle economics for unmet demand but not bundles without future demand 37ms
+{"timestamp":"2026-10-18T17:36:43.042Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:43.042Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo 9\"})"}
+{"timestamp":"2026-10-18T17:36:43.047Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:43.047Z","level":"info","module":"loop","message":"[TOOLS] Max tool calls per turn reached (10)"}
+ ✓ src/__tests__/p030-treasury-scenario.test.ts > P-030 evidence-based treasury scenarios > exposes scenario evidence through the protected catalog without making payments 65ms
+{"timestamp":"2026-10-18T17:36:43.054Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:43.061Z","level":"info","module":"loop","message":"[THOUGHT] Done."}
+{"timestamp":"2026-10-18T17:36:43.061Z","level":"info","module":"loop","message":"[IDLE] No pending inputs. Entering brief sleep."}
+{"timestamp":"2026-10-18T17:36:43.061Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > inbox messages cause pendingInput injection 522ms
+(node:44819) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/__tests__/p010-authorization-followup.test.ts > P-010 creator-signed authorization follow-up > verifies EVM and Solana signatures against the exact message 203ms
+ ✓ src/__tests__/p010-authorization-followup.test.ts > P-010 creator-signed authorization follow-up > binds an approval to the durable creator, decision, tool, scope and expiry 48ms
+ ✓ src/__tests__/p010-authorization-followup.test.ts > P-010 creator-signed authorization follow-up > rejects a valid signature from any address other than the durable creator 31ms
+{"timestamp":"2026-10-18T17:36:43.440Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+{"timestamp":"2026-10-18T17:36:43.445Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:43.451Z","level":"info","module":"loop","message":"[ERROR] Turn failed: Inference API unavailable"}
+{"timestamp":"2026-10-18T17:36:43.454Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:43.459Z","level":"info","module":"loop","message":"[ERROR] Turn failed: Inference API unavailable"}
+{"timestamp":"2026-10-18T17:36:43.461Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:43.467Z","level":"info","module":"loop","message":"[ERROR] Turn failed: Inference API unavailable"}
+{"timestamp":"2026-10-18T17:36:43.470Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:43.475Z","level":"info","module":"loop","message":"[ERROR] Turn failed: Inference API unavailable"}
+{"timestamp":"2026-10-18T17:36:43.477Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:43.483Z","level":"info","module":"loop","message":"[ERROR] Turn failed: Inference API unavailable"}
+{"timestamp":"2026-10-18T17:36:43.483Z","level":"info","module":"loop","message":"[FATAL] 5 consecutive errors. Sleeping."}
+{"timestamp":"2026-10-18T17:36:43.483Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > MAX_TOOL_CALLS_PER_TURN limits tool calls 586ms
+{"timestamp":"2026-10-18T17:36:43.486Z","level":"info","module":"topup","message":"Attempting credit topup: $25 USD for 0xa96Bd1F4bfBd8fb0151995D78836Cf9b28878fBc"}
+{"timestamp":"2026-10-18T17:36:43.486Z","level":"info","module":"topup","message":"Credit topup HTTP accepted: 25 USD tier; credits reported=2500 (not verified settlement)"}
+ ✓ src/__tests__/p010-authorization-followup.test.ts > P-010 creator-signed authorization follow-up > supports Solana creator approval without storing a private key 33ms
+ ✓ src/__tests__/p010-authorization-followup.test.ts > P-010 creator-signed authorization follow-up > revokes an unconsumed approval and prevents later claim 46ms
+ ✓ src/__tests__/p010-authorization-followup.test.ts > P-010 creator-signed authorization follow-up > refuses expired creator evidence 22ms
+{"timestamp":"2026-10-18T17:36:43.528Z","level":"info","module":"topup","message":"Bootstrap topup requires the protected policy-governed executor (minimum tier $5)."}
+{"timestamp":"2026-10-18T17:36:43.528Z","level":"info","module":"topup","message":"Sandbox recovery requires a protected topup execution (suggested tier $25)."}
+ ✓ src/__tests__/p010-authorization-followup.test.ts > P-010 creator-signed authorization follow-up > caps x402 topup at the exact canonical tier and rejects arbitrary amounts 23ms
+ ✓ src/__tests__/p010-authorization-followup.test.ts > P-010 creator-signed authorization follow-up > never pays from startup or sandbox recovery helpers 40ms
+ ✓ src/__tests__/p010-authorization-followup.test.ts > P-010 creator-signed authorization follow-up > accepts Solana for send_message but keeps financial address validation EVM-only 31ms
+ ✓ src/__tests__/p010-authorization-followup.test.ts > P-010 creator-signed authorization follow-up > does not convert amount alone into creator approval by default 26ms
+ ✓ src/__tests__/p031-billable-mutation-reconciliation.test.ts > P-031 ambiguous billable provider mutation lifecycle > quarantines an in-flight resize from reuse and never applies previous size after success 84ms
+ ✓ src/__tests__/p031-billable-mutation-reconciliation.test.ts > P-031 ambiguous billable provider mutation lifecycle > restores proven earlier capacity when resize is rejected before dispatch 64ms
+ ✓ src/__tests__/p010-authorization-followup.test.ts > P-010 creator-signed authorization follow-up > rate limits executed/uncertain effects, not pre-effect allows or known failures 40ms
+(node:44827) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/__tests__/p031-billable-mutation-reconciliation.test.ts > P-031 ambiguous billable provider mutation lifecycle > reconciles an out-of-band resource shape change without inheriting old quantitative capacity 37ms
+ ✓ src/__tests__/p031-billable-mutation-reconciliation.test.ts > P-031 ambiguous billable provider mutation lifecycle > removes stale observed capacity on failed health rather than reporting old utilization as current 36ms
+ ✓ src/__tests__/p031-billable-mutation-reconciliation.test.ts > P-031 ambiguous billable provider mutation lifecycle > does not let an inconclusive provider callback erase the lifecycle reconciliation marker 56ms
+{"timestamp":"2026-10-18T17:36:43.783Z","level":"error","module":"loop","message":"Credits balance fetch failed","error":{"message":"API down","stack":"Error: API down\n    at MockConwayClient.conway.getCreditsBalance (/workspace/ABOS/src/__tests__/loop.test.ts:354:13)\n    at getFinancialState (/workspace/ABOS/src/agent/loop.ts:2089:33)\n    at Module.runAgentLoop (/workspace/ABOS/src/agent/loop.ts:1233:25)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at /workspace/ABOS/src/__tests__/loop.test.ts:364:5\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"}}
+{"timestamp":"2026-10-18T17:36:43.796Z","level":"warn","module":"loop","message":"Balance API failed, using cached balance"}
+{"timestamp":"2026-10-18T17:36:43.796Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $50.00"}
+{"timestamp":"2026-10-18T17:36:43.796Z","level":"error","module":"loop","message":"Credits balance fetch failed","error":{"message":"API down","stack":"Error: API down\n    at MockConwayClient.conway.getCreditsBalance (/workspace/ABOS/src/__tests__/loop.test.ts:354:13)\n    at getFinancialState (/workspace/ABOS/src/agent/loop.ts:2089:33)\n    at Module.runAgentLoop (/workspace/ABOS/src/agent/loop.ts:1313:25)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at /workspace/ABOS/src/__tests__/loop.test.ts:364:5\n    at file:///workspace/ABOS/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"}}
+{"timestamp":"2026-10-18T17:36:43.796Z","level":"warn","module":"loop","message":"Balance API failed, using cached balance"}
+{"timestamp":"2026-10-18T17:36:43.799Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:43.805Z","level":"info","module":"loop","message":"[THOUGHT] Running with cached balance."}
+{"timestamp":"2026-10-18T17:36:43.805Z","level":"info","module":"loop","message":"[IDLE] No pending inputs. Entering brief sleep."}
+{"timestamp":"2026-10-18T17:36:43.805Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > consecutive errors trigger sleep 423ms
+ ✓ src/__tests__/p030-credit-topup.test.ts > P-030 x402 topup durable financial intents > does not book purchased credits based on accepted paid HTTP alone 47ms
+ ✓ src/__tests__/p031-billable-mutation-reconciliation.test.ts > P-031 ambiguous billable provider mutation lifecycle > marks timeout-after-possible-start UNKNOWN, blocks retry, then reopens after observed provider reconciliation 28ms
+ ✓ src/__tests__/p031-billable-mutation-reconciliation.test.ts > P-031 ambiguous billable provider mutation lifecycle > does not clear uncertain provider effect on inconclusive reconciliation 53ms
+ ✓ src/__tests__/p031-billable-mutation-reconciliation.test.ts > P-031 ambiguous billable provider mutation lifecycle > restores the original suspended status after denied-before-dispatch recovery 45ms
+ ✓ src/__tests__/p031-billable-mutation-reconciliation.test.ts > P-031 ambiguous billable provider mutation lifecycle > clearance after verified absence does not invent a refund or a running resource 28ms
+ ✓ src/__tests__/p030-credit-topup.test.ts > P-030 x402 topup durable financial intents > persists the signed authorization nonce before paid dispatch 64ms
+ ✓ src/__tests__/p030-credit-topup.test.ts > P-030 x402 topup durable financial intents > blocks a different tier or key while a prior wallet purchase is pending 33ms
+(node:44836) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/__tests__/p030-credit-topup.test.ts > P-030 x402 topup durable financial intents > preserves UNKNOWN after a paid request loses its response, including SQLite restart 67ms
+ ✓ src/__tests__/p030-credit-topup.test.ts > P-030 x402 topup durable financial intents > halts automatic recovery from a durable x402 pending effect before any fresh balance lookup 67ms
+ ✓ src/__tests__/p030-credit-topup.test.ts > P-030 x402 topup durable financial intents > rejects x402 payments if signer wallet and tracked recipient differ 36ms
+ ✓ src/__tests__/p030-credit-topup.test.ts > P-030 x402 topup durable financial intents > fails closed when the signing account is not initialized 21ms
+ ✓ src/__tests__/p030-credit-topup.test.ts > P-030 x402 topup durable financial intents > does not prevent independent wallet funding and allows an explicitly rejected pre-payment intent 41ms
+{"timestamp":"2026-10-18T17:36:44.147Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+{"timestamp":"2026-10-18T17:36:44.149Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:44.151Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo processing\"})"}
+{"timestamp":"2026-10-18T17:36:44.152Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:44.156Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:44.158Z","level":"info","module":"loop","message":"[THOUGHT] Done processing."}
+{"timestamp":"2026-10-18T17:36:44.158Z","level":"info","module":"loop","message":"[IDLE] No pending inputs. Entering brief sleep."}
+{"timestamp":"2026-10-18T17:36:44.158Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > financial state cached fallback on API failure 321ms
+(node:44844) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/__tests__/p030-credit-visibility.test.ts > P-030 Conway balance and treasury authority separation > preserves the reconciliation worklist when provider balance is unreachable 57ms
+ ✓ src/__tests__/p030-credit-visibility.test.ts > P-030 Conway balance and treasury authority separation > separates committed x402 USDC from pending Conway credits 26ms
+ ✓ src/__tests__/p030-credit-visibility.test.ts > P-030 Conway balance and treasury authority separation > reports observed credits without claiming unknown funds are free 25ms
+ ✓ src/__tests__/p010-autonomous-topup.test.ts > P-010 autonomous topup judgment > buys only the smallest supported tier that closes demonstrated startup need 58ms
+ ✓ src/__tests__/p010-autonomous-topup.test.ts > P-010 autonomous topup judgment > does not turn a large wallet balance into a reason to overbuy 28ms
+{"timestamp":"2026-10-18T17:36:44.677Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+{"timestamp":"2026-10-18T17:36:44.679Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:44.682Z","level":"info","module":"loop","message":"[THOUGHT] Nothing to do."}
+{"timestamp":"2026-10-18T17:36:44.682Z","level":"info","module":"loop","message":"[IDLE] No pending inputs. Entering brief sleep."}
+{"timestamp":"2026-10-18T17:36:44.682Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > turn persistence is atomic with inbox ack 353ms
+(node:44852) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/__tests__/p010-autonomous-topup.test.ts > P-010 autonomous topup judgment > uses provider granularity without pretending an arbitrary percentage is rational 57ms
+ ✓ src/__tests__/p010-autonomous-topup.test.ts > P-010 autonomous topup judgment > does not spend when observed USDC cannot fund the smallest sufficient tier 33ms
+ ✓ src/__tests__/p010-autonomous-topup.test.ts > P-010 autonomous topup judgment > preserves UNKNOWN instead of manufacturing zero-balance evidence 38ms
+ ✓ src/__tests__/p010-autonomous-topup.test.ts > P-010 autonomous topup judgment > does not silently underfund a need larger than the maximum supported tier 49ms
+ ✓ src/__tests__/p010-autonomous-topup.test.ts > P-010 autonomous topup judgment > treats the EVM-only x402 route as a real boundary for Solana identity 20ms
+ ✓ src/__tests__/p010-autonomous-topup.test.ts > P-010 autonomous topup judgment > delegates bootstrap recovery only through the installed protected executor 27ms
+ ✓ src/__tests__/p010-autonomous-topup.test.ts > P-010 autonomous topup judgment > executes an autonomous system topup through PolicyEngine and records its outcome 53ms
+ ✓ src/__tests__/p010-autonomous-topup.test.ts > P-010 autonomous topup judgment > does not blindly redispatch while a prior topup effect is unresolved 77ms
+{"timestamp":"2026-10-18T17:36:44.999Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+{"timestamp":"2026-10-18T17:36:45.002Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+(node:44861) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"timestamp":"2026-10-18T17:36:45.004Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo loop\"})"}
+{"timestamp":"2026-10-18T17:36:45.005Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:45.007Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:45.009Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo loop\"})"}
+{"timestamp":"2026-10-18T17:36:45.010Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:45.012Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:45.013Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo loop\"})"}
+{"timestamp":"2026-10-18T17:36:45.029Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:45.030Z","level":"info","module":"loop","message":"[LOOP] Repetitive pattern detected: exec"}
+{"timestamp":"2026-10-18T17:36:45.030Z","level":"info","module":"loop","message":"[CYCLE LIMIT] 3 turns reached (max: 3). Forcing sleep."}
+{"timestamp":"2026-10-18T17:36:45.030Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > state transitions are reported via onStateChange 525ms
+ ✓ src/__tests__/policy-lifecycle-p010.test.ts > P-010 durable policy lifecycle > preserves P-010 policy lifecycle columns through the current schema 109ms
+ ✓ src/__tests__/policy-lifecycle-p010.test.ts > P-010 durable policy lifecycle > persists pending authorization before refusing the effect 48ms
+ ✓ src/__tests__/policy-lifecycle-p010.test.ts > P-010 durable policy lifecycle > consumes one exact approved scope once and refuses replay 26ms
+ ✓ src/__tests__/policy-lifecycle-p010.test.ts > P-010 durable policy lifecycle > preserves an approved authorization across restart and still claims it once 35ms
+ ✓ src/__tests__/policy-lifecycle-p010.test.ts > P-010 durable policy lifecycle > does not resurrect a consumed authorization after restart 77ms
+(node:44869) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"timestamp":"2026-10-18T17:36:45.357Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+{"timestamp":"2026-10-18T17:36:45.362Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:45.366Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo test\"})"}
+{"timestamp":"2026-10-18T17:36:45.367Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:45.368Z","level":"info","module":"loop","message":"[CYCLE LIMIT] 1 turns reached (max: 1). Forcing sleep."}
+{"timestamp":"2026-10-18T17:36:45.368Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > cycle turn limit forces sleep after maxTurnsPerCycle 347ms
+ ✓ src/__tests__/p030-x402-service-purchase.test.ts > P-030 autonomous x402 service-purchase accounting > accepts service content but never books HTTP 200 as settled financial expense 82ms
+ ✓ src/__tests__/p030-x402-service-purchase.test.ts > P-030 autonomous x402 service-purchase accounting > does not send a second indistinguishable paid request while the earlier settlement remains unknown 64ms
+ ✓ src/__tests__/p030-x402-service-purchase.test.ts > P-030 autonomous x402 service-purchase accounting > refuses to sign a paid request with a different wallet identity 25ms
+ ✓ src/__tests__/p013-heartbeat-correlation.test.ts > P-013 heartbeat correlation > persists a durable attempt intent before executing the task and links the canonical success 56ms
+ ✓ src/__tests__/p013-heartbeat-correlation.test.ts > P-013 heartbeat correlation > blocks redispatch after restart when a durable start has no settlement 32ms
+{"timestamp":"2026-10-18T17:36:45.525Z","level":"error","module":"heartbeat.scheduler","message":"Task 'late_success_p013' timeout: Task timed out after 15ms"}
+{"timestamp":"2026-10-18T17:36:45.528Z","level":"warn","module":"heartbeat.scheduler","message":"Task 'late_success_p013' completed after its timeout; durable timeout reconciled to success and pending retry suppressed"}
+(node:44886) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/__tests__/p013-heartbeat-correlation.test.ts > P-013 heartbeat correlation > keeps timeout and late success on one history authority and one causal chain 56ms
+ ✓ src/__tests__/p013-heartbeat-correlation.test.ts > P-013 heartbeat correlation > does not turn an externally successful task into false failure when success evidence cannot commit 35ms
+(node:44894) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"timestamp":"2026-10-18T17:36:45.709Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+{"timestamp":"2026-10-18T17:36:45.712Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:45.714Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo work\"})"}
+{"timestamp":"2026-10-18T17:36:45.714Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:45.726Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:45.729Z","level":"info","module":"loop","message":"[TOOL] write_file({\"path\":\"/tmp/test\"})"}
+{"timestamp":"2026-10-18T17:36:45.730Z","level":"info","module":"loop","message":"[TOOL RESULT] write_file: Blocked: write_file path \"/tmp/test\" resolves to \"/tmp/test\" which is outside the allowed directory (/root). Paths are confined to the sandbox home."}
+{"timestamp":"2026-10-18T17:36:45.734Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:45.736Z","level":"info","module":"loop","message":"[TOOL] git_status({\"path\":\"/tmp/test\"})"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > cycle limit sets 2-minute sleep duration 338ms
+{"timestamp":"2026-10-18T17:36:45.757Z","level":"info","module":"loop","message":"[TOOL RESULT] git_status: Branch: unknown\nStaged: 1\nModified: 0\nUntracked: 0\nClean: false"}
+{"timestamp":"2026-10-18T17:36:45.761Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:45.763Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo work\"})"}
+{"timestamp":"2026-10-18T17:36:45.764Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:45.768Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:45.770Z","level":"info","module":"loop","message":"[TOOL] write_file({\"path\":\"/tmp/test\"})"}
+{"timestamp":"2026-10-18T17:36:45.771Z","level":"info","module":"loop","message":"[TOOL RESULT] write_file: Blocked: write_file path \"/tmp/test\" resolves to \"/tmp/test\" which is outside the allowed directory (/root). Paths are confined to the sandbox home."}
+{"timestamp":"2026-10-18T17:36:45.774Z","level":"info","module":"loop","message":"[CYCLE LIMIT] 5 turns reached (max: 5). Forcing sleep."}
+{"timestamp":"2026-10-18T17:36:45.774Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/policy-engine.test.ts > PolicyEngine > evaluate() > allows all tool calls with empty rules 8ms
+ ✓ src/__tests__/policy-engine.test.ts > PolicyEngine > evaluate() > blocks execution when a deny rule matches 2ms
+ ✓ src/__tests__/policy-engine.test.ts > PolicyEngine > evaluate() > filters rules by name selector 2ms
+ ✓ src/__tests__/policy-engine.test.ts > PolicyEngine > evaluate() > filters rules by category selector 1ms
+ ✓ src/__tests__/policy-engine.test.ts > PolicyEngine > evaluate() > filters rules by risk level selector 1ms
+ ✓ src/__tests__/policy-engine.test.ts > PolicyEngine > evaluate() > evaluates rules in priority order 2ms
+ ✓ src/__tests__/policy-engine.test.ts > PolicyEngine > evaluate() > first deny wins over later allow 9ms
+ ✓ src/__tests__/policy-engine.test.ts > PolicyEngine > evaluate() > returns quarantine when no deny but quarantine exists 2ms
+ ✓ src/__tests__/policy-engine.test.ts > PolicyEngine > evaluate() > produces correct argsHash for given args 2ms
+ ✓ src/__tests__/policy-engine.test.ts > PolicyEngine > evaluate() > includes correct toolName and riskLevel in decision 1ms
+ ✓ src/__tests__/policy-engine.test.ts > PolicyEngine > logDecision() > logs decisions to the policy_decisions table 4ms
+ ✓ src/__tests__/policy-engine.test.ts > PolicyEngine > deriveAuthorityLevel() > returns external for undefined 1ms
+ ✓ src/__tests__/policy-engine.test.ts > PolicyEngine > deriveAuthorityLevel() > returns external for heartbeat 1ms
+ ✓ src/__tests__/policy-engine.test.ts > PolicyEngine > deriveAuthorityLevel() > returns agent for creator 1ms
+ ✓ src/__tests__/policy-engine.test.ts > PolicyEngine > deriveAuthorityLevel() > returns agent for agent 1ms
+ ✓ src/__tests__/policy-engine.test.ts > PolicyEngine > deriveAuthorityLevel() > returns system for system 1ms
+ ✓ src/__tests__/policy-engine.test.ts > PolicyEngine > deriveAuthorityLevel() > returns system for wakeup 1ms
+ ✓ src/__tests__/policy-engine.test.ts > Tool risk classifications > all tools have riskLevel set (not undefined) 9ms
+ ✓ src/__tests__/policy-engine.test.ts > Tool risk classifications > has no dangerous? property on any tool 1ms
+ ✓ src/__tests__/policy-engine.test.ts > Tool risk classifications > classifies safe tools correctly 1ms
+ ✓ src/__tests__/policy-engine.test.ts > Tool risk classifications > classifies dangerous tools correctly 1ms
+ ✓ src/__tests__/policy-engine.test.ts > Tool call IDs > executeTool returns ULID IDs (not Date.now patterns) 25ms
+ ✓ src/__tests__/policy-engine.test.ts > Tool call IDs > unknown tool returns ULID ID too 1ms
+ ✓ src/__tests__/policy-engine.test.ts > executeTool with PolicyEngine > blocks tool execution when policy denies 38ms
+ ✓ src/__tests__/policy-engine.test.ts > executeTool with PolicyEngine > allows tool execution when no policy engine is provided 26ms
+ ✓ src/__tests__/policy-engine.test.ts > executeTool with PolicyEngine > allows tool execution when policy allows 37ms
+ ✓ src/__tests__/p031-standalone-task-receipt.test.ts > P-031 standalone worker durable same-generation idempotency > atomically claims, settles and replays one Task attempt across SQLite reopen without repeating its mirror work 52ms
+ ✓ src/__tests__/p031-standalone-task-receipt.test.ts > P-031 standalone worker durable same-generation idempotency > rejects a possibly interrupted execution instead of blindly replaying it after restart 23ms
+ ✓ src/__tests__/p031-standalone-task-receipt.test.ts > P-031 standalone worker durable same-generation idempotency > fails closed for changed same-generation envelope and malformed prior result 20ms
+(node:44920) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:44928) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"timestamp":"2026-10-18T17:36:46.135Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $0.00"}
+{"timestamp":"2026-10-18T17:36:46.135Z","level":"info","module":"loop","message":"[CRITICAL] Credits critically low. Limited operation."}
+{"timestamp":"2026-10-18T17:36:46.138Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: critical, connection: legacy/auto, model: gpt-5-mini)..."}
+{"timestamp":"2026-10-18T17:36:46.141Z","level":"info","module":"loop","message":"[THOUGHT] I have no credits but I'm still alive."}
+{"timestamp":"2026-10-18T17:36:46.141Z","level":"info","module":"loop","message":"[IDLE] No pending inputs. Entering brief sleep."}
+{"timestamp":"2026-10-18T17:36:46.141Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > respects custom maxTurnsPerCycle from config 409ms
+{"timestamp":"2026-10-18T17:36:46.365Z","level":"error","module":"heartbeat.scheduler","message":"Task 'late_success' timeout: Task timed out after 15ms"}
+{"timestamp":"2026-10-18T17:36:46.367Z","level":"warn","module":"heartbeat.scheduler","message":"Task 'late_success' completed after its timeout; durable timeout reconciled to success and pending retry suppressed"}
+ ✓ src/__tests__/p011-heartbeat-timeout-recovery.test.ts > P-011 heartbeat timeout crash recovery > does not redispatch a durable timeout after supervisor crash/lease loss 46ms
+ ✓ src/__tests__/p011-heartbeat-timeout-recovery.test.ts > P-011 heartbeat timeout crash recovery > reconciles the original late success instead of executing a retry 42ms
+{"timestamp":"2026-10-18T17:36:46.412Z","level":"error","module":"heartbeat.scheduler","message":"Task 'late_failure' timeout: Task timed out after 15ms"}
+{"timestamp":"2026-10-18T17:36:46.413Z","level":"warn","module":"heartbeat.scheduler","message":"Task 'late_failure' settled with an error after its timeout; durable timeout reconciled to failure","context":{"error":"remote operation definitively failed"}}
+ ✓ src/__tests__/p011-heartbeat-timeout-recovery.test.ts > P-011 heartbeat timeout crash recovery > reconciles a late rejection to known failure so the scheduled retry can become eligible 59ms
+{"timestamp":"2026-10-18T17:36:46.438Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+{"timestamp":"2026-10-18T17:36:46.440Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:46.442Z","level":"info","module":"loop","message":"[TOOL] check_credits({})"}
+{"timestamp":"2026-10-18T17:36:46.444Z","level":"info","module":"loop","message":"[TOOL RESULT] check_credits: Credit balance: $100.00 (10000 cents)\nTreasury: free credits=UNKNOWN;\npending financial effects=0;\nimmobilized pending credits=0;\nunresolved x402 USDC topups=0; committed USDC cents (NOT Conway credit"}
+{"timestamp":"2026-10-18T17:36:46.450Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:46.452Z","level":"info","module":"loop","message":"[TOOL] system_synopsis({})"}
+{"timestamp":"2026-10-18T17:36:46.453Z","level":"info","module":"loop","message":"[TOOL RESULT] system_synopsis: === SYSTEM SYNOPSIS ===\nName: test-abos\nCreator: 0xabcdefabcdefabcdefabcdefabcdefabcdefabcd\nState: running\nTotal turns: 1\nInstalled tools: 0\nActive heartbeats: 0\nModel: mock-model\n===================="}
+ ✓ src/__tests__/p031-reviewed-path-provenance.test.ts > P-025 reviewed route provenance for P-031 > requires exact canonical materialized-path receipt, task binding and selected status 52ms
+ ✓ src/__tests__/p031-reviewed-path-provenance.test.ts > P-025 reviewed route provenance for P-031 > rejects stale or unrelated review receipts and stale task routes 45ms
+{"timestamp":"2026-10-18T17:36:46.457Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:46.459Z","level":"info","module":"loop","message":"[TOOL] review_memory({})"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > zero credits enters critical tier, not dead 363ms
+{"timestamp":"2026-10-18T17:36:46.497Z","level":"info","module":"loop","message":"[TOOL RESULT] review_memory: === Working Memory ===\n(empty)\n\n=== Recent History ===\n[tool:check_credits] Tools: check_credits(ok) (success, maintenance)\n[tool:system_synopsis] Tools: system_synopsis(ok) (success, maintenance)"}
+{"timestamp":"2026-10-18T17:36:46.498Z","level":"info","module":"loop","message":"[LOOP] Maintenance loop detected: 3 consecutive idle-only turns"}
+{"timestamp":"2026-10-18T17:36:46.504Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:46.506Z","level":"info","module":"loop","message":"[THOUGHT] I will now work on something productive."}
+{"timestamp":"2026-10-18T17:36:46.506Z","level":"info","module":"loop","message":"[IDLE] No pending inputs. Entering brief sleep."}
+{"timestamp":"2026-10-18T17:36:46.506Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+(node:44937) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:44943) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/__tests__/p031-provider-usd-exposure.test.ts > P-031 provider USD exposure in canonical P-025/P-030 review > separates usd_cent provider amounts from USDC, credits and unclassified units 65ms
+ ✓ src/__tests__/p031-provider-usd-exposure.test.ts > P-031 provider USD exposure in canonical P-025/P-030 review > exposes provider dollar commitments as unresolved liabilities, never free cash 24ms
+ ✓ src/__tests__/p031-provider-usd-exposure.test.ts > P-031 provider USD exposure in canonical P-025/P-030 review > keeps USD financial-effect overflow and invalid strategic input visible 55ms
+(node:44953) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"timestamp":"2026-10-18T17:36:46.790Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+{"timestamp":"2026-10-18T17:36:46.794Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:46.795Z","level":"info","module":"loop","message":"[TOOL] check_credits({})"}
+{"timestamp":"2026-10-18T17:36:46.796Z","level":"info","module":"loop","message":"[TOOL RESULT] check_credits: Credit balance: $100.00 (10000 cents)\nTreasury: free credits=UNKNOWN;\npending financial effects=0;\nimmobilized pending credits=0;\nunresolved x402 USDC topups=0; committed USDC cents (NOT Conway credit"}
+{"timestamp":"2026-10-18T17:36:46.800Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:46.802Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo hello\"})"}
+{"timestamp":"2026-10-18T17:36:46.802Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:46.805Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:46.807Z","level":"info","module":"loop","message":"[TOOL] system_synopsis({})"}
+{"timestamp":"2026-10-18T17:36:46.824Z","level":"info","module":"loop","message":"[TOOL RESULT] system_synopsis: === SYSTEM SYNOPSIS ===\nName: test-abos\nCreator: 0xabcdefabcdefabcdefabcdefabcdefabcdefabcd\nState: running\nTotal turns: 2\nInstalled tools: 0\nActive heartbeats: 0\nModel: mock-model\n===================="}
+{"timestamp":"2026-10-18T17:36:46.828Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:46.830Z","level":"info","module":"loop","message":"[THOUGHT] Done."}
+{"timestamp":"2026-10-18T17:36:46.830Z","level":"info","module":"loop","message":"[IDLE] No pending inputs. Entering brief sleep."}
+{"timestamp":"2026-10-18T17:36:46.831Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > maintenance loop detected after 3 consecutive idle-only turns 365ms
+ ✓ src/__tests__/p031-provider-account-exposure.test.ts > P-031 account-scoped provider obligations from P-030 canonical intents > does not add obligations of another account, currency or supplier 67ms
+ ✓ src/__tests__/p031-provider-account-exposure.test.ts > P-031 account-scoped provider obligations from P-030 canonical intents > refuses to silently allocate account-less and ambiguous pending effects 22ms
+ ✓ src/__tests__/p031-provider-account-exposure.test.ts > P-031 account-scoped provider obligations from P-030 canonical intents > never rounds oversized same-account pending cents into valid financial authority 20ms
+(node:44962) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"timestamp":"2026-10-18T17:36:47.064Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+ ✓ src/__tests__/p031-resource-decision-journey.test.ts > P-031 coherent Goal → owned inventory → selection → treasury evidence > materializes a reviewed mixed-service objective as a complete, dependency-aware Task graph without authorizing purchase 97ms
+ ✓ src/__tests__/p031-resource-decision-journey.test.ts > P-031 coherent Goal → owned inventory → selection → treasury evidence > reuses a Task-compatible owned compute candidate while keeping uncovered SaaS dependencies discoverable 63ms
+{"timestamp":"2026-10-18T17:36:47.067Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:47.068Z","level":"info","module":"loop","message":"[TOOL] check_credits({})"}
+ ✓ src/__tests__/p031-resource-decision-journey.test.ts > P-031 coherent Goal → owned inventory → selection → treasury evidence > never turns a synthetic supplier quote or budget into a purchase despite a missing dependency 1ms
+ ✓ src/__tests__/p031-worker-attempt-restart.test.ts > P-031 persisted local worker attempt evidence > preserves remote-process harness start, settlement and parent identity across restart without inferring provider usage 62ms
+ ✓ src/__tests__/p031-worker-attempt-restart.test.ts > P-031 persisted local worker attempt evidence > cannot claim a remote harness settled without observed start or after ownership changes 69ms
+{"timestamp":"2026-10-18T17:36:47.070Z","level":"info","module":"loop","message":"[TOOL RESULT] check_credits: Credit balance: $100.00 (10000 cents)\nTreasury: free credits=UNKNOWN;\npending financial effects=0;\nimmobilized pending credits=0;\nunresolved x402 USDC topups=0; committed USDC cents (NOT Conway credit"}
+{"timestamp":"2026-10-18T17:36:47.074Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:47.075Z","level":"info","module":"loop","message":"[TOOL] check_usdc_balance({})"}
+{"timestamp":"2026-10-18T17:36:47.076Z","level":"info","module":"loop","message":"[TOOL RESULT] check_usdc_balance: USDC balance: 0.000000 USDC on Base"}
+{"timestamp":"2026-10-18T17:36:47.079Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:47.081Z","level":"info","module":"loop","message":"[TOOL] git_status({})"}
+{"timestamp":"2026-10-18T17:36:47.081Z","level":"info","module":"loop","message":"[TOOL RESULT] git_status: Branch: unknown\nStaged: 1\nModified: 0\nUntracked: 0\nClean: false"}
+{"timestamp":"2026-10-18T17:36:47.082Z","level":"info","module":"loop","message":"[LOOP] Maintenance loop detected: 3 consecutive idle-only turns"}
+{"timestamp":"2026-10-18T17:36:47.084Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:47.086Z","level":"info","module":"loop","message":"[THOUGHT] Starting productive work now."}
+{"timestamp":"2026-10-18T17:36:47.086Z","level":"info","module":"loop","message":"[IDLE] No pending inputs. Entering brief sleep."}
+{"timestamp":"2026-10-18T17:36:47.086Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > maintenance loop NOT triggered when turns mix idle and productive tools 326ms
+(node:44970) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/__tests__/p031-worker-attempt-restart.test.ts > P-031 persisted local worker attempt evidence > retains an observed first attempt across retry, process restart and subsequent completion 99ms
+(node:44978) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"timestamp":"2026-10-18T17:36:47.384Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+{"timestamp":"2026-10-18T17:36:47.387Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:47.390Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo loop\"})"}
+{"timestamp":"2026-10-18T17:36:47.391Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:47.397Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:47.398Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo loop\"})"}
+{"timestamp":"2026-10-18T17:36:47.399Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:47.401Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:47.403Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo loop\"})"}
+{"timestamp":"2026-10-18T17:36:47.403Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:47.404Z","level":"info","module":"loop","message":"[LOOP] Repetitive pattern detected: exec"}
+{"timestamp":"2026-10-18T17:36:47.407Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:47.424Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo loop\"})"}
+{"timestamp":"2026-10-18T17:36:47.425Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:47.428Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:47.431Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo loop\"})"}
+{"timestamp":"2026-10-18T17:36:47.432Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:47.435Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:47.437Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo loop\"})"}
+{"timestamp":"2026-10-18T17:36:47.438Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:47.439Z","level":"info","module":"loop","message":"[LOOP] Enforcement: agent ignored loop warning, forcing sleep."}
+{"timestamp":"2026-10-18T17:36:47.439Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > maintenance loop triggers with varying idle tool combinations 255ms
+ ✓ src/__tests__/p031-ec2-mutation-economic-boundary.test.ts > P-031 EC2 billable mutation boundaries > blocks resize, resume and stopped-instance recovery before any billable mutation when no issuer is wired 4ms
+ ✓ src/__tests__/p031-ec2-mutation-economic-boundary.test.ts > P-031 EC2 billable mutation boundaries > rejects mismatched or expired account/resource/action/type/region/terms before billing effects 12ms
+ ✓ src/__tests__/p031-ec2-mutation-economic-boundary.test.ts > P-031 EC2 billable mutation boundaries > allows each precisely scoped mock-authorized mutation and records decision intent separately from invoices 2ms
+ ✓ src/__tests__/p031-ec2-mutation-economic-boundary.test.ts > P-031 EC2 billable mutation boundaries > observes already-running recovery/resume without new monetary authorization or provider mutation 0ms
+ ✓ src/__tests__/p031-ec2-mutation-economic-boundary.test.ts > P-031 EC2 billable mutation boundaries > records definitely-denied pre-dispatch lifecycle resume without degrading owned stopped resource 79ms
+(node:44986) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/__tests__/p031-goal-resource-lifecycle-journey.test.ts > P-031 real owner chain, synthetic Goal through resource retirement > preserves Task demand and economic authority across provision, replay, restart and retirement 171ms
+{"timestamp":"2026-10-18T17:36:47.780Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+{"timestamp":"2026-10-18T17:36:47.784Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:47.786Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo loop\"})"}
+{"timestamp":"2026-10-18T17:36:47.787Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:47.789Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:47.791Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo loop\"})"}
+{"timestamp":"2026-10-18T17:36:47.792Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:47.794Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:47.796Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo loop\"})"}
+{"timestamp":"2026-10-18T17:36:47.797Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:47.797Z","level":"info","module":"loop","message":"[LOOP] Repetitive pattern detected: exec"}
+(node:44995) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"timestamp":"2026-10-18T17:36:47.806Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:47.808Z","level":"info","module":"loop","message":"[TOOL] send_message({\"to\":\"0x123\",\"content\":\"hello\"})"}
+{"timestamp":"2026-10-18T17:36:47.825Z","level":"info","module":"loop","message":"[TOOL RESULT] send_message: Social relay not configured. Set socialRelayUrl in config."}
+ ✓ src/__tests__/p010-creator-rotation.test.ts > P-010 creator authority scope rotation > changes scope when creator authority rotates and refuses the stale approved scope 76ms
+{"timestamp":"2026-10-18T17:36:47.832Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:47.834Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo loop\"})"}
+{"timestamp":"2026-10-18T17:36:47.835Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:47.842Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:47.843Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo loop\"})"}
+{"timestamp":"2026-10-18T17:36:47.845Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:47.848Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:47.850Z","level":"info","module":"loop","message":"[TOOL] exec({\"command\":\"echo loop\"})"}
+{"timestamp":"2026-10-18T17:36:47.851Z","level":"info","module":"loop","message":"[TOOL RESULT] exec: exit_code: 0\nstdout: ok\nstderr: "}
+{"timestamp":"2026-10-18T17:36:47.852Z","level":"info","module":"loop","message":"[LOOP] Repetitive pattern detected: exec"}
+{"timestamp":"2026-10-18T17:36:47.854Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:47.857Z","level":"info","module":"loop","message":"[THOUGHT] Done."}
+{"timestamp":"2026-10-18T17:36:47.857Z","level":"info","module":"loop","message":"[IDLE] No pending inputs. Entering brief sleep."}
+{"timestamp":"2026-10-18T17:36:47.857Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > loop enforcement forces sleep after warning is ignored (6 identical patterns) 355ms
+(node:45003) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"timestamp":"2026-10-18T17:36:48.062Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-18T17:36:48.062Z","level":"info","module":"topup","message":"Credit topup HTTP accepted: 5 USD tier; credits reported=UNKNOWN (not verified settlement)"}
+{"timestamp":"2026-10-18T17:36:48.063Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-18T17:36:48.063Z","level":"info","module":"topup","message":"Credit topup HTTP accepted: 5 USD tier; credits reported=UNKNOWN (not verified settlement)"}
+{"timestamp":"2026-10-18T17:36:48.063Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-18T17:36:48.063Z","level":"info","module":"topup","message":"Credit topup HTTP accepted: 5 USD tier; credits reported=UNKNOWN (not verified settlement)"}
+{"timestamp":"2026-10-18T17:36:48.064Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-18T17:36:48.064Z","level":"info","module":"topup","message":"Credit topup HTTP accepted: 5 USD tier; credits reported=UNKNOWN (not verified settlement)"}
+{"timestamp":"2026-10-18T17:36:48.064Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-18T17:36:48.065Z","level":"info","module":"topup","message":"Credit topup HTTP accepted: 5 USD tier; credits reported=0 (not verified settlement)"}
+{"timestamp":"2026-10-18T17:36:48.065Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-18T17:36:48.065Z","level":"info","module":"topup","message":"Credit topup HTTP accepted: 5 USD tier; credits reported=500 (not verified settlement)"}
+{"timestamp":"2026-10-18T17:36:48.067Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-18T17:36:48.068Z","level":"error","module":"topup","message":"Credit topup failed: HTTP transport dropped"}
+ ✓ src/__tests__/p030-topup-http-claims.test.ts > P-030 topup HTTP claims vs observed credit quantity > never substitutes nominal tier for absent or invalid credited balance {} 2ms
+ ✓ src/__tests__/p030-topup-http-claims.test.ts > P-030 topup HTTP claims vs observed credit quantity > never substitutes nominal tier for absent or invalid credited balance {"credits_cents":"500"} 0ms
+ ✓ src/__tests__/p030-topup-http-claims.test.ts > P-030 topup HTTP claims vs observed credit quantity > never substitutes nominal tier for absent or invalid credited balance {"credits_cents":-1} 0ms
+ ✓ src/__tests__/p030-topup-http-claims.test.ts > P-030 topup HTTP claims vs observed credit quantity > never substitutes nominal tier for absent or invalid credited balance {"amount_cents":499} 1ms
+ ✓ src/__tests__/p030-topup-http-claims.test.ts > P-030 topup HTTP claims vs observed credit quantity > never substitutes nominal tier for absent or invalid credited balance {"credits_cents":0} 1ms
+ ✓ src/__tests__/p030-topup-http-claims.test.ts > P-030 topup HTTP claims vs observed credit quantity > passes the paid-request observer through the x402 wrapper 2ms
+ ✓ src/__tests__/p030-topup-http-claims.test.ts > P-030 topup HTTP claims vs observed credit quantity > distinguishes a paid request that lost its response from a confirmed payment 1ms
+(node:45011) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/__tests__/p031-conway-account-read-probe.test.ts > P-031 Conway authenticated GET-only diagnostic > reads balance, provider inventory and advertised tiers once, without mutating or claiming an owned account 16ms
+ ✓ src/__tests__/p031-conway-account-read-probe.test.ts > P-031 Conway authenticated GET-only diagnostic > does not turn duplicated provider sandbox identifiers into a complete inventory 1ms
+ ✓ src/__tests__/p031-conway-account-read-probe.test.ts > P-031 Conway authenticated GET-only diagnostic > does not promote a negative balance or a synthetic supplier list into capital and owned inventory 1ms
+ ✓ src/__tests__/p031-conway-account-read-probe.test.ts > P-031 Conway authenticated GET-only diagnostic > isolates supplier failures, preserves UNKNOWN instead of zero and never emits provider response bodies or credentials 0ms
+ ✓ src/__tests__/p031-conway-account-read-probe.test.ts > P-031 Conway authenticated GET-only diagnostic > preserves exact observed provider-priced tiers without deducing complete contract 1ms
+ ✓ src/__tests__/p031-conway-account-read-probe.test.ts > P-031 Conway authenticated GET-only diagnostic > preserves exact observed provider-priced tiers without deducing complete contract 1ms
+ ✓ src/__tests__/p031-conway-account-read-probe.test.ts > P-031 Conway authenticated GET-only diagnostic > preserves exact observed provider-priced tiers without deducing complete contract 5ms
+ ✓ src/__tests__/p031-conway-account-read-probe.test.ts > P-031 Conway authenticated GET-only diagnostic > rejects missing or imprecise Conway price source rather than fabricating a free tier 6ms
+ ✓ src/__tests__/p031-conway-account-read-probe.test.ts > P-031 Conway authenticated GET-only diagnostic > rejects missing or imprecise Conway price source rather than fabricating a free tier 5ms
+ ✓ src/__tests__/p031-conway-account-read-probe.test.ts > P-031 Conway authenticated GET-only diagnostic > rejects missing or imprecise Conway price source rather than fabricating a free tier 1ms
+ ✓ src/__tests__/p031-conway-account-read-probe.test.ts > P-031 Conway authenticated GET-only diagnostic > rejects missing or imprecise Conway price source rather than fabricating a free tier 1ms
+ ✓ src/__tests__/p031-conway-account-read-probe.test.ts > P-031 Conway authenticated GET-only diagnostic > rejects missing or imprecise Conway price source rather than fabricating a free tier 1ms
+ ✓ src/__tests__/p031-conway-account-read-probe.test.ts > P-031 Conway authenticated GET-only diagnostic > rejects missing or imprecise Conway price source rather than fabricating a free tier 1ms
+ ✓ src/__tests__/p031-conway-account-read-probe.test.ts > P-031 Conway authenticated GET-only diagnostic > rejects missing or imprecise Conway price source rather than fabricating a free tier 1ms
+ ✓ src/__tests__/p031-conway-account-read-probe.test.ts > P-031 Conway authenticated GET-only diagnostic > rejects missing or imprecise Conway price source rather than fabricating a free tier 1ms
+ ✓ src/__tests__/p031-conway-account-read-probe.test.ts > P-031 Conway authenticated GET-only diagnostic > rejects missing or imprecise Conway price source rather than fabricating a free tier 1ms
+ ✓ src/__tests__/p031-conway-account-read-probe.test.ts > P-031 Conway authenticated GET-only diagnostic > does not interpret invalid provider price tiers as a complete contract 0ms
+ ✓ src/__tests__/p030-conway-balance.test.ts > P-030: Conway financial balance observation is not fabricated > rejects an unobserved or invalid balance instead of pretending it is zero: {} 15ms
+ ✓ src/__tests__/p030-conway-balance.test.ts > P-030: Conway financial balance observation is not fabricated > rejects an unobserved or invalid balance instead of pretending it is zero: {"balance_cents":null} 1ms
+ ✓ src/__tests__/p030-conway-balance.test.ts > P-030: Conway financial balance observation is not fabricated > rejects an unobserved or invalid balance instead of pretending it is zero: {"balance_cents":"0"} 1ms
+ ✓ src/__tests__/p030-conway-balance.test.ts > P-030: Conway financial balance observation is not fabricated > rejects an unobserved or invalid balance instead of pretending it is zero: {"credits_cents":null} 1ms
+ ✓ src/__tests__/p030-conway-balance.test.ts > P-030: Conway financial balance observation is not fabricated > rejects an unobserved or invalid balance instead of pretending it is zero: {"balance_cents":0.1} 1ms
+ ✓ src/__tests__/p030-conway-balance.test.ts > P-030: Conway financial balance observation is not fabricated > preserves actual provider observations {"balance_cents":0} 5ms
+ ✓ src/__tests__/p030-conway-balance.test.ts > P-030: Conway financial balance observation is not fabricated > preserves actual provider observations {"credits_cents":750} 1ms
+ ✓ src/__tests__/p030-conway-balance.test.ts > P-030: Conway financial balance observation is not fabricated > preserves actual provider observations {"balance_cents":-15} 0ms
+ ✓ src/__tests__/p030-conway-balance.test.ts > P-030: Conway financial balance observation is not fabricated > requests an uncached balance without treating provider metadata as verified wallet provenance 11ms
+{"timestamp":"2026-10-18T17:36:48.338Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+{"timestamp":"2026-10-18T17:36:48.341Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:48.343Z","level":"info","module":"loop","message":"[TOOL] discover_agents({\"limit\":15})"}
+{"timestamp":"2026-10-18T17:36:48.344Z","level":"info","module":"loop","message":"[TOOL RESULT] discover_agents: #1 mock-agent (0x1111111111111111111111111111111111111111): Deterministic test agent"}
+{"timestamp":"2026-10-18T17:36:48.348Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:48.354Z","level":"info","module":"loop","message":"[TOOL] discover_agents({\"limit\":15})"}
+{"timestamp":"2026-10-18T17:36:48.355Z","level":"info","module":"loop","message":"[TOOL RESULT] discover_agents: #1 mock-agent (0x1111111111111111111111111111111111111111): Deterministic test agent"}
+{"timestamp":"2026-10-18T17:36:48.357Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:48.359Z","level":"info","module":"loop","message":"[TOOL] discover_agents({\"limit\":15})"}
+{"timestamp":"2026-10-18T17:36:48.360Z","level":"info","module":"loop","message":"[TOOL RESULT] discover_agents: #1 mock-agent (0x1111111111111111111111111111111111111111): Deterministic test agent"}
+{"timestamp":"2026-10-18T17:36:48.360Z","level":"info","module":"loop","message":"[LOOP] Repetitive pattern detected: discover_agents"}
+{"timestamp":"2026-10-18T17:36:48.363Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:48.365Z","level":"info","module":"loop","message":"[THOUGHT] Processing discovery results."}
+{"timestamp":"2026-10-18T17:36:48.365Z","level":"info","module":"loop","message":"[IDLE] No pending inputs. Entering brief sleep."}
+{"timestamp":"2026-10-18T17:36:48.365Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > loop enforcement resets when agent changes behavior after warning 423ms
+(node:45026) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:45020) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > classifies explicit final provider status settled as settled 2ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > classifies explicit final provider status completed as settled 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > classifies explicit final provider status complete as settled 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > classifies explicit final provider status succeeded as settled 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > classifies explicit final provider status success as settled 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > classifies explicit final provider status confirmed as settled 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > keeps intermediate provider status submitted pending 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > keeps intermediate provider status processing pending 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > keeps intermediate provider status pending pending 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > keeps intermediate provider status queued pending 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > keeps intermediate provider status accepted pending 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > keeps intermediate provider status received pending 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > classifies explicit negative provider status failed as rejected 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > classifies explicit negative provider status error as rejected 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > classifies explicit negative provider status rejected as rejected 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > classifies explicit negative provider status declined as rejected 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > classifies explicit negative provider status cancelled as rejected 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > classifies explicit negative provider status denied as rejected 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > classifies explicit negative provider status invalid_request as rejected 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > preserves unrecognized provider status  as unknown 1ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > preserves unrecognized provider status     as unknown 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > preserves unrecognized provider status future_provider_state as unknown 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > preserves unrecognized provider status awaiting_external_finality as unknown 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > preserves nullish status as unknown 0ms
+ ✓ src/__tests__/p030-credit-transfer-status.test.ts > P-030 credit transfer status classification > does not let a positive-looking substring override explicit rejection 0ms
+ ✓ src/__tests__/p031-conway-billable-post-no-retry.test.ts > P-031 Conway provider-native billable creation does not auto-replay > sandbox rejects a 502 without silently dispatching a second paid operation 22ms
+ ✓ src/__tests__/p031-conway-billable-post-no-retry.test.ts > P-031 Conway provider-native billable creation does not auto-replay > domain rejects a 502 without silently dispatching a second paid operation 1ms
+ ✓ src/__tests__/p031-conway-billable-post-no-retry.test.ts > P-031 Conway provider-native billable creation does not auto-replay > sandbox preserves an ambiguous network outcome without automatic paid replay 1ms
+ ✓ src/__tests__/p031-conway-billable-post-no-retry.test.ts > P-031 Conway provider-native billable creation does not auto-replay > domain preserves an ambiguous network outcome without automatic paid replay 0ms
+ ✓ src/__tests__/p031-conway-billable-post-no-retry.test.ts > P-031 Conway provider-native billable creation does not auto-replay > still permits a single valid sandbox create, without changing supplier response data 2ms
+ ✓ src/__tests__/p031-conway-billable-post-no-retry.test.ts > P-031 Conway provider-native billable creation does not auto-replay > still returns a supplier domain receipt after exactly one valid request 1ms
+ ✓ src/__tests__/p030-conway-transfer-wire.test.ts > P-030 Conway transfer wire response provenance > does not fabricate recipient or amount from an incomplete provider response 18ms
+ ✓ src/__tests__/p030-conway-transfer-wire.test.ts > P-030 Conway transfer wire response provenance > retains independently echoed provider terms 1ms
+{"timestamp":"2026-10-18T17:36:48.768Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+{"timestamp":"2026-10-18T17:36:48.771Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:48.773Z","level":"info","module":"loop","message":"[TOOL] read_file({\"path\":\"/tmp/one.txt\"})"}
+{"timestamp":"2026-10-18T17:36:48.774Z","level":"info","module":"loop","message":"[TOOL RESULT] read_file: one"}
+{"timestamp":"2026-10-18T17:36:48.776Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:48.778Z","level":"info","module":"loop","message":"[TOOL] read_file({\"path\":\"/tmp/two.txt\"})"}
+{"timestamp":"2026-10-18T17:36:48.778Z","level":"info","module":"loop","message":"[TOOL RESULT] read_file: two"}
+{"timestamp":"2026-10-18T17:36:48.780Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:48.782Z","level":"info","module":"loop","message":"[TOOL] read_file({\"path\":\"/tmp/three.txt\"})"}
+{"timestamp":"2026-10-18T17:36:48.783Z","level":"info","module":"loop","message":"[TOOL RESULT] read_file: three"}
+{"timestamp":"2026-10-18T17:36:48.784Z","level":"info","module":"loop","message":"[LOOP] Repetitive pattern detected: read_file"}
+{"timestamp":"2026-10-18T17:36:48.787Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:48.790Z","level":"info","module":"loop","message":"[THOUGHT] Processed file contents."}
+{"timestamp":"2026-10-18T17:36:48.790Z","level":"info","module":"loop","message":"[IDLE] No pending inputs. Entering brief sleep."}
+{"timestamp":"2026-10-18T17:36:48.790Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > discover_agents turns are retained in context (not classified as idle) 505ms
+{"timestamp":"2026-10-18T17:36:48.994Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+{"timestamp":"2026-10-18T17:36:48.995Z","level":"info","module":"loop","message":"[ORCHESTRATOR] All delegated work is active and no self-assigned parent task remains. Sleeping to avoid idle loop."}
+{"timestamp":"2026-10-18T17:36:48.995Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > read_file turns are retained in context (not classified as idle) 421ms
+{"timestamp":"2026-10-18T17:36:49.176Z","level":"info","module":"loop","message":"[WAKE UP] test-abos is alive. Credits: $100.00"}
+{"timestamp":"2026-10-18T17:36:49.186Z","level":"info","module":"loop","message":"[THINK] Routing inference (tier: high, connection: legacy/auto, model: gpt-5.2)..."}
+{"timestamp":"2026-10-18T17:36:49.189Z","level":"info","module":"loop","message":"[THOUGHT] Still working."}
+{"timestamp":"2026-10-18T17:36:49.189Z","level":"info","module":"loop","message":"[IDLE] No pending inputs. Entering brief sleep."}
+{"timestamp":"2026-10-18T17:36:49.189Z","level":"info","module":"loop","message":"[LOOP END] Agent loop finished. State: sleeping"}
+ ✓ src/__tests__/loop.test.ts > Agent Loop > sleeps early when delegated work is active and no self-assigned parent task remains 203ms
+ ✓ src/__tests__/loop.test.ts > Agent Loop > does not sleep early when the parent has a self-assigned task 194ms
+
+ Test Files  37 passed (37)
+      Tests  446 passed (446)
+   Start at  17:36:34
+   Duration  14.42s (transform 4.76s, setup 0ms, import 17.01s, tests 30.71s, environment 4ms)
+
+JSON report written to /workspace/.abos-evidence-tools/topup-v2/results.json

@@ -7,6 +7,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { BUILTIN_TASKS } from "../heartbeat/tasks.js";
+import { prepareFinancialEffect, recordFinancialEffectObservation } from "../economics/financial-effects.js";
 import {
   MockConwayClient,
   MockSocialClient,
@@ -405,6 +406,50 @@ describe("Heartbeat Tasks", () => {
   // ─── check_usdc_balance ─────────────────────────────────────
 
   describe("check_usdc_balance", () => {
+    it("avoids repeated paid-credit retries while periodically restoring reconciliation notice", async () => {
+      const identity = createTestIdentity();
+      prepareFinancialEffect(db.raw, {
+        operationKey: "topup:provider-credit-uncertain",
+        effectKind: "x402_credit_topup",
+        amountCents: 500,
+        unit: "usdc_cent",
+        provider: "conway_x402",
+        recipient: identity.address.toLowerCase(),
+        request: { tierUsd: 5, product: "conway_compute_credits" },
+      });
+      const tickCtx = createMockTickContext(db, {
+        creditBalance: 0,
+        usdcBalance: 10,
+        survivalTier: "critical",
+      });
+      const taskCtx: HeartbeatLegacyContext = {
+        identity, config: createTestConfig(), db, conway,
+      };
+      const first = await BUILTIN_TASKS.check_usdc_balance(tickCtx, taskCtx);
+      expect(first.shouldWake).toBe(true);
+      expect(first.message).toContain("topup:provider-credit-uncertain");
+      expect(first.message).toContain("Reconcile");
+      expect(first.message).not.toContain("topup_credits to retry");
+
+      const second = await BUILTIN_TASKS.check_usdc_balance(tickCtx, taskCtx);
+      expect(second.shouldWake).toBe(false);
+
+      recordFinancialEffectObservation(db.raw, "topup:provider-credit-uncertain", {
+        resolution: "pending", providerStatus: "provider_credit_still_unknown",
+      });
+      const stateChanged = await BUILTIN_TASKS.check_usdc_balance(tickCtx, taskCtx);
+      expect(stateChanged.shouldWake).toBe(true);
+      const immediatelyAgain = await BUILTIN_TASKS.check_usdc_balance(tickCtx, taskCtx);
+      expect(immediatelyAgain.shouldWake).toBe(false);
+
+      taskCtx.db.setKV("last_unresolved_credit_topup_notice", JSON.stringify({
+        signature: "topup:provider-credit-uncertain:pending",
+        atMs: Date.now() - 16 * 60_000,
+      }));
+      const overdue = await BUILTIN_TASKS.check_usdc_balance(tickCtx, taskCtx);
+      expect(overdue.shouldWake).toBe(true);
+    });
+
     it("does not wake when no USDC and enough credits", async () => {
       const tickCtx = createMockTickContext(db, {
         creditBalance: 10_000,

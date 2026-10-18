@@ -25,6 +25,7 @@ import { metricsInsertSnapshot, metricsPruneOld } from "../state/database.js";
 import { ulid } from "ulid";
 import { getChildEconomicSnapshot } from "../economics/child-economics.js";
 import { getTreasuryProjection } from "../economics/treasury-projection.js";
+import { listUnresolvedCreditTopups } from "../economics/credit-topup.js";
 
 const logger = createLogger("heartbeat.tasks");
 
@@ -158,6 +159,45 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
       timestamp: new Date().toISOString(),
     }));
 
+    // A paid x402 request may be charged on-chain even when Conway fails to
+    // grant credits. Use P-030 durable identity: a second purchase is not a
+    // recovery strategy for a pending/unknown first payment.
+    if (ctx.survivalTier === "critical" || ctx.survivalTier === "dead") {
+      const unresolved = listUnresolvedCreditTopups(taskCtx.db, taskCtx.identity.address);
+      if (unresolved.length > 0) {
+        const prior = unresolved[0];
+        // Notice is not a payment gate. It wakes on a new effect/state or after
+        // a bounded observation interval so UNKNOWN is never hidden forever.
+        const noticeKey = "last_unresolved_credit_topup_notice";
+        const signature = `${prior.operationKey}:${prior.state}`;
+        let last: { signature: string; atMs: number } | null = null;
+        try {
+          const raw = taskCtx.db.getKV(noticeKey);
+          const parsed = raw ? JSON.parse(raw) : null;
+          if (parsed && typeof parsed.signature === "string" &&
+              typeof parsed.atMs === "number") last = parsed;
+        } catch {
+          // Invalid reminder metadata is not a reason to suppress recovery.
+        }
+        const configuredMs = ctx.config.defaultIntervalMs;
+        const reminderMs = Math.max(15 * 60_000,
+          Number.isFinite(configuredMs) && configuredMs > 0 ? configuredMs : 0);
+        const now = Date.now();
+        const elapsed = last ? now - last.atMs : Number.POSITIVE_INFINITY;
+        if (last?.signature !== signature || elapsed < 0 ||
+            elapsed >= reminderMs) {
+          taskCtx.db.setKV(noticeKey, JSON.stringify({ signature, atMs: now }));
+          return {
+            shouldWake: true,
+            message: `Conway x402 topup ${prior.operationKey} remains ${prior.state}. ` +
+              "Reconcile its P-030 effect and independent provider/chain evidence " +
+              "before considering another paid request.",
+          };
+        }
+        return { shouldWake: false };
+      }
+    }
+
     const MIN_TOPUP_USD = 5;
     if (balance >= MIN_TOPUP_USD && (ctx.survivalTier === "critical" || ctx.survivalTier === "dead")) {
       // Cooldown: don't attempt more than once every 5 minutes to avoid
@@ -193,7 +233,7 @@ export const BUILTIN_TASKS: Record<string, HeartbeatTaskFn> = {
       logger.warn(`Auto-topup failed: ${errMsg}`);
       return {
         shouldWake: true,
-        message: `Low credits ($${(credits / 100).toFixed(2)}) with USDC available ($${balance.toFixed(2)}) but auto-topup failed: ${errMsg}. Use topup_credits to retry.`,
+        message: `Low credits ($${(credits / 100).toFixed(2)}) with USDC available ($${balance.toFixed(2)}), but credit recovery did not complete: ${errMsg}. Inspect P-030 and actual provider/account state before any new purchase.`,
       };
     }
 
