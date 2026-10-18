@@ -10,6 +10,7 @@
  * effect from this module. Purchase authority remains P-010/P-030.
  */
 import { domainToASCII } from "node:url";
+import { isAddress } from "viem";
 
 export interface ConwayDomainPurchaseEvidence {
   provider: "conway-domains";
@@ -153,4 +154,128 @@ export async function observeConwayDomainPurchaseEvidence(
     base.evidence.push("Specific-name check price differs from TLD catalog: NOT interchangeable; obtain provider's exact order requirements.");
   }
   return base;
+}
+
+/**
+ * Parse one supplier-supplied 402 body for inspection only. Conway Domains'
+ * documented x402Version:2 fields are `amount` (USDC atomic units), `asset`
+ * and `payTo`, not the older `maxAmountRequired`/payToAddress shape.
+ *
+ * Important: this code NEVER sends the initial POST, signs anything, claims a
+ * financial effect, or decides the quote is bound to a particular request.
+ * Those responsibilities remain with the trusted P-010/P-030 host boundary.
+ */
+export interface ConwayDomainsX402Version2Preview {
+  provider: "conway-domains";
+  status: "requirements_observed" | "unavailable";
+  reasonCode:
+    | "payment_required" | "unexpected_http_status" | "malformed_requirements"
+    | "no_supported_offer" | "ambiguous_offers";
+  requirement: {
+    scheme: "exact";
+    network: "eip155:8453";
+    usdcAddress: string;
+    payToAddress: string;
+    amountMicroUsdc: string;
+    policyAmountCents: number;
+    timeoutSeconds: number;
+  } | null;
+  /** Untrusted 402 metadata is not an order-specific commitment. */
+  exactOrderQuoteEstablished: false;
+  providerAccountId: null;
+  paymentAuthorized: false;
+  purchaseDispatched: false;
+  evidence: string[];
+}
+
+const CONWAY_DOMAINS_BASE_USDC =
+  "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+
+/** No network access or wallet access; caller supplies an already observed 402. */
+export function inspectConwayDomainsX402Version2(
+  httpStatus: number,
+  payload: unknown,
+): ConwayDomainsX402Version2Preview {
+  const base: ConwayDomainsX402Version2Preview = {
+    provider: "conway-domains",
+    status: "unavailable",
+    reasonCode: "malformed_requirements",
+    requirement: null,
+    exactOrderQuoteEstablished: false,
+    providerAccountId: null,
+    paymentAuthorized: false,
+    purchaseDispatched: false,
+    evidence: [
+      "Passive parser only: this function sends no supplier requests, signs no payment and creates no financial effect.",
+      "Observed supplier metadata is not bound to an authenticated account, exact registration body, term, funds, final contract, P-010 policy or P-030 dispatch.",
+    ],
+  };
+  if (httpStatus !== 402) {
+    return {
+      ...base,
+      reasonCode: "unexpected_http_status",
+      evidence: [...base.evidence,
+        "A non-402 result may involve an external effect; do not retry or infer no charge without supplier reconciliation."],
+    };
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return base;
+  const response = payload as Record<string, unknown>;
+  if (response.x402Version !== 2 || !Array.isArray(response.accepts) ||
+      response.accepts.length < 1 || response.accepts.length > 32) return base;
+
+  const compatible: NonNullable<ConwayDomainsX402Version2Preview["requirement"]>[] = [];
+  for (const raw of response.accepts) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const item = raw as Record<string, unknown>;
+    if (item.scheme !== "exact" || item.network !== "eip155:8453") continue;
+    // Reject ambiguous mixed old/new supplier fields rather than guessing
+    // which amount/recipient will actually be charged.
+    if (item.maxAmountRequired !== undefined ||
+        item.payToAddress !== undefined || item.usdcAddress !== undefined) {
+      return base;
+    }
+    if (typeof item.asset !== "string" ||
+        !isAddress(item.asset) ||
+        item.asset.toLowerCase() !== CONWAY_DOMAINS_BASE_USDC.toLowerCase() ||
+        typeof item.payTo !== "string" || !isAddress(item.payTo) ||
+        typeof item.amount !== "string" ||
+        !/^[0-9]+$/.test(item.amount) ||
+        typeof item.maxTimeoutSeconds !== "number" ||
+        !Number.isSafeInteger(item.maxTimeoutSeconds) ||
+        item.maxTimeoutSeconds <= 0 || item.maxTimeoutSeconds > 86_400) {
+      return base;
+    }
+    try {
+      const atomic = BigInt(item.amount);
+      if (atomic <= 0n) return base;
+      // USDC 6-decimal atomic amounts; one cent = 10,000 units.
+      const cents = (atomic + 9_999n) / 10_000n;
+      if (cents > BigInt(Number.MAX_SAFE_INTEGER)) return base;
+      compatible.push({
+        scheme: "exact",
+        network: "eip155:8453",
+        usdcAddress: item.asset,
+        payToAddress: item.payTo,
+        amountMicroUsdc: atomic.toString(),
+        policyAmountCents: Number(cents),
+        timeoutSeconds: item.maxTimeoutSeconds,
+      });
+    } catch {
+      return base;
+    }
+  }
+  if (!compatible.length) {
+    return { ...base, reasonCode: "no_supported_offer" };
+  }
+  if (compatible.length !== 1) {
+    return { ...base, reasonCode: "ambiguous_offers" };
+  }
+  return {
+    ...base,
+    status: "requirements_observed",
+    reasonCode: "payment_required",
+    requirement: compatible[0]!,
+    evidence: [...base.evidence,
+      "A compatible x402 v2 Base USDC exact requirement was parsed from HTTP 402. The price is informational only; do not sign, buy or equate it with a supplier contract."],
+  };
 }
