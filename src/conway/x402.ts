@@ -416,6 +416,8 @@ export async function probeX402ReadOnly(
     // as the target. Never retry this external probe automatically.
     const response = await x402HttpClient.request(url, {
       method: "HEAD", redirect: "error", retries: 0, timeout: 10_000,
+      cache: "no-store",
+      headers: { "Cache-Control": "no-store, max-age=0", Pragma: "no-cache" },
     });
     if (response.status !== 402) {
       if (response.ok) {
