@@ -29,6 +29,11 @@ ProjectOps-PR: 30
 Master-Plan-PR: 31
 Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
+## P-031 — Conway secondary gate synthetic physical PASS (2026-10-18)
+
+- **E3 CODE AND EVIDENCE VERIFIED:** source `7629866fc879c7ad82d386d053f60e4c03b1cb66`, evidence `95f49b757187c50b9c8cc316756f36d5678f257d` (único padre = source), 8 archivos en primer commit, hashes recalculados **7/7**, protocolo **6/6**, ProjectOps integrity/typecheck/build PASS, Vitest **168/168 pruebas / 12/12 archivos**. Audit `ProjectOps/evidence/P-031/audits/7629866f-conway-claimed-provision.md` e índice `ProjectOps/EVIDENCE.md`.
+- **OPEN:** suministro económico auténtico de Conway / trusted host (cuenta, oferta exacta de sandbox, exposición por renovación/salida, financiación, policy P-010) sigue sin verificarse; la CLI estándar no ha conectado esos adapters. Fuente y fixture E3 ≠ P-005 E5/E6 LIVE; no compras/pagos ni Actions. P-031 sigue `EN_EJECUCIÓN`, `main` no fusionado. Continuidad de siguiente trabajo en `continuity/C0030.md`.
+
 ## P-031 — Conway supplier POST second P-030 mandate (2026-10-18)
 
 - **SOURCE IN GIT / PHYSICAL PENDING:** `src/environments/conway-procurement-authority.ts` binds a Conway supplier provisioning POST to an active exact P-030 financial dispatch, P-010 policy receipt ID, verified-in-source account/region/task/path/shape scope, and supplier-derived finite quote/financing windows. `src/agent/loop.ts` installs this second gate for trusted-host Conway `provision` only. It never itself issues payment or fabricates wallet credits, and current distributed CLI still has no trusted supplier economic quote adapter. Existing P-025/P-010/P-030/P-018 owners and AWS paths preserved.
