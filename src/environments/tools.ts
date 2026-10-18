@@ -5,6 +5,7 @@ import {
   type ProviderProcurementScope,
 } from "../economics/provider-procurement-execution.js";
 import type { EnvironmentLifecycleManager } from "./lifecycle.js";
+import type { EnvironmentRetentionCoordinator } from "./retention.js";
 import type { EnvironmentRegistry } from "./registry.js";
 import type { EnvironmentSelector } from "./selector.js";
 import type { EnvironmentMobilityCoordinator } from "./mobility.js";
@@ -56,6 +57,8 @@ const SENSITIVE_AWS_PATTERNS: Array<(args: string[]) => boolean> = [
 export interface EnvironmentToolingOptions {
   selector?: EnvironmentSelector;
   lifecycle?: EnvironmentLifecycleManager;
+  /** Reuse P-018's single retention/cleanup authority, not a second destroy path. */
+  getRetention?: () => EnvironmentRetentionCoordinator | null;
   /**
    * Lazy because Task executors are registered after the general tool catalog
    * is assembled. Returns the single runtime mobility authority when ready.
@@ -702,6 +705,64 @@ export function createEnvironmentTools(
         },
       },
     );
+  }
+
+  // Expose a precise, intentionally destructive P-031 action for owned
+  // manually retained resources. The existing P-018 coordinator still owns
+  // artifacts, durable destroy intent, provider observation and restart.
+  // Child-managed resources use SandboxCleanup to preserve ChildLifecycle.
+  if (options.lifecycle && options.getRetention) {
+    tools.push({
+      name: "environment_resource_retire",
+      description:
+        "Request retirement of one exact ABOS-owned manually retained P-018 resource. " +
+        "Reuses P-018 artifact holds, restart/replay protection, provider destroy and " +
+        "separate contract-billing reconciliation. For child-owned resources use " +
+        "cleanup_child instead. This can delete remote provider resources.",
+      category: "environment",
+      riskLevel: "dangerous",
+      parameters: {
+        type: "object",
+        properties: {
+          resource_id: {
+            type: "string",
+            description: "Exact canonical P-018 resource ID; not a remote provider ID.",
+          },
+        },
+        required: ["resource_id"],
+      },
+      execute: async (args) => {
+        if (typeof args.resource_id !== "string" || !args.resource_id.trim()) {
+          return "BLOCKED: exact ABOS-owned resource_id required.";
+        }
+        const id = args.resource_id.trim();
+        const stored = options.lifecycle!.resources.get(id);
+        if (!stored) return "UNAVAILABLE: resource is not in canonical P-018 inventory.";
+        if (stored.metadata.childId) {
+          return "BLOCKED: child-owned sandbox must use canonical cleanup_child with child lifecycle evidence.";
+        }
+        if (stored.status === "terminated") {
+          return JSON.stringify({
+            status: stored.metadata.retentionReleaseState === "released"
+              ? "ALREADY_RELEASED" : "UNKNOWN_UNRECONCILED",
+            resource: stored,
+            note: "Physical release does not establish contract cancellation or paid invoice.",
+          }, null, 2);
+        }
+        if (stored.retentionPolicy !== "manual_retention") {
+          return "BLOCKED: this tool requests explicit manual-retention release; other retention policies remain under their existing Goal/Task lifecycle.";
+        }
+        const retention = options.getRetention!();
+        if (!retention) return "UNAVAILABLE: canonical P-018 retention authority not initialized.";
+        const sweep = await retention.sweep({ explicitManualResourceId: id });
+        return JSON.stringify({
+          resourceId: id,
+          resource: options.lifecycle!.resources.get(id),
+          sweep,
+          note: "Supplier contract, final invoice and refunds require independent economic evidence.",
+        }, null, 2);
+      },
+    });
   }
 
   if (options.getMobility) {

@@ -13,14 +13,17 @@ import {
   spawnChild,
 } from "../replication/spawn.js";
 import { SandboxCleanup } from "../replication/cleanup.js";
+import { createBuiltinTools } from "../agent/tools.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { ChildHealthMonitor } from "../replication/health.js";
 import { ChildLifecycle } from "../replication/lifecycle.js";
 import { pruneDeadChildren } from "../replication/lineage.js";
 import {
   MockConwayClient,
+  MockInferenceClient,
   createTestDb,
   createTestIdentity,
+  createTestConfig,
 } from "./mocks.js";
 import type { AbosDatabase, GenesisConfig } from "../types.js";
 import { MIGRATION_V7 } from "../state/schema.js";
@@ -638,6 +641,37 @@ describe("SandboxCleanup", () => {
     await expect(new SandboxCleanup(conway, new ChildLifecycle(db.raw), db.raw)
       .cleanup("child-uncertain")).rejects.toThrow(/not verified/);
     expect(deleteSpy).toHaveBeenCalledTimes(1);
+  });
+
+
+  it("exposes exact cleanup_child for a single stopped child without a prune threshold", async () => {
+    const childId = "child-single";
+    lifecycle.initChild(childId, "test", "sandbox-single", "prompt");
+    for (const state of ["sandbox_created", "runtime_ready", "wallet_verified",
+      "funded", "starting", "healthy", "stopped"] as const) {
+      lifecycle.transition(childId, state, "test");
+    }
+    new EnvironmentResourceStore(db.raw).create({
+      id: "owned-single", provider: "conway",
+      externalId: "sandbox-single", type: "conway-sandbox",
+      status: "running", retentionPolicy: "manual_retention",
+      metadata: { childId },
+    });
+    const cleanupChild = createBuiltinTools("own-test-controller")
+      .find(item => item.name === "cleanup_child")!;
+    expect(cleanupChild.riskLevel).toBe("dangerous");
+    const spy = vi.spyOn(conway, "deleteSandbox");
+    const ctx = {
+      conway, db, identity: createTestIdentity(),
+      config: createTestConfig(), inference: new MockInferenceClient(),
+    } as any;
+    expect(await cleanupChild.execute({ child_id: "" }, ctx)).toContain("BLOCKED");
+    expect(spy).not.toHaveBeenCalled();
+    const result = JSON.parse(await cleanupChild.execute({ child_id: childId }, ctx));
+    expect(result.childId).toBe(childId);
+    expect(result.state).toBe("cleaned_up");
+    expect(result.event.toState).toBe("cleaned_up");
+    expect(spy).toHaveBeenCalledExactlyOnceWith("sandbox-single");
   });
 
   it("marks a child cleaned_up only after canonical P-018 confirmed termination", async () => {
