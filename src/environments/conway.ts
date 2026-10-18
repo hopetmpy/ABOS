@@ -103,7 +103,7 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
    * pending spends, invoice settlement or USD conversion. No P-010 permit.
    */
   async observeEconomics(
-    options: { includeConwayCreditHistory?: boolean } = {},
+    options: Parameters<NonNullable<EnvironmentProvider["observeEconomics"]>>[0] = {},
   ): Promise<EnvironmentEconomicObservation> {
     const observedAt = new Date().toISOString();
     const base: EnvironmentEconomicObservation = {
