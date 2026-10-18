@@ -29,6 +29,11 @@ ProjectOps-PR: 30
 Master-Plan-PR: 31
 Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
+## P-031 — Handoff Task P-028 → P-031 / P-018 / P-030 (SOURCE) — 2026-10-18
+
+- **CURRENT_BRANCH / SOURCE_PATCHED / PHYSICAL_NOT_YET_RUN:** `src/agent/loop.ts` ahora busca sandbox Conway ya adquirido para Goal/Task/path mediante `findProcuredChildSandboxForTask` en `src/replication/spawn.ts`, y pasa el exacto `resourceId + operationKey` al bootstrap P-029. Se reutilizan los owners existentes P-018, P-030 y decisión P-010; no hay emisión de nuevo proveedor ni pago implícito. Sin recurso adquirido adecuado se conserva reciclaje legítimo de child fallido y se reporta falta de adquisición, no prohibición global.
+- Se añadieron tests negativos/positivos de correspondencia Task/Goal/path, proveedor, memoria, reserva ya reclamada y creación sin doble POST. **SOLO AUDITORÍA ESTÁTICA 10/10**; no se afirma typecheck/build/test PASS de este source. `continuity/C0030.md` guarda el protocolo y decisión exacta. **NEXT_ELIGIBLE_WORK:** batería Codex `p031-child` sobre HEAD fuente exacto posterior a docs, publicación verificable y auditoría Git; continuar con integración de host económico real Conway. P-031 EN_EJECUCIÓN, main no fusionado y E5/E6 P-005 separados.
+
 ## P-031 — segundo Codex / publicación directa verificada — 2026-10-18
 
 - `f202619811238528034d1d16d62ae2fa3793177b` fuente ejecutada; evidencia remota final `7235a87c734704ca10e6fa8197dbae84e2af6c66`, parent directo fuente, **siete archivos en primer commit** (incluidos cuatro logs antes ignorados), **6/6 hashes recalculados**. El expediente demuestra físicamente typecheck, build, ProjectOps Integrity y P-031/P-029/replicación **140/140 tests PASS en 12/12 archivos**. Registro derivado: `ProjectOps/evidence/P-031/audits/f2026198-p031-child.md`; índice `ProjectOps/EVIDENCE.md`.
