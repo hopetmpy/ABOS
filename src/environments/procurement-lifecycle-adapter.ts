@@ -146,8 +146,11 @@ export function createLifecycleProcurementDependencies(
         if (!owned || !owned.externalId || owned.provider !== scope.provider ||
             scope.externalId !== owned.externalId ||
             owned.region !== scope.region ||
-            owned.goalId !== scope.goalId || owned.taskId !== scope.taskId ||
-            owned.pathId !== scope.pathId ||
+            // Contract maintenance has its OWN P-025 reviewed Task. The
+            // original purchaser's Task/Goal may already be completed, so
+            // do not require their identifiers to match this new Task.
+            // Authorization remains bound to the exact P-010 contract/account
+            // and independent supplier identity below.
             (scope.operation === "renew" && owned.status === "terminated") ||
             owned.metadata.provisionNeedsReconciliation === true ||
             owned.metadata.mutationNeedsReconciliation === true ||
