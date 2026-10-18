@@ -17,6 +17,31 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const evidenceRoot = join(root, "ProjectOps", "evidence");
 const SHA = /^[0-9a-f]{40}$/;
 const PROFILES = Object.freeze({
+  "p031-domains-economic-discovery": {
+    module: "P-031",
+    fixture: "SYNTHETIC_NO_EXTERNAL_SPEND",
+    steps: [
+      ["projectops-integrity", "node", ["scripts/projectops-integrity-verify.mjs"], 120000],
+      ["evidence-gate-tests", "node", ["--test", "scripts/codex-evidence-gate.test.mjs"], 120000],
+      ["typecheck", "pnpm", ["typecheck"], 300000],
+      ["build", "pnpm", ["build"], 300000],
+      ["domains-auth-and-procurement", "pnpm", [
+        "exec", "vitest", "run",
+        "src/__tests__/p031-conway-domains-purchase-evidence.test.ts",
+        "src/__tests__/p031-conway-domains-account-proof.test.ts",
+        "src/__tests__/p031-authorized-procurement-execution.test.ts",
+        "src/__tests__/p031-conway-secondary-procurement-gate.test.ts",
+        "src/__tests__/p031-conway-credit-history.test.ts",
+        "src/__tests__/p031-conway-account-read-probe.test.ts",
+        "src/__tests__/p031-runtime-procurement-tool.test.ts",
+        "src/__tests__/p030-x402-service-purchase.test.ts",
+        "src/__tests__/p030-topup-http-claims.test.ts",
+        "src/__tests__/p030-financial-effects.test.ts",
+        "src/__tests__/p031-provider-account-exposure.test.ts",
+        "src/__tests__/p031-goal-resource-lifecycle-journey.test.ts",
+      ], 900000],
+    ],
+  },
   "p031-conway-claimed-provision": {
     module: "P-031",
     fixture: "SYNTHETIC_NO_EXTERNAL_SPEND",
