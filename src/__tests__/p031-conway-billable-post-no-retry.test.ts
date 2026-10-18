@@ -23,7 +23,8 @@ describe("P-031 Conway provider-native billable creation does not auto-replay", 
         : conway.registerDomain("example-business.test", 1);
       await expect(create).rejects.toThrow(/502/);
       expect(fetcher).toHaveBeenCalledTimes(1);
-      expect(fetcher.mock.calls[0]![1].method).toBe("POST");
+      const sent = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+      expect(sent[1].method).toBe("POST");
     },
   );
 
