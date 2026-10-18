@@ -8,6 +8,7 @@
 import type { Database as DatabaseType } from "better-sqlite3";
 import type { ConwayClient } from "../types.js";
 import type { ChildLifecycle } from "./lifecycle.js";
+import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { createLogger } from "../observability/logger.js";
 const logger = createLogger("replication.cleanup");
 
@@ -33,12 +34,25 @@ export class SandboxCleanup {
       .prepare("SELECT sandbox_id FROM children WHERE id = ?")
       .get(childId) as { sandbox_id: string } | undefined;
 
-    // Sandbox deletion is disabled by the Conway API (prepaid, non-refundable).
-    // Transition to cleaned_up so the child slot is freed for reuse.
-    const sandboxNote = childRow?.sandbox_id
-      ? `sandbox ${childRow.sandbox_id} released (deletion disabled)`
-      : "no sandbox to clean up";
-    this.lifecycle.transition(childId, "cleaned_up", sandboxNote);
+    // The child state must never say cleaned_up merely because a legacy
+    // Conway client returned a successful no-op. P-018 has the canonical,
+    // crash-recoverable physical release owner, and an uncertain DELETE must
+    // not be retried blindly through a second cleanup implementation.
+    if (childRow?.sandbox_id) {
+      const matching = new EnvironmentResourceStore(this.db)
+        .list({ provider: "conway", includeTerminated: true })
+        .filter(resource => resource.externalId === childRow.sandbox_id);
+      if (matching.length !== 1 ||
+          matching[0]!.status !== "terminated" ||
+          matching[0]!.metadata.retentionReleaseState !== "released") {
+        throw new Error(
+          "Conway child sandbox release is not verified by P-018. Keep the child stopped/failed until provider-neutral retention confirms deletion.",
+        );
+      }
+    }
+    this.lifecycle.transition(childId, "cleaned_up", childRow?.sandbox_id
+      ? `sandbox ${childRow.sandbox_id} physically released by P-018`
+      : "child has no external sandbox identity to release");
   }
 
   /**

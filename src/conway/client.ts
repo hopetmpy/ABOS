@@ -51,7 +51,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     method: string,
     path: string,
     body?: unknown,
-    requestOptions?: { idempotencyKey?: string; retries404?: number; noStore?: boolean },
+    requestOptions?: { idempotencyKey?: string; retries404?: number; noStore?: boolean; retries?: number },
   ): Promise<any> {
     // Conway LB has an intermittent routing bug that returns 404 for valid
     // sandbox endpoints. Retry 404s here (outside ResilientHttpClient) to
@@ -70,6 +70,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
         cache: requestOptions?.noStore ? "no-store" : undefined,
         body: body ? JSON.stringify(body) : undefined,
         idempotencyKey: requestOptions?.idempotencyKey,
+        retries: requestOptions?.retries,
       });
 
       if (resp.status === 404 && attempt < max404Retries) {
@@ -313,9 +314,21 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     };
   };
 
-  const deleteSandbox = async (_targetId: string): Promise<void> => {
-    // Conway API no longer supports sandbox deletion.
-    // Sandboxes are prepaid and non-refundable — this is a no-op.
+  const deleteSandbox = async (targetId: string): Promise<void> => {
+    // The provider's documented DELETE endpoint returns 204 on success.
+    // Reject malformed path identities BEFORE any network action, and never
+    // automatically replay an ambiguous destructive HTTP request. P-018
+    // persists a destroy_requested intent and owns restart/reconciliation.
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(targetId)) {
+      throw new Error("Conway sandbox deletion requires a valid exact sandbox ID.");
+    }
+    await request("DELETE", `/v1/sandboxes/${targetId}`, undefined, {
+      retries: 0,
+      retries404: 0,
+      noStore: true,
+    });
+    // 204 provider success only proves sandbox deletion; it is not a supplier
+    // subscription cancellation, charge settlement or a refundable credit.
   };
 
   const listSandboxes = async (): Promise<SandboxInfo[]> => {

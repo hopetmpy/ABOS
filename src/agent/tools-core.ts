@@ -551,7 +551,7 @@ Reconciliation requires independently verified provider finality; this view is n
     },
     {
       name: "delete_sandbox",
-      description: "Delete a sandbox. Note: sandbox deletion is currently disabled by the Conway API.",
+      description: "Sandbox deletion is provider-supported, but direct untracked destruction is unavailable: retire ABOS-owned resources through the recoverable P-018 lifecycle.",
       category: "conway",
       riskLevel: "dangerous",
       parameters: {
@@ -565,7 +565,7 @@ Reconciliation requires independently verified provider finality; this view is n
         required: ["sandbox_id"],
       },
       execute: async () => {
-        return "Sandbox deletion is disabled. Sandboxes are prepaid and non-refundable.";
+        return "BLOCKED: direct sandbox deletion bypasses canonical P-018 resource ownership, artifact retention and crash recovery. Use the ABOS-owned resource lifecycle; no external DELETE was dispatched.";
       },
     },
     {

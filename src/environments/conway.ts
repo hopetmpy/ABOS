@@ -7,6 +7,7 @@ import type {
   EnvironmentEconomicObservation,
   EnvironmentEstimate,
   EnvironmentHealthResult,
+  EnvironmentMutationResult,
   EnvironmentPreparationResult,
   EnvironmentProvider,
   EnvironmentProvisionResult,
@@ -59,6 +60,8 @@ export interface ConwayProbe {
   createScopedClient?(
     targetSandboxId: string,
   ): ConwaySandboxExecutionProbe;
+  /** Provider-native DELETE sandbox operation; not a contract cancellation. */
+  deleteSandbox?(sandboxId: string): Promise<void>;
 }
 
 export class ConwayEnvironmentProvider implements EnvironmentProvider {
@@ -67,6 +70,7 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
   readonly health?: NonNullable<EnvironmentProvider["health"]>;
   readonly collect?: NonNullable<EnvironmentProvider["collect"]>;
   readonly reconcile?: NonNullable<EnvironmentProvider["reconcile"]>;
+  readonly destroy?: NonNullable<EnvironmentProvider["destroy"]>;
 
   constructor(private readonly conway: ConwayProbe) {
     if (conway.createSandbox) {
@@ -81,6 +85,9 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
     if (conway.createScopedClient) {
       this.collect = async (resource) =>
         this.collectSandboxArtifacts(resource);
+    }
+    if (conway.deleteSandbox) {
+      this.destroy = async (resource) => this.destroySandbox(resource);
     }
   }
 
@@ -574,6 +581,29 @@ export class ConwayEnvironmentProvider implements EnvironmentProvider {
         artifactCollectionObservedAt:
           new Date().toISOString(),
       },
+    };
+  }
+
+  private async destroySandbox(
+    resource: Parameters<NonNullable<EnvironmentProvider["destroy"]>>[0],
+  ): Promise<EnvironmentMutationResult> {
+    if (resource.provider !== this.id || resource.type !== "conway-sandbox" ||
+        typeof resource.externalId !== "string" ||
+        !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(resource.externalId)) {
+      const rejection = new Error(
+        "Conway destroy rejected an unowned or malformed sandbox identity before provider dispatch.",
+      );
+      Object.assign(rejection, { externalEffectNotDispatched: true });
+      throw rejection;
+    }
+    await this.conway.deleteSandbox!(resource.externalId);
+    return {
+      status: "terminated",
+      providerState: "deleted",
+      evidence: [
+        `Conway provider DELETE accepted sandbox ${resource.externalId}; P-018 owns physical resource release.`,
+        "Sandbox deletion does NOT prove supplier contract cancellation, invoice settlement, refunds or the absence of unrelated charges.",
+      ],
     };
   }
 
