@@ -36,6 +36,13 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
 
+
+## P-031 — host-owned Domains inventory tool integrated, E3 physical pending (2026-10-18)
+
+- **SOURCE IMPLEMENTED / PHYSICAL PENDING:** Conway Domains documented SIWE/SIWS JWT sessions already existed for `conway_domains_account_proof`; separate `observeConwayDomainsOwnedResources` required a trusted JWT callback. Reused each existing verified-wallet sign-in via private host-only ephemeral session consumer in `src/conway/domains-siwe-session.ts` and exposed new read-only `conway_domains_owned_resources` tool in `src/agent/tools-core.ts` without model-supplied token/key/account. No second wallet or auth service. Inventory read only after account `/auth/me` wallet match; empty/partial/foreign results remain nonfinancial UNKNOWN. Five new adverse tests appended to existing SIWE/SIWS suite. No registration POST, signed x402, P-010 bypass, treasury changes or persistence of JWT. **New HEAD not yet physically tested.**
+- **NEXT_ELIGIBLE_WORK:** run Codex existing `p031-domains-economic-discovery` grouped profile on final exact branch source; audit remote hashes and PASS/FAIL. Prior `d0d6951f` 144/144 E3 pass does not transfer. Afterwards continue P-031 binding supplier order quote and financial intent under P-010/P-030/P-018; E5/E6 LIVE stay P-005. P-031 EN_EJECUCIÓN; P-032 PARCIAL; `main` not merged; more detail active `continuity/C0030.md`.
+
+
 ## P-031 — inventory and HOME-isolated Goal journey E3 PASS (2026-10-18)
 
 - **GIT_AUDITED / E3_SYNTHETIC_PASS**: Codex ran source exact `d0d6951f17e0ae3c2e541a8bc801cc01a94a2d7c`, remote evidence `a3328df243e69b16c2d25e4d708ca0e88f35690e`, 1 evidence-only commit with 8 files; all 7 SHA-256 independent recalculations matched. Profile `p031-domains-economic-discovery`: ProjectOps integrity, typecheck, build, evidence gate **6/6** and Vitest **144/144 tests in 13/13 files** PASS. Correctly isolated the Goal workspace under test-owned HOME; six new Conway Domains inventory tests passed. Audit `ProjectOps/evidence/P-031/audits/d0d6951f-domains-inventory-pass.md`, indexed in `ProjectOps/EVIDENCE.md`.
