@@ -2610,6 +2610,34 @@ Model: ${ctx.inference.getDefaultModel()}
 
     // ── Domain Tools ──
     {
+      name: "conway_domain_purchase_evidence",
+      description:
+        "Observe Conway Domains' PUBLIC specific-name availability and TLD " +
+        "registration/renewal catalog via GET without wallet access, account " +
+        "tokens, payment, registration or P-030 dispatch. USD catalog prices " +
+        "are only preliminary research: this cannot quote the full x402 " +
+        "order (including years/premium pricing) or establish authorization.",
+      category: "conway",
+      riskLevel: "safe",
+      parameters: {
+        type: "object",
+        properties: {
+          domain: {
+            type: "string",
+            description: "Full desired DNS name, not a URL; e.g. project.example",
+          },
+        },
+        required: ["domain"],
+      },
+      execute: async args => {
+        const { observeConwayDomainPurchaseEvidence } =
+          await import("../conway/domains-purchase-evidence.js");
+        return JSON.stringify(
+          await observeConwayDomainPurchaseEvidence(args.domain as string), null, 2,
+        );
+      },
+    },
+    {
       name: "search_domains",
       description: "Search for available domain names and get pricing.",
       category: "conway",
