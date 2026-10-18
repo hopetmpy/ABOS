@@ -32,6 +32,13 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
 
+
+## P-031 — passive Conway Domains x402 v2 parsing, source pending physical acceptance (2026-10-18)
+
+- **SOURCE_PATCHED / PHYSICAL_PENDING:** supplier docs prove a domain registration 402 has `accepts[].amount` atomic USDC in x402 v2, whereas generic `src/conway/x402.ts` only understands `maxAmountRequired`. Added pure, non-dispatching `inspectConwayDomainsX402Version2` in `src/conway/domains-purchase-evidence.ts` instead of broadening the generic paid `x402Fetch` side effects. Parses validated Base-USDC 402 preview only, never binds a final quote/account, signs or buys. Five adversarial tests appended to existing Domains purchase evidence suite. No typecheck, build or Vitest PASS claimed on this new code.
+- **BOUNDARY / NEXT:** execute Codex `p031-domains-economic-discovery` on the exact subsequent source+docs HEAD, independently verify remote evidence, then implement only authenticated, durable one-shot supplier-specific order preflight under canonical P-010/P-030 and P-031 authority when evidence supports it. Previous 133/133 evidence belongs only to `c55db344`. E5/E6 remain P-005; P-031 EN_EJECUCIÓN, P-032 PARCIAL; `main` unmerged. See active `continuity/C0030.md`.
+
+
 ## P-031 — Conway Domains SIWE+SIWS Codex E3 verified (2026-10-18)
 
 - **GIT_AUDITED / E3_SYNTHETIC_PASS:** Codex Cloud ran exact source `c55db34484d9a243fdec5eeac7b7617cc9d6033c` → evidence `de1f5cc2bc069dedd4700c1448a47cf2d1c08ca0`, one additional evidence-only commit with 8 files and **7/7 independent SHA-256 hashes** verified; 5 commands PASS: ProjectOps integrity, protocol **6/6**, typecheck, build and Vitest **133/133 tests in 13/13 files**, including all five new SIWS/Solana cases. Runner reports synthetic fixture, zero external provider operations and no GitHub Actions. `ProjectOps/evidence/P-031/audits/c55db344-domains-siws.md` is indexed in `ProjectOps/EVIDENCE.md`.
