@@ -679,25 +679,13 @@ export class EnvironmentRetentionCoordinator {
     }, "retention_billing_reconciliation",
     "Resource retired; supplier billing outcome separately unverified.");
 
-    const addresses = [
-      resource.metadata.executorAddress,
-      resource.metadata.childAddress,
-    ].filter(
-      (value): value is string =>
-        typeof value === "string" && value.trim().length > 0,
-    );
-
-    const update = this.db.prepare(
-      "UPDATE children SET status = 'cleaned_up' WHERE address = ? OR sandbox_id = ?",
-    );
-
-    for (const address of addresses) {
-      update.run(address, resource.externalId ?? address);
-    }
-
-    if (addresses.length === 0 && resource.externalId) {
-      update.run(resource.externalId, resource.externalId);
-    }
+    // P-018 owns physical resource release, not ChildLifecycle state.
+    // The former direct UPDATE children.status=cleaned_up here fabricated a
+    // terminal child state without child_lifecycle_events, even for healthy
+    // executors with no durable ChildLifecycle provenance. After restart the
+    // row disagreed with the event owner. SandboxCleanup (P-029/replication)
+    // observes canonical P-018 release before emitting stopped/failed ->
+    // cleaned_up through ChildLifecycle.transition, preserving its history.
   }
 }
 

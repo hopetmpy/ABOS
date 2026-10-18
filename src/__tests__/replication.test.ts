@@ -585,6 +585,10 @@ describe("SandboxCleanup", () => {
     await cleanup.cleanup("child-explicit");
     expect(deleteSpy).toHaveBeenCalledExactlyOnceWith("sandbox-child-explicit");
     expect(lifecycle.getCurrentState("child-explicit")).toBe("cleaned_up");
+    const events = lifecycle.getHistory("child-explicit");
+    expect(events.at(-1)?.fromState).toBe("stopped");
+    expect(events.at(-1)?.toState).toBe("cleaned_up");
+    expect(events.at(-1)?.reason).toContain("physically released");
     expect(lifecycle.getCurrentState("child-other")).toBe("stopped");
     const resources = new EnvironmentResourceStore(db.raw);
     expect(resources.get("owned-child-explicit")?.metadata.retentionReleaseState).toBe("released");
@@ -634,6 +638,7 @@ describe("SandboxCleanup", () => {
     const cleanup = new SandboxCleanup(conway, lifecycle, db.raw);
     await cleanup.cleanup("child-2");
     expect(lifecycle.getCurrentState("child-2")).toBe("cleaned_up");
+    expect(lifecycle.getHistory("child-2").at(-1)?.toState).toBe("cleaned_up");
   });
 
 });

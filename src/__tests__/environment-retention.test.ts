@@ -794,7 +794,7 @@ describe("EnvironmentRetentionCoordinator", () => {
     }
   });
 
-  it("retires the legacy child row when a provider-neutral executor is released", async () => {
+  it("does not fabricate child cleanup when provider-neutral retention releases a legacy executor", async () => {
     const db = createDb();
     try {
       insertGoal(db, "goal-legacy", "completed");
@@ -843,7 +843,13 @@ describe("EnvironmentRetentionCoordinator", () => {
       const child = db.prepare(
         "SELECT status FROM children WHERE id = ?",
       ).get("child-aws") as { status: string };
-      expect(child.status).toBe("cleaned_up");
+      // The physical executor is retired; this legacy healthy row has no
+      // ChildLifecycle terminal event, so P-018 must not invent one.
+      expect(child.status).toBe("healthy");
+      const owned = lifecycle.resources.list({ includeTerminated: true })
+        .find(resource => resource.externalId === "i-legacy");
+      expect(owned?.status).toBe("terminated");
+      expect(owned?.metadata.retentionReleaseState).toBe("released");
     } finally {
       db.close();
     }
