@@ -119,6 +119,7 @@ export async function pruneDeadChildren(
           const matching = resources.list({ includeTerminated: true })
             .filter(resource => resource.externalId === sandboxId);
           return matching.length === 1 &&
+            matching[0]!.metadata.childId === child.id &&
             matching[0]!.status === "terminated" &&
             matching[0]!.metadata.retentionReleaseState === "released";
         };
