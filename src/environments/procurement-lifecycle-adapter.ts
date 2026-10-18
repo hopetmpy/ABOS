@@ -9,7 +9,7 @@
 import type {
   ProviderProcurementExecutionDependencies,
   ProviderProcurementScope,
-  type ProviderProcurementDispatchOutcome,
+  ProviderProcurementDispatchOutcome,
 } from "../economics/provider-procurement-execution.js";
 import type { ProviderProcurementScenarioInput } from "../economics/treasury-scenario.js";
 import type { EnvironmentProvisionRequest, EnvironmentResource } from "./types.js";
@@ -171,8 +171,8 @@ export function createLifecycleProcurementDependencies(
           );
         }
         const now = Date.now();
-        const observed = Date.parse(contract?.observedAt);
-        const expires = Date.parse(contract?.validUntil);
+        const observed = Date.parse(contract?.observedAt ?? "");
+        const expires = Date.parse(contract?.validUntil ?? "");
         const current = lifecycle.resources.get(scope.resourceId);
         if (!contract ||
             contract.operation !== scope.operation ||
