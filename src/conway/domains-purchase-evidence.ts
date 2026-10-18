@@ -238,7 +238,7 @@ export function inspectConwayDomainsX402Version2(
         !isAddress(item.asset) ||
         item.asset.toLowerCase() !== CONWAY_DOMAINS_BASE_USDC.toLowerCase() ||
         typeof item.payTo !== "string" || !isAddress(item.payTo) ||
-        typeof item.amount !== "string" ||
+        typeof item.amount !== "string" || item.amount.length > 64 ||
         !/^[0-9]+$/.test(item.amount) ||
         typeof item.maxTimeoutSeconds !== "number" ||
         !Number.isSafeInteger(item.maxTimeoutSeconds) ||
