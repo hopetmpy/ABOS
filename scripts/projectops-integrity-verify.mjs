@@ -44,6 +44,17 @@ const p={
   constitution:"constitution.md",
 };
 for(const path of Object.values(p))needFile(path);
+
+// Evidence is derivative, never another state authority or a second scheduler.
+for (const path of [
+  "ProjectOps/EVIDENCE.md",
+  "ProjectOps/evidence/README.md",
+  "scripts/codex-evidence-gate.mjs",
+  "scripts/codex-evidence-gate.test.mjs",
+]) needFile(path);
+need(read("ProjectOps/EVIDENCE.md"), "EVIDENCE_INDEX_NON_SCHEDULER");
+need(read("ProjectOps/evidence/README.md"), "EVIDENCE_PROTOCOL_NON_SCHEDULER");
+
 if(existsSync(at("CONTINUITY.md"))||existsSync(at("PLAN.md")))fail("competing root ProjectOps authority exists");
 
 // Historical snapshots remain immutable. Live ProjectOps state remains correctable.
