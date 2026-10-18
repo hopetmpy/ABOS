@@ -19,6 +19,7 @@ import type {
   CreateSandboxOptions,
   SandboxInfo,
   PricingTier,
+  ConwayCreditHistoryPage,
   CreditTransferResult,
   DomainSearchResult,
   DomainRegistration,
@@ -425,6 +426,59 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     return observed;
   };
 
+  /**
+   * Conway Terminal documents authenticated credit history with limit/offset.
+   * Only a bounded GET page is observed. Neither a provider HTTP transaction
+   * nor a wallet credit movement by itself proves x402 chain settlement,
+   * receiving account ownership, invoice finality or available cash.
+   */
+  const getCreditsHistory = async (
+    limit = 20, offset = 0,
+  ): Promise<ConwayCreditHistoryPage> => {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
+        !Number.isSafeInteger(offset) || offset < 0) {
+      throw new Error("Conway credit history requires bounded integer pagination.");
+    }
+    const result: unknown = await request(
+      "GET", `/v1/credits/history?limit=${limit}&offset=${offset}`,
+      undefined, { noStore: true, retries404: 0 },
+    );
+    const response = result && typeof result === "object" && !Array.isArray(result)
+      ? result as Record<string, unknown> : null;
+    const raw: unknown = Array.isArray(result) ? result
+      : response?.transactions ?? response?.data ?? response?.history;
+    if (!Array.isArray(raw) || raw.length > limit) {
+      throw new Error("Conway credit history page unrecognized or incomplete; entries UNKNOWN.");
+    }
+    const entries = raw.map((item): ConwayCreditHistoryPage["entries"][number] => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        throw new Error("Conway credit history entry invalid; ledger UNKNOWN.");
+      }
+      const row = item as Record<string, unknown>;
+      const amount = row.amount_cents ?? row.amount;
+      const balance = row.balance_after_cents ?? row.balance_after;
+      const id = row.id ?? row.transaction_id;
+      const type = row.type ?? row.transaction_type;
+      const timestamp = row.created_at ?? row.timestamp;
+      if ((amount != null && !Number.isSafeInteger(amount)) ||
+          (balance != null && !Number.isSafeInteger(balance)) ||
+          (id != null && (typeof id !== "string" || !id.trim())) ||
+          (type != null && (typeof type !== "string" || !type.trim())) ||
+          (timestamp != null && (typeof timestamp !== "string" || !timestamp.trim())) ||
+          (amount == null && type == null && timestamp == null)) {
+        throw new Error("Conway credit history fields ambiguous; financial entries UNKNOWN.");
+      }
+      return {
+        id: typeof id === "string" ? id : null,
+        type: typeof type === "string" ? type : null,
+        amountCents: typeof amount === "number" ? amount : null,
+        balanceAfterCents: typeof balance === "number" ? balance : null,
+        createdAt: typeof timestamp === "string" ? timestamp : null,
+      };
+    });
+    return { entries, limit, offset, completeness: "observed_page" };
+  };
+
   const getCreditsPricing = async (): Promise<PricingTier[]> => {
     const result: unknown = await request("GET", "/v1/credits/pricing");
     const response = result && typeof result === "object" && !Array.isArray(result)
@@ -776,6 +830,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     listSandboxes,
     getCreditsBalance,
     getCreditsPricing,
+    getCreditsHistory,
     transferCredits,
     registerAbos,
     searchDomains,
