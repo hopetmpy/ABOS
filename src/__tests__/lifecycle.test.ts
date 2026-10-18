@@ -11,6 +11,7 @@ import Database from "better-sqlite3";
 import { ChildLifecycle } from "../replication/lifecycle.js";
 import { ChildHealthMonitor } from "../replication/health.js";
 import { SandboxCleanup } from "../replication/cleanup.js";
+import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { propagateConstitution, verifyConstitution } from "../replication/constitution.js";
 import {
   generateGenesisConfig,
@@ -27,7 +28,15 @@ import {
   MESSAGE_LIMITS,
 } from "../types.js";
 import type { ChildLifecycleState, ConwayClient, ExecResult } from "../types.js";
-import { MIGRATION_V7 } from "../state/schema.js";
+import {
+  CREATE_TABLES,
+  MIGRATION_V7,
+  MIGRATION_V9,
+  MIGRATION_V10,
+  MIGRATION_V12,
+  MIGRATION_V13,
+  MIGRATION_V18_EVIDENCE_FABRIC,
+} from "../state/schema.js";
 import {
   MockConwayClient,
   MockSocialClient,
@@ -97,6 +106,19 @@ function createTestRawDb(): InstanceType<typeof Database> {
   db.prepare("INSERT INTO schema_version (version) VALUES (7)").run();
 
   return db;
+}
+
+/** Restore full canonical P-018 owner tables only where legacy child-cleanup
+ * tests need physical resource-release evidence. Keep other V7 fixtures
+ * minimal and retain their original migration boundaries.
+ */
+function installP018Fixture(db: InstanceType<typeof Database>): void {
+  db.exec(CREATE_TABLES);
+  db.exec(MIGRATION_V9);
+  db.exec(MIGRATION_V10);
+  db.exec(MIGRATION_V12);
+  db.exec(MIGRATION_V13);
+  db.exec(MIGRATION_V18_EVIDENCE_FABRIC);
 }
 
 // ─── ChildLifecycle ─────────────────────────────────────────────
@@ -447,8 +469,18 @@ describe("SandboxCleanup", () => {
   let lifecycle: ChildLifecycle;
   let conway: MockConwayClient;
 
+  function released(childId: string, sandboxId: string) {
+    new EnvironmentResourceStore(db).create({
+      id: `owned-${childId}`, provider: "conway",
+      externalId: sandboxId, type: "conway-sandbox",
+      status: "terminated", retentionPolicy: "manual_retention",
+      metadata: { childId, retentionReleaseState: "released" },
+    });
+  }
+
   beforeEach(() => {
     db = createTestRawDb();
+    installP018Fixture(db);
     lifecycle = new ChildLifecycle(db);
     conway = new MockConwayClient();
   });
@@ -467,7 +499,7 @@ describe("SandboxCleanup", () => {
     );
   });
 
-  it("cleanup transitions stopped to cleaned_up", async () => {
+  it("transitions stopped to cleaned_up only with P-018 verified release", async () => {
     lifecycle.initChild("child-1", "test", "sandbox-1", "genesis");
     lifecycle.transition("child-1", "sandbox_created");
     lifecycle.transition("child-1", "runtime_ready");
@@ -476,6 +508,7 @@ describe("SandboxCleanup", () => {
     lifecycle.transition("child-1", "starting");
     lifecycle.transition("child-1", "healthy");
     lifecycle.transition("child-1", "stopped");
+    released("child-1", "sandbox-1");
 
     const cleanup = new SandboxCleanup(conway, lifecycle, db);
     await cleanup.cleanup("child-1");
@@ -483,9 +516,10 @@ describe("SandboxCleanup", () => {
     expect(lifecycle.getCurrentState("child-1")).toBe("cleaned_up");
   });
 
-  it("cleanup transitions failed to cleaned_up", async () => {
+  it("transitions failed to cleaned_up only with P-018 verified release", async () => {
     lifecycle.initChild("child-1", "test", "sandbox-1", "genesis");
     lifecycle.transition("child-1", "failed");
+    released("child-1", "sandbox-1");
 
     const cleanup = new SandboxCleanup(conway, lifecycle, db);
     await cleanup.cleanup("child-1");
@@ -505,6 +539,8 @@ describe("SandboxCleanup", () => {
 
     lifecycle.initChild("child-2", "failed-child", "sandbox-2", "genesis");
     lifecycle.transition("child-2", "failed");
+    released("child-1", "sandbox-1");
+    released("child-2", "sandbox-2");
 
     const cleanup = new SandboxCleanup(conway, lifecycle, db);
     const count = await cleanup.cleanupAll();
@@ -521,6 +557,7 @@ describe("SandboxCleanup", () => {
     // Set last_checked to 48 hours ago
     const oldDate = new Date(Date.now() - 48 * 3600_000).toISOString();
     db.prepare("UPDATE children SET last_checked = ? WHERE id = ?").run(oldDate, "child-1");
+    released("child-1", "sandbox-1");
 
     lifecycle.initChild("child-2", "new-failed", "sandbox-2", "genesis");
     lifecycle.transition("child-2", "failed");
@@ -738,6 +775,7 @@ describe("Messaging", () => {
 describe("pruneDeadChildren", () => {
   it("actually deletes from DB (not a no-op)", async () => {
     const db = createTestRawDb();
+    installP018Fixture(db);
     const lifecycle = new ChildLifecycle(db);
 
     // Create 8 dead children
@@ -763,6 +801,15 @@ describe("pruneDeadChildren", () => {
       raw: db,
     } as any;
 
+    const resources = new EnvironmentResourceStore(db);
+    for (const id of ["child-6", "child-7", "child-8"]) {
+      resources.create({
+        id: `owned-${id}`, provider: "conway",
+        externalId: id.replace("child-", "sandbox-"), type: "conway-sandbox",
+        status: "terminated", retentionPolicy: "manual_retention",
+        metadata: { childId: id, retentionReleaseState: "released" },
+      });
+    }
     const pruned = await pruneDeadChildren(mockDb, undefined, 5);
     expect(pruned).toBe(3); // 8 - 5 = 3 pruned
 

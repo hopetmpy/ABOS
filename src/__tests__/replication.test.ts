@@ -13,6 +13,7 @@ import {
   spawnChild,
 } from "../replication/spawn.js";
 import { SandboxCleanup } from "../replication/cleanup.js";
+import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { ChildHealthMonitor } from "../replication/health.js";
 import { ChildLifecycle } from "../replication/lifecycle.js";
 import { pruneDeadChildren } from "../replication/lineage.js";
@@ -550,7 +551,7 @@ describe("SandboxCleanup", () => {
     db.close();
   });
 
-  it("transitions to cleaned_up even though sandbox deletion is disabled", async () => {
+  it("refuses to mark a Conway child cleaned_up without canonical P-018 ownership", async () => {
     lifecycle.initChild("child-1", "test-child", "sandbox-1", "test prompt");
     lifecycle.transition("child-1", "sandbox_created", "created");
     lifecycle.transition("child-1", "runtime_ready", "ready");
@@ -561,12 +562,60 @@ describe("SandboxCleanup", () => {
     lifecycle.transition("child-1", "stopped", "stopped");
 
     const cleanup = new SandboxCleanup(conway, lifecycle, db.raw);
-    await cleanup.cleanup("child-1");
-
-    expect(lifecycle.getCurrentState("child-1")).toBe("cleaned_up");
+    await expect(cleanup.cleanup("child-1")).rejects.toThrow(/not attributable/);
+    expect(lifecycle.getCurrentState("child-1")).toBe("stopped");
   });
 
-  it("transitions to cleaned_up when sandbox deletion succeeds", async () => {
+  it("explicitly releases one owned manual-retention Conway sandbox, not every child", async () => {
+    for (const id of ["child-explicit", "child-other"]) {
+      lifecycle.initChild(id, "test-child", `sandbox-${id}`, "test prompt");
+      for (const state of ["sandbox_created", "runtime_ready", "wallet_verified",
+        "funded", "starting", "healthy", "stopped"] as const) {
+        lifecycle.transition(id, state, "test");
+      }
+      new EnvironmentResourceStore(db.raw).create({
+        id: `owned-${id}`, provider: "conway",
+        externalId: `sandbox-${id}`, type: "conway-sandbox",
+        status: "running", retentionPolicy: "manual_retention",
+        metadata: { childId: id },
+      });
+    }
+    const deleteSpy = vi.spyOn(conway, "deleteSandbox");
+    const cleanup = new SandboxCleanup(conway, lifecycle, db.raw);
+    await cleanup.cleanup("child-explicit");
+    expect(deleteSpy).toHaveBeenCalledExactlyOnceWith("sandbox-child-explicit");
+    expect(lifecycle.getCurrentState("child-explicit")).toBe("cleaned_up");
+    expect(lifecycle.getCurrentState("child-other")).toBe("stopped");
+    const resources = new EnvironmentResourceStore(db.raw);
+    expect(resources.get("owned-child-explicit")?.metadata.retentionReleaseState).toBe("released");
+    expect(resources.get("owned-child-other")?.status).toBe("running");
+  });
+
+  it("does not retry an uncertain child DELETE or mark cleaned_up after restart", async () => {
+    lifecycle.initChild("child-uncertain", "test-child", "sandbox-uncertain", "test prompt");
+    for (const state of ["sandbox_created", "runtime_ready", "wallet_verified",
+      "funded", "starting", "healthy", "stopped"] as const) {
+      lifecycle.transition("child-uncertain", state, "test");
+    }
+    const resources = new EnvironmentResourceStore(db.raw);
+    resources.create({
+      id: "owned-uncertain", provider: "conway", externalId: "sandbox-uncertain",
+      type: "conway-sandbox", status: "running",
+      retentionPolicy: "manual_retention", metadata: { childId: "child-uncertain" },
+    });
+    const deleteSpy = vi.spyOn(conway, "deleteSandbox")
+      .mockRejectedValue(new Error("Provider response lost"));
+    const cleanup = new SandboxCleanup(conway, lifecycle, db.raw);
+    await expect(cleanup.cleanup("child-uncertain")).rejects.toThrow(/not verified/);
+    expect(lifecycle.getCurrentState("child-uncertain")).toBe("stopped");
+    expect(resources.get("owned-uncertain")?.metadata.retentionReleaseState)
+      .toBe("pending_observation");
+    await expect(new SandboxCleanup(conway, new ChildLifecycle(db.raw), db.raw)
+      .cleanup("child-uncertain")).rejects.toThrow(/not verified/);
+    expect(deleteSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks a child cleaned_up only after canonical P-018 confirmed termination", async () => {
     lifecycle.initChild("child-2", "test-child", "sandbox-2", "test prompt");
     lifecycle.transition("child-2", "sandbox_created", "created");
     lifecycle.transition("child-2", "runtime_ready", "ready");
@@ -576,11 +625,17 @@ describe("SandboxCleanup", () => {
     lifecycle.transition("child-2", "healthy", "healthy");
     lifecycle.transition("child-2", "stopped", "stopped");
 
+    new EnvironmentResourceStore(db.raw).create({
+      id: "child-2-owned", provider: "conway",
+      externalId: "sandbox-2", type: "conway-sandbox",
+      status: "terminated", retentionPolicy: "manual_retention",
+      metadata: { childId: "child-2", retentionReleaseState: "released" },
+    });
     const cleanup = new SandboxCleanup(conway, lifecycle, db.raw);
     await cleanup.cleanup("child-2");
-
     expect(lifecycle.getCurrentState("child-2")).toBe("cleaned_up");
   });
+
 });
 
 // ─── pruneDeadChildren ──────────────────────────────────────
@@ -607,11 +662,51 @@ describe("pruneDeadChildren", () => {
     ).run(id, name, status, createdAt);
   }
 
+  it("preserves child rows when cleanup fails or no canonical release exists", async () => {
+    for (let i = 0; i < 7; i++) {
+      insertChild(`stopped-${i}`, `child-${i}`, "stopped",
+        `2020-01-0${i + 1} 00:00:00`);
+    }
+    const failedCleanup = {
+      cleanup: vi.fn(async () => { throw new Error("Supplier DELETE uncertain"); }),
+    } as any;
+    expect(await pruneDeadChildren(db, failedCleanup, 5)).toBe(0);
+    expect(failedCleanup.cleanup).toHaveBeenCalledTimes(2);
+    expect(db.raw.prepare(
+      "SELECT COUNT(*) AS n FROM children WHERE status = 'stopped'",
+    ).get()).toMatchObject({ n: 7 });
+    expect(await pruneDeadChildren(db, undefined, 5)).toBe(0);
+  });
+
+  it("prunes already-cleaned children only after P-018 recorded physical release", async () => {
+    for (let i = 0; i < 7; i++) {
+      insertChild(`cleaned-${i}`, `child-${i}`, "cleaned_up",
+        `2020-01-0${i + 1} 00:00:00`);
+    }
+    new EnvironmentResourceStore(db.raw).create({
+      id: "resource-already-cleaned", provider: "conway",
+      externalId: "sandbox-cleaned-0", type: "conway-sandbox",
+      status: "terminated", metadata: { retentionReleaseState: "released" },
+    });
+    expect(await pruneDeadChildren(db, undefined, 5)).toBe(1);
+    expect(db.raw.prepare("SELECT COUNT(*) AS n FROM children").get())
+      .toMatchObject({ n: 6 });
+  });
+
   it("attempts sandbox cleanup for children with dead status", async () => {
     for (let i = 0; i < 7; i++) {
       insertChild(`dead-${i}`, `child-${i}`, "dead", `2020-01-0${i + 1} 00:00:00`);
     }
 
+    const store = new EnvironmentResourceStore(db.raw);
+    for (let i = 0; i < 2; i++) {
+      store.create({
+        id: `owned-dead-${i}`, provider: "conway",
+        externalId: `sandbox-dead-${i}`, type: "conway-sandbox",
+        status: "terminated",
+        metadata: { retentionReleaseState: "released" },
+      });
+    }
     const cleanupCalls: string[] = [];
     const mockCleanup = {
       cleanup: vi.fn(async (childId: string) => {
@@ -622,7 +717,10 @@ describe("pruneDeadChildren", () => {
     const removed = await pruneDeadChildren(db, mockCleanup, 5);
 
     expect(removed).toBe(2);
-    expect(cleanupCalls).toContain("dead-0");
-    expect(cleanupCalls).toContain("dead-1");
+    // Already verified resources need no second provider deletion.
+    expect(cleanupCalls).toHaveLength(0);
+    expect(db.raw.prepare("SELECT COUNT(*) AS n FROM children WHERE id IN (?, ?)").get(
+      "dead-0", "dead-1",
+    )).toMatchObject({ n: 0 });
   });
 });
