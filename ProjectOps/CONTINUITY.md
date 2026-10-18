@@ -29,6 +29,12 @@ ProjectOps-PR: 30
 Master-Plan-PR: 31
 Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
+## P-031 — evidencia física Codex y fixtures / 2026-10-18
+
+- **SOURCE ONLY; E2/E3 PENDING.** `ProjectOps/EVIDENCE.md`, `ProjectOps/evidence/README.md`, `scripts/codex-evidence-gate.mjs`, su test y los scripts `package.json` introducen expediente `RUN.json + EVIDENCE.md + SHA256SUMS.txt + logs`, exact-source checkout, verificación de hashes y publicación de solo evidencia con `[skip ci]`. No existe autorización económica adicional ni scheduler paralelo. El verificador ProjectOps ahora exige esa estructura y `C0030.md` usa la rama viva.
+- Codex físico anterior: screenshot reportó 447 PASS y 12 FAIL por fixtures con foreign keys; local `evidencia.md` NO PUBLICADO y sin hash Git. Código de fixtures corregido creando Goal/Task/Path válidos antes de insertar `environment_resources`, sin deshabilitar foreign keys. No se afirma que los 12 errores hayan desaparecido.
+- **NEXT_ELIGIBLE_WORK:** probar físicamente el runner/protocolo y repetir una batería `p031-child` única para el SHA de fuente resultante, publicar evidencia desde Codex si Git lo autoriza, auditarla desde Git y continuar P-031. Estado EN_EJECUCIÓN.
+
 ## P-031 — source checkpoint de child bootstrap / 2026-10-18
 
 La rama `abos/p031-child-verified-resource-20261018` parte de main `50ff17f57d80`. Eliminó el purchase bypass en `spawnChild` y en `spawnChildLegacy`, conectando hijos a P-018/P-030/P-010 y preservando la reutilización de recursos existentes sin falsa limpieza del propietario anterior. Cobertura de tests sintéticos editada, **NO EJECUTADA**; source no fusionado, P-031 sigue EN_EJECUCIÓN y su Definition of Done no está acreditado. El punto preciso de recuperación, incertidumbres y siguiente validación están en `continuity/C0030.md`. Main y la última CI verificada son anteriores a esta rama, no se promueve E3/E5.
