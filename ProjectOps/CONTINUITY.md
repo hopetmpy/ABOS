@@ -29,6 +29,11 @@ ProjectOps-PR: 30
 Master-Plan-PR: 31
 Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
+## P-031 — Conway history E3 physical PASS (2026-10-18)
+
+- **Git audit verified:** SHA exact source `70c76f7692dfcfab1ca66e7df24b68e9b99385b3` → evidence `12fba559d4592617f80b55ed01e7f86470b1d5a3` (parent directo), ocho archivos publicados, 7/7 SHA256 independientes y cinco pasos `PASS` incluyendo 6/6 tests de protocolo, 121/121 tests en 13/13 archivos, ProjectOps integrity, typecheck y build. `SYNTHETIC_NO_EXTERNAL_SPEND`, sin compras/operaciones LIVE ni Actions. Auditoría `ProjectOps/evidence/P-031/audits/70c76f76-conway-history.md`; índice actualizado en `ProjectOps/EVIDENCE.md`.
+- **Macro sigue abierto:** P-031 `EN_EJECUCIÓN`; ruta económica provider/host y cuenta-contract quote/authority P-010 pendiente de datos externos de confianza. No proyectar SOURCE/E3 como P-005 LIVE E5/E6. Código en rama de trabajo, `main` sin fusionar. Siguiente trabajo gobernado por `continuity/C0030.md`.
+
 ## P-031 — Conway credit-history economic observability source (2026-10-18)
 
 - **SOURCE IMPLEMENTED, PHYSICAL PENDING:** `src/conway/client.ts` now has a bounded authenticated credit-history GET for Conway; `src/environments/conway.ts`, `src/environments/types.ts` and `src/environments/tools.ts` surface optional `include_conway_credit_history` through the existing read-only economic evidence tool. By default balance-only behavior persists, no added provider mutation or duplicate treasury. New regression `src/__tests__/p031-conway-credit-history.test.ts` covers opt-in, malformed supplier fields, missing endpoints, wallet/account authority boundaries and no raw IDs/secrets in the report. Do not claim tests PASS before grouped Codex physical run.
