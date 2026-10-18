@@ -29,6 +29,11 @@ ProjectOps-PR: 30
 Master-Plan-PR: 31
 Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
+## P-031 — x402 HEAD grouped E3 physical PASS (2026-10-18)
+
+- **INTEGRATION VERIFIED IN E3**: source `b5f9de732e44d106f9c73141bacff958cc389ab6`, evidence `b28b94312cd8971a5643853f44dba976ee39112a`, 152/152 tests / 12/12 suites, evidence protocol 6/6, ProjectOps integrity/typecheck/build PASS; eight files first evidence commit with direct source parent, 7/7 SHA-256 independently recalculated. Audit `ProjectOps/evidence/P-031/audits/b5f9de73-x402-preflight.md`; `ProjectOps/EVIDENCE.md` updated. Exact SHA only, no LIVE, no payments, no Actions.
+- **SCOPE BOUNDARY**: existing x402 HEAD observer is not same-body/contract quote for Conway sandbox `POST /v1/sandboxes`; external economic source/account + P-010 issuer remain unavailable in default runtime. Next inspect provider-native contract discovery and inherited direct purchase routes under existing P-025/P-010/P-030/P-018 owners. P-031 `EN_EJECUCIÓN`, P-005 LIVE distinct, `main` not merged. Full provenance in `continuity/C0030.md`.
+
 ## P-031 — X402 read-only GET pricing preflight / source pending (2026-10-18)
 
 - **SOURCE IMPLEMENTED, PHYSICAL PENDING:** `src/conway/x402.ts` extends canonical HEAD x402 parsing with `probeX402ReadOnly` for read-only GET payment-requirement discovery (one `HEAD`, no-store, no redirect, no automatic retries). Distinguishes `head_requirements_observed` / `head_no_402` / `unknown` / `unsupported_target_method`; always `purchaseAuthorized:false`, `exactOperationQuoteEstablished:false`, account unknown. The existing `x402_fetch` paid route is unchanged. Exposes tool `x402_price_probe` in `src/agent/tools-core.ts` and six adversarial tests in `src/__tests__/p031-x402-readonly-preflight.test.ts`.
