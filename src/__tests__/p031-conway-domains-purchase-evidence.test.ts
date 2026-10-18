@@ -200,7 +200,7 @@ describe("P-031 supplier native x402 v2 402 inspection (no payment)", () => {
     for (const changes of cases) {
       const body = {
         ...validConwayDomains402,
-        accepts: [{ ...validConwayDomains402.accepts[0], ...changes as object }],
+        accepts: [{ ...validConwayDomains402.accepts[0], ...(changes as Record<string, unknown>) }],
       };
       const result = inspectConwayDomainsX402Version2(402, body);
       expect(result.status).toBe("unavailable");
