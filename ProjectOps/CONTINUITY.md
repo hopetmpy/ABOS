@@ -35,6 +35,13 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
 
+
+## P-031 — inventory FAIL audited, isolated Goal workspace test source pending physical (2026-10-18)
+
+- **AUDITADO / PHYSICAL FAIL:** Codex `p031-domains-economic-discovery` source `af5c6500d779ebc1560fb3d9e38a30deeeb56f31` → evidence `daf01049770a7e83e5e625ea3ded75abdb6f45b4`, one evidence-only commit with eight files, independently recalculated **7/7 SHA-256**; protocol **6/6**, ProjectOps integrity, typecheck, build PASS. Vitest **143 PASS / 1 FAIL**; failure `p031-goal-resource-lifecycle-journey.test.ts:122` because `AgentWorkspace` mkdir raised `ENOENT` under `/home/agent/.abos/workspace/<goal>/outputs`; six new owned-inventory cases PASS. Record is `ProjectOps/evidence/P-031/audits/af5c6500-domains-inventory-fail.md`, indexed in `ProjectOps/EVIDENCE.md`. The group stays FAIL, without retroactive conversion.
+- **SOURCE PATCHED / PHYSICAL PENDING:** isolated that real orchestration integration fixture under unique, test-owned temporary HOME (restore original process HOME; only delete test dir; preserve exact journey assertions and all product owners). Root global-home disappearance not independently attributed to a particular worker: filesystem precondition is what this change falsifies. No product runtime changes, P-030 authority changes, wallet writes, payments or Actions. **NEXT:** Codex grouped `p031-domains-economic-discovery` on final new branch SHA, audit external Git logs/hashes and reconcile; if FAIL persists, investigate host without weakening tests. P-031 EN_EJECUCIÓN; P-032 PARCIAL; P-005 E5/E6 external; `main` unmerged. See `continuity/C0030.md`.
+
+
 ## P-031 — read-only Domains inventory + transaction source patch, PHYSICAL PENDING (2026-10-18)
 
 - **SOURCE IMPLEMENTED / NOT YET TESTED:** official Conway Domains `GET /domains` / `GET /transactions` provide provider-owned inventory and USD transaction references relevant to lifecycle/reconciliation after a possibly pending 202 payment. Added `src/conway/domains-owned-inventory.ts`, a host-only GET observer requiring existing trusted JWT callback, exact controlled EVM/Solana wallet and `/auth/me` ownership match before further read; returns independent partial/UNKNOWN for invalid/unavailable feeds, bounded sanitized records, `financialSettlementEstablished:false`, `purchaseAuthority:not_established`. No provider POST, payment, transaction ledger mutation, JWT persistence or exposure as model-supplied credential. Corrected EVM-only proof note for Solana. Six new adversarial tests in the existing Domains account-proof suite. This source is **not yet wired into the default agent CLI**, and has **no physical PASS** pending Codex on exact new HEAD.
