@@ -15,6 +15,11 @@ import {
 import { SandboxCleanup } from "../replication/cleanup.js";
 import { createBuiltinTools } from "../agent/tools.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
+import {
+  claimFinancialEffectDispatch,
+  prepareFinancialEffect,
+  recordFinancialEffectObservation,
+} from "../economics/financial-effects.js";
 import { ChildHealthMonitor } from "../replication/health.js";
 import { ChildLifecycle } from "../replication/lifecycle.js";
 import { pruneDeadChildren } from "../replication/lineage.js";
@@ -179,6 +184,88 @@ describe("spawnChild", () => {
     expect(list).toHaveBeenCalledTimes(1);
     expect(created).not.toHaveBeenCalled();
     expect(db.getChildById("failed-existing-child")?.status).toBe("failed");
+  });
+
+  it("does not buy an unreviewed new child sandbox even with lifecycle enabled", async () => {
+    const created = vi.spyOn(conway, "createSandbox");
+    await expect(spawnChild(
+      conway, identity, db, genesis, new ChildLifecycle(db.raw),
+      { maxChildren: 3, childSandboxMemoryMb: 1024 },
+    )).rejects.toThrow(/requires P-031/);
+    expect(created).not.toHaveBeenCalled();
+  });
+
+  it("bootstraps an independently healthy P-031 acquired sandbox without another purchase", async () => {
+    const resources = new EnvironmentResourceStore(db.raw);
+    const resourceId = "p031-child-resource";
+    const operationKey = "p031-child-provision";
+    const sandboxId = "p031-existing-sandbox";
+    const created = vi.spyOn(conway, "createSandbox");
+    resources.create({
+      id: resourceId, provider: "conway", externalId: sandboxId,
+      type: "conway-sandbox", goalId: "goal-1", taskId: "task-1",
+      pathId: "path-1", region: "us-east", status: "running",
+      metadata: { memoryMb: 2048 },
+    });
+    resources.recordHealth(resourceId, { status: "running" });
+    prepareFinancialEffect(db.raw, {
+      operationKey, effectKind: "provider_resource_procurement",
+      provider: "conway", amountCents: 450, unit: "credit_cent",
+      policyDecisionId: "p010-verified-policy",
+      request: {
+        operation: "provision", resourceId, goalId: "goal-1",
+        taskId: "task-1", pathId: "path-1", region: "us-east",
+      },
+    });
+    expect(claimFinancialEffectDispatch(db.raw, operationKey).dispatchAllowed).toBe(true);
+    recordFinancialEffectObservation(db.raw, operationKey, {
+      resolution: "pending", providerEffectId: sandboxId,
+      providerStatus: "running",
+    });
+    vi.spyOn(conway, "exec").mockImplementation(async command =>
+      command.includes("--init")
+        ? { stdout: "Wallet initialized: 0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", stderr: "", exitCode: 0 }
+        : { stdout: "ok", stderr: "", exitCode: 0 },
+    );
+
+    const child = await spawnChild(
+      conway, identity, db, genesis, new ChildLifecycle(db.raw),
+      { maxChildren: 3, childSandboxMemoryMb: 1024 },
+      { resourceId, operationKey },
+    );
+    expect(child.status).toBe("wallet_verified");
+    expect(child.sandboxId).toBe(sandboxId);
+    expect(created).not.toHaveBeenCalled();
+    expect(resources.get(resourceId)?.metadata.childId).toBe(child.id);
+    expect(resources.get(resourceId)?.retentionPolicy).toBe("manual_retention");
+
+    // A replay with a new child identity must not reuse the same purchased
+    // resource or emit another supplier POST.
+    await expect(spawnChild(
+      conway, identity, db, genesis, new ChildLifecycle(db.raw),
+      { maxChildren: 3, childSandboxMemoryMb: 1024 },
+      { resourceId, operationKey },
+    )).rejects.toThrow(/P-031 child sandbox unavailable|already claimed/);
+    expect(created).not.toHaveBeenCalled();
+  });
+
+  it("refuses a fabricated P-018 resource lacking its P-030 effect", async () => {
+    const resources = new EnvironmentResourceStore(db.raw);
+    resources.create({
+      id: "unpaid-resource", provider: "conway", externalId: "untracked-sandbox",
+      type: "conway-sandbox", goalId: "goal", taskId: "task",
+      pathId: "path", region: "us-east", status: "running",
+      metadata: { memoryMb: 2048 },
+    });
+    resources.recordHealth("unpaid-resource", { status: "running" });
+    const created = vi.spyOn(conway, "createSandbox");
+    await expect(spawnChild(
+      conway, identity, db, genesis, new ChildLifecycle(db.raw),
+      { maxChildren: 3, childSandboxMemoryMb: 1024 },
+      { resourceId: "unpaid-resource", operationKey: "missing-financial-intent" },
+    )).rejects.toThrow(/P-031 child sandbox unavailable/);
+    expect(created).not.toHaveBeenCalled();
+    expect(resources.get("unpaid-resource")?.metadata.childId).toBeUndefined();
   });
 
   it("uses childSandboxMemoryMb from the runtime config when selecting a sandbox tier", async () => {
