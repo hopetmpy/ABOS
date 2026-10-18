@@ -228,23 +228,31 @@ function makeEvidence(profileName, source) {
   return { status, relativePath: relDir.replaceAll("\\", "/") };
 }
 
+/**
+ * Enumerate ONLY the hash-verified bundle files, including logs that are
+ * intentionally ignored outside ProjectOps. Keep the original .gitignore.
+ */
+function publicationFiles(relativePath, manifest) {
+  const prefix = relativePath.replaceAll("\\\\", "/").replace(/\\/$/, "") + "/";
+  return [
+    "RUN.json", "EVIDENCE.md", "SHA256SUMS.txt",
+    ...manifest.steps.filter(step => step.status !== "NOT_EXECUTED")
+      .map(step => step.logFile),
+  ].map(file => prefix + file);
+}
+
 function publish(relativePath) {
   const { manifest } = checkBundle(relativePath);
   checkSource(manifest.sourceCommit);
   const staged = git(["diff", "--cached", "--name-only"]);
   if (staged) fail("Index already has staged changes; refusing evidence-only commit.");
-  const prefix = relativePath.replaceAll("\\", "/").replace(/\/$/, "") + "/";
   const dirty = git(["status", "--porcelain", "--untracked-files=all"]).split("\n")
     .filter(Boolean).filter(line => !line.slice(3).startsWith("ProjectOps/evidence/"));
   if (dirty.length) fail("Non-evidence modifications detected; refusing to publish.");
   // *.log is intentionally ignored for the ABOS runtime. Force-add ONLY
   // the six/seven files explicitly verified in this exact physical dossier,
   // rather than force-adding an arbitrary directory or weakening .gitignore.
-  const expectedFiles = [
-    "RUN.json", "EVIDENCE.md", "SHA256SUMS.txt",
-    ...manifest.steps.filter(step => step.status !== "NOT_EXECUTED")
-      .map(step => step.logFile),
-  ].map(file => prefix + file);
+  const expectedFiles = publicationFiles(relativePath, manifest);
   git(["add", "-f", "--", ...expectedFiles]);
   const stagedFiles = git(["diff", "--cached", "--name-only"]).split("\n").filter(Boolean);
   const expectedSet = new Set(expectedFiles);
@@ -293,4 +301,4 @@ async function main() {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch(error => { console.error(cleanText(error.message)); process.exitCode = 1; });
 }
-export { checkBundle, makeEvidence, publish };
+export { checkBundle, makeEvidence, publish, publicationFiles };
