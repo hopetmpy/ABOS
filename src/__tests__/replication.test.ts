@@ -128,6 +128,43 @@ describe("spawnChild", () => {
   const validAddress = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
   const zeroAddress = "0x" + "0".repeat(40);
 
+  // Synthetic P-031/P-018 source for existing child-bootstrap tests. No
+  // supplier purchase occurs in spawnChild; these records model a previous
+  // verified economic claim and a healthy owned Conway resource.
+  const procuredSandbox = (memoryMb = 1024) => {
+    const resources = new EnvironmentResourceStore(db.raw);
+    const resourceId = "preprocured-child-fixture";
+    const operationKey = "preprocured-child-fixture-op";
+    const sandboxId = "preprocured-synthetic-sandbox";
+    resources.create({
+      id: resourceId, provider: "conway", externalId: sandboxId,
+      type: "conway-sandbox", goalId: "goal-fixture", taskId: "task-fixture",
+      pathId: "path-fixture", region: "us-east", status: "running",
+      metadata: { memoryMb },
+    });
+    resources.recordHealth(resourceId, { status: "running" });
+    prepareFinancialEffect(db.raw, {
+      operationKey, effectKind: "provider_resource_procurement",
+      provider: "conway", amountCents: 250, unit: "credit_cent",
+      policyDecisionId: "p010-fixture",
+      request: {
+        operation: "provision", resourceId, goalId: "goal-fixture",
+        taskId: "task-fixture", pathId: "path-fixture", region: "us-east",
+      },
+    });
+    claimFinancialEffectDispatch(db.raw, operationKey);
+    recordFinancialEffectObservation(db.raw, operationKey, {
+      resolution: "pending", providerEffectId: sandboxId,
+      providerStatus: "running",
+    });
+    return { resourceId, operationKey };
+  };
+
+  const spawnReviewed = (memoryMb = 1024) =>
+    spawnChild(conway, identity, db, genesis, undefined,
+      { maxChildren: 3, childSandboxMemoryMb: memoryMb },
+      procuredSandbox(memoryMb));
+
   beforeEach(() => {
     bootstrapGateState.valid = true;
     conway = new MockConwayClient();
@@ -268,31 +305,14 @@ describe("spawnChild", () => {
     expect(resources.get("unpaid-resource")?.metadata.childId).toBeUndefined();
   });
 
-  it("uses childSandboxMemoryMb from the runtime config when selecting a sandbox tier", async () => {
-    vi.spyOn(conway, "exec").mockImplementation(async (command: string) => {
-      if (command.includes("--init")) {
-        return { stdout: `Wallet initialized: ${validAddress}`, stderr: "", exitCode: 0 };
-      }
-      return { stdout: "ok", stderr: "", exitCode: 0 };
-    });
-    const createSandbox = vi.spyOn(conway, "createSandbox");
-
-    await spawnChild(
-      conway,
-      identity,
-      db,
-      genesis,
-      undefined,
+  it("rejects a P-031 sandbox too small for child memory demand", async () => {
+    const created = vi.spyOn(conway, "createSandbox");
+    await expect(spawnChild(
+      conway, identity, db, genesis, undefined,
       { maxChildren: 3, childSandboxMemoryMb: 2048 },
-    );
-
-    expect(createSandbox).toHaveBeenCalledWith(
-      expect.objectContaining({
-        memoryMb: 2048,
-        vcpu: 2,
-        diskGb: 20,
-      }),
-    );
+      procuredSandbox(1024),
+    )).rejects.toThrow(/required capacity/);
+    expect(created).not.toHaveBeenCalled();
   });
 
   it("runs child initialization from the ABOS repository root", async () => {
@@ -305,7 +325,7 @@ describe("spawnChild", () => {
       return { stdout: "ok", stderr: "", exitCode: 0 };
     });
 
-    await spawnChild(conway, identity, db, genesis);
+    await spawnReviewed();
 
     expect(commands).toContain("cd /root/abos && node dist/index.js --init 2>&1");
     expect(
@@ -317,7 +337,7 @@ describe("spawnChild", () => {
     ).toBe(true);
   });
 
-  it("validates wallet address before creating child record", async () => {
+  it("validates wallet address before declaring child ready", async () => {
     vi.spyOn(conway, "exec").mockImplementation(async (command: string) => {
       if (command.includes("--init")) {
         return { stdout: `Wallet initialized: ${validAddress}`, stderr: "", exitCode: 0 };
@@ -325,10 +345,10 @@ describe("spawnChild", () => {
       return { stdout: "ok", stderr: "", exitCode: 0 };
     });
 
-    const child = await spawnChild(conway, identity, db, genesis);
+    const child = await spawnReviewed();
 
     expect(child.address).toBe(validAddress);
-    expect(child.status).toBe("spawning");
+    expect(child.status).toBe("wallet_verified");
   });
 
   it("fails spawn when ABOS child initialization exits nonzero", async () => {
@@ -343,7 +363,7 @@ describe("spawnChild", () => {
       return { stdout: "ok", stderr: "", exitCode: 0 };
     });
 
-    await expect(spawnChild(conway, identity, db, genesis)).rejects.toThrow(
+    await expect(spawnReviewed()).rejects.toThrow(
       /Child ABOS initialization failed \(exit 1\): Fatal: Conway unavailable/,
     );
   });
@@ -356,7 +376,7 @@ describe("spawnChild", () => {
       return { stdout: "ok", stderr: "", exitCode: 0 };
     });
 
-    await expect(spawnChild(conway, identity, db, genesis))
+    await expect(spawnReviewed())
       .rejects.toThrow("Child wallet address invalid");
   });
 
@@ -368,7 +388,7 @@ describe("spawnChild", () => {
       return { stdout: "ok", stderr: "", exitCode: 0 };
     });
 
-    await expect(spawnChild(conway, identity, db, genesis))
+    await expect(spawnReviewed())
       .rejects.toThrow("Child wallet address invalid");
   });
 
@@ -378,7 +398,7 @@ describe("spawnChild", () => {
       throw new Error("constitution unavailable");
     });
 
-    await expect(spawnChild(conway, identity, db, genesis)).rejects.toThrow(
+    await expect(spawnReviewed()).rejects.toThrow(
       /constitution unavailable/,
     );
   });
@@ -387,7 +407,7 @@ describe("spawnChild", () => {
     const deleteSpy = vi.spyOn(conway, "deleteSandbox");
     vi.spyOn(conway, "exec").mockRejectedValue(new Error("Install failed"));
 
-    await expect(spawnChild(conway, identity, db, genesis))
+    await expect(spawnReviewed())
       .rejects.toThrow();
 
     expect(deleteSpy).not.toHaveBeenCalled();
@@ -403,7 +423,7 @@ describe("spawnChild", () => {
       return { stdout: "ok", stderr: "", exitCode: 0 };
     });
 
-    await expect(spawnChild(conway, identity, db, genesis))
+    await expect(spawnReviewed())
       .rejects.toThrow("Child wallet address invalid");
 
     expect(deleteSpy).not.toHaveBeenCalled();
@@ -413,17 +433,18 @@ describe("spawnChild", () => {
     vi.spyOn(conway, "deleteSandbox").mockRejectedValue(new Error("delete also failed"));
     vi.spyOn(conway, "exec").mockRejectedValue(new Error("Install failed"));
 
-    await expect(spawnChild(conway, identity, db, genesis))
+    await expect(spawnReviewed())
       .rejects.toThrow(/Install failed/);
   });
 
-  it("does not call deleteSandbox if createSandbox itself fails", async () => {
+  it("never creates or deletes a sandbox when procurement evidence is absent", async () => {
     const deleteSpy = vi.spyOn(conway, "deleteSandbox");
-    vi.spyOn(conway, "createSandbox").mockRejectedValue(new Error("Sandbox creation failed"));
+    const createSpy = vi.spyOn(conway, "createSandbox");
 
     await expect(spawnChild(conway, identity, db, genesis))
-      .rejects.toThrow("Sandbox creation failed");
+      .rejects.toThrow(/requires P-031/);
 
+    expect(createSpy).not.toHaveBeenCalled();
     expect(deleteSpy).not.toHaveBeenCalled();
   });
 });
