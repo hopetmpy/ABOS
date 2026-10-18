@@ -2659,6 +2659,58 @@ Model: ${ctx.inference.getDefaultModel()}
       },
     },
     {
+      name: "conway_domains_owned_resources",
+      description:
+        "Use the agent's already-controlled EVM or Solana wallet to authenticate " +
+        "with Conway Domains, verify its own account, and observe that account's " +
+        "domain inventory and transaction history by GET. This is read-only and " +
+        "neither grants purchase authority nor establishes x402 settlement. " +
+        "No model-supplied token, wallet key or provider account argument.",
+      category: "conway",
+      riskLevel: "caution",
+      parameters: { type: "object", properties: {} },
+      execute: async (_args, ctx) => {
+        if (ctx.identity.chainType === "solana") {
+          const wallet = ctx.identity.chainIdentity;
+          if (!wallet || wallet.chainType !== "solana" ||
+              wallet.address !== ctx.identity.address ||
+              typeof wallet.signMessage !== "function") {
+            return JSON.stringify({
+              provider: "conway-domains", status: "unavailable",
+              financialSettlementEstablished: false,
+              purchaseAuthority: "not_established",
+              evidence: ["No matching host-owned Solana signer: authenticated inventory was not requested."],
+            });
+          }
+          const { observeConwayDomainsControlledSolanaResources } =
+            await import("../conway/domains-siwe-session.js");
+          return JSON.stringify(
+            await observeConwayDomainsControlledSolanaResources(wallet), null, 2,
+          );
+        }
+        const wallet = ctx.identity.account;
+        if (!wallet?.signMessage ||
+            typeof wallet.address !== "string" ||
+            typeof ctx.identity.address !== "string" ||
+            wallet.address.toLowerCase() !== ctx.identity.address.toLowerCase()) {
+          return JSON.stringify({
+            provider: "conway-domains", status: "unavailable",
+            financialSettlementEstablished: false,
+            purchaseAuthority: "not_established",
+            evidence: ["No matching host-owned EVM signer: authenticated inventory was not requested."],
+          });
+        }
+        const { observeConwayDomainsControlledEvmResources } =
+          await import("../conway/domains-siwe-session.js");
+        return JSON.stringify(
+          await observeConwayDomainsControlledEvmResources({
+            address: wallet.address,
+            signMessage: ({ message }) => wallet.signMessage({ message }),
+          }), null, 2,
+        );
+      },
+    },
+    {
       name: "conway_domain_purchase_evidence",
       description:
         "Observe Conway Domains' PUBLIC specific-name availability and TLD " +
