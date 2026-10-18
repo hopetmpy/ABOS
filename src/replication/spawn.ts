@@ -15,7 +15,7 @@ import type {
   ChildAbosAgent,
 } from "../types.js";
 import { DEFAULT_CONFIG, MAX_CHILDREN } from "../types.js";
-import type { ChildLifecycle } from "./lifecycle.js";
+import { ChildLifecycle } from "./lifecycle.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { getFinancialEffectByOperationKey } from "../economics/financial-effects.js";
 import { ulid } from "ulid";
@@ -26,20 +26,6 @@ import {
   ABOS_CANONICAL_BRANCH,
   ABOS_CANONICAL_REPOSITORY,
 } from "../self-mod/upstream.js";
-
-/** Valid Conway sandbox pricing tiers. */
-const SANDBOX_TIERS = [
-  { memoryMb: 512,  vcpu: 1, diskGb: 5 },
-  { memoryMb: 1024, vcpu: 1, diskGb: 10 },
-  { memoryMb: 2048, vcpu: 2, diskGb: 20 },
-  { memoryMb: 4096, vcpu: 2, diskGb: 40 },
-  { memoryMb: 8192, vcpu: 4, diskGb: 80 },
-];
-
-/** Find the smallest valid tier that has at least the requested memory. */
-function selectSandboxTier(requestedMemoryMb: number) {
-  return SANDBOX_TIERS.find((t) => t.memoryMb >= requestedMemoryMb) ?? SANDBOX_TIERS[SANDBOX_TIERS.length - 1];
-}
 
 async function installAbosRuntime(childConway: ConwayClient): Promise<void> {
   const command = [
@@ -202,13 +188,10 @@ export async function spawnChild(
   }
 
   const childId = ulid();
-  let sandboxId: string | undefined;
   let reusedSandbox: { id: string } | null = null;
-
-  // If no lifecycle provided, use legacy path
-  if (!lifecycle) {
-    return spawnChildLegacy(conway, identity, db, genesis, childId, runtimeConfig); // Legacy bypass is audited separately.
-  }
+  // Older callers remain source-compatible; they now share the canonical
+  // P-029 child lifecycle rather than buying through a second legacy path.
+  lifecycle ??= new ChildLifecycle(db.raw);
 
   try {
     // State: requested
@@ -236,7 +219,7 @@ export async function spawnChild(
         "procurement_operation_key to spawn_child; no supplier purchase dispatched.",
       );
     }
-    sandboxId = sandbox.id;
+
 
     // Create a scoped client so all exec/writeFile calls target the CHILD sandbox
     const childConway = conway.createScopedClient(sandbox.id);
@@ -621,120 +604,6 @@ export async function ensureChildRuntimeRunning(
     } catch {
       // Preserve the original execution error.
     }
-    throw error;
-  }
-}
-
-/**
- * Legacy spawn path for backward compatibility when no lifecycle is provided.
- */
-async function spawnChildLegacy(
-  conway: ConwayClient,
-  identity: AbosIdentity,
-  db: AbosDatabase,
-  genesis: GenesisConfig,
-  childId: string,
-  runtimeConfig?: Pick<AbosConfig, "maxChildren" | "childSandboxMemoryMb">,
-): Promise<ChildAbosAgent> {
-  let sandboxId: string | undefined;
-
-  // Get child sandbox memory from config (default 1024MB)
-  const childMemoryMb =
-    runtimeConfig?.childSandboxMemoryMb ??
-    DEFAULT_CONFIG.childSandboxMemoryMb!;
-
-  const legacyTier = selectSandboxTier(childMemoryMb);
-
-  try {
-    const sandbox = await conway.createSandbox({
-      name: `abos-child-${genesis.name.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,
-      vcpu: legacyTier.vcpu,
-      memoryMb: legacyTier.memoryMb,
-      diskGb: legacyTier.diskGb,
-    });
-    sandboxId = sandbox.id;
-
-    // Create a scoped client so all exec/writeFile calls target the CHILD sandbox
-    const childConway = conway.createScopedClient(sandbox.id);
-
-    await childConway.exec(
-      "apt-get update -qq && apt-get install -y -qq nodejs npm git curl",
-      120_000,
-    );
-    await installAbosRuntime(childConway);
-    await childConway.exec("mkdir -p /root/.abos", 10_000);
-
-    const legacyGenesisJson = JSON.stringify(
-      {
-        name: genesis.name,
-        genesisPrompt: genesis.genesisPrompt,
-        creatorMessage: genesis.creatorMessage,
-        creatorAddress: identity.address,
-        parentAddress: identity.address,
-        chainType: genesis.chainType || (identity as any).chainType || "evm",
-      },
-      null,
-      2,
-    );
-    await childConway.writeFile("/root/.abos/genesis.json", legacyGenesisJson);
-
-    await materializeRequiredBootstrap(
-      childConway,
-      sandbox.id,
-      db,
-      identity.address,
-    );
-
-    const initResult = await childConway.exec("cd /root/abos && node dist/index.js --init 2>&1", 60_000);
-    if (initResult.exitCode !== 0) {
-      throw new Error(
-        `Child ABOS initialization failed (exit ${initResult.exitCode}): ${initResult.stderr || initResult.stdout || "no output"}`,
-      );
-    }
-    const legacyParentChainType = genesis.chainType || (identity as any).chainType || "evm";
-    const legacyEvmMatch = (initResult.stdout || "").match(/0x[a-fA-F0-9]{40}/);
-    const legacySolMatch = (initResult.stdout || "").match(/[1-9A-HJ-NP-Za-km-z]{32,44}/);
-    const childWallet = legacyParentChainType === "solana"
-      ? (legacySolMatch ? legacySolMatch[0] : "")
-      : (legacyEvmMatch ? legacyEvmMatch[0] : "");
-
-    if (!isValidWalletAddress(childWallet, legacyParentChainType)) {
-      throw new Error(`Child wallet address invalid: ${childWallet}`);
-    }
-
-    const child: ChildAbosAgent = {
-      id: childId,
-      name: genesis.name,
-      address: childWallet,
-      sandboxId: sandbox.id,
-      genesisPrompt: genesis.genesisPrompt,
-      creatorMessage: genesis.creatorMessage,
-      fundedAmountCents: 0,
-      status: "spawning",
-      createdAt: new Date().toISOString(),
-      chainType: legacyParentChainType,
-    };
-
-    const bootstrap = await verifyChildBootstrap(childConway, db, child);
-    if (!bootstrap.valid) {
-      throw new Error(
-        `Child bootstrap verification failed: ${bootstrap.evidence.join("; ")}`,
-      );
-    }
-
-    db.insertChild(child);
-
-    db.insertModification({
-      id: ulid(),
-      timestamp: new Date().toISOString(),
-      type: "child_spawn",
-      description: `Spawned child: ${genesis.name} in sandbox ${sandbox.id}`,
-      reversible: false,
-    });
-
-    return child;
-  } catch (error) {
-    // Sandbox deletion disabled — failed sandboxes left for potential reuse.
     throw error;
   }
 }
