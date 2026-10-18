@@ -6,19 +6,19 @@ ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
 Active-Plan: P-031
 Active-Segment: continuity/C0030.md
-Active-Intervention: P031_CONTRACT_LIFECYCLE — EN_EJECUCIÓN / SOURCE_E3_CONTRACT_BOUNDARIES_INTEGRATED_DOD_OPEN
+Active-Intervention: P031_PROVIDER_NATIVE_CLEANUP — EN_EJECUCIÓN / CONWAY_DELETE_SOURCE_E3_INTEGRATED_DOD_OPEN
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-source-contract-checkpoint-20261017
-Host-Head-At-Audit-Open: a8ba5ed154a8be4654cb0026ca626bfab109540e
-Last-Reconciled-Host-Head: a8ba5ed154a8be4654cb0026ca626bfab109540e
-Observed-Main-Head: a8ba5ed154a8be4654cb0026ca626bfab109540e
-Last-Product-Head: a8ba5ed154a8be4654cb0026ca626bfab109540e
-Last-Product-CI: exact main a8ba5ed154a8be4654cb0026ca626bfab109540e push 39084009996 — IN_PROGRESS at checkpoint; exact PR 212 CI 39083831729 SUCCESS 8/8
+Current-Host-Branch: abos/p031-provider-capability-checkpoint-20261017
+Host-Head-At-Audit-Open: a297029a447cafcac1181b0d7670ddafd8fcc66e
+Last-Reconciled-Host-Head: a297029a447cafcac1181b0d7670ddafd8fcc66e
+Observed-Main-Head: a297029a447cafcac1181b0d7670ddafd8fcc66e
+Last-Product-Head: a297029a447cafcac1181b0d7670ddafd8fcc66e
+Last-Product-CI: exact main a297029a447cafcac1181b0d7670ddafd8fcc66e push 39085250256 — IN_PROGRESS at checkpoint; exact PR 215 CI 39085078797 SUCCESS 8/8
 Last-Completed-Plan: P-030
 Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
 Last-Completed-CI: 38766126322 — SUCCESS 8/8
@@ -31,6 +31,15 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
 
+
+## P-031 — Provider-native Conway deletion revalidated; DoD still open (2026-10-17)
+
+- Exact parent `main a297029a447cafcac1181b0d7670ddafd8fcc66e`: PR #215 https://github.com/hopetmpy/ABOS/pull/215 merged; exact PR HEAD `71961a22dcadefc5f7073485a5240e8463454e00`, CI `39085078797` COMPLETE SUCCESS **8/8**. Exact-main CI `39085250256` IN_PROGRESS at checkpoint, no success claim until finished. No external provider operation was executed.
+- **Root finding**: the canonical `src/conway/client.ts:deleteSandbox` was silently a no-op, stating that Conway no longer supported deletion. Current first-party Conway documentation https://docs.conway.tech/cloud/sandboxes shows `DELETE /v1/sandboxes/:id` with `204 No Content` success. The local statement was stale and materially misrepresented a resource-retirement capability. Separately `ConwayEnvironmentProvider` did not expose `destroy` to P-018, preventing autonomous cleanup.
+- **Correction**: client now sends one validated, authenticated provider DELETE, disables automatic transport/404 retries on the destructive route, accepts only status 204, and propagates ambiguous responses instead of claiming release. Existing P-018 lifecycle/retention now exposes destroy iff client implements it; rejects foreign/non-sandbox resource, retains artifact-holds and terminal Goal retention. Proven only in mocked HTTP/runtime tests, not in a live supplier account. Deleting a sandbox is not cancellation of other contracts, future billing reconciliation, refund, or realized savings.
+- **Provider contract classification**: AWS EC2 instance `terminate-instances` handles compute disposal but does **not** cancel separate Reserved Instances/Savings Plans/AWS Marketplace subscriptions or settle residual EBS/storage charges, per AWS provider guidance https://docs.aws.amazon.com/us_en/awsaccountbilling/latest/aboutv2/checklistforunwantedcharges.html. Conway's sandbox DELETE is now documented (prior code contradicted docs); account credits/contract charges still require independent authenticated observation. Supplier-specific renewal/cancellation semantics remain open and can be injected through the trusted P-031 port when backed by actual provider authentication; no universal synthetic contract implementation should be substituted.
+- **State:** P-031 `EN_EJECUCIÓN`, original Definition of Done not accredited: no default CLI host has demonstrated complete real financial authorization, source quote/contract, supplier dispatch, realized cost/refund and verified end-to-end outcome. P-005 E5/E6 continues separate; P-032 PARCIAL paused.
+- **NEXT_ELIGIBLE_WORK:** audit exact provider capability boundaries from runtime entrypoints (host procurement injection, supplier contract observer and AWS/Conway account ownership), test any remaining demonstrable SOURCE gap without duplication, compare all original P-031 scenarios and evidence tiers. If future LIVE credits/account/contract/permissions are unavailable, record `UNKNOWN / P-005` without inventing them; do not close P-031 as workaround.
 
 ## P-031 — Source contract operations and post-retirement reconciliation (2026-10-17)
 
