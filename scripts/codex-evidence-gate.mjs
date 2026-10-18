@@ -153,6 +153,12 @@ function checkBundle(dirArg) {
       !/^[a-z0-9-]+$/.test(manifest.profile) ||
       !["PASS", "FAIL", "BLOCKED"].includes(manifest.status) ||
       !Array.isArray(manifest.steps)) fail("Invalid evidence manifest.");
+  const relParts = relative(evidenceRoot, dir).replaceAll("\\", "/").split("/");
+  if (relParts.length !== 4 || relParts[0] !== manifest.module ||
+      relParts[1] !== manifest.sourceCommit || relParts[2] !== manifest.profile ||
+      !/^[a-zA-Z0-9-]+$/.test(relParts[3])) {
+    fail("Evidence directory does not match module/source/profile provenance.");
+  }
   if (!manifest.steps.every(s =>
     ["PASS", "FAIL", "NOT_EXECUTED"].includes(s.status) &&
     /^logs\/[a-z0-9-]+\.log$/.test(s.logFile))) fail("Invalid evidence step.");
