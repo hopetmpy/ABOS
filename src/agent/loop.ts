@@ -65,7 +65,7 @@ import { MemoryRetriever } from "../memory/retrieval.js";
 import { MemoryIngestionPipeline } from "../memory/ingestion.js";
 import { EnhancedRetriever, calculateMemoryBudget } from "../memory/enhanced-retriever.js";
 import { ContextManager, createTokenCounter } from "../memory/context-manager.js";
-import { DEFAULT_MEMORY_BUDGET } from "../types.js";
+import { DEFAULT_CONFIG, DEFAULT_MEMORY_BUDGET } from "../types.js";
 import { formatMemoryBlock } from "./context.js";
 import { createLogger } from "../observability/logger.js";
 import { correlationIdFor } from "../observability/evidence.js";
@@ -760,9 +760,18 @@ export async function runAgentLoop(
                 ],
               },
         spawn: async (task) => {
+          const { spawnChild, findProcuredChildSandboxForTask } =
+            await import("../replication/spawn.js");
+          // A previous P-031 Task procurement may already own usable compute.
+          // Discover by canonical Goal/Task/path and P-030 effect, never by
+          // a model-supplied purchase receipt or an unrelated free sandbox.
+          const procurement = findProcuredChildSandboxForTask(
+            db,
+            task,
+            config.childSandboxMemoryMb ?? DEFAULT_CONFIG.childSandboxMemoryMb!,
+          );
           const spawnOnce = async () => {
             const { generateGenesisConfig } = await import("../replication/genesis.js");
-            const { spawnChild } = await import("../replication/spawn.js");
             const { ChildLifecycle } = await import("../replication/lifecycle.js");
 
             const role = task.agentRole ?? "generalist";
@@ -771,7 +780,10 @@ export async function runAgentLoop(
               specialization: `${role}: ${task.title}`,
             });
             const lifecycle = new ChildLifecycle(db.raw);
-            return spawnChild(conway, identity, db, genesis, lifecycle, config);
+            return spawnChild(
+              conway, identity, db, genesis, lifecycle, config,
+              procurement ?? undefined,
+            );
           };
 
           try {
@@ -784,6 +796,9 @@ export async function runAgentLoop(
               resourceType: "conway-sandbox",
               evidence: [
                 `Conway child ${child.id} spawned for task ${task.id}.`,
+                ...(procurement ? [
+                  `P-031 verified resource ${procurement.resourceId} used without a second supplier purchase.`,
+                ] : []),
               ],
               metadata: {
                 childId: child.id,
@@ -791,9 +806,13 @@ export async function runAgentLoop(
               },
             };
           } catch (sandboxError: any) {
-            const is402 =
+            // Once P-018/P-030 capacity was claimed, a fresh spawn retry
+            // cannot safely reuse the same child reservation. Recovery must
+            // resume the recorded child instead of paying/retrying blindly.
+            const is402 = !procurement && (
               sandboxError?.status === 402 ||
-              sandboxError?.message?.includes("INSUFFICIENT_CREDITS");
+              sandboxError?.message?.includes("INSUFFICIENT_CREDITS")
+            );
 
             if (!is402) {
               throw sandboxError;
