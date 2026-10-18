@@ -472,6 +472,8 @@ export interface ConwayClient {
   listSandboxes(): Promise<SandboxInfo[]>;
   getCreditsBalance(): Promise<number>;
   getCreditsPricing(): Promise<PricingTier[]>;
+  /** Optional authenticated, read-only supplier history; not payment settlement. */
+  getCreditsHistory?(limit?: number, offset?: number): Promise<ConwayCreditHistoryPage>;
   transferCredits(
     toAddress: string,
     amountCents: number,
@@ -576,6 +578,24 @@ export interface PricingTier {
   memoryMb: number;
   diskGb: number;
   monthlyCents: number;
+}
+
+/** Supplier-reported Conway credit movements. Account identity and chain
+ * settlement remain unverified; never infer unreserved spendable liquidity. */
+export interface ConwayCreditHistoryEntry {
+  id: string | null;
+  type: string | null;
+  amountCents: number | null;
+  balanceAfterCents: number | null;
+  createdAt: string | null;
+}
+
+export interface ConwayCreditHistoryPage {
+  entries: ConwayCreditHistoryEntry[];
+  limit: number;
+  offset: number;
+  /** Page observed, not complete provider ledger or verified monetary finality. */
+  completeness: "observed_page";
 }
 
 export interface CreditTransferResult {
