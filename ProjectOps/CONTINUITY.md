@@ -29,6 +29,12 @@ ProjectOps-PR: 30
 Master-Plan-PR: 31
 Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
+## P-031 — X402 read-only GET pricing preflight / source pending (2026-10-18)
+
+- **SOURCE IMPLEMENTED, PHYSICAL PENDING:** `src/conway/x402.ts` extends canonical HEAD x402 parsing with `probeX402ReadOnly` for read-only GET payment-requirement discovery (one `HEAD`, no-store, no redirect, no automatic retries). Distinguishes `head_requirements_observed` / `head_no_402` / `unknown` / `unsupported_target_method`; always `purchaseAuthorized:false`, `exactOperationQuoteEstablished:false`, account unknown. The existing `x402_fetch` paid route is unchanged. Exposes tool `x402_price_probe` in `src/agent/tools-core.ts` and six adversarial tests in `src/__tests__/p031-x402-readonly-preflight.test.ts`.
+- **FALSATION / LIMIT:** Conway Cloud sandbox creation is POST with body/shape; official Conway x402_check documentation does NOT prove its generic HEAD would quote an exact POST body/account. New probe never sends POST, nor fabricates price, account, contract or funds. Existing P-025/P-010/P-030/P-018 remain sole decision/treasury/provision authorities. Source-only static checks PASS, no full physical test until `p031-x402-preflight` grouped Codex profile is executed on exact new SHA. Detailed rationale, test boundaries and next vendor-native quote investigation in active `continuity/C0030.md`. No LIVE calls, purchases, or GitHub Actions.
+- **NEXT:** get Codex synthetic `p031-x402-preflight` evidence; independently audit from Git and continue supplier-specific same-operation quote/account/contract discovery. P-031 `EN_EJECUCIÓN`, `main` still unmerged, P-005 LIVE separate.
+
 ## P-031 — Conway history E3 physical PASS (2026-10-18)
 
 - **Git audit verified:** SHA exact source `70c76f7692dfcfab1ca66e7df24b68e9b99385b3` → evidence `12fba559d4592617f80b55ed01e7f86470b1d5a3` (parent directo), ocho archivos publicados, 7/7 SHA256 independientes y cinco pasos `PASS` incluyendo 6/6 tests de protocolo, 121/121 tests en 13/13 archivos, ProjectOps integrity, typecheck y build. `SYNTHETIC_NO_EXTERNAL_SPEND`, sin compras/operaciones LIVE ni Actions. Auditoría `ProjectOps/evidence/P-031/audits/70c76f76-conway-history.md`; índice actualizado en `ProjectOps/EVIDENCE.md`.
