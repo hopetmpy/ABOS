@@ -271,14 +271,13 @@ async function main() {
     console.log(JSON.stringify(publish(arg)));
     return;
   }
-  if ((action === "run" || action === "run-publish") && arg && source) {
+  if (action === "run" && arg && source) {
     const x = makeEvidence(arg, source);
     console.log("ABOS_EVIDENCE " + x.status + ": " + x.relativePath);
-    if (action === "run-publish") console.log(JSON.stringify(publish(x.relativePath)));
     if (x.status !== "PASS") process.exitCode = 1;
     return;
   }
-  fail("Usage: node scripts/codex-evidence-gate.mjs run|run-publish <profile> <exact-source-sha> | verify|publish <relative-evidence-directory>.");
+  fail("Usage: node scripts/codex-evidence-gate.mjs run <profile> <exact-source-sha> | verify|publish <relative-evidence-directory>.");
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
