@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { observeConwayDomainPurchaseEvidence } from "../conway/domains-purchase-evidence.js";
+import { observeConwayDomainPurchaseEvidence, inspectConwayDomainsX402Version2 } from "../conway/domains-purchase-evidence.js";
 import { createBuiltinTools } from "../agent/tools.js";
 
 afterEach(() => {
@@ -140,5 +140,106 @@ describe("P-031 Conway Domains read-only acquisition research", () => {
       providerAccountId: null, paymentAuthorized: false,
     });
     expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+});
+
+const validConwayDomains402 = {
+  x402Version: 2,
+  accepts: [{
+    scheme: "exact",
+    network: "eip155:8453",
+    asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    amount: "43750000",
+    payTo: "0x1111111111111111111111111111111111111111",
+    maxTimeoutSeconds: 300,
+  }],
+};
+
+describe("P-031 supplier native x402 v2 402 inspection (no payment)", () => {
+  it("parses the exact documented amount/asset/payTo format as informational evidence, never purchase authority", () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    const result = inspectConwayDomainsX402Version2(402, validConwayDomains402);
+    expect(result).toMatchObject({
+      provider: "conway-domains", status: "requirements_observed",
+      reasonCode: "payment_required",
+      requirement: {
+        scheme: "exact", network: "eip155:8453",
+        amountMicroUsdc: "43750000",
+        policyAmountCents: 4375, timeoutSeconds: 300,
+      },
+      providerAccountId: null, exactOrderQuoteEstablished: false,
+      paymentAuthorized: false, purchaseDispatched: false,
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("rounds sub-cent USDC conservatively without float conversion", () => {
+    const req = structuredClone(validConwayDomains402);
+    req.accepts[0]!.amount = "1";
+    expect(inspectConwayDomainsX402Version2(402, req).requirement)
+      .toMatchObject({ amountMicroUsdc: "1", policyAmountCents: 1 });
+    req.accepts[0]!.amount = "10001";
+    expect(inspectConwayDomainsX402Version2(402, req).requirement)
+      .toMatchObject({ amountMicroUsdc: "10001", policyAmountCents: 2 });
+  });
+
+  it("rejects forged asset, recipient, or mixed legacy amount/recipient fields", () => {
+    const cases: unknown[] = [
+      { asset: "0x2222222222222222222222222222222222222222" },
+      { payTo: "not-an-address" },
+      { maxAmountRequired: "1" },
+      { payToAddress: "0x2222222222222222222222222222222222222222" },
+      { usdcAddress: "0x2222222222222222222222222222222222222222" },
+      { amount: "-1" },
+      { amount: "43.75" },
+      { amount: "1000000000000000000000000000000000000000000" },
+      { maxTimeoutSeconds: 0 },
+      { maxTimeoutSeconds: 90000 },
+    ];
+    for (const changes of cases) {
+      const body = {
+        ...validConwayDomains402,
+        accepts: [{ ...validConwayDomains402.accepts[0], ...changes as object }],
+      };
+      const result = inspectConwayDomainsX402Version2(402, body);
+      expect(result.status).toBe("unavailable");
+      expect(result.requirement).toBeNull();
+      expect(result.paymentAuthorized).toBe(false);
+    }
+  });
+
+  it("rejects duplicate compatible offers, unsupported supplier networks and malformed payload", () => {
+    const duplicate = {
+      ...validConwayDomains402,
+      accepts: [
+        validConwayDomains402.accepts[0],
+        { ...validConwayDomains402.accepts[0], amount: "43760000" },
+      ],
+    };
+    expect(inspectConwayDomainsX402Version2(402, duplicate).reasonCode)
+      .toBe("ambiguous_offers");
+    const alternate = {
+      ...validConwayDomains402,
+      accepts: [{ ...validConwayDomains402.accepts[0], network: "solana:mainnet" }],
+    };
+    expect(inspectConwayDomainsX402Version2(402, alternate).reasonCode)
+      .toBe("no_supported_offer");
+    expect(inspectConwayDomainsX402Version2(402, {
+      ...validConwayDomains402, x402Version: 1,
+    }).status).toBe("unavailable");
+    expect(inspectConwayDomainsX402Version2(402, null).status).toBe("unavailable");
+  });
+
+  it("treats unexpected 201/202 and provider errors as unknown external effects, without retries", () => {
+    for (const status of [200, 201, 202, 401, 500]) {
+      const result = inspectConwayDomainsX402Version2(status, validConwayDomains402);
+      expect(result).toMatchObject({
+        status: "unavailable", reasonCode: "unexpected_http_status",
+        exactOrderQuoteEstablished: false, paymentAuthorized: false,
+        purchaseDispatched: false, requirement: null,
+      });
+      expect(result.evidence.join(" ")).toContain("do not retry");
+    }
   });
 });
