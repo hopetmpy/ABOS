@@ -29,6 +29,11 @@ ProjectOps-PR: 30
 Master-Plan-PR: 31
 Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
+## P-031 — E3 physical reconciliation + x402 retry fix (2026-10-18)
+
+- **Codex evidence independently audited**: Task-child handoff source `9af9e6b3` → evidence `60f33dad`, 143/143 tests / 12/12 files; subsequent product commit `8478247c` added durable x402 reconciliation warnings and inline duplicate-topup guard, verified 446/446 tests / 37/37 files. Remote file SHA-256: 6/6 for former evidence, 10/10 evidence and 3/3 product for latter. `ProjectOps/EVIDENCE.md` is a derived index; see active segment `continuity/C0030.md` for provenance.
+- **Open scope:** P-031 economic provider/host Conway authentic account, quote, fund exposure, policy issuance and lifecycle. Existing P-010/P-018/P-030 authorities remain owners; no fictional 'default' provider purchase authorization. E5/E6 remains external P-005, without LIVE charge. Branch remains unmerged.
+
 ## P-031 — Handoff Task P-028 → P-031 / P-018 / P-030 (SOURCE) — 2026-10-18
 
 - **CURRENT_BRANCH / SOURCE_PATCHED / PHYSICAL_NOT_YET_RUN:** `src/agent/loop.ts` ahora busca sandbox Conway ya adquirido para Goal/Task/path mediante `findProcuredChildSandboxForTask` en `src/replication/spawn.ts`, y pasa el exacto `resourceId + operationKey` al bootstrap P-029. Se reutilizan los owners existentes P-018, P-030 y decisión P-010; no hay emisión de nuevo proveedor ni pago implícito. Sin recurso adquirido adecuado se conserva reciclaje legítimo de child fallido y se reporta falta de adquisición, no prohibición global.
