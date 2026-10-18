@@ -37,6 +37,11 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
 
+## P-031 — passive exact-order x402 candidate binding, physical pending (2026-10-18)
+
+- **SOURCE IMPLEMENTED / PHYSICAL PENDING:** `src/conway/domains-order-binding.ts` adds a pure `bindConwayDomainsRegistration402` to relate an already-captured Conway Domains HTTP 402 x402 v2 requirement to an explicit EVM host-owned wallet/account and the byte-exact submitted `POST /domains/register` body (domain, years, privacy, nameservers). It validates supplier account proof, host address/type, request normalization, strict submitted/planned body equivalence and the existing Base-USDC parser; hashes exact body + payment requirement/account into a reproducible candidate fingerprint. Six negative/positive tests appended to `p031-conway-domains-purchase-evidence.test.ts` in existing grouped profile. No fetch, signature, registration, P-030 intent or paid dispatch. All outputs keep `authenticatedOrderQuoteEstablished:false`, `financialIntentPrepared:false`, `paymentAuthorized:false`. A local candidate is **not** supplier authentication, contract or quote in force.
+- **NEXT_ELIGIBLE_WORK:** run grouped Codex `p031-domains-economic-discovery` on new exact HEAD, audit published evidence. After PASS, determine trusted host source/response acquisition and P-010/P-030 durable intent for any provider POST; do not admit model-supplied JWT/402 or 2xx as automatic no-charge. Prior 149/149 E3 applies only to `300f7c35`. P-031 EN_EJECUCIÓN, P-032 PARCIAL, P-005 E5/E6 external; `main` unmerged.
+
 ## P-031 — owned-session Domains E3 verified on exact source (2026-10-18)
 
 - **GIT_AUDITED / E3_SYNTHETIC_PASS:** Codex ran exact source `300f7c352c3d6d75eac984fd0d9b4b224724c9c8` → remote evidence `be5175e364399513fc0de5a2e0de5148ca195f2c`, one evidence-only commit with 8 files; independent SHA-256 **7/7**. Profile `p031-domains-economic-discovery` passed ProjectOps integrity, 6/6 protocol, typecheck, build, **149/149 Vitest in 13 files**; runner reports synthetic-only and no LIVE/Actions. Audit `ProjectOps/evidence/P-031/audits/300f7c35-domains-owned-session.md`, indexed in `ProjectOps/EVIDENCE.md`.
