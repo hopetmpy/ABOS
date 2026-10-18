@@ -11,6 +11,7 @@ import { createConwayClient } from "../conway/client.js";
 import { EnvironmentRegistry } from "../environments/registry.js";
 import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
+import { EnvironmentRetentionCoordinator } from "../environments/retention.js";
 import { createTestDb } from "./mocks.js";
 
 function resource(
@@ -419,5 +420,149 @@ describe("ConwayEnvironmentProvider collect", () => {
     expect(result.evidence?.join(" ")).toMatch(
       /integrity mismatch/i,
     );
+  });
+});
+
+
+describe("P-031 Conway sandbox deletion is a real, verified supplier operation", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function deletionClient(fetcher: ReturnType<typeof vi.fn>) {
+    vi.stubGlobal("fetch", fetcher);
+    return createConwayClient({
+      apiUrl: "https://api.conway.tech",
+      apiKey: "synthetic-test-key",
+      sandboxId: "controller-sandbox",
+    });
+  }
+
+  it("performs one exact provider DELETE on HTTP 204 and never treats that as a refund", async () => {
+    const fetcher = vi.fn(async () => new Response(null, { status: 204 }));
+    const client = deletionClient(fetcher);
+    await client.deleteSandbox("sbx-0123");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const [url, options] = fetcher.mock.calls[0]!;
+    expect(url).toBe("https://api.conway.tech/v1/sandboxes/sbx-0123");
+    expect(options.method).toBe("DELETE");
+    expect(options.body).toBeUndefined();
+    expect(options.headers.Authorization).toBe("synthetic-test-key");
+  });
+
+  it.each([200, 202, 403, 404, 500])(
+    "does not claim deletion on HTTP %s, and never retries a destructive outcome",
+    async status => {
+      const fetcher = vi.fn(async () => new Response("not a 204 receipt", { status }));
+      const client = deletionClient(fetcher);
+      await expect(client.deleteSandbox("sbx-present")).rejects.toThrow(
+        /unexpected status|Conway API error/,
+      );
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("treats a lost transport response as unknown without replaying DELETE", async () => {
+    const fetcher = vi.fn(async () => { throw new Error("supplier transport lost"); });
+    const client = deletionClient(fetcher);
+    await expect(client.deleteSandbox("sbx-uncertain")).rejects.toThrow(/transport lost/);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["", "   ", "../other", "sbx/other", "sbx?other", "sbx%2Fother"])(
+    "rejects malformed sandbox identity before contacting Conway",
+    async id => {
+      const fetcher = vi.fn(async () => new Response(null, { status: 204 }));
+      const client = deletionClient(fetcher);
+      await expect(client.deleteSandbox(id)).rejects.toThrow(/valid exact sandbox ID/);
+      expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
+
+  it("exposes destroy only with the native operation and does not delete another provider's resource", async () => {
+    const without = new ConwayEnvironmentProvider({
+      getCreditsBalance: async () => 200,
+    });
+    const registry = new EnvironmentRegistry();
+    registry.register(without);
+    expect(registry.supportsOperation("conway", "destroy")).toBe(false);
+
+    const requests: string[] = [];
+    const withDelete = new ConwayEnvironmentProvider({
+      getCreditsBalance: async () => 200,
+      deleteSandbox: async id => { requests.push(id); },
+    });
+    registry.register(withDelete);
+    expect(registry.supportsOperation("conway", "destroy")).toBe(true);
+    await expect(withDelete.destroy!({
+      ...resource("goal-a"), provider: "other-cloud",
+    })).rejects.toThrow(/exact owned sandbox resource/);
+    expect(requests).toHaveLength(0);
+    const result = await withDelete.destroy!({
+      ...resource("goal-a"), type: "conway-sandbox",
+    });
+    expect(result.status).toBe("terminated");
+    expect(result.evidence?.join(" ")).toContain("does not establish contract cancellation");
+    expect(requests).toEqual(["sandbox-1"]);
+  });
+
+  it("retires a completed Goal's Conway sandbox once without asserting billing settlement", async () => {
+    const db = createTestDb();
+    try {
+      const goalId = "goal-conway-retire";
+      db.raw.prepare(
+        "INSERT INTO goals (id,title,description,status,created_at) VALUES (?,?,?,?,?)",
+      ).run(goalId, "Completed", "Synthetic goal", "completed", new Date().toISOString());
+      const requests: string[] = [];
+      const registry = new EnvironmentRegistry();
+      registry.register(new ConwayEnvironmentProvider({
+        getCreditsBalance: async () => 200,
+        deleteSandbox: async id => { requests.push(id); },
+      }));
+      const lifecycle = new EnvironmentLifecycleManager(
+        registry, new EnvironmentResourceStore(db.raw),
+      );
+      lifecycle.adopt({
+        provider: "conway", externalId: "sbx-owned-retire",
+        type: "conway-sandbox", goalId, status: "running",
+        retentionPolicy: "until_goal_complete",
+      });
+      const first = await new EnvironmentRetentionCoordinator(
+        db.raw, registry, lifecycle,
+      ).sweep();
+      expect(first.released).toBe(1);
+      expect(requests).toEqual(["sbx-owned-retire"]);
+      const again = await new EnvironmentRetentionCoordinator(
+        db.raw, registry, lifecycle,
+      ).sweep();
+      expect(again.destroyAttempts).toBe(0);
+      expect(requests).toHaveLength(1);
+      const retired = lifecycle.resources.list({ includeTerminated: true })
+        .find(x => x.externalId === "sbx-owned-retire");
+      expect(retired?.status).toBe("terminated");
+      expect(retired?.metadata.retentionBillingReconciliation)
+        .toBe("unverified_after_resource_release");
+      expect((db.raw.prepare("SELECT COUNT(*) AS n FROM transactions").get() as { n: number }).n)
+        .toBe(0);
+    } finally { db.close(); }
+  });
+
+  it("does not mark a Conway sandbox terminated after an uncertain supplier exception", async () => {
+    const db = createTestDb();
+    try {
+      const registry = new EnvironmentRegistry();
+      registry.register(new ConwayEnvironmentProvider({
+        getCreditsBalance: async () => 200,
+        deleteSandbox: async () => { throw new Error("supplier timeout after remote DELETE"); },
+      }));
+      const store = new EnvironmentResourceStore(db.raw);
+      const lifecycle = new EnvironmentLifecycleManager(registry, store);
+      store.create({
+        id: "conway-delete-unknown", provider: "conway",
+        externalId: "sbx-remotely-uncertain", type: "conway-sandbox",
+        status: "running",
+      });
+      const changed = await lifecycle.destroy("conway-delete-unknown");
+      expect(changed.status).toBe("unknown");
+      expect(changed.evidence.join(" ")).toContain("supplier timeout");
+    } finally { db.close(); }
   });
 });

@@ -51,7 +51,7 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     method: string,
     path: string,
     body?: unknown,
-    requestOptions?: { idempotencyKey?: string; retries404?: number; noStore?: boolean },
+    requestOptions?: { idempotencyKey?: string; retries404?: number; retries?: number; noStore?: boolean; expectedStatus?: number },
   ): Promise<any> {
     // Conway LB has an intermittent routing bug that returns 404 for valid
     // sandbox endpoints. Retry 404s here (outside ResilientHttpClient) to
@@ -70,7 +70,19 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
         cache: requestOptions?.noStore ? "no-store" : undefined,
         body: body ? JSON.stringify(body) : undefined,
         idempotencyKey: requestOptions?.idempotencyKey,
+        // A destructive, possibly non-idempotent provider mutation must not
+        // be silently replayed after a lost response by the HTTP transport.
+        retries: requestOptions?.retries,
       });
+
+      if (requestOptions?.expectedStatus !== undefined &&
+          resp.status !== requestOptions.expectedStatus) {
+        const err = new Error(
+          `Conway API returned unexpected status for ${method} ${path}: ${resp.status}; provider outcome UNKNOWN.`,
+        ) as Error & { status?: number };
+        err.status = resp.status;
+        throw err;
+      }
 
       if (resp.status === 404 && attempt < max404Retries) {
         await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
@@ -313,9 +325,23 @@ export function createConwayClient(options: ConwayClientOptions): ConwayClient {
     };
   };
 
-  const deleteSandbox = async (_targetId: string): Promise<void> => {
-    // Conway API no longer supports sandbox deletion.
-    // Sandboxes are prepaid and non-refundable — this is a no-op.
+  const deleteSandbox = async (targetId: string): Promise<void> => {
+    // Provider docs declare DELETE /v1/sandboxes/:id => 204 No Content.
+    // Historical source used a silent no-op: it could never prove deletion.
+    // The exact provider resource ID is required, never a remote path/query
+    // or model-generated shell command. Unknown provider outcomes are fatal.
+    if (typeof targetId !== "string" ||
+        !/^[A-Za-z0-9][A-Za-z0-9_-]{0,255}$/.test(targetId)) {
+      throw new Error("Conway sandbox deletion requires a valid exact sandbox ID.");
+    }
+    await request(
+      "DELETE",
+      `/v1/sandboxes/${encodeURIComponent(targetId)}`,
+      undefined,
+      { retries404: 0, retries: 0, noStore: true, expectedStatus: 204 },
+    );
+    // Successful 204 is the supplier's acknowledgement of resource removal,
+    // never proof of credit refund, subscription cancellation or zero bills.
   };
 
   const listSandboxes = async (): Promise<SandboxInfo[]> => {
