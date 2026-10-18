@@ -233,7 +233,7 @@ function makeEvidence(profileName, source) {
  * intentionally ignored outside ProjectOps. Keep the original .gitignore.
  */
 function publicationFiles(relativePath, manifest) {
-  const prefix = relativePath.replaceAll("\\\\", "/").replace(/\\/$/, "") + "/";
+  const prefix = relativePath.replaceAll("\\", "/").replace(/\/$/, "") + "/";
   return [
     "RUN.json", "EVIDENCE.md", "SHA256SUMS.txt",
     ...manifest.steps.filter(step => step.status !== "NOT_EXECUTED")
