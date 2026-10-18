@@ -1,0 +1,96 @@
+{
+  "schema": "abos.codex.physical-evidence.v1",
+  "module": "P-031",
+  "profile": "p031-child",
+  "sourceCommit": "9af9e6b351c1e9089a3ae01b029cdd30db784c8f",
+  "sourceBranch": "detached",
+  "runner": "CODEX_CLOUD_MANUAL",
+  "fixture": "SYNTHETIC_NO_EXTERNAL_SPEND",
+  "startedAt": "2026-10-18T16:10:12.951Z",
+  "finishedAt": "2026-10-18T16:10:33.803Z",
+  "status": "PASS",
+  "blockedReason": null,
+  "environment": {
+    "node": "v22.23.3",
+    "pnpm": "10.28.1",
+    "platform": "linux"
+  },
+  "externalOperationsExecutedByRunner": false,
+  "githubActionsExecutedByRunner": false,
+  "steps": [
+    {
+      "name": "projectops-integrity",
+      "command": [
+        "node",
+        "scripts/projectops-integrity-verify.mjs"
+      ],
+      "timeoutMs": 120000,
+      "startedAt": "2026-10-18T16:10:13.283Z",
+      "durationMs": 53,
+      "exitCode": 0,
+      "signal": null,
+      "status": "PASS",
+      "error": null,
+      "logFile": "logs/projectops-integrity.log"
+    },
+    {
+      "name": "typecheck",
+      "command": [
+        "pnpm",
+        "typecheck"
+      ],
+      "timeoutMs": 300000,
+      "startedAt": "2026-10-18T16:10:13.336Z",
+      "durationMs": 6947,
+      "exitCode": 0,
+      "signal": null,
+      "status": "PASS",
+      "error": null,
+      "logFile": "logs/typecheck.log"
+    },
+    {
+      "name": "build",
+      "command": [
+        "pnpm",
+        "build"
+      ],
+      "timeoutMs": 300000,
+      "startedAt": "2026-10-18T16:10:20.283Z",
+      "durationMs": 9415,
+      "exitCode": 0,
+      "signal": null,
+      "status": "PASS",
+      "error": null,
+      "logFile": "logs/build.log"
+    },
+    {
+      "name": "replication-and-p031",
+      "command": [
+        "pnpm",
+        "exec",
+        "vitest",
+        "run",
+        "src/__tests__/replication.test.ts",
+        "src/__tests__/p029-child-bootstrap.test.ts",
+        "src/__tests__/p029-bootstrap-recovery.test.ts",
+        "src/__tests__/child-capital-integration.test.ts",
+        "src/__tests__/child-economics.test.ts",
+        "src/__tests__/p031-authorized-procurement-execution.test.ts",
+        "src/__tests__/p031-conway-billable-post-no-retry.test.ts",
+        "src/__tests__/p031-goal-resource-lifecycle-journey.test.ts",
+        "src/__tests__/p031-runtime-procurement-tool.test.ts",
+        "src/__tests__/p031-provider-account-exposure.test.ts",
+        "src/__tests__/p031-resource-decision-journey.test.ts",
+        "src/__tests__/p031-worker-attempt-restart.test.ts"
+      ],
+      "timeoutMs": 900000,
+      "startedAt": "2026-10-18T16:10:29.698Z",
+      "durationMs": 4103,
+      "exitCode": 0,
+      "signal": null,
+      "status": "PASS",
+      "error": null,
+      "logFile": "logs/replication-and-p031.log"
+    }
+  ]
+}
