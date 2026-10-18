@@ -10,6 +10,8 @@ import type { ProviderProcurementScope } from "../economics/provider-procurement
 import type { ProviderProcurementScenarioInput } from "../economics/treasury-scenario.js";
 import type { EnvironmentProvisionRequest } from "../environments/types.js";
 import { createTestDb } from "./mocks.js";
+import { createLifecycleProcurementDependencies } from "../environments/procurement-lifecycle-adapter.js";
+import type { EnvironmentLifecycleManager } from "../environments/lifecycle.js";
 
 const dbs: ReturnType<typeof createTestDb>[] = [];
 afterEach(() => {
@@ -110,6 +112,50 @@ describe("P-031 Conway secondary host procurement gate", () => {
     expect(getFinancialEffectByOperationKey(h.db.raw, h.scope.operationKey)?.state).toBe("dispatching");
     await expect(h.invoke()).rejects.toMatchObject({ externalEffectNotDispatched: true });
     expect(h.action).toHaveBeenCalledTimes(1);
+  });
+
+  it("is actually invoked by the existing trusted P-031 -> P-018 lifecycle adapter", async () => {
+    const h = setup();
+    const providerProvision = vi.fn(async () => ({
+      status: "ready" as const,
+      externalId: "conway-sandbox-fixture-1",
+      providerState: "running",
+    }));
+    const lifecycle = {
+      provision: providerProvision,
+      resources: { get: vi.fn() },
+    } as unknown as EnvironmentLifecycleManager;
+    const { resourceId, goalId, taskId, pathId, region, ...prepared } = h.request;
+    const deps = createLifecycleProcurementDependencies(lifecycle, {
+      observeAuthenticatedEconomics: async () => h.scenario,
+      resolveProvisionRequest: async () => prepared,
+    }, h.authority);
+
+    await deps.observeAuthenticatedEconomics(h.scope);
+    // Bypassing the owner P-030 claim does not reach lifecycle.provision.
+    await expect(deps.dispatch(h.scope, h.authorization))
+      .rejects.toMatchObject({ externalEffectNotDispatched: true });
+    expect(providerProvision).not.toHaveBeenCalled();
+
+    h.prepare();
+    claimFinancialEffectDispatch(h.db.raw, h.scope.operationKey);
+    await deps.observeAuthenticatedEconomics(h.scope);
+    const result = await deps.dispatch(h.scope, h.authorization);
+    expect(result).toMatchObject({
+      status: "usable", providerEffectId: "conway-sandbox-fixture-1",
+    });
+    expect(providerProvision).toHaveBeenCalledTimes(1);
+    expect(providerProvision.mock.calls[0]?.[0]).toMatchObject({
+      resourceId: h.scope.resourceId,
+      region: h.scope.region,
+      metadata: { ...shape },
+    });
+    // No second provider create is permitted even with the same in-memory
+    // P-030 dispatching record and cached scenario.
+    await deps.observeAuthenticatedEconomics(h.scope);
+    await expect(deps.dispatch(h.scope, h.authorization))
+      .rejects.toMatchObject({ externalEffectNotDispatched: true });
+    expect(providerProvision).toHaveBeenCalledTimes(1);
   });
 
   it("rejects mismatched scope, account, supplier-quoted shape, time and owner before any POST", async () => {
