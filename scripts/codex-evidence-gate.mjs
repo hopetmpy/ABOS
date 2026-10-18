@@ -29,6 +29,7 @@ const PROFILES = Object.freeze({
         "exec", "vitest", "run",
         "src/__tests__/p031-conway-domains-purchase-evidence.test.ts",
         "src/__tests__/p031-conway-domains-account-proof.test.ts",
+        "src/__tests__/p031-conway-domains-siwe-session.test.ts",
         "src/__tests__/p031-authorized-procurement-execution.test.ts",
         "src/__tests__/p031-conway-secondary-procurement-gate.test.ts",
         "src/__tests__/p031-conway-credit-history.test.ts",
