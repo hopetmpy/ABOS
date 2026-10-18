@@ -28,7 +28,15 @@ import {
   MESSAGE_LIMITS,
 } from "../types.js";
 import type { ChildLifecycleState, ConwayClient, ExecResult } from "../types.js";
-import { MIGRATION_V7 } from "../state/schema.js";
+import {
+  CREATE_TABLES,
+  MIGRATION_V7,
+  MIGRATION_V9,
+  MIGRATION_V10,
+  MIGRATION_V12,
+  MIGRATION_V13,
+  MIGRATION_V18_EVIDENCE_FABRIC,
+} from "../state/schema.js";
 import {
   MockConwayClient,
   MockSocialClient,
@@ -98,6 +106,19 @@ function createTestRawDb(): InstanceType<typeof Database> {
   db.prepare("INSERT INTO schema_version (version) VALUES (7)").run();
 
   return db;
+}
+
+/** Restore full canonical P-018 owner tables only where legacy child-cleanup
+ * tests need physical resource-release evidence. Keep other V7 fixtures
+ * minimal and retain their original migration boundaries.
+ */
+function installP018Fixture(db: InstanceType<typeof Database>): void {
+  db.exec(CREATE_TABLES);
+  db.exec(MIGRATION_V9);
+  db.exec(MIGRATION_V10);
+  db.exec(MIGRATION_V12);
+  db.exec(MIGRATION_V13);
+  db.exec(MIGRATION_V18_EVIDENCE_FABRIC);
 }
 
 // ─── ChildLifecycle ─────────────────────────────────────────────
@@ -459,6 +480,7 @@ describe("SandboxCleanup", () => {
 
   beforeEach(() => {
     db = createTestRawDb();
+    installP018Fixture(db);
     lifecycle = new ChildLifecycle(db);
     conway = new MockConwayClient();
   });
@@ -753,6 +775,7 @@ describe("Messaging", () => {
 describe("pruneDeadChildren", () => {
   it("actually deletes from DB (not a no-op)", async () => {
     const db = createTestRawDb();
+    installP018Fixture(db);
     const lifecycle = new ChildLifecycle(db);
 
     // Create 8 dead children
