@@ -18,6 +18,7 @@ import type {
 import { ChildLifecycle } from "./lifecycle.js";
 import { ChildHealthMonitor } from "./health.js";
 import type { SandboxCleanup } from "./cleanup.js";
+import { EnvironmentResourceStore } from "../environments/resource-store.js";
 import { deleteChild } from "../state/database.js";
 import { createLogger } from "../observability/logger.js";
 const logger = createLogger("replication.lineage");
@@ -91,7 +92,7 @@ export async function pruneDeadChildren(
 ): Promise<number> {
   const children = db.getChildren();
   const dead = children.filter(
-    (c) => c.status === "dead" || c.status === "failed" || c.status === "stopped",
+    (c) => ["dead", "failed", "stopped", "cleaned_up"].includes(c.status),
   );
 
   if (dead.length <= keepLast) return 0;
@@ -104,20 +105,38 @@ export async function pruneDeadChildren(
 
   // Keep the most recent `keepLast` dead children
   const toRemove = dead.slice(0, dead.length - keepLast);
+  const resources = new EnvironmentResourceStore(db.raw);
   let removed = 0;
 
   for (const child of toRemove) {
     try {
-      // Clean up sandbox if cleanup is available and child is in cleanable state
-      if (cleanup && (child.status === "stopped" || child.status === "failed" || child.status === "dead")) {
-        try {
+      // A child's local DB row must not disappear while its remote sandbox
+      // may still exist or a possibly dispatched DELETE is UNKNOWN. Deleting
+      // the row would lose the only recovery ownership correlation.
+      const sandboxId = child.sandboxId?.trim() ?? "";
+      if (sandboxId) {
+        const verifiedReleased = () => {
+          const matching = resources.list({ includeTerminated: true })
+            .filter(resource => resource.externalId === sandboxId);
+          return matching.length === 1 &&
+            matching[0]!.status === "terminated" &&
+            matching[0]!.metadata.retentionReleaseState === "released";
+        };
+        if (!verifiedReleased()) {
+          if (!cleanup || (child.status !== "stopped" && child.status !== "failed")) {
+            throw new Error("Child sandbox release not verified by P-018; keep row for recovery.");
+          }
           await cleanup.cleanup(child.id);
-        } catch {
-          // Cleanup may fail; still delete the record
         }
+        if (!verifiedReleased()) {
+          throw new Error("Cleanup returned but P-018 still lacks verified physical release.");
+        }
+      } else if (cleanup && (child.status === "stopped" || child.status === "failed")) {
+        await cleanup.cleanup(child.id);
       }
 
-      // Actually delete from DB
+      // Only irreversibly delete the child row after provider-neutral
+      // evidence establishes release (or no external sandbox ever existed).
       deleteChild(db.raw, child.id);
       removed++;
     } catch (error) {

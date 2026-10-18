@@ -551,7 +551,7 @@ Reconciliation requires independently verified provider finality; this view is n
     },
     {
       name: "delete_sandbox",
-      description: "Delete a sandbox. Note: sandbox deletion is currently disabled by the Conway API.",
+      description: "Sandbox deletion is available via canonical P-018 resource retention; direct untracked deletion is blocked to preserve ownership, artifacts and crash recovery.",
       category: "conway",
       riskLevel: "dangerous",
       parameters: {
@@ -565,7 +565,7 @@ Reconciliation requires independently verified provider finality; this view is n
         required: ["sandbox_id"],
       },
       execute: async () => {
-        return "Sandbox deletion is disabled. Sandboxes are prepaid and non-refundable.";
+        return "BLOCKED: direct Conway sandbox DELETE bypasses P-018 resource ownership and crash-safe retention; use the authorized ABOS resource/child cleanup lifecycle.";
       },
     },
     {
@@ -2351,9 +2351,9 @@ Model: ${ctx.inference.getDefaultModel()}
     },
     {
       name: "prune_dead_children",
-      description: "Clean up dead/failed children and their sandboxes.",
+      description: "Clean up dead/failed children and their sandboxes only after canonical P-018 physical release; may perform irreversible provider DELETE.",
       category: "replication",
-      riskLevel: "caution",
+      riskLevel: "dangerous",
       parameters: {
         type: "object",
         properties: {

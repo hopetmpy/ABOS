@@ -69,7 +69,17 @@ export class EnvironmentRetentionCoordinator {
     private readonly trustedSupplierObserver?: (provider: string) => TrustedSupplierContractObserver | null,
   ) {}
 
-  async sweep(): Promise<EnvironmentRetentionSweepResult> {
+  /**
+   * An explicit child-cleanup request can release exactly one manually
+   * retained resource. Normal sweeps still respect every retention policy;
+   * this is not a global/manual-retention auto-delete toggle.
+   */
+  async sweep(options: { explicitManualResourceId?: string } = {}): Promise<EnvironmentRetentionSweepResult> {
+    if (options.explicitManualResourceId !== undefined &&
+        (typeof options.explicitManualResourceId !== "string" ||
+          !options.explicitManualResourceId.trim())) {
+      throw new Error("Explicit manual retention release requires an exact P-018 resource ID.");
+    }
     const result: EnvironmentRetentionSweepResult = {
       evaluated: 0,
       releaseEligible: 0,
@@ -82,9 +92,16 @@ export class EnvironmentRetentionCoordinator {
       evidence: [],
     };
 
-    for (const initial of this.lifecycle.resources.list()) {
+    const eligibleScope = this.lifecycle.resources.list().filter(resource =>
+      options.explicitManualResourceId === undefined ||
+      resource.id === options.explicitManualResourceId);
+    for (const initial of eligibleScope) {
       result.evaluated += 1;
-      const decision = this.retentionDecision(initial);
+      const decision: RetentionDecision =
+        initial.id === options.explicitManualResourceId &&
+        initial.retentionPolicy === "manual_retention"
+          ? { release: true, reason: "explicit child cleanup of one owned P-018 manual-retention resource" }
+          : this.retentionDecision(initial);
       if (!decision.release) continue;
       result.releaseEligible += 1;
 
