@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { authenticateConwayDomainsControlledEvmWallet } from "../conway/domains-siwe-session.js";
 import { createBuiltinTools } from "../agent/tools.js";
+import { authenticateConwayDomainsControlledSolanaWallet } from "../conway/domains-siwe-session.js";
+import { SolanaChainIdentity } from "../identity/chain.js";
+import nacl from "tweetnacl";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -134,5 +137,129 @@ describe("P-031 Conway Domains existing-wallet ephemeral SIWE identity", () => {
     } as any));
     expect(solana.status).toBe("unavailable");
     expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+});
+
+const solanaWallet = new SolanaChainIdentity(
+  nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(7)).secretKey,
+);
+const otherSolanaWallet = new SolanaChainIdentity(
+  nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(8)).secretKey,
+);
+
+function solanaProvider(observedWallet = solanaWallet.address) {
+  return vi.fn(async (url: string, options: RequestInit) => {
+    expect(new URL(url).origin).toBe("https://api.conway.domains");
+    expect(options.redirect).toBe("error");
+    expect(new Headers(options.headers).has("X-PAYMENT")).toBe(false);
+    if (url.endsWith("/auth/solana/nonce")) {
+      expect(options.method).toBe("POST");
+      expect(options.body).toBeUndefined();
+      return json({ nonce: "solNonce12345" });
+    }
+    if (url.endsWith("/auth/solana/verify")) {
+      expect(options.method).toBe("POST");
+      const body = JSON.parse(String(options.body));
+      expect(body.message).toContain(solanaWallet.address);
+      expect(body.message).toContain("solNonce12345");
+      expect(body.message).toContain("Chain ID: mainnet");
+      expect(body.signature).toMatch(/^[1-9A-HJ-NP-Za-km-z]+$/);
+      return json({ access_token: "synthetic.solana.JWT" });
+    }
+    expect(url).toBe("https://api.conway.domains/auth/me");
+    expect(options.method).toBe("GET");
+    expect(new Headers(options.headers).get("Authorization"))
+      .toBe("Bearer synthetic.solana.JWT");
+    return json({
+      id: "solana-provider-account",
+      wallet_address: observedWallet,
+      wallet_type: "solana",
+    });
+  });
+}
+
+describe("P-031 Conway Domains SIWS uses the existing Solana identity", () => {
+  it("authenticates with a locally verifiable Ed25519 signature and proves exact account ownership", async () => {
+    const fetcher = solanaProvider();
+    vi.stubGlobal("fetch", fetcher);
+    const proof = await authenticateConwayDomainsControlledSolanaWallet(solanaWallet);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(proof).toMatchObject({
+      provider: "conway-domains", status: "wallet_match",
+      walletAddress: solanaWallet.address, walletType: "solana",
+      providerAccountId: "solana-provider-account",
+      purchaseAuthority: "not_established", financingUnit: null,
+    });
+    expect(JSON.stringify(proof)).not.toContain("synthetic.solana.JWT");
+  });
+
+  it("routes the builtin tool through chainIdentity, never the EVM stub account", async () => {
+    const fetcher = solanaProvider();
+    vi.stubGlobal("fetch", fetcher);
+    const tool = createBuiltinTools("fixture").find(
+      t => t.name === "conway_domains_account_proof",
+    )!;
+    expect(tool.riskLevel).toBe("caution");
+    expect(tool.parameters).toMatchObject({ properties: {} });
+    const output = JSON.parse(await tool.execute({}, {
+      identity: {
+        chainType: "solana",
+        address: solanaWallet.address,
+        chainIdentity: solanaWallet,
+        account: { address: solanaWallet.address, signMessage: vi.fn(() => {
+          throw new Error("EVM stub signer must never be used");
+        }) },
+      },
+    } as any));
+    expect(output).toMatchObject({
+      status: "wallet_match", walletType: "solana",
+      purchaseAuthority: "not_established",
+    });
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+
+  it("rejects a signer for a different Solana wallet before login verification", async () => {
+    const fetcher = solanaProvider();
+    vi.stubGlobal("fetch", fetcher);
+    const proof = await authenticateConwayDomainsControlledSolanaWallet({
+      chainType: "solana",
+      address: solanaWallet.address,
+      signMessage: message => otherSolanaWallet.signMessage(message),
+    });
+    expect(proof).toMatchObject({
+      status: "unavailable", providerAccountId: null,
+      purchaseAuthority: "not_established",
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not claim ownership of another Solana account or reveal it", async () => {
+    const fetcher = solanaProvider(otherSolanaWallet.address);
+    vi.stubGlobal("fetch", fetcher);
+    const proof = await authenticateConwayDomainsControlledSolanaWallet(solanaWallet);
+    expect(proof).toMatchObject({
+      status: "wallet_mismatch", providerAccountId: null, walletAddress: null,
+    });
+    expect(JSON.stringify(proof)).not.toContain(otherSolanaWallet.address);
+    expect(JSON.stringify(proof)).not.toContain("solana-provider-account");
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+
+  it("returns UNKNOWN without networking when no controlled Solana signer is available", async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    const tool = createBuiltinTools("fixture").find(
+      t => t.name === "conway_domains_account_proof",
+    )!;
+    const result = JSON.parse(await tool.execute({}, {
+      identity: {
+        chainType: "solana",
+        address: otherSolanaWallet.address,
+        chainIdentity: solanaWallet,
+      },
+    } as any));
+    expect(result.status).toBe("unavailable");
+    expect(result.purchaseAuthority).toBe("not_established");
+    expect(fetcher).not.toHaveBeenCalled();
   });
 });
