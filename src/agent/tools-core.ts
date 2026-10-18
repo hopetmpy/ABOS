@@ -2016,7 +2016,7 @@ Model: ${ctx.inference.getDefaultModel()}
     {
       name: "spawn_child",
       description:
-        "Spawn a child abos in a new Conway sandbox with lifecycle tracking.",
+        "Bootstrap a child ABOS in an owned Conway sandbox: reuse a verified failed-child sandbox, or supply resource_id plus procurement_operation_key from a previously authorized P-031 acquisition. No implicit supplier purchase.",
       category: "replication",
       riskLevel: "dangerous",
       parameters: {
@@ -2032,10 +2032,19 @@ Model: ${ctx.inference.getDefaultModel()}
             description: "What the child should specialize in",
           },
           message: { type: "string", description: "Message to the child" },
+          resource_id: { type: "string", description: "Existing P-018 Conway sandbox resource acquired through P-031 (optional for failed-child reuse)." },
+          procurement_operation_key: { type: "string", description: "Exact P-030 financial-effect operation key of that same P-031 provision (required with resource_id)." },
         },
         required: ["name"],
       },
       execute: async (args, ctx) => {
+        const resourceId = typeof args.resource_id === "string" ? args.resource_id.trim() : "";
+        const operationKey = typeof args.procurement_operation_key === "string"
+          ? args.procurement_operation_key.trim() : "";
+        if (Boolean(resourceId) !== Boolean(operationKey)) {
+          return "BLOCKED: resource_id and procurement_operation_key must be provided together for a P-031 acquired sandbox.";
+        }
+        const procurement = resourceId ? { resourceId, operationKey } : undefined;
         const { generateGenesisConfig, validateGenesisParams } =
           await import("../replication/genesis.js");
         const { spawnChild } = await import("../replication/spawn.js");
@@ -2065,6 +2074,7 @@ Model: ${ctx.inference.getDefaultModel()}
             genesis,
             lifecycle,
             ctx.config,
+            procurement,
           );
         } catch (err: any) {
           // Auto-topup on 402 insufficient credits and retry once
@@ -2099,6 +2109,7 @@ Model: ${ctx.inference.getDefaultModel()}
                   retryGenesis,
                   retryLifecycle,
                   ctx.config,
+                  procurement,
                 );
               }
             }
