@@ -16,6 +16,8 @@ import type {
 } from "../types.js";
 import { DEFAULT_CONFIG, MAX_CHILDREN } from "../types.js";
 import type { ChildLifecycle } from "./lifecycle.js";
+import { EnvironmentResourceStore } from "../environments/resource-store.js";
+import { getFinancialEffectByOperationKey } from "../economics/financial-effects.js";
 import { ulid } from "ulid";
 import { propagateConstitution, verifyConstitution } from "./constitution.js";
 import { writeFamilyKnowledgeBundle } from "./family-knowledge.js";
@@ -95,7 +97,84 @@ async function materializeRequiredBootstrap(
 }
 
 /**
- * Spawn a child abos in a new Conway sandbox using lifecycle state machine.
+ * One already-provisioned resource and its canonical P-030 purchase identity.
+ * This is NOT an authorization to create another provider resource.
+ */
+export interface ProcuredChildSandbox {
+  resourceId: string;
+  operationKey: string;
+}
+
+/**
+ * Attach an existing, independently observed P-031 resource to a new child.
+ * Exact P-018 ownership and P-030 identity must agree before any bootstrap
+ * command. Neither provider acceptance nor a policy decision by itself proves
+ * a usable sandbox. This function makes NO provider purchase.
+ */
+function claimProcuredChildSandbox(
+  db: AbosDatabase,
+  procurement: ProcuredChildSandbox,
+  childId: string,
+  requiredMemoryMb: number,
+): { id: string } {
+  const resources = new EnvironmentResourceStore(db.raw);
+  const resource = resources.get(procurement.resourceId);
+  const effect = getFinancialEffectByOperationKey(db.raw, procurement.operationKey);
+  if (!resource || resource.provider !== "conway" ||
+      resource.type !== "conway-sandbox" ||
+      !resource.externalId || !resource.lastHealthCheck ||
+      !["ready", "running"].includes(resource.status) ||
+      resource.metadata.provisionNeedsReconciliation === true ||
+      resource.metadata.retentionReleaseState === "released" ||
+      resource.metadata.retentionReleaseState === "destroy_requested" ||
+      resource.metadata.retentionReleaseState === "pending_observation" ||
+      resource.metadata.childId ||
+      db.getChildren().some(child => child.sandboxId === resource.externalId &&
+        child.status !== "cleaned_up") ||
+      !effect || effect.effectKind !== "provider_resource_procurement" ||
+      effect.provider !== "conway" ||
+      !effect.policyDecisionId ||
+      !["pending", "completed"].includes(effect.state) ||
+      effect.providerEffectId !== resource.externalId ||
+      effect.request.operation !== "provision" ||
+      effect.request.resourceId !== resource.id ||
+      effect.request.goalId !== resource.goalId ||
+      effect.request.taskId !== resource.taskId ||
+      effect.request.pathId !== resource.pathId ||
+      effect.request.region !== resource.region ||
+      typeof resource.metadata.memoryMb !== "number" ||
+      !Number.isFinite(resource.metadata.memoryMb) ||
+      resource.metadata.memoryMb < requiredMemoryMb) {
+    throw new Error(
+      "P-031 child sandbox unavailable: verified P-018 resource, matching " +
+      "P-030 authorized procurement, independent health, ownership or " +
+      "required capacity is missing; no new Conway sandbox purchased.",
+    );
+  }
+  // Claim in one local SQLite transaction. This prevents two child boots
+  // from silently assigning the same owned resource. A failed bootstrap keeps
+  // the explicit child/resource link available for recovery/cleanup.
+  return db.raw.transaction(() => {
+    const current = resources.get(resource.id);
+    if (!current || current.metadata.childId ||
+        db.getChildren().some(child => child.sandboxId === resource.externalId &&
+          child.status !== "cleaned_up")) {
+      throw new Error("P-018 child sandbox already claimed; no duplicate bootstrap.");
+    }
+    resources.applyMutation(resource.id, {
+      retentionPolicy: "manual_retention",
+      metadata: { childId },
+      evidence: [
+        "Existing independently verified P-031 resource reserved for child bootstrap; no additional purchase.",
+      ],
+    }, "child_bootstrap_claim", "Bind P-018 acquired resource to one P-029 child.");
+    return { id: resource.externalId! };
+  })();
+}
+
+/**
+ * Spawn a child abos using an owned Conway sandbox, reusing known failed-child
+ * capacity first when no new purchase has already been made.
  */
 export async function spawnChild(
   conway: ConwayClient,
@@ -104,6 +183,7 @@ export async function spawnChild(
   genesis: GenesisConfig,
   lifecycle?: ChildLifecycle,
   runtimeConfig?: Pick<AbosConfig, "maxChildren" | "childSandboxMemoryMb">,
+  procurement?: ProcuredChildSandbox,
 ): Promise<ChildAbosAgent> {
   // Check child limit from config
   const existing = db
@@ -127,7 +207,7 @@ export async function spawnChild(
 
   // If no lifecycle provided, use legacy path
   if (!lifecycle) {
-    return spawnChildLegacy(conway, identity, db, genesis, childId, runtimeConfig);
+    return spawnChildLegacy(conway, identity, db, genesis, childId, runtimeConfig); // Legacy bypass is audited separately.
   }
 
   try {
@@ -142,20 +222,19 @@ export async function spawnChild(
 
     // Try to reuse an existing sandbox whose DB record is 'failed' but
     // is still running remotely, before creating a new one.
-    reusedSandbox = await findReusableSandbox(conway, db);
-
-    const tier = selectSandboxTier(childMemoryMb);
+    reusedSandbox = procurement ? null : await findReusableSandbox(conway, db);
 
     let sandbox: { id: string };
-    if (reusedSandbox) {
+    if (procurement) {
+      sandbox = claimProcuredChildSandbox(db, procurement, childId, childMemoryMb);
+    } else if (reusedSandbox) {
       sandbox = reusedSandbox;
     } else {
-      sandbox = await conway.createSandbox({
-        name: `abos-child-${genesis.name.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`,
-        vcpu: tier.vcpu,
-        memoryMb: tier.memoryMb,
-        diskGb: tier.diskGb,
-      });
+      throw new Error(
+        "UNAVAILABLE: new Conway child sandbox requires P-031 " +
+        "environment_procurement_execute first. Supply its resource_id and " +
+        "procurement_operation_key to spawn_child; no supplier purchase dispatched.",
+      );
     }
     sandboxId = sandbox.id;
 
