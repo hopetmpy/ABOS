@@ -4,24 +4,24 @@ Format-Version: 2
 Authority: CANONICAL_OPERATIONAL_CONTINUITY
 ProjectOps-Model: SINGLE_OPERATING_SYSTEM
 Operating-Kernel: AGENTS.md
-Active-Plan: P-032
+Active-Plan: P-031
 Active-Segment: continuity/C0030.md
-Active-Intervention: P032_SOUL_SELF_MODEL — EN_EJECUCIÓN / IMMUTABLE_IDENTITY_AND_LEXICAL_DIAGNOSTIC_E3_GREEN
+Active-Intervention: P031_DOD_REOPEN — EN_EJECUCIÓN / E3_BASELINE_PRESERVED_CONTRACT_LIFECYCLE_SOURCE_GAP
 Legacy-History: continuity/C0000-legacy.md
 Reasoning-Layer: system/ABOS_ADAPTIVE_REASONING_LAYER.md
 Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p032-first-source-checkpoint-20261017
-Host-Head-At-Audit-Open: a576e4af3449d38cf46120142126aa571ab8e2bf
-Last-Reconciled-Host-Head: a576e4af3449d38cf46120142126aa571ab8e2bf
-Observed-Main-Head: a576e4af3449d38cf46120142126aa571ab8e2bf
-Last-Product-Head: a576e4af3449d38cf46120142126aa571ab8e2bf
-Last-Product-CI: exact main a576e4af3449d38cf46120142126aa571ab8e2bf push 39077213890 — COMPLETE SUCCESS 8/8
-Last-Completed-Plan: P-031
-Last-Completed-Merge: 9033ce0b9e40bb3a275f3c23f44c27518bd0f2c2
-Last-Completed-CI: 39076067564 — SUCCESS 8/8
+Current-Host-Branch: abos/p031-dod-reopen-20261017
+Host-Head-At-Audit-Open: 8f4c1cb3cf46e43aec572797a49fc1f7dcccc215
+Last-Reconciled-Host-Head: 8f4c1cb3cf46e43aec572797a49fc1f7dcccc215
+Observed-Main-Head: 8f4c1cb3cf46e43aec572797a49fc1f7dcccc215
+Last-Product-Head: 8f4c1cb3cf46e43aec572797a49fc1f7dcccc215
+Last-Product-CI: exact main 8f4c1cb3cf46e43aec572797a49fc1f7dcccc215 push 39077634123 — COMPLETE SUCCESS 8/8
+Last-Completed-Plan: P-030
+Last-Completed-Merge: 2fd877667b493ba5cea967092d79abed41787e70
+Last-Completed-CI: 38766126322 — SUCCESS 8/8
 ProjectOps-Cutover-Commit: 76d89315484464c3fd1bacb0d8e1ed19c6e0f1f1
 ProjectOps-Integrity-Fix: 57c18bac71235107ce0e8a8f13fa7216766ad85e
 ProjectOps-Integrity-Workflow-Commit: 9029bfff5a67d92bbbe65363999b7a55f24c3237
@@ -31,6 +31,16 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
 
+
+## P-031 — Reapertura por DoD incompleto, preservando E3 (2026-10-17)
+
+**Decisión actual:** una auditoría contra la versión original `plan/P-031.md` (ya presente cuando P-031 estaba PLANIFICADO, antes del cierre) demuestra una brecha de fuente no resuelta por el cierre administrativo `SOURCE_COMPLETE/E3`. En `continuity/C0029.md` existía un checkpoint que mantenía explícitamente P-031 abierto por DoD completo no acreditado; el cierre posterior trasladó renovación/cancelación contractual, invoice/refund y resultados auténticos a P-005. La separación de evidencia LIVE en P-005 es correcta, pero no demuestra que toda la capacidad invocable de contrato/renovación/cancelación/billing cleanup ya exista en el source.
+
+**Observaciones Git/code:** `main 8f4c1cb3cf46e43aec572797a49fc1f7dcccc215` incluye los avances P-031 hasta PR #206 y los cambios P-032 PR #208/#209, CI exacta `39077634123` 8/8 SUCCESS. `ProviderProcurementScope.operation` admite `renew` pero el adaptador canónico `createLifecycleProcurementDependencies` sólo despacha provision/resize/resume/recover; no hay ruta estándar de renovación contractual. `EnvironmentLifecycleManager.destroy` y `EnvironmentRetentionCoordinator` cubren retiro físico y observación de contratos read-only, sin cancellation/stop-billing contractual demostrada. El dispatcher `getTrustedProcurementDependencies` permite extensiones de host, no es implementación del proveedor por sí mismo. El test E3 `p031-goal-resource-lifecycle-journey` usa fixture sintética y marca Goal/Tasks como terminados manualmente para ejercitar retention; no hay E5/E6 ni ciclo comercial autónomo verificado.
+
+**Resolución:** P-031 vuelve a `EN_EJECUCIÓN` por gap material SOURCE/DoD, conservando evidencia E3 válida de subcapacidades. P-032 pasa a `PARCIAL`/pausado, con Soul identity fix E3 intacto, no descartado. P-005 sigue PLANIFICADO para autenticación/contratos/fondos/coste económico LIVE; la falta de credenciales o fondos no se cuenta como defecto source ni permiso implícito de gasto.
+
+**NEXT_ELIGIBLE_WORK:** 1) mapa de operaciones contractuales vs operaciones físicas y providers/hosts ya soportados (P-018/P-030/P-010); 2) falsar equivalencia `NO_CHANGE` vs ausencia real de dispatch autorizado de renew/cancel con facturación y recovery; 3) especificar/implementar sólo el adaptador o wiring causal que falte en owners existentes y pruebas adversariales, sin simulación de pago o catálogo cerrado; 4) revalidar DoD original con capacidades invocables y CI; 5) retomar P-032 desde el checkpoint Soul anterior. No crear segunda tesorería, inventario, lifecycle ni otra instancia ProjectOps.
 
 ## P-032 — Identity integrity and lexical-only diagnosis: E3 checkpoint (2026-10-17)
 
