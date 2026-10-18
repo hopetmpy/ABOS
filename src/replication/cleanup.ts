@@ -53,9 +53,10 @@ export class SandboxCleanup {
       );
     }
     const resource = owned[0]!;
-    if (typeof resource.metadata.childId === "string" &&
-        resource.metadata.childId !== childId) {
-      throw new Error("Child sandbox resource belongs to a different P-018 child; no deletion.");
+    if (resource.metadata.childId !== childId) {
+      throw new Error(
+        "Child sandbox lacks exact canonical P-018 child ownership; no deletion or fabricated cleanup.",
+      );
     }
 
     const released = (observed: typeof resource) =>
