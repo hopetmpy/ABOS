@@ -30,6 +30,13 @@ Master-Plan-PR: 31
 Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
+
+## P-031 — SIWS support with existing controlled Solana wallet, source pending Codex (2026-10-18)
+
+- **SOURCE IMPLEMENTED / PHYSICAL PENDING:** following official Conway Domains SIWS `/auth/solana/nonce` and `/auth/solana/verify` interface, `domains-account-proof.ts` now matches supplier account to controlled `evm` or `solana` wallet without false authority; `domains-siwe-session.ts` reuses ABOS `ChainIdentity` + `buildSiwsMessage/verifySiwsSignature` to make an ephemeral Solana login and subsequent `/auth/me` observation; `tools-core.ts` routes existing `conway_domains_account_proof` by matching chain/address/signer, no new model credentials. Five adversarial SIWS cases added to existing Vitest file, **not yet executed**. No registration, payment, financial effect or new wallet, and no default ability to acquire domains.
+- **BOUNDARY/NEXT:** exact SIWS dialect/owner observation from real supplier still E5 UNKNOWN, same-body 402 quote/USDC/P-010 financial authority still missing. Run Codex grouped `p031-domains-economic-discovery` against exact current source+docs HEAD, independently audit/publish results, then continue provider-auth/account-specific economic sourcing without treating earlier source `acbbb8a7` PASS as a new run. P-031 EN_EJECUCIÓN, P-032 PARCIAL, P-005 E5/E6 external, `main` unmerged.
+
+
 ## P-031 — Conway Domains Codex evidence independently audited (2026-10-18)
 
 - **E3 PHYSICAL PASS / GIT_AUDITED:** source exact `acbbb8a7ffcfd5dcf5b291a2d0401d71cd54bfb4` (rama `abos/p031-child-verified-resource-20261018`) → commit de evidencia `9e8f54024f4ec158d9c4f6a25ead3efe60d2fd12`, un commit por delante del source con únicamente ocho archivos de expediente; siete payload/logs recalculados **7/7 SHA-256**, protocolo **6/6**, ProjectOps integrity, typecheck, build y Vitest **128/128 tests en 13/13 archivos PASS** (Node 22.23.3 / pnpm 10.28.1, Linux). Auditoría: `ProjectOps/evidence/P-031/audits/acbbb8a7-domains-economic-discovery.md`, indexada en `ProjectOps/EVIDENCE.md`. Sin operaciones financieras LIVE, dominios comprados ni GitHub Actions ejecutadas por Codex.
