@@ -635,6 +635,33 @@ describe("SandboxCleanup", () => {
     await cleanup.cleanup("child-2");
     expect(lifecycle.getCurrentState("child-2")).toBe("cleaned_up");
   });
+
+});
+
+// ─── pruneDeadChildren ──────────────────────────────────────
+
+describe("pruneDeadChildren", () => {
+  let db: AbosDatabase;
+  let conway: MockConwayClient;
+
+  beforeEach(() => {
+    db = createTestDb();
+    db.raw.exec(MIGRATION_V7);
+    conway = new MockConwayClient();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    db.close();
+  });
+
+  function insertChild(id: string, name: string, status: string, createdAt: string): void {
+    db.raw.prepare(
+      `INSERT INTO children (id, name, address, sandbox_id, genesis_prompt, status, created_at)
+       VALUES (?, ?, '0xabc', 'sandbox-${id}', 'prompt', ?, ?)`,
+    ).run(id, name, status, createdAt);
+  }
+
   it("preserves child rows when cleanup fails or no canonical release exists", async () => {
     for (let i = 0; i < 7; i++) {
       insertChild(`stopped-${i}`, `child-${i}`, "stopped",
@@ -665,32 +692,6 @@ describe("SandboxCleanup", () => {
     expect(db.raw.prepare("SELECT COUNT(*) AS n FROM children").get())
       .toMatchObject({ n: 6 });
   });
-
-});
-
-// ─── pruneDeadChildren ──────────────────────────────────────
-
-describe("pruneDeadChildren", () => {
-  let db: AbosDatabase;
-  let conway: MockConwayClient;
-
-  beforeEach(() => {
-    db = createTestDb();
-    db.raw.exec(MIGRATION_V7);
-    conway = new MockConwayClient();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-    db.close();
-  });
-
-  function insertChild(id: string, name: string, status: string, createdAt: string): void {
-    db.raw.prepare(
-      `INSERT INTO children (id, name, address, sandbox_id, genesis_prompt, status, created_at)
-       VALUES (?, ?, '0xabc', 'sandbox-${id}', 'prompt', ?, ?)`,
-    ).run(id, name, status, createdAt);
-  }
 
   it("attempts sandbox cleanup for children with dead status", async () => {
     for (let i = 0; i < 7; i++) {

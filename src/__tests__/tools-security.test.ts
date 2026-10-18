@@ -75,9 +75,8 @@ describe("Tool Risk Level Classification", () => {
     switch_model: "caution",
     start_child: "caution",
     message_child: "caution",
-    prune_dead_children: "caution",
-
     // Dangerous tools (significant side effects)
+    prune_dead_children: "dangerous",
     delete_sandbox: "dangerous",
     edit_own_file: "dangerous",
     install_npm_package: "dangerous",
@@ -524,22 +523,22 @@ describe("delete_sandbox self-preservation", () => {
     db.close();
   });
 
-  it("reports sandbox deletion is disabled for own sandbox", async () => {
+  it("blocks untracked deletion of its own sandbox", async () => {
     const deleteTool = tools.find((t) => t.name === "delete_sandbox")!;
     const result = await deleteTool.execute(
       { sandbox_id: ctx.identity.sandboxId },
       ctx,
     );
-    expect(result).toContain("disabled");
+    expect(result).toContain("BLOCKED: direct Conway sandbox DELETE");
   });
 
-  it("reports sandbox deletion is disabled for other sandboxes", async () => {
+  it("blocks untracked deletion of other sandboxes", async () => {
     const deleteTool = tools.find((t) => t.name === "delete_sandbox")!;
     const result = await deleteTool.execute(
       { sandbox_id: "different-sandbox-id" },
       ctx,
     );
-    expect(result).toContain("disabled");
+    expect(result).toContain("BLOCKED: direct Conway sandbox DELETE");
   });
 });
 
