@@ -9,6 +9,7 @@ import {
   createPublicClient,
   http,
   parseUnits,
+  isAddress,
   type Address,
   type PrivateKeyAccount,
 } from "viem";
@@ -335,6 +336,140 @@ export async function checkX402(
     return parsed?.requirement ?? null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Read-only HEAD observation for a GET service endpoint. In contrast to
+ * x402Fetch, this NEVER signs a payment, replays a paid request, or creates a
+ * P-030 financial effect. A HEAD response is not a binding quote for GET,
+ * still less for a POST sandbox creation or domain registration.
+ *
+ * A 200/204 HEAD does not prove that GET is free; a 402 HEAD does not
+ * establish same-body/same-account billing terms. Keep those facts explicit.
+ */
+export interface X402ReadOnlyPreflight {
+  kind: "x402_head_preflight";
+  targetMethod: string;
+  inspectedMethod: "HEAD" | null;
+  status: "head_requirements_observed" | "head_no_402" |
+    "unknown" | "unsupported_target_method";
+  reasonCode: "payment_required" | "head_not_payment_required" |
+    "malformed_payment_requirements" | "unexpected_http_status" |
+    "unavailable" | "unverified_mutating_operation";
+  requirement: {
+    scheme: string;
+    network: string;
+    payToAddress: string;
+    usdcAddress: string;
+    /** Preview only, interpreted using this server's x402 version. */
+    amountMicroUsdc: string;
+    policyAmountCents: number;
+  } | null;
+  /** No HEAD probe can attest an exact supplier contract or P-010 decision. */
+  exactOperationQuoteEstablished: false;
+  providerAccountId: null;
+  purchaseAuthorized: false;
+  evidence: string[];
+}
+
+export async function probeX402ReadOnly(
+  url: string,
+  targetMethod = "GET",
+): Promise<X402ReadOnlyPreflight> {
+  const method = typeof targetMethod === "string"
+    ? targetMethod.trim().toUpperCase() : "UNKNOWN";
+  const base: X402ReadOnlyPreflight = {
+    kind: "x402_head_preflight",
+    targetMethod: method,
+    inspectedMethod: null,
+    status: "unknown",
+    reasonCode: "unavailable",
+    requirement: null,
+    exactOperationQuoteEstablished: false,
+    providerAccountId: null,
+    purchaseAuthorized: false,
+    evidence: [
+      "HTTP HEAD only. No signed x402 payment, wallet access, supplier mutation or financial-effect dispatch.",
+      "Any observed requirement is supplier metadata, not exact GET pricing, a binding POST contract, provider account ownership or P-010 authority.",
+    ],
+  };
+
+  // An independently read-only HEAD can only scout a GET-capable service.
+  // Claiming it quotes POST/PUT/PATCH/DELETE would permit a wrong-operation
+  // price to be passed into P-030 and expose an unintended supplier mutation.
+  if (method !== "GET") {
+    return {
+      ...base, status: "unsupported_target_method",
+      reasonCode: "unverified_mutating_operation",
+      evidence: [...base.evidence,
+        "A HEAD observation cannot quote this operation. Require trusted supplier-specific same-body preflight before any purchase."],
+    };
+  }
+  if (typeof url !== "string" || !url.trim() || url.length > 2048) {
+    return { ...base, reasonCode: "unavailable" };
+  }
+
+  try {
+    // The existing ResilientHttpClient enforces ABOS HTTP URL trust.
+    // Redirects are rejected to avoid treating a different origin/endpoint
+    // as the target. Never retry this external probe automatically.
+    const response = await x402HttpClient.request(url, {
+      method: "HEAD", redirect: "error", retries: 0, timeout: 10_000,
+    });
+    if (response.status !== 402) {
+      if (response.ok) {
+        return {
+          ...base, inspectedMethod: "HEAD", status: "head_no_402",
+          reasonCode: "head_not_payment_required",
+          evidence: [...base.evidence,
+            "HEAD returned HTTP success without payment requirement; GET and other method costs remain UNKNOWN."],
+        };
+      }
+      return {
+        ...base, inspectedMethod: "HEAD", reasonCode: "unexpected_http_status",
+      };
+    }
+    const parsed = await parsePaymentRequired(response);
+    if (!parsed || parsed.requirement.scheme !== "exact" ||
+        !isAddress(parsed.requirement.payToAddress) ||
+        !isAddress(parsed.requirement.usdcAddress) ||
+        parsed.requirement.usdcAddress.toLowerCase() !==
+          USDC_ADDRESSES[parsed.requirement.network].toLowerCase()) {
+      return {
+        ...base, inspectedMethod: "HEAD",
+        reasonCode: "malformed_payment_requirements",
+      };
+    }
+    try {
+      const price = describeMicroUsdcAmount(parseMaxAmountRequired(
+        parsed.requirement.maxAmountRequired, parsed.x402Version,
+      ));
+      return {
+        ...base, inspectedMethod: "HEAD",
+        status: "head_requirements_observed",
+        reasonCode: "payment_required",
+        requirement: {
+          scheme: parsed.requirement.scheme,
+          network: parsed.requirement.network,
+          payToAddress: parsed.requirement.payToAddress,
+          usdcAddress: parsed.requirement.usdcAddress,
+          amountMicroUsdc: price.amountMicroUsdc,
+          policyAmountCents: price.policyAmountCents,
+        },
+        evidence: [...base.evidence,
+          "Exact-scheme x402 requirement appeared on HEAD for the inspected URL. Amount is a nonbinding preview in USDC; no actual signed cost or supplier contract was observed."],
+      };
+    } catch {
+      return {
+        ...base, inspectedMethod: "HEAD",
+        reasonCode: "malformed_payment_requirements",
+      };
+    }
+  } catch {
+    // Provider/network error messages can include bearer tokens or private
+    // URLs. Preserve UNKNOWN without leaking any raw exception or response.
+    return { ...base, reasonCode: "unavailable" };
   }
 }
 
