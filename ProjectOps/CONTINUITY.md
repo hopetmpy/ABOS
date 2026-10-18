@@ -29,6 +29,11 @@ ProjectOps-PR: 30
 Master-Plan-PR: 31
 Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
+## P-031 — Conway Domains account + public price discovery (2026-10-18)
+
+- **SOURCE IMPLEMENTED / E3 PHYSICAL PENDING:** discovered a second Conway vendor API `api.conway.domains` with documented public exact-name availability (GET `/domains/check`) and TLD registration/renewal pricing (GET `/domains/pricing`), and separate SIWE/SIWS authenticated account `GET /auth/me` using a domain-scoped JWT. Added `src/conway/domains-purchase-evidence.ts`, read-only agent tool `conway_domain_purchase_evidence` and `src/conway/domains-account-proof.ts` accepting host-owned session token callback and controlled EVM wallet address. Public price != actual multi-year/premium payable order, Domains wallet/account != Cloud API-key account, wallet identity != available x402 funds/P-010 authorization. Legacy `register_domain` remains inactive; no supplier purchase or hidden signed HTTP POST.
+- **NEXT:** grouped Codex `p031-domains-economic-discovery` exact HEAD (two new test files + P-030/P-031 10 regressions and standard ProjectOps/protocol/typecheck/build); publish physical evidence, independently audit. Then source actual wallet authentication and same-body x402 order terms under trusted host+P-010/P-030 before enabling vendor registration. Source/public documentation only so far, LIVE wallet/quote is not asserted. Active `continuity/C0030.md` records details and exact public refs; P-031 `EN_EJECUCIÓN`, `main` unmerged, P-005 LIVE separate.
+
 ## P-031 — Conway secondary gate synthetic physical PASS (2026-10-18)
 
 - **E3 CODE AND EVIDENCE VERIFIED:** source `7629866fc879c7ad82d386d053f60e4c03b1cb66`, evidence `95f49b757187c50b9c8cc316756f36d5678f257d` (único padre = source), 8 archivos en primer commit, hashes recalculados **7/7**, protocolo **6/6**, ProjectOps integrity/typecheck/build PASS, Vitest **168/168 pruebas / 12/12 archivos**. Audit `ProjectOps/evidence/P-031/audits/7629866f-conway-claimed-provision.md` e índice `ProjectOps/EVIDENCE.md`.
