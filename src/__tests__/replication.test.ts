@@ -223,6 +223,68 @@ describe("spawnChild", () => {
     expect(db.getChildById("failed-existing-child")?.status).toBe("failed");
   });
 
+  it("reuses only a healthy failed-child sandbox with exact P-018 ownership", async () => {
+    const oldChildId = "failed-child-with-owned-sandbox";
+    const sandboxId = "existing-failed-child-sandbox";
+    db.insertChild({
+      id: oldChildId, name: "old-failed", address: validAddress,
+      sandboxId, genesisPrompt: "old child", fundedAmountCents: 0,
+      status: "failed", createdAt: new Date().toISOString(),
+    });
+    const resources = new EnvironmentResourceStore(db.raw);
+    resources.create({
+      id: "reusable-conway-resource", provider: "conway", externalId: sandboxId,
+      type: "conway-sandbox", status: "unknown",
+      retentionPolicy: "manual_retention", metadata: { childId: oldChildId },
+    });
+    const created = vi.spyOn(conway, "createSandbox");
+    vi.spyOn(conway, "listSandboxes").mockResolvedValue([{
+      id: sandboxId, status: "running", region: "us-east", vcpu: 2,
+      memoryMb: 2048, diskGb: 20, createdAt: new Date().toISOString(),
+    }]);
+    vi.spyOn(conway, "exec").mockImplementation(async command =>
+      command.includes("--init")
+        ? { stdout: `Wallet initialized: ${validAddress}`, stderr: "", exitCode: 0 }
+        : { stdout: "ok", stderr: "", exitCode: 0 },
+    );
+
+    const child = await spawnChild(
+      conway, identity, db, genesis, new ChildLifecycle(db.raw),
+      { maxChildren: 3, childSandboxMemoryMb: 1024 },
+    );
+    expect(child.sandboxId).toBe(sandboxId);
+    expect(child.status).toBe("wallet_verified");
+    expect(created).not.toHaveBeenCalled();
+    expect(db.getChildById(oldChildId)?.status).toBe("failed");
+    expect(resources.get("reusable-conway-resource")?.metadata.childId).toBe(child.id);
+    expect(resources.listEvents("reusable-conway-resource")
+      .some(event => event.operation === "child_reuse_handoff")).toBe(true);
+  });
+
+  it("refuses reuse when supplier inventory belongs to a different P-018 child", async () => {
+    const sandboxId = "not-our-failed-child-sandbox";
+    db.insertChild({
+      id: "historical-failed", name: "historical-failed", address: validAddress,
+      sandboxId, genesisPrompt: "old child", fundedAmountCents: 0,
+      status: "failed", createdAt: new Date().toISOString(),
+    });
+    new EnvironmentResourceStore(db.raw).create({
+      id: "currently-owned", provider: "conway", externalId: sandboxId,
+      type: "conway-sandbox", status: "running",
+      metadata: { childId: "different-child" },
+    });
+    vi.spyOn(conway, "listSandboxes").mockResolvedValue([{
+      id: sandboxId, status: "running", region: "us-east", vcpu: 2,
+      memoryMb: 2048, diskGb: 20, createdAt: new Date().toISOString(),
+    }]);
+    const created = vi.spyOn(conway, "createSandbox");
+    await expect(spawnChild(
+      conway, identity, db, genesis, new ChildLifecycle(db.raw),
+    )).rejects.toThrow(/requires P-031/);
+    expect(created).not.toHaveBeenCalled();
+    expect(db.getChildById("historical-failed")?.status).toBe("failed");
+  });
+
   it("does not buy an unreviewed new child sandbox even with lifecycle enabled", async () => {
     const created = vi.spyOn(conway, "createSandbox");
     await expect(spawnChild(
