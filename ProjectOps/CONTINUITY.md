@@ -36,6 +36,12 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
 
+## P-031 — inventory and HOME-isolated Goal journey E3 PASS (2026-10-18)
+
+- **GIT_AUDITED / E3_SYNTHETIC_PASS**: Codex ran source exact `d0d6951f17e0ae3c2e541a8bc801cc01a94a2d7c`, remote evidence `a3328df243e69b16c2d25e4d708ca0e88f35690e`, 1 evidence-only commit with 8 files; all 7 SHA-256 independent recalculations matched. Profile `p031-domains-economic-discovery`: ProjectOps integrity, typecheck, build, evidence gate **6/6** and Vitest **144/144 tests in 13/13 files** PASS. Correctly isolated the Goal workspace under test-owned HOME; six new Conway Domains inventory tests passed. Audit `ProjectOps/evidence/P-031/audits/d0d6951f-domains-inventory-pass.md`, indexed in `ProjectOps/EVIDENCE.md`.
+- **PRESERVE PREVIOUS FAIL**: prior `af5c6500 → daf01049` still a valid recorded 143 PASS / 1 FAIL from ENOENT, now not reproducible with isolated fixture, not overwritten. E3 synthetic pass does not establish provider LIVE account or purchases. Host-only inventory helper not yet wired into the tool session. P-031 EN_EJECUCIÓN, P-032 PARCIAL; E5/E6 P-005, `main` not merged.
+- **NEXT_ELIGIBLE_WORK**: audit supplier-auth session management and P-010/P-030 financial authority before any one-shot order quote/registration. Avoid treating a GET supplier transaction as independent USDC settlement or enabling unreviewed POST. No new Codex suite until new source requires it.
+
 ## P-031 — inventory FAIL audited, isolated Goal workspace test source pending physical (2026-10-18)
 
 - **AUDITADO / PHYSICAL FAIL:** Codex `p031-domains-economic-discovery` source `af5c6500d779ebc1560fb3d9e38a30deeeb56f31` → evidence `daf01049770a7e83e5e625ea3ded75abdb6f45b4`, one evidence-only commit with eight files, independently recalculated **7/7 SHA-256**; protocol **6/6**, ProjectOps integrity, typecheck, build PASS. Vitest **143 PASS / 1 FAIL**; failure `p031-goal-resource-lifecycle-journey.test.ts:122` because `AgentWorkspace` mkdir raised `ENOENT` under `/home/agent/.abos/workspace/<goal>/outputs`; six new owned-inventory cases PASS. Record is `ProjectOps/evidence/P-031/audits/af5c6500-domains-inventory-fail.md`, indexed in `ProjectOps/EVIDENCE.md`. The group stays FAIL, without retroactive conversion.
