@@ -188,36 +188,60 @@ export async function spawnChild(
   }
 
   const childId = ulid();
-  let reusedSandbox: { id: string } | null = null;
+  let reusedSandbox: { id: string; resourceId: string; previousChildId: string } | null = null;
   // Older callers remain source-compatible; they now share the canonical
   // P-029 child lifecycle rather than buying through a second legacy path.
   lifecycle ??= new ChildLifecycle(db.raw);
 
   try {
-    // State: requested
-    const childChainType = genesis.chainType || (identity as any).chainType || "evm";
-    lifecycle.initChild(childId, genesis.name, "", genesis.genesisPrompt, childChainType);
-
-    // Get child sandbox memory from config (default 1024MB)
+    // Determine whether the supplier resource is available BEFORE creating
+    // any child row. Missing purchase authority is not a failed child birth.
     const childMemoryMb =
       runtimeConfig?.childSandboxMemoryMb ??
       DEFAULT_CONFIG.childSandboxMemoryMb!;
-
-    // Try to reuse an existing sandbox whose DB record is 'failed' but
-    // is still running remotely, before creating a new one.
-    reusedSandbox = procurement ? null : await findReusableSandbox(conway, db);
-
-    let sandbox: { id: string };
-    if (procurement) {
-      sandbox = claimProcuredChildSandbox(db, procurement, childId, childMemoryMb);
-    } else if (reusedSandbox) {
-      sandbox = reusedSandbox;
-    } else {
+    reusedSandbox = procurement ? null :
+      await findReusableSandbox(conway, db, childMemoryMb);
+    if (!procurement && !reusedSandbox) {
       throw new Error(
         "UNAVAILABLE: new Conway child sandbox requires P-031 " +
         "environment_procurement_execute first. Supply its resource_id and " +
         "procurement_operation_key to spawn_child; no supplier purchase dispatched.",
       );
+    }
+
+    const childChainType = genesis.chainType || (identity as any).chainType || "evm";
+    lifecycle.initChild(childId, genesis.name, "", genesis.genesisPrompt, childChainType);
+
+    let sandbox: { id: string };
+    if (procurement) {
+      sandbox = claimProcuredChildSandbox(db, procurement, childId, childMemoryMb);
+    } else if (reusedSandbox) {
+      // Transfer only the already-owned P-018 resource. The old failed
+      // child remains historically failed, NOT cleaned_up/released: the
+      // sandbox has NOT been destroyed. Ownership is now bound to the
+      // next child before its potentially failing bootstrap.
+      const resourceId = reusedSandbox.resourceId;
+      const priorChildId = reusedSandbox.previousChildId;
+      const resources = new EnvironmentResourceStore(db.raw);
+      db.raw.transaction(() => {
+        const owned = resources.get(resourceId);
+        if (!owned || owned.externalId !== reusedSandbox!.id ||
+            owned.metadata.childId !== priorChildId ||
+            db.getChildById(priorChildId)?.status !== "failed") {
+          throw new Error("P-018 reused child sandbox ownership changed; no bootstrap.");
+        }
+        resources.applyMutation(resourceId, {
+          retentionPolicy: "manual_retention",
+          metadata: { childId, priorChildId },
+          evidence: [
+            "Conway authenticated inventory observed existing sandbox running; " +
+            "transferred child bootstrap ownership without supplier purchase or resource deletion.",
+          ],
+        }, "child_reuse_handoff", "Rebind reusable failed-child sandbox to successor child.");
+      })();
+      sandbox = { id: reusedSandbox.id };
+    } else {
+      throw new Error("P-031 child resource selection unresolved; no supplier dispatch.");
     }
 
 
@@ -351,21 +375,17 @@ export async function spawnChild(
       reversible: false,
     });
 
-    // If we reused a sandbox, update the old children record to 'cleaned_up'
-    // so it doesn't get reused again.
-    if (reusedSandbox) {
-      db.raw.prepare(
-        "UPDATE children SET status = 'cleaned_up' WHERE sandbox_id = ? AND status = 'failed'",
-      ).run(sandbox.id);
-    }
+    // A prior failed child is NOT cleaned_up: its resource was transferred,
+    // not physically released. P-018 owner metadata excludes it from future
+    // reuse, and its failure history remains recoverable.
 
     return {
       ...childForGate,
       status: "wallet_verified",
     };
   } catch (error) {
-    // Note: sandbox deletion is disabled by the Conway API (prepaid, non-refundable).
-    // Failed sandboxes are left running and may be reused by findReusableSandbox().
+    // Cleanup must use P-018 retention, not an untracked supplier DELETE.
+    // Failed sandboxes retain their owner and may be reused after fresh inventory.
 
     // Transition to failed if lifecycle has been initialized
     try {
@@ -609,23 +629,20 @@ export async function ensureChildRuntimeRunning(
 }
 
 /**
- * Find a reusable sandbox: one that is marked 'failed' in the local DB
- * but is still running remotely. Returns the first match or null.
+ * Find failed-child capacity that is both physically running and owned by the
+ * same failed child in P-018. A stale children row must never steal a sandbox
+ * that P-018 has already handed to a new child or marked for release.
  */
 async function findReusableSandbox(
   conway: ConwayClient,
   db: AbosDatabase,
-): Promise<{ id: string } | null> {
+  requiredMemoryMb: number,
+): Promise<{ id: string; resourceId: string; previousChildId: string } | null> {
   const failedChildren = db.getChildren().filter(
     child => child.status === "failed" && child.sandboxId,
   );
   if (failedChildren.length === 0) return null;
 
-  // A failed child with a durable sandbox ID is a possibly billable
-  // resource, not proof that a new sandbox must be purchased. An incomplete
-  // supplier inventory cannot distinguish reusable running capacity from
-  // an orphan. Keep this exact acquisition UNKNOWN and let P-018/provider
-  // reconciliation determine reality before any replacement purchase.
   let remoteSandboxes: Awaited<ReturnType<ConwayClient["listSandboxes"]>>;
   try {
     remoteSandboxes = await conway.listSandboxes();
@@ -636,14 +653,26 @@ async function findReusableSandbox(
       { cause: error },
     );
   }
-  const runningIds = new Set(
-    remoteSandboxes.filter(sandbox => sandbox.status === "running")
-      .map(sandbox => sandbox.id),
+  const running = new Map(
+    remoteSandboxes.filter(sandbox =>
+      sandbox.status === "running" &&
+      typeof sandbox.memoryMb === "number" &&
+      Number.isFinite(sandbox.memoryMb) &&
+      sandbox.memoryMb >= requiredMemoryMb,
+    ).map(sandbox => [sandbox.id, sandbox]),
   );
+  const resources = new EnvironmentResourceStore(db.raw);
   for (const child of failedChildren) {
-    if (runningIds.has(child.sandboxId)) {
-      return { id: child.sandboxId };
-    }
+    if (!running.has(child.sandboxId)) continue;
+    const owned = resources.findByExternalId("conway", child.sandboxId);
+    if (!owned || owned.type !== "conway-sandbox" ||
+        owned.metadata.childId !== child.id ||
+        owned.metadata.provisionNeedsReconciliation === true ||
+        ["released", "destroy_requested", "pending_observation", "artifact_hold"]
+          .includes(String(owned.metadata.retentionReleaseState ?? "")) ||
+        owned.metadata.artifactCollectionState === "pending" ||
+        owned.status === "terminated") continue;
+    return { id: child.sandboxId, resourceId: owned.id, previousChildId: child.id };
   }
   return null;
 }
