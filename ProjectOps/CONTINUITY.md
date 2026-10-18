@@ -29,6 +29,11 @@ ProjectOps-PR: 30
 Master-Plan-PR: 31
 Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
+## P-031 — Conway credit-history economic observability source (2026-10-18)
+
+- **SOURCE IMPLEMENTED, PHYSICAL PENDING:** `src/conway/client.ts` now has a bounded authenticated credit-history GET for Conway; `src/environments/conway.ts`, `src/environments/types.ts` and `src/environments/tools.ts` surface optional `include_conway_credit_history` through the existing read-only economic evidence tool. By default balance-only behavior persists, no added provider mutation or duplicate treasury. New regression `src/__tests__/p031-conway-credit-history.test.ts` covers opt-in, malformed supplier fields, missing endpoints, wallet/account authority boundaries and no raw IDs/secrets in the report. Do not claim tests PASS before grouped Codex physical run.
+- The provider history is a bounded page, not supplier contract, P-010 procurement right, complete accounting, free cash or verified x402 settlement. Do not auto-settle P-030 from HTTP history. See active `continuity/C0030.md`; source/fixture validation next, then any authenticated account/quote integration shown real by provider. P-031 `EN_EJECUCIÓN`; P-005 LIVE separate.
+
 ## P-031 — E3 physical reconciliation + x402 retry fix (2026-10-18)
 
 - **Codex evidence independently audited**: Task-child handoff source `9af9e6b3` → evidence `60f33dad`, 143/143 tests / 12/12 files; subsequent product commit `8478247c` added durable x402 reconciliation warnings and inline duplicate-topup guard, verified 446/446 tests / 37/37 files. Remote file SHA-256: 6/6 for former evidence, 10/10 evidence and 3/3 product for latter. `ProjectOps/EVIDENCE.md` is a derived index; see active segment `continuity/C0030.md` for provenance.
