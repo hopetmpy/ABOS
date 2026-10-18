@@ -9,6 +9,7 @@
 import type {
   ProviderProcurementExecutionDependencies,
   ProviderProcurementScope,
+  ProviderProcurementDispatchOutcome,
 } from "../economics/provider-procurement-execution.js";
 import type { ProviderProcurementScenarioInput } from "../economics/treasury-scenario.js";
 import type { EnvironmentProvisionRequest, EnvironmentResource } from "./types.js";
@@ -24,6 +25,25 @@ export class LifecycleProcurementNotDispatchedError extends Error {
     super(message);
     this.name = "LifecycleProcurementNotDispatchedError";
   }
+}
+
+/**
+ * Provider-native contract is a separate identity from P-018 compute/storage.
+ * A trusted host must observe a specific supplier contract before its mutation.
+ * Target is not synthesized from the model, resource SKU, or AWS terminate.
+ */
+export interface TrustedProviderContractOperation {
+  operation: "renew" | "cancel";
+  provider: string;
+  providerAccountId: string;
+  contractId: string;
+  externalResourceId: string;
+  region: string;
+  resourceShape: string;
+  observedAt: string;
+  validUntil: string;
+  source: string;
+  evidence: string[];
 }
 
 export interface TrustedLifecycleProcurementSource {
@@ -52,6 +72,22 @@ export interface TrustedLifecycleProcurementSource {
     source: string;
     evidence: string[];
   }>;
+  /** Independently authenticated, read-only exact supplier contract identity. */
+  resolveContractOperation?: (
+    scope: Readonly<ProviderProcurementScope>,
+    owned: Readonly<EnvironmentResource>,
+  ) => Promise<TrustedProviderContractOperation>;
+  /**
+   * Provider-specific mutation: the callback owns authentication, contract
+   * semantics and remote side effects. Only called after P-010/P-030 claim.
+   * An uncertain callback MUST throw normally, never claim no-dispatch.
+   */
+  dispatchContractOperation?: (
+    scope: Readonly<ProviderProcurementScope>,
+    authorized: Readonly<{ policyDecisionId: string; amountCents: number; unit: string }>,
+    quoted: Readonly<ProviderProcurementScenarioInput>,
+    contract: Readonly<TrustedProviderContractOperation>,
+  ) => Promise<ProviderProcurementDispatchOutcome>;
 }
 
 export interface ClaimedProvisionAuthority {
@@ -90,9 +126,9 @@ export function createLifecycleProcurementDependencies(
     },
     observeAuthenticatedResourceFit: source.observeAuthenticatedResourceFit,
     dispatch: async (scope, authorized) => {
-      if (!["provision", "resize", "resume", "recover"].includes(scope.operation)) {
+      if (!["provision", "resize", "resume", "recover", "renew", "cancel"].includes(scope.operation)) {
         throw new LifecycleProcurementNotDispatchedError(
-          "Provider lifecycle economic operation has no trusted implementation; no mutation dispatched.",
+          "Provider economic operation has no trusted implementation; no mutation dispatched.",
         );
       }
       if (authorized.unit !== scope.unit || !authorized.policyDecisionId ||
@@ -101,6 +137,87 @@ export function createLifecycleProcurementDependencies(
         throw new LifecycleProcurementNotDispatchedError(
           "P-030 dispatch claim is incompatible with provider scope.",
         );
+      }
+      if (scope.operation === "renew" || scope.operation === "cancel") {
+        // P-018 destroy is physical release, never supplier contract cancellation.
+        // The caller already obtained exact P-010 policy and a durable P-030
+        // dispatch claim; require a second independent host/provider identity.
+        const owned = lifecycle.resources.get(scope.resourceId);
+        if (!owned || !owned.externalId || owned.provider !== scope.provider ||
+            scope.externalId !== owned.externalId ||
+            owned.region !== scope.region ||
+            // Contract maintenance has its OWN P-025 reviewed Task. The
+            // original purchaser's Task/Goal may already be completed, so
+            // do not require their identifiers to match this new Task.
+            // Authorization remains bound to the exact P-010 contract/account
+            // and independent supplier identity below.
+            (scope.operation === "renew" && owned.status === "terminated") ||
+            owned.metadata.provisionNeedsReconciliation === true ||
+            owned.metadata.mutationNeedsReconciliation === true ||
+            !source.resolveContractOperation || !source.dispatchContractOperation) {
+          throw new LifecycleProcurementNotDispatchedError(
+            "Owned resource, supplier contract handler or exact identity unavailable; no contract mutation dispatched.",
+          );
+        }
+        const quote = observedQuotes.get(scope);
+        if (!quote) {
+          throw new LifecycleProcurementNotDispatchedError(
+            "Supplier contract mutation has no matching reviewed economic scenario.",
+          );
+        }
+        let contract: TrustedProviderContractOperation;
+        try {
+          contract = await source.resolveContractOperation(scope, owned);
+        } catch {
+          throw new LifecycleProcurementNotDispatchedError(
+            "Supplier contract observation failed before mutation; no contract action dispatched.",
+          );
+        }
+        const now = Date.now();
+        const observed = Date.parse(contract?.observedAt ?? "");
+        const expires = Date.parse(contract?.validUntil ?? "");
+        const current = lifecycle.resources.get(scope.resourceId);
+        if (!contract ||
+            contract.operation !== scope.operation ||
+            contract.provider !== scope.provider ||
+            contract.providerAccountId !== scope.providerAccountId ||
+            !contract.contractId?.trim() ||
+            contract.externalResourceId !== scope.externalId ||
+            contract.contractId !== scope.contractId ||
+            contract.region !== scope.region ||
+            contract.resourceShape !== scope.resourceShape ||
+            !contract.source?.trim() ||
+            !Array.isArray(contract.evidence) ||
+            !contract.evidence.some(item => typeof item === "string" && item.trim()) ||
+            !Number.isFinite(observed) || observed > now ||
+            !Number.isFinite(expires) || expires <= now || expires <= observed ||
+            !current || current.externalId !== owned.externalId ||
+            current.provider !== owned.provider || current.region !== owned.region ||
+            current.goalId !== owned.goalId || current.taskId !== owned.taskId ||
+            current.pathId !== owned.pathId ||
+            (scope.operation === "renew" && current.status === "terminated") ||
+            current.metadata.provisionNeedsReconciliation === true ||
+            current.metadata.mutationNeedsReconciliation === true) {
+          throw new LifecycleProcurementNotDispatchedError(
+            "Supplier contract identity, authorization scope or fresh provider evidence mismatched; no contract mutation dispatched.",
+          );
+        }
+        try {
+          const outcome = await source.dispatchContractOperation(scope, authorized, quote, contract);
+          // Even a positive supplier response is not independent verification
+          // of renewal, stop-billing, a final invoice or a paid/refunded amount.
+          return {
+            ...outcome,
+            status: outcome.status === "usable" ? "pending" : outcome.status,
+            evidence: [
+              ...outcome.evidence,
+              ...contract.evidence,
+              "Supplier contract mutation response is provisional; independently observe contract state and monetary settlement.",
+            ],
+          };
+        } finally {
+          observedQuotes.delete(scope);
+        }
       }
       // Existing P-018 resources and a source-specific mutation target are
       // checked before any capacity action. P-030 already owns the financial

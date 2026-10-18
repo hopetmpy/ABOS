@@ -399,6 +399,15 @@ export async function runAgentLoop(
     getTrustedProcurementDependencies: (providerId, operation) => {
       const custom = options.getTrustedProcurementDependencies?.(providerId);
       if (custom) return custom;
+      // Supplier contracts are not P-018 physical environment operations.
+      // Host-owned provider integration must explicitly support the contract.
+      const contractOperation = operation === "renew" || operation === "cancel";
+      if (contractOperation) {
+        const source = options.getTrustedLifecycleProcurementSource?.(providerId);
+        return source?.resolveContractOperation && source.dispatchContractOperation
+          ? createLifecycleProcurementDependencies(environmentLifecycle, source)
+          : null;
+      }
       if (!["provision", "resize", "resume", "recover"].includes(operation ?? "") ||
           !environmentRegistry.supportsOperation(providerId, operation!)) {
         return null;

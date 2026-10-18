@@ -262,7 +262,7 @@ export function createEnvironmentTools(
       type: "object",
       properties: {
         operation_key: { type: "string", description: "Stable idempotency key for this exact acquisition attempt." },
-        operation: { type: "string", description: "provision, resize, resume, recover, renew, or other." },
+        operation: { type: "string", description: "provision, resize, resume, recover, renew, cancel, or other. Contract operations require trusted supplier authority." },
         provider: { type: "string", description: "Registered provider identifier." },
         provider_account_id: { type: "string" },
         unit: { type: "string", description: "Exact provider account monetary unit." },
@@ -272,7 +272,8 @@ export function createEnvironmentTools(
         resource_id: { type: "string", description: "Canonical P-018 resource ID." },
         region: { type: "string" },
         resource_shape: { type: "string" },
-        external_id: { type: "string", description: "Optional known existing provider resource identity." },
+        external_id: { type: "string", description: "Exact known external resource identity (required for contract operations)." },
+        contract_id: { type: "string", description: "Exact supplier contract ID required for renew/cancel; host must independently verify the contract." },
         policy_decision_id: { type: "string", description: "Optional existing exact P-010 receipt; otherwise a trusted host P-010 issuer must produce the decision after the verified quote." },
       },
       required: [
@@ -296,13 +297,17 @@ export function createEnvironmentTools(
       const provider = (args.provider as string).trim();
       if (!registry.get(provider)) return "UNAVAILABLE: provider is not registered.";
       const operation = (args.operation as string).trim();
-      if (!["provision", "resize", "resume", "recover", "renew", "other"]
+      if (!["provision", "resize", "resume", "recover", "renew", "cancel", "other"]
         .includes(operation)) {
         return "BLOCKED: unsupported procurement operation.";
       }
       if (args.external_id !== undefined &&
           (typeof args.external_id !== "string" || !args.external_id.trim())) {
         return "BLOCKED: malformed external resource identity.";
+      }
+      if (args.contract_id !== undefined &&
+          (typeof args.contract_id !== "string" || !args.contract_id.trim())) {
+        return "BLOCKED: malformed supplier contract identity.";
       }
       if (args.policy_decision_id !== undefined &&
           (typeof args.policy_decision_id !== "string" || !args.policy_decision_id.trim())) {
@@ -333,6 +338,8 @@ export function createEnvironmentTools(
         resourceShape: (args.resource_shape as string).trim(),
         ...(typeof args.external_id === "string" ?
           { externalId: args.external_id.trim() } : {}),
+        ...(typeof args.contract_id === "string" ?
+          { contractId: args.contract_id.trim() } : {}),
       };
       try {
         const result = await executeReviewedProviderProcurement(context.db.raw, {
