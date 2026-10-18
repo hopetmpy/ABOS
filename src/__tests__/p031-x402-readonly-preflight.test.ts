@@ -33,6 +33,8 @@ describe("P-031 x402 nonpaying GET/HEAD price preflight", () => {
       expect(url).toBe(origin);
       expect(options.method).toBe("HEAD");
       expect(options.redirect).toBe("error");
+      expect(options.cache).toBe("no-store");
+      expect(new Headers(options.headers).get("Cache-Control")).toContain("no-store");
       expect(options.body).toBeUndefined();
       expect(new Headers(options.headers).has("X-PAYMENT")).toBe(false);
       expect(new Headers(options.headers).has("PAYMENT-SIGNATURE")).toBe(false);
