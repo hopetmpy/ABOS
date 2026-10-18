@@ -29,6 +29,13 @@ ProjectOps-PR: 30
 Master-Plan-PR: 31
 Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
+## P-031 — evidencia Codex auditada / 2026-10-18
+
+- Git remoto: source exacto `e05856f7c9bea17408028ee1fecdbe713b292548`, expediente en rama `evidence/p-031/e05856f7/p031-child/2026-10-18T14-32-35-403Z-30067`, commit final `1305624649b80cc25621c357f6bb7f00cec35819`. Independientemente verificados **6/6 hashes SHA256** (RUN, EVIDENCE y cuatro logs) y descendencia Git: parent del primer evidence commit = source. Evidencia física acotada **P-031/P-029 PASS 140/140 tests, 12/12 archivos, typecheck/build/ProjectOps integrity PASS**. Auditoría derivada: `ProjectOps/evidence/P-031/audits/e05856f7-p031-child.md`; índice `ProjectOps/EVIDENCE.md`.
+- Incidencia real: `.gitignore` ignoraba `*.log` y `publish` no los añadía; Codex corrigió el expediente con un segundo commit de solo logs, no de producto. Se corrigió el publisher en la rama de producto usando `git add -f` únicamente sobre archivos verificados, sin abrir la visibilidad de otros logs. Nueva prueba de regresión **PENDIENTE DE EJECUCIÓN FÍSICA**, no hereda el resultado del source anterior.
+- Estado: **P-031 EN_EJECUCIÓN**, rama de producto aún sin merge, sin pruebas LIVE E5/E6, sin compra o factura real. NEXT: prueba agrupada del publicador corregido sobre SHA posterior y auditoría de DoD/proveedores pendientes; integrar únicamente tras evidencia suficiente. No repetir por ceremonia 140 tests de source anterior sin cambios de su área.
+
+
 ## P-031 — evidencia física Codex y fixtures / 2026-10-18
 
 - **SOURCE ONLY; E2/E3 PENDING.** `ProjectOps/EVIDENCE.md`, `ProjectOps/evidence/README.md`, `scripts/codex-evidence-gate.mjs`, su test y los scripts `package.json` introducen expediente `RUN.json + EVIDENCE.md + SHA256SUMS.txt + logs`, exact-source checkout, verificación de hashes y publicación de solo evidencia con `[skip ci]`. No existe autorización económica adicional ni scheduler paralelo. El verificador ProjectOps ahora exige esa estructura y `C0030.md` usa la rama viva.
