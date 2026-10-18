@@ -315,6 +315,26 @@ export interface EnvironmentEconomicObservation {
     observedAt: string;
     evidence: string[];
   };
+  /**
+   * One explicitly requested Conway authenticated history page, not the
+   * full ledger, provider account identity, wallet settlement, invoice or
+   * certification that any pending P-030 x402 effect has cleared.
+   * 'unavailable' entries are UNKNOWN, not proof of no activity.
+   */
+  nativeCreditHistory?: {
+    unit: "credit_cent";
+    status: "observed_page" | "unavailable";
+    accountScope: "authenticated_client_unattributed";
+    offset: number;
+    limit: number;
+    entries: Array<{
+      type: string | null;
+      amountCents: number | null;
+      balanceAfterCents: number | null;
+      createdAt: string | null;
+    }>;
+    evidence: string[];
+  };
   /** No budget value, AWS credit or observed account spend proves general available cash. */
   spendableLiquidityUsdCents: null;
   recurringCommitmentUsdCents: null;
@@ -338,6 +358,8 @@ export interface EnvironmentProvider {
     includeProviderCredits?: boolean;
     /** Explicitly opt in to one additional AWS Billing allocation history read. */
     includeCreditAllocationHistory?: boolean;
+    /** Conway authenticated history read, one bounded page, explicit opt-in. */
+    includeConwayCreditHistory?: boolean;
   }): Promise<EnvironmentEconomicObservation>;
   canSatisfy?(
     requirements: EnvironmentRequirements,
