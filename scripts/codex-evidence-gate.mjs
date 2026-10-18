@@ -237,10 +237,20 @@ function publish(relativePath) {
   const dirty = git(["status", "--porcelain", "--untracked-files=all"]).split("\n")
     .filter(Boolean).filter(line => !line.slice(3).startsWith("ProjectOps/evidence/"));
   if (dirty.length) fail("Non-evidence modifications detected; refusing to publish.");
-  git(["add", "--", relativePath]);
+  // *.log is intentionally ignored for the ABOS runtime. Force-add ONLY
+  // the six/seven files explicitly verified in this exact physical dossier,
+  // rather than force-adding an arbitrary directory or weakening .gitignore.
+  const expectedFiles = [
+    "RUN.json", "EVIDENCE.md", "SHA256SUMS.txt",
+    ...manifest.steps.filter(step => step.status !== "NOT_EXECUTED")
+      .map(step => step.logFile),
+  ].map(file => prefix + file);
+  git(["add", "-f", "--", ...expectedFiles]);
   const stagedFiles = git(["diff", "--cached", "--name-only"]).split("\n").filter(Boolean);
-  if (!stagedFiles.length || stagedFiles.some(file => !file.startsWith(prefix))) {
-    fail("Only exactly this evidence directory may be staged.");
+  const expectedSet = new Set(expectedFiles);
+  if (stagedFiles.length !== expectedSet.size ||
+      stagedFiles.some(file => !expectedSet.has(file))) {
+    fail("Exactly the verified evidence files, including ignored logs, must be staged.");
   }
   const runId = relativePath.replaceAll("\\", "/").split("/").at(-1);
   const evidenceBranch = [
