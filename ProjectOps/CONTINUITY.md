@@ -13,10 +13,10 @@ Reasoning-Acceptance: system/ABOS_ADAPTIVE_REASONING_ACCEPTANCE.md
 Host-Mode: system/PUBLIC_TRACKED_MATRIX.md
 ProjectOps-Integrity-Verifier: scripts/projectops-integrity-verify.mjs
 Cutover-State: ACTIVE
-Current-Host-Branch: abos/p031-legacy-paid-tool-routing-20261017
-Host-Head-At-Audit-Open: af5945a67854673abb8439348e3b5e968ff22b5f
+Current-Host-Branch: abos/p031-child-verified-resource-20261018
+Host-Head-At-Audit-Open: 50ff17f57d804ddaa1b05868fa4588c583d631ae
 Last-Reconciled-Host-Head: af5945a67854673abb8439348e3b5e968ff22b5f
-Observed-Main-Head: af5945a67854673abb8439348e3b5e968ff22b5f
+Observed-Main-Head: 50ff17f57d804ddaa1b05868fa4588c583d631ae
 Last-Product-Head: af5945a67854673abb8439348e3b5e968ff22b5f
 Last-Product-CI: exact main af5945a67854673abb8439348e3b5e968ff22b5f push 39088247177 — COMPLETE SUCCESS 8/8
 Last-Completed-Plan: P-030
@@ -29,6 +29,9 @@ ProjectOps-PR: 30
 Master-Plan-PR: 31
 Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
+## P-031 — source checkpoint de child bootstrap / 2026-10-18
+
+La rama `abos/p031-child-verified-resource-20261018` parte de main `50ff17f57d80`. Eliminó el purchase bypass en `spawnChild` y en `spawnChildLegacy`, conectando hijos a P-018/P-030/P-010 y preservando la reutilización de recursos existentes sin falsa limpieza del propietario anterior. Cobertura de tests sintéticos editada, **NO EJECUTADA**; source no fusionado, P-031 sigue EN_EJECUCIÓN y su Definition of Done no está acreditado. El punto preciso de recuperación, incertidumbres y siguiente validación están en `continuity/C0030.md`. Main y la última CI verificada son anteriores a esta rama, no se promueve E3/E5.
 
 
 
