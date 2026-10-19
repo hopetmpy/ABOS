@@ -624,9 +624,26 @@ export async function executeReviewedProviderProcurement(
     const message = neverDispatched
       ? "Trusted provider preflight established NO external dispatch; no supplier charge or refund is asserted."
       : "Provider dispatch response lost; external monetary outcome UNKNOWN, reconcile before retry.";
+    // A host-owned supplier quote may have returned an informational 402
+    // before refusing a *paid* dispatch. Keep the digest with P-030 so
+    // recovery can correlate the attempt. Never treat it as a payment
+    // receipt or a fresh policy/contract on a subsequent operation.
+    const quoteFingerprint = neverDispatched && typeof error === "object" &&
+      error !== null &&
+      typeof (error as { observedQuoteCandidateFingerprint?: unknown })
+        .observedQuoteCandidateFingerprint === "string" &&
+      /^[a-f0-9]{64}$/.test(
+        (error as { observedQuoteCandidateFingerprint: string })
+          .observedQuoteCandidateFingerprint,
+      )
+      ? (error as { observedQuoteCandidateFingerprint: string })
+          .observedQuoteCandidateFingerprint
+      : null;
     const effect = recordFinancialEffectObservation(db, scope.operationKey, {
       resolution,
-      evidence: [message],
+      evidence: [message, ...(quoteFingerprint
+        ? [`Informational authenticated supplier 402 candidate fingerprint: ${quoteFingerprint}; no charge, settlement, contract or purchase authority inferred.`]
+        : [])],
     });
     recordPolicyExecutionOutcome(db, policyDecisionId,
       neverDispatched ? "failed" : "unknown", {
