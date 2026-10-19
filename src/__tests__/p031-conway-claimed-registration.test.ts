@@ -169,7 +169,16 @@ describe("P-031 registered-domain quote from claimed canonical financial dispatc
     await expect(deps.dispatch(scope, authorized)).rejects.toThrow(/already attempted/);
     expect(provider.calls).toHaveLength(4);
     expect(getFinancialEffectByOperationKey(db.raw, scope.operationKey)?.state)
-      .toBe("dispatching");
+      .toBe("unknown");
+    // A different adapter instance (or host restart) cannot reissue the
+    // same supplier POST, because P-030 persists the external request claim.
+    const restarted = createConwayDomainsRegistrationDependencies(db.raw, {
+      wallet: signer, observeAuthenticatedEconomics: vi.fn(),
+      resolveRegistrationRequest: async () => body,
+    });
+    await expect(restarted.dispatch(scope, authorized))
+      .rejects.toThrow(/requires reconciliation/);
+    expect(provider.calls).toHaveLength(4);
   });
 
   it("does not call the paid host on a quote with a changed price or payTo", async () => {
@@ -252,6 +261,25 @@ describe("P-031 registered-domain quote from claimed canonical financial dispatc
       expect(provider.calls).toHaveLength(4);
       vi.unstubAllGlobals();
     }
+  });
+
+  it("rejects a JWT exposed in the host's paid provider receipt as UNKNOWN", async () => {
+    const { db, scope, authorized, signer } = setup();
+    const provider = fixtureProvider();
+    vi.stubGlobal("fetch", provider.fetcher);
+    const deps = createConwayDomainsRegistrationDependencies(db.raw, {
+      wallet: signer, observeAuthenticatedEconomics: vi.fn(),
+      resolveRegistrationRequest: async () => body,
+      dispatchAuthorizedPayment: async () => ({
+        status: "pending", providerStatus: "synthetic",
+        evidence: ["accidental JWT leak: " + token],
+      }),
+    });
+    await expect(deps.dispatch(scope, authorized))
+      .rejects.toThrow(/outcome UNKNOWN/);
+    expect(provider.calls).toHaveLength(4);
+    expect(getFinancialEffectByOperationKey(db.raw, scope.operationKey)?.state)
+      .toBe("unknown");
   });
 
   it("does not quote a different supplier account after wallet mismatch", async () => {
