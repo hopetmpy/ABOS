@@ -12,6 +12,7 @@ import {
   FinancialEffectProviderIdentityConflictError,
   FinancialEffectReconciliationRequiredError,
   claimFinancialEffectDispatch,
+  claimFinancialEffectExternalRequest,
   getCommittedFinancialEffectCents,
   getStrategicFinancialExposure,
   getFinancialEffectByOperationKey,
@@ -52,6 +53,47 @@ afterEach(() => {
 });
 
 describe("P-030 financial effect authority", () => {
+  it("atomically claims one external HTTP attempt inside P-030 before any possible provider side effect", () => {
+    const database = db();
+    prepareFinancialEffect(database.raw, {
+      operationKey: "quoted-domain-attempt",
+      effectKind: "provider_resource_procurement",
+      provider: "conway-domains", unit: "usdc_cent",
+      recipient: "0x2222222222222222222222222222222222222222",
+      amountCents: 4375,
+      request: { resourceId: "domain-1", requestBodySha256: "a".repeat(64) },
+    });
+    expect(claimFinancialEffectDispatch(
+      database.raw, "quoted-domain-attempt",
+    ).dispatchAllowed).toBe(true);
+    const first = claimFinancialEffectExternalRequest(
+      database.raw, "quoted-domain-attempt", "conway-domains-register-unsigned-402",
+    );
+    const repeat = claimFinancialEffectExternalRequest(
+      database.raw, "quoted-domain-attempt", "conway-domains-register-unsigned-402",
+    );
+    expect(first.dispatchAllowed).toBe(true);
+    expect(repeat.dispatchAllowed).toBe(false);
+    expect(repeat.effect.state).toBe("unknown");
+    expect(repeat.effect.evidence.join(" ")).toContain("result UNKNOWN");
+    expect(claimFinancialEffectDispatch(
+      database.raw, "quoted-domain-attempt",
+    ).dispatchAllowed).toBe(false);
+    expect((database.raw.prepare("SELECT COUNT(*) AS n FROM transactions")
+      .get() as { n: number }).n).toBe(0);
+    const resolved = recordFinancialEffectObservation(
+      database.raw, "quoted-domain-attempt", {
+        resolution: "rejected",
+        evidence: ["Synthetic x402 402 was observed without an X-PAYMENT header."],
+      },
+    );
+    expect(resolved.state).toBe("rejected");
+    expect(claimFinancialEffectExternalRequest(
+      database.raw, "quoted-domain-attempt",
+      "conway-domains-register-unsigned-402",
+    ).dispatchAllowed).toBe(false);
+  });
+
   it("reports mixed unsettled credit, USDC topup/service and unknown units without a fake balance", () => {
     const database = db();
     for (const [operationKey, effectKind, amountCents, unit] of [
