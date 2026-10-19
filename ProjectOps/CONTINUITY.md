@@ -37,6 +37,13 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
 
+## P-031 — authenticated claimed Domains 402 + canonical P-030 request CAS (2026-10-19)
+
+- **MACRO SOURCE ADVANCED / PHYSICAL PENDING:** The existing P-030/policy scope now records exact x402 recipient `paymentRecipient` and `requestBodySha256` and rejects replay if either differs. The new `src/conway/domains-claimed-registration.ts` adapts a trusted host-owned SIWE login + `/auth/me` to one unsigned provider `POST /domains/register` under an already claimed P-010/P-030 operation; a documented 402 must match account, body, exact approved amount and payee before the OPTIONAL trusted host paid callback can be invoked. No model-supplied JWT/payment signature and no default purchase.
+- **DURABLE UNKNOWN BEFORE HTTP:** `financial-effects.ts::claimFinancialEffectExternalRequest` atomically transitions `dispatching → unknown` before sending a potentially effectful HTTP request. A crash or another adapter cannot retry it; a confirmed unsigned 402 without paid callback can mark the attempt rejected with informational quote hash, whereas an unexpected 2xx/timeout or failed paid host callback remains UNKNOWN. No duplicate ledger introduced. `environment_procurement_execute` now carries payee/body digest as policy-scoped request data and supports host-trusted external suppliers without requiring they masquerade as compute environments.
+- **REGRESSIONS SOURCE ONLY:** Added claimed-registration suite, P-030 CAS/restart tests, full agent-to-402 synthetic journey, payee/body replay assertions; `p031-lifecycle-acceptance` has **35** files in one macro batch. THESE NEW CHANGES ARE NOT PHYSICALLY TESTED. Existing 161/161 PASS is for older `71227b30` only; `main` unmerged and no LIVE operations.
+- **HARD EXTERNAL REMAINS:** first true account-specific 402 bootstrap is not yet observed/authenticated for LIVE; public USD prices are not final USDC contract. P-005 E5/E6, wallet/policy issuer/signed pay callback and externally usable resources stay unverified. See `ProjectOps/evidence/P-031/audits/p031-claimed-domains-quote-source-20261019.md`; P-031 EN_EJECUCIÓN, P-032 PARCIAL. Next continue macro source audit/acceptance, not another micro Codex run.
+
 ## P-031 — macro lifecycle source recovery and one grouped acceptance (2026-10-19)
 
 - Independently audited last Codex source `71227b30f745c01ba62821672b7611c799958f7b`: **161/161 E3 PASS**, 6/6 evidence protocol, build/typecheck/integrity PASS, 7/7 hashes of `ba9f266d1b7cd25656fbce84d5072b759a93852c`; indexed in `ProjectOps/EVIDENCE.md`. No LIVE or GitHub Actions.
