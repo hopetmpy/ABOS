@@ -465,6 +465,15 @@ export class EnvironmentRetentionCoordinator {
         const prior = oldQuotes.find(x => x && typeof x === "object" &&
           x.operationKey === scope.operationKey);
         if (!prior) continue;
+        const latestRetainedContract = typeof prior.contractId === "string" &&
+          prior.contractId.trim() ? prior.contractId : null;
+        if ((isContractAction && latestRetainedContract !== canonicalContract) ||
+            (latestRetainedContract && latestRetainedContract !== canonicalContract)) {
+          result.evidence.push(
+            "Supplier quote identity changed during observation; stale provider response discarded.",
+          );
+          continue;
+        }
         const previousAt = isExplicitInstant(prior.supplierStatusObservedAt)
           ? Date.parse(prior.supplierStatusObservedAt) : NaN;
         if (Number.isFinite(previousAt) && previousAt >= observedAt) continue;
