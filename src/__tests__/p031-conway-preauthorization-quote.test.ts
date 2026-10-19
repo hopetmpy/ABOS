@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestDb } from "./mocks.js";
+import { createBuiltinTools } from "../agent/tools.js";
 import { observeConwayDomainsPreauthorizationQuote } from
   "../conway/domains-preauthorization-quote.js";
 import {
@@ -146,4 +147,45 @@ describe("P-031 pre-policy authentic quote bootstrap and durable P-030 observati
     expect(getProviderQuoteObservation(db.raw,scope)?.candidateFingerprint)
       .toBe("b".repeat(64));
   });
+  it("agent quote tool accepts only the host-owned EVM wallet, not model-supplied signing authority",async()=>{
+    const db=database(),fixture=supplier();
+    vi.stubGlobal("fetch",fixture.fetcher);
+    const tool=createBuiltinTools("fixture").find(x=>
+      x.name==="conway_domain_preauthorization_quote")!;
+    expect(tool.category).toBe("conway");
+    expect(tool.riskLevel).toBe("caution");
+    expect(tool.parameters.required).toContain("domain");
+    const input={provider_account_id:"account-a",...registration};
+    const denied=JSON.parse(await tool.execute(input,{
+      db,identity:{chainType:"evm",address,
+        account:{address:"0x3333333333333333333333333333333333333333",
+          signMessage:signer.signMessage}},
+    } as any));
+    expect(denied.status).toBe("unavailable");
+    expect(fixture.fetcher).not.toHaveBeenCalled();
+    const result=JSON.parse(await tool.execute(input,{
+      db,identity:{chainType:"evm",address,
+        account:{address,signMessage:signer.signMessage}},
+    } as any));
+    expect(result.status).toBe("observed");
+    expect(result.paymentAuthorized).toBe(false);
+    expect(result.paymentDispatched).toBe(false);
+    expect(JSON.stringify(result)).not.toContain("synthetic.JWT.signature");
+    expect(fixture.registerCalls()).toBe(1);
+  });
+
+  it("agent cannot quote a foreign supplier account even with its own matching wallet",async()=>{
+    const db=database(),fixture=supplier();
+    vi.stubGlobal("fetch",fixture.fetcher);
+    const tool=createBuiltinTools("fixture").find(x=>
+      x.name==="conway_domain_preauthorization_quote")!;
+    const res=JSON.parse(await tool.execute({
+      provider_account_id:"foreign-account",...registration,
+    },{db,identity:{chainType:"evm",address,
+      account:{address,signMessage:signer.signMessage}},
+    } as any));
+    expect(res.status).toBe("unavailable");
+    expect(fixture.registerCalls()).toBe(0);
+  });
+
 });
