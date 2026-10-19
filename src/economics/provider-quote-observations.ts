@@ -104,11 +104,11 @@ export function claimProviderQuoteObservation(
     // A rejected/no-paid attempt is not a new active purchase.
     const pending=db.prepare(
       `SELECT state,request_json FROM financial_effects
-       WHERE provider = 'conway-domains'
+       WHERE provider = ?
          AND effect_kind = 'provider_resource_procurement'
          AND state IN ('prepared','dispatching','pending','unknown',
                        'reconciliation_required','completed')`,
-    ).all() as Array<{state:string;request_json:string}>;
+    ).all(n.provider) as Array<{state:string;request_json:string}>;
     for(const row of pending) {
       let request:Record<string,unknown>;
       try {request=JSON.parse(row.request_json);} catch{return;}
