@@ -112,7 +112,9 @@ export function claimProviderQuoteObservation(
         if (quote.status==="request_claimed" &&
             quote.provider===n.provider &&
             quote.accountId===n.accountId &&
-            quote.requestBodySha256!==n.requestBodySha256 &&
+            // The same bytes under a DIFFERENT host wallet are still a
+            // second independent request identity. Do not redispatch a
+            // potentially effectful operation through another signer.
             (!quote.resourceIdentity ||
               quote.resourceIdentity===n.resourceIdentity)) {
           return;
