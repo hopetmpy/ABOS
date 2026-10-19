@@ -84,7 +84,7 @@ export async function observeConwayOwnedDomainDns(
     const jwt=await getTrustedSessionToken();
     if(!jwt)return base;
     const snapshot=await observeConwayDomainsOwnedResources(
-      async()=>jwt,expectedWalletAddress,expectedWalletType,
+      async()=>jwt,expectedWalletAddress,expectedWalletType,false,
     );
     if(snapshot.account.status!=="wallet_match" ||
         !snapshot.domains)return base;
