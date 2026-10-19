@@ -407,6 +407,90 @@ describe("EnvironmentRetentionCoordinator", () => {
     } finally { db.close(); }
   });
 
+  it("refuses a retired billing observation if cached contract or remote identity conflicts with P-030", async () => {
+    // A saved retention quote is mutable resource metadata, not the
+    // canonical supplier contract. A forged/stale entry must never trigger
+    // a read of another external resource or persist a false cancellation.
+    for (const kind of ["metadata_contract", "financial_external", "legacy_contract"] as const) {
+      const db = createDb();
+      try {
+        const goal = "goal-retired-canonical-" + kind;
+        insertGoal(db, goal, "completed");
+        const registry = new EnvironmentRegistry();
+        registry.register(provider());
+        const lifecycle = new EnvironmentLifecycleManager(
+          registry, new EnvironmentResourceStore(db),
+        );
+        const resource = lifecycle.adopt({
+          provider: "cloud", externalId: "remote-owned-" + kind,
+          type: "compute", goalId: goal, status: "running",
+          retentionPolicy: "until_goal_complete",
+        });
+        await new EnvironmentRetentionCoordinator(db, registry, lifecycle).sweep();
+        expect(lifecycle.resources.get(resource.id)?.status).toBe("terminated");
+
+        const operationKey = "p031-canonical-retention-" + kind;
+        const isLegacy = kind === "legacy_contract";
+        const canonicalContract = isLegacy ? undefined : "canonical-contract-001";
+        prepareFinancialEffect(db, {
+          operationKey, effectKind: "provider_resource_procurement",
+          provider: "cloud", amountCents: 0, unit: "usd_cent",
+          request: {
+            resourceId: resource.id,
+            externalId: kind === "financial_external"
+              ? "foreign-remote-id" : resource.externalId,
+            operation: isLegacy ? "provision" : "cancel",
+            providerAccountId: "controlled-supplier-account",
+            ...(canonicalContract ? { contractId: canonicalContract } : {}),
+          },
+          evidence: ["Durable fixture identity for an authorized operation."],
+        });
+        claimFinancialEffectDispatch(db, operationKey);
+
+        // Simulate an obsolete or modified post-retirement snapshot while
+        // leaving the P-030 journal untouched.
+        lifecycle.resources.applyMutation(resource.id, {
+          metadata: {
+            retentionBillingLifecycleQuotes: [{
+              operationKey,
+              contractId: kind === "metadata_contract" ||
+                kind === "legacy_contract"
+                ? "foreign-contract-id" : "canonical-contract-001",
+              supplierCancellationStatus: "UNKNOWN",
+            }],
+            retentionBillingReconciliation: "unverified_after_resource_release",
+          },
+        }, "test", "stale supplier contract metadata fixture");
+
+        let reads = 0;
+        const result = await new EnvironmentRetentionCoordinator(
+          db, registry, lifecycle, () => async scope => {
+            reads++;
+            return {
+              ...scope,
+              source: "synthetic contract observer",
+              observedAt: new Date(Date.now() - 1000).toISOString(),
+              validUntil: new Date(Date.now() + 120_000).toISOString(),
+              evidence: ["Supplier response fixture only."],
+              cancellation: "cancelled" as const,
+              autoRenewal: "disabled" as const,
+              finalInvoice: "finalized" as const,
+            };
+          },
+        ).sweep();
+        expect(reads).toBe(0);
+        expect(result.supplierObservations).toBe(0);
+        expect((lifecycle.resources.get(resource.id)!.metadata
+          .retentionBillingLifecycleQuotes as Array<Record<string, unknown>>)[0]
+          ?.supplierCancellationStatus).toBe("UNKNOWN");
+        expect(getFinancialEffectByOperationKey(db, operationKey)?.state)
+          .toBe("dispatching");
+      } finally {
+        db.close();
+      }
+    }
+  });
+
   it("discovers a later cancellation intent for an already-retired resource and authenticates its exact supplier contract", async () => {
     const db = createDb();
     try {
