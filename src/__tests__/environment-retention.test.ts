@@ -437,8 +437,10 @@ describe("EnvironmentRetentionCoordinator", () => {
           provider: "cloud", amountCents: 0, unit: "usd_cent",
           request: {
             resourceId: resource.id,
-            externalId: kind === "financial_external"
-              ? "foreign-remote-id" : resource.externalId,
+            ...(isLegacy ? {} : {
+              externalId: kind === "financial_external"
+                ? "foreign-remote-id" : resource.externalId,
+            }),
             operation: isLegacy ? "provision" : "cancel",
             providerAccountId: "controlled-supplier-account",
             ...(canonicalContract ? { contractId: canonicalContract } : {}),
