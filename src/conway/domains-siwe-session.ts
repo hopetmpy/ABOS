@@ -58,7 +58,8 @@ async function postAuth(path:
 
 async function signInEvm(
   wallet: TrustedEvmLoginSigner,
-  onVerifiedSession?: (token: string) => Promise<void>,
+  onVerifiedSession?: (token: string, account: ConwayDomainsAccountProof) => Promise<void>,
+  rethrowConsumerError = false,
 ): Promise<ConwayDomainsAccountProof> {
   // Use the same fail-closed response contract as the read-only supplier
   // identity helper; intentionally do not create or persist a JWT.
@@ -68,6 +69,7 @@ async function signInEvm(
   if (!wallet || !isAddress(wallet.address) ||
       typeof wallet.signMessage !== "function") return unknown();
 
+  let consumerStarted = false;
   try {
     const nonceData = await postAuth("/auth/nonce") as Record<string, unknown> | null;
     const nonce = nonceData?.nonce;
@@ -97,12 +99,17 @@ async function signInEvm(
       async () => access, wallet.address,
     );
     if (account.status === "wallet_match" && onVerifiedSession) {
-      await onVerifiedSession(access);
+      consumerStarted = true;
+      await onVerifiedSession(access, account);
     }
     return account;
   } catch {
-    // Do not expose nonce/JWT, SIWE signature, supplier error payloads or
-    // token-bearing network exception text to any agent/log.
+    // Do not suppress an uncertain provider effect raised by the trusted
+    // session consumer. The ordinary read-only callers still return UNKNOWN.
+    if (rethrowConsumerError && consumerStarted) {
+      throw new Error("Conway Domains verified-session external outcome UNKNOWN; do not replay.");
+    }
+    // Do not expose nonce/JWT, SIWE signature or supplier error payloads.
     return unknown();
   }
 }
@@ -251,4 +258,25 @@ export async function observeConwayControlledSolanaDns(
   return observation ?? observeConwayOwnedDomainDns(
     async () => null, wallet?.address ?? "", "solana", domain,
   );
+}
+
+/**
+ * Trusted host-only transport hook: borrow one already verified EVM login
+ * session without persisting or exporting a JWT to the model. Crucially,
+ * errors AFTER callback entry propagate as UNKNOWN rather than being
+ * mislabeled "no provider dispatch".
+ */
+export async function withVerifiedConwayDomainsEvmSession<T>(
+  wallet: TrustedEvmLoginSigner,
+  consumer: (token: string, account: ConwayDomainsAccountProof) => Promise<T>,
+): Promise<{ account: ConwayDomainsAccountProof; value: T } | null> {
+  let value: T | undefined;
+  let consumed = false;
+  const account = await signInEvm(wallet, async (token, proof) => {
+    value = await consumer(token, proof);
+    consumed = true;
+  }, true);
+  return account.status === "wallet_match" && consumed
+    ? { account, value: value as T }
+    : null;
 }
