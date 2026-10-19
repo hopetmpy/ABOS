@@ -23,6 +23,10 @@ import {
   observeConwayDomainsOwnedResources,
   type ConwayDomainsOwnedResourceSnapshot,
 } from "./domains-owned-inventory.js";
+import {
+  observeConwayOwnedDomainDns,
+  type ConwayOwnedDnsObservation,
+} from "./domains-dns-observation.js";
 
 export interface TrustedEvmLoginSigner {
   /** Pre-existing ABOS wallet supplied by trusted host, never model args. */
@@ -215,4 +219,36 @@ export async function observeConwayDomainsControlledSolanaResources(
     );
   });
   return observation ?? unknownInventory(wallet?.address ?? "", "solana", account);
+}
+
+/**
+ * One wallet-owned session for DNS observation. No persistent JWT and no
+ * independent resource-usable claim; the provider's DNS view may be cached.
+ */
+export async function observeConwayControlledEvmDns(
+  wallet: TrustedEvmLoginSigner, domain: string,
+): Promise<ConwayOwnedDnsObservation> {
+  let observation: ConwayOwnedDnsObservation | null = null;
+  await signInEvm(wallet, async token => {
+    observation = await observeConwayOwnedDomainDns(
+      async () => token, wallet.address, "evm", domain,
+    );
+  });
+  return observation ?? observeConwayOwnedDomainDns(
+    async () => null, wallet?.address ?? "", "evm", domain,
+  );
+}
+
+export async function observeConwayControlledSolanaDns(
+  wallet: ChainIdentity, domain: string,
+): Promise<ConwayOwnedDnsObservation> {
+  let observation: ConwayOwnedDnsObservation | null = null;
+  await signInSolana(wallet, async token => {
+    observation = await observeConwayOwnedDomainDns(
+      async () => token, wallet.address, "solana", domain,
+    );
+  });
+  return observation ?? observeConwayOwnedDomainDns(
+    async () => null, wallet?.address ?? "", "solana", domain,
+  );
 }
