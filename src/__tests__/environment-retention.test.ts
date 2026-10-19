@@ -411,7 +411,7 @@ describe("EnvironmentRetentionCoordinator", () => {
     // A saved retention quote is mutable resource metadata, not the
     // canonical supplier contract. A forged/stale entry must never trigger
     // a read of another external resource or persist a false cancellation.
-    for (const kind of ["metadata_contract", "financial_external", "legacy_contract"] as const) {
+    for (const kind of ["metadata_contract", "financial_external", "legacy_contract", "duplicate_contract"] as const) {
       const db = createDb();
       try {
         const goal = "goal-retired-canonical-" + kind;
@@ -451,13 +451,20 @@ describe("EnvironmentRetentionCoordinator", () => {
         // leaving the P-030 journal untouched.
         lifecycle.resources.applyMutation(resource.id, {
           metadata: {
-            retentionBillingLifecycleQuotes: [{
-              operationKey,
-              contractId: kind === "metadata_contract" ||
-                kind === "legacy_contract"
-                ? "foreign-contract-id" : "canonical-contract-001",
-              supplierCancellationStatus: "UNKNOWN",
-            }],
+            retentionBillingLifecycleQuotes: [
+              {
+                operationKey,
+                contractId: kind === "metadata_contract" ||
+                  kind === "legacy_contract"
+                  ? "foreign-contract-id" : "canonical-contract-001",
+                supplierCancellationStatus: "UNKNOWN",
+              },
+              ...(kind === "duplicate_contract" ? [{
+                operationKey,
+                contractId: "canonical-contract-001",
+                supplierCancellationStatus: "cancelled",
+              }] : []),
+            ],
             retentionBillingReconciliation: "unverified_after_resource_release",
           },
         }, "test", "stale supplier contract metadata fixture");
@@ -480,9 +487,39 @@ describe("EnvironmentRetentionCoordinator", () => {
         ).sweep();
         expect(reads).toBe(0);
         expect(result.supplierObservations).toBe(0);
-        expect((lifecycle.resources.get(resource.id)!.metadata
-          .retentionBillingLifecycleQuotes as Array<Record<string, unknown>>)[0]
-          ?.supplierCancellationStatus).toBe("UNKNOWN");
+        const retained = lifecycle.resources.get(resource.id)!.metadata
+          .retentionBillingLifecycleQuotes as Array<Record<string, unknown>>;
+        expect(retained[0]?.supplierCancellationStatus).toBe("UNKNOWN");
+        if (kind === "metadata_contract" || kind === "duplicate_contract") {
+          // A forged identity or duplicate does not strand autonomous
+          // reconciliation forever: canonical P-030 repairs it as UNKNOWN.
+          expect(retained).toHaveLength(1);
+          expect(retained[0]?.contractId).toBe("canonical-contract-001");
+          let recoveredReads = 0;
+          const restarted = new EnvironmentLifecycleManager(
+            registry, new EnvironmentResourceStore(db),
+          );
+          const recovered = await new EnvironmentRetentionCoordinator(
+            db, registry, restarted, () => async scope => {
+              recoveredReads++;
+              return {
+                ...scope, source: "trusted synthetic provider read",
+                observedAt: new Date(Date.now() - 1000).toISOString(),
+                validUntil: new Date(Date.now() + 120_000).toISOString(),
+                evidence: ["Restarted read, still no financial settlement."],
+                cancellation: "cancelled" as const,
+                autoRenewal: "disabled" as const,
+                finalInvoice: "outstanding" as const,
+              };
+            },
+          ).sweep();
+          expect(recoveredReads).toBe(1);
+          expect(recovered.supplierObservations).toBe(1);
+          const refreshed = restarted.resources.get(resource.id)!.metadata
+            .retentionBillingLifecycleQuotes as Array<Record<string, unknown>>;
+          expect(refreshed[0]?.supplierCancellationStatus).toBe("cancelled");
+          expect(refreshed[0]?.supplierFinalInvoiceStatus).toBe("outstanding");
+        }
         expect(getFinancialEffectByOperationKey(db, operationKey)?.state)
           .toBe("dispatching");
       } finally {
