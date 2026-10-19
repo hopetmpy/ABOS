@@ -143,6 +143,62 @@ describe("P-031 agent environment_procurement_execute runtime route", () => {
     } finally { db.close(); }
   });
 
+  it("supports trusted external suppliers without an EnvironmentRegistry compute provider, while binding payee and exact body hash", async () => {
+    const { db, registry, scope: original, args } = setup();
+    try {
+      const scope: ProviderProcurementScope = {
+        ...original, provider: "supplier-native",
+        paymentRecipient: "0x1111111111111111111111111111111111111111",
+        requestBodySha256: "a".repeat(64),
+      };
+      const quote = createScenario();
+      quote.provider = scope.provider;
+      const decision = exactP010Decision(db, scope, quote);
+      const dispatch = vi.fn(async () => ({
+        status: "pending" as const,
+        evidence: ["Synthetic supplier owner; no charge was sent."],
+      }));
+      const deps: ProviderProcurementExecutionDependencies = {
+        observeAuthenticatedEconomics: async () => quote,
+        dispatch,
+      };
+      const tool = createEnvironmentTools(registry, {
+        getTrustedProcurementDependencies: id =>
+          id === "supplier-native" ? deps : null,
+      }).find(x => x.name === "environment_procurement_execute")!;
+      const input = {
+        ...args, provider: scope.provider,
+        payment_recipient: scope.paymentRecipient,
+        request_body_sha256: scope.requestBodySha256,
+        policy_decision_id: decision,
+      };
+      const accepted = JSON.parse(await tool.execute(input, { db } as any));
+      expect(accepted.status).toBe("pending");
+      expect(accepted.financialEffectState).toBe("pending");
+      expect(dispatch).toHaveBeenCalledTimes(1);
+      const effect = db.raw.prepare(
+        "SELECT recipient, request_json FROM financial_effects WHERE operation_key = ?",
+      ).get(scope.operationKey) as { recipient: string; request_json: string };
+      expect(effect.recipient).toBe(scope.paymentRecipient);
+      expect(JSON.parse(effect.request_json).requestBodySha256).toBe(scope.requestBodySha256);
+
+      const changed = await tool.execute({
+        ...input, payment_recipient: "0x2222222222222222222222222222222222222222",
+      }, { db } as any);
+      expect(changed).toMatch(/BLOCKED\/UNKNOWN/);
+      const changedBody = await tool.execute({
+        ...input, request_body_sha256: "b".repeat(64),
+      }, { db } as any);
+      expect(changedBody).toMatch(/BLOCKED\/UNKNOWN/);
+      expect(dispatch).toHaveBeenCalledTimes(1);
+
+      const malformed = await tool.execute({
+        ...input, request_body_sha256: "unknown",
+      }, { db } as any);
+      expect(malformed).toContain("malformed exact supplier request hash");
+    } finally { db.close(); }
+  });
+
   it("runs the real P-025/P-010/P-030 economic engine through agent tool with a trusted synthetic adapter, then refuses duplicate effects", async () => {
     const { db, registry, scope, args } = setup();
     try {
