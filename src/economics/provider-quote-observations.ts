@@ -21,6 +21,7 @@ export interface ProviderQuoteRecord extends ProviderQuoteScope {
   observedAt: string | null;
   candidateFingerprint: string | null;
   amountCents: number | null;
+  amountMicroUsdc: string | null;
   paymentRecipient: string | null;
   network: string | null;
   asset: string | null;
@@ -73,7 +74,7 @@ export function claimProviderQuoteObservation(
   const n = normalized(scope);
   const initial: ProviderQuoteRecord = {
     ...n, status:"request_claimed", observedAt:null,
-    candidateFingerprint:null, amountCents:null, paymentRecipient:null,
+    candidateFingerprint:null, amountCents:null, amountMicroUsdc:null, paymentRecipient:null,
     network:null, asset:null, noPaymentHeader:true,
     financialEffectEstablished:false, paymentDispatched:false,
   };
@@ -88,6 +89,7 @@ export function confirmProviderQuoteObservation(
   db: Database.Database, scope: ProviderQuoteScope,
   observation: {
     candidateFingerprint: string; amountCents: number;
+    amountMicroUsdc: string;
     paymentRecipient: string; network: string; asset: string;
   },
 ): ProviderQuoteRecord | null {
@@ -95,6 +97,10 @@ export function confirmProviderQuoteObservation(
   if (!HASH.test(observation.candidateFingerprint) ||
       !Number.isSafeInteger(observation.amountCents) ||
       observation.amountCents <= 0 ||
+      typeof observation.amountMicroUsdc !== "string" ||
+      !/^[1-9][0-9]{0,40}$/.test(observation.amountMicroUsdc) ||
+      (BigInt(observation.amountMicroUsdc) + 9999n) / 10000n !==
+        BigInt(observation.amountCents) ||
       typeof observation.paymentRecipient !== "string" ||
       !observation.paymentRecipient.trim() ||
       typeof observation.network !== "string" || !observation.network.trim() ||
@@ -107,6 +113,7 @@ export function confirmProviderQuoteObservation(
     ...prior, status:"observed", observedAt:new Date().toISOString(),
     candidateFingerprint:observation.candidateFingerprint,
     amountCents:observation.amountCents,
+    amountMicroUsdc:observation.amountMicroUsdc,
     paymentRecipient:observation.paymentRecipient,
     network:observation.network, asset:observation.asset,
   };
