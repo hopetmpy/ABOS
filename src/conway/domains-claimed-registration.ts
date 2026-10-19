@@ -39,9 +39,14 @@ const REGISTER_URL = "https://api.conway.domains/domains/register";
 /** Only this module creates a no-payment marker after observing HTTP 402. */
 class RegistrationNoPaidDispatchError extends Error {
   readonly externalEffectNotDispatched = true;
-  constructor() {
+  /** Informational digest only; never implies supplier acceptance or funds. */
+  readonly observedQuoteCandidateFingerprint?: string;
+  constructor(fingerprint?: string | null) {
     super("Conway Domains registration did not submit an x402 payment.");
     this.name = "RegistrationNoPaidDispatchError";
+    if (typeof fingerprint === "string" && /^[a-f0-9]{64}$/.test(fingerprint)) {
+      this.observedQuoteCandidateFingerprint = fingerprint;
+    }
   }
 }
 
@@ -212,12 +217,12 @@ export function createConwayDomainsRegistrationDependencies(
             // Supplier definitely asked for payment; no X-PAYMENT was sent.
             // Quotes/prices diverged, so reject this reviewed operation and
             // require a fresh P-010/P-030 economic decision.
-            throw new RegistrationNoPaidDispatchError();
+            throw new RegistrationNoPaidDispatchError(candidate.candidateFingerprint);
           }
           if (!source.dispatchAuthorizedPayment) {
             // Quote-only source path: leave all financial operations to the
             // next fully reviewed attempt; no paid POST in this execution.
-            throw new RegistrationNoPaidDispatchError();
+            throw new RegistrationNoPaidDispatchError(candidate.candidateFingerprint);
           }
           // Only a trusted host can supply x402 signing/paid transport. The
           // callback must bind both exact request bytes and candidate price.
