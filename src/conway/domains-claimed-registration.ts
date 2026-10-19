@@ -223,9 +223,23 @@ export function createConwayDomainsRegistrationDependencies(
           // callback must bind both exact request bytes and candidate price.
           // Any error after calling it is always UNKNOWN (never safe retry).
           try {
-            return await source.dispatchAuthorizedPayment({
+            const outcome = await source.dispatchAuthorizedPayment({
               scope, authorized, account, token, requestBody, candidate,
             });
+            if (!outcome || !["usable", "pending", "rejected", "unknown"]
+                .includes(outcome.status) ||
+                !Array.isArray(outcome.evidence) ||
+                outcome.evidence.some(entry =>
+                  typeof entry !== "string" || entry.includes(token)) ||
+                (typeof outcome.providerEffectId === "string" &&
+                  outcome.providerEffectId.includes(token)) ||
+                (typeof outcome.providerStatus === "string" &&
+                  outcome.providerStatus.includes(token))) {
+              // An already paid host callback may have succeeded remotely:
+              // malformed/secret-bearing receipt is UNKNOWN, not rejection.
+              throw new Error("Untrusted paid registration receipt.");
+            }
+            return outcome;
           } catch {
             throw new Error("Conway Domains paid registration outcome UNKNOWN.");
           }
