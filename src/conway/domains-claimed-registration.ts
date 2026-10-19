@@ -124,10 +124,8 @@ export function createConwayDomainsRegistrationDependencies(
   db: Database.Database,
   source: ConwayDomainsRegistrationHostSource,
 ): ProviderProcurementExecutionDependencies {
-  // Cross-call single-use defense in the current host; the durable P-030
-  // operation key stops replay after restart through its canonical executor.
-  const attempted = new Set<string>();
-
+  // P-030 owns all replay protection. Do not invent an in-memory second
+  // authority: an atomic durable subdispatch claim guards the actual POST.
   return {
     issuePolicyDecision: source.issuePolicyDecision,
     observeAuthenticatedEconomics: source.observeAuthenticatedEconomics,
@@ -149,11 +147,6 @@ export function createConwayDomainsRegistrationDependencies(
         }
         throw new RegistrationNoPaidDispatchError();
       }
-      if (attempted.has(scope.operationKey)) {
-        // Even direct misuse of a cached dispatcher must not replay a POST.
-        throw new Error("Conway Domains operation already attempted; reconcile provider effect before retry.");
-      }
-      attempted.add(scope.operationKey); // before the first async boundary
       let planned: ConwayDomainsRegistrationBody | null = null;
       try {
         planned = normalizeConwayDomainsRegistrationBody(
