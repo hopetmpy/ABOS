@@ -7,6 +7,12 @@ import {
   prepareFinancialEffect,
 } from "../economics/financial-effects.js";
 import { createConwayDomainsRegistrationDependencies } from "../conway/domains-claimed-registration.js";
+import {
+  claimProviderQuoteObservation,
+  confirmProviderQuoteObservation,
+} from "../economics/provider-quote-observations.js";
+import { bindConwayDomainsRegistration402 } from "../conway/domains-order-binding.js";
+import type { ConwayDomainsAccountProof } from "../conway/domains-account-proof.js";
 import type { ProviderProcurementScope } from "../economics/provider-procurement-execution.js";
 
 const wallet = "0x1111111111111111111111111111111111111111";
@@ -48,6 +54,38 @@ function setup(claim = true) {
     requestBodySha256: createHash("sha256")
       .update(JSON.stringify(body), "utf8").digest("hex"),
   };
+  const candidate = bindConwayDomainsRegistration402({
+    account: {
+      provider:"conway-domains", status:"wallet_match",
+      providerAccountId:"account-controlled", walletAddress:wallet,
+      walletType:"evm", purchaseAuthority:"not_established",
+      financingUnit:null, evidence:["Synthetic account match fixture."],
+    } satisfies ConwayDomainsAccountProof,
+    expectedControlledWalletAddress:wallet,
+    expectedControlledWalletType:"evm",
+    plannedRequest:body, submittedBody:JSON.stringify(body),
+    httpStatus:402, payload:quote,
+  });
+  if(candidate.status!=="scoped_candidate" || !candidate.requirement ||
+      !candidate.candidateFingerprint) {
+    throw new Error("Synthetic x402 order fixture is malformed");
+  }
+  scope.quoteCandidateFingerprint=candidate.candidateFingerprint;
+  scope.paymentAmountMicroUsdc=candidate.requirement.amountMicroUsdc;
+  scope.controlledWalletAddress=wallet;
+  const observedScope={
+    provider:"conway-domains",accountId:scope.providerAccountId,
+    walletAddress:wallet,requestBodySha256:scope.requestBodySha256!,
+  };
+  if (!claimProviderQuoteObservation(db.raw,observedScope).claimed ||
+      !confirmProviderQuoteObservation(db.raw,observedScope,{
+        candidateFingerprint:candidate.candidateFingerprint,
+        amountCents:candidate.requirement.policyAmountCents,
+        amountMicroUsdc:candidate.requirement.amountMicroUsdc,
+        paymentRecipient:candidate.requirement.payToAddress,
+        network:candidate.requirement.network,
+        asset:candidate.requirement.usdcAddress,
+      })) throw new Error("Could not persist synthetic supplier quote fixture.");
   const authorized = {
     policyDecisionId: "persisted-policy-fixture",
     amountCents: 4375, unit: "usdc_cent",
