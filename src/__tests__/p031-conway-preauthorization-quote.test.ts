@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestDb } from "./mocks.js";
 import { createBuiltinTools } from "../agent/tools.js";
+import { requireSourceOwnedConwayPrequote, type ProviderProcurementScope } from "../economics/provider-procurement-execution.js";
 import { observeConwayDomainsPreauthorizationQuote } from
   "../conway/domains-preauthorization-quote.js";
 import {
@@ -186,6 +187,41 @@ describe("P-031 pre-policy authentic quote bootstrap and durable P-030 observati
     } as any));
     expect(res.status).toBe("unavailable");
     expect(fixture.registerCalls()).toBe(0);
+  });
+
+  it("refuses same-cent atomic amount changes and stale quote after the purchase-review window",async()=>{
+    const db=database(),fixture=supplier({amount:"43749999"});
+    vi.stubGlobal("fetch",fixture.fetcher);
+    const observation=await observeConwayDomainsPreauthorizationQuote(
+      db.raw,signer,"account-a",registration);
+    expect(observation.status).toBe("observed");
+    const q=observation.quote!;
+    const scope:ProviderProcurementScope={
+      operationKey:"domain:quote:review",operation:"provision",
+      provider:"conway-domains",providerAccountId:q.accountId,
+      unit:"usdc_cent",goalId:"goal",taskId:"task",pathId:"path",
+      resourceId:"domain-1",region:"global",resourceShape:"domain",
+      requestBodySha256:q.requestBodySha256,
+      paymentRecipient:q.paymentRecipient,
+      paymentAmountMicroUsdc:q.amountMicroUsdc,
+      quoteCandidateFingerprint:q.candidateFingerprint,
+      controlledWalletAddress:q.walletAddress,
+    };
+    const observedAt=new Date(q.observedAt!);
+    expect(requireSourceOwnedConwayPrequote(
+      db.raw,scope,q.amountCents!,observedAt)).toHaveLength(1);
+    // 43,749,999 and 43,750,000 both round up to 4,375 cents:
+    // the exact 6-decimal USDC amount is still financially meaningful.
+    expect(()=>requireSourceOwnedConwayPrequote(
+      db.raw,{...scope,paymentAmountMicroUsdc:"43750000"},
+      q.amountCents!,observedAt)).toThrow(/missing, changed or too old/);
+    expect(()=>requireSourceOwnedConwayPrequote(
+      db.raw,{...scope,paymentRecipient:address},
+      q.amountCents!,observedAt)).toThrow(/missing, changed or too old/);
+    expect(()=>requireSourceOwnedConwayPrequote(
+      db.raw,scope,q.amountCents!,
+      new Date(observedAt.getTime()+120_001))).toThrow(/too old/);
+    expect(fixture.registerCalls()).toBe(1);
   });
 
 });
