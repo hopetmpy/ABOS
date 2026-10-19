@@ -372,7 +372,15 @@ export class EnvironmentRetentionCoordinator {
             // A retained quote is a snapshot, not a second authority for
             // supplier identity. Cross-check the durable P-030 operation with
             // the exact resource that actually left P-018 before any read.
-            effect.request.externalId !== resource.externalId ||
+            // Legacy initial provisions predate a P-030 externalId field:
+            // preserve their existing owner/operationKey observation path,
+            // but never accept a conflicting explicit identity. Contract
+            // renew/cancel MUST carry the exact external supplier identity.
+            (effect.request.externalId != null &&
+              effect.request.externalId !== resource.externalId) ||
+            ((effect.request.operation === "renew" ||
+              effect.request.operation === "cancel") &&
+              effect.request.externalId !== resource.externalId) ||
             !["dispatching", "pending", "unknown", "reconciliation_required", "completed"]
               .includes(effect.state)) continue;
         const canonicalContract = typeof effect.request.contractId === "string" &&
@@ -444,7 +452,11 @@ export class EnvironmentRetentionCoordinator {
         if (!latestEffect || latestEffect.effectKind !== "provider_resource_procurement" ||
             latestEffect.provider !== scope.provider ||
             latestEffect.request.resourceId !== scope.resourceId ||
-            latestEffect.request.externalId !== scope.externalResourceId ||
+            (latestEffect.request.externalId != null &&
+              latestEffect.request.externalId !== scope.externalResourceId) ||
+            ((latestEffect.request.operation === "renew" ||
+              latestEffect.request.operation === "cancel") &&
+              latestEffect.request.externalId !== scope.externalResourceId) ||
             latestEffect.request.providerAccountId !== scope.providerAccountId ||
             ((typeof latestEffect.request.contractId === "string" &&
               latestEffect.request.contractId.trim()) || null) !== canonicalContract ||
