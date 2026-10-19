@@ -2659,6 +2659,59 @@ Model: ${ctx.inference.getDefaultModel()}
       },
     },
     {
+      name: "conway_domain_preauthorization_quote",
+      description:
+        "Obtain the exact Conway Domains x402 requirement for one proposed " +
+        "registration, BEFORE purchase authorization. The supplier protocol " +
+        "uses a POST without X-PAYMENT: it can have uncertain provider effects. " +
+        "The host must own the EVM wallet, verify the provider account and " +
+        "durably claim this one observation before network I/O. This is not " +
+        "a purchase, wallet balance, contract or x402 signing tool.",
+      category: "conway",
+      riskLevel: "dangerous",
+      parameters: {
+        type: "object",
+        properties: {
+          provider_account_id: { type: "string", description: "Expected supplier account ID; verified against host-signed /auth/me." },
+          domain: { type: "string", description: "Exact lowercase ASCII domain to register." },
+          years: { type: "number", description: "Registration term, 1-10 years." },
+          privacy: { type: "boolean", description: "WHOIS privacy requested." },
+          nameservers: { type: "array", items: { type: "string" }, description: "Optional 2-13 ordered custom nameservers." },
+        },
+        required: ["provider_account_id", "domain", "years", "privacy"],
+      },
+      execute: async (args, ctx) => {
+        const w = ctx.identity.account;
+        if (ctx.identity.chainType !== "evm" ||
+            typeof ctx.identity.address !== "string" ||
+            !w || typeof w.address !== "string" ||
+            w.address.toLowerCase() !== ctx.identity.address.toLowerCase() ||
+            typeof w.signMessage !== "function") {
+          return JSON.stringify({
+            status:"unavailable", financialEffectPrepared:false,
+            paymentAuthorized:false, paymentDispatched:false,
+            evidence:["Matching host EVM wallet is not available; no quote POST."],
+          });
+        }
+        const account = typeof args.provider_account_id === "string"
+          ? args.provider_account_id.trim() : "";
+        const registration = {
+          domain:args.domain, years:args.years, privacy:args.privacy,
+          ...(args.nameservers !== undefined
+            ? {nameservers:args.nameservers} : {}),
+        };
+        const { observeConwayDomainsPreauthorizationQuote } =
+          await import("../conway/domains-preauthorization-quote.js");
+        const result = await observeConwayDomainsPreauthorizationQuote(
+          ctx.db.raw, {
+            address:w.address,
+            signMessage:({message})=>w.signMessage({message}),
+          }, account, registration,
+        );
+        return JSON.stringify(result,null,2);
+      },
+    },
+    {
       name: "conway_domains_owned_resources",
       description:
         "Use the agent's already-controlled EVM or Solana wallet to authenticate " +
