@@ -37,6 +37,13 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
 
+## P-031 — real-order x402 quote BEFORE purchase policy, source macro (2026-10-19)
+
+- **SOURCE IMPLEMENTED / E3 PHYSICAL PENDING:** New `conway_domain_preauthorization_quote` agent tool uses only matching host-owned EVM signer, verified provider `/auth/me`, and a durable P-030 `kv` quote-observation claim to obtain the exact `POST /domains/register` **unsigned 402 before** any P-010 approval or P-030 financial effect. Provider quote records store atomic micro-USDC, cents, payee, asset, account/wallet/body hash and candidate fingerprint; no keys/JWT, money, signed X-PAYMENT or automatic purchase.
+- **CONTINUOUS AUTHORITY:** P-010 policy args and P-030 financial replay now bind the source-owned quote fingerprint, exact amount in micro-USDC and host wallet. P-030 rejects foreign/stale/inexact quote before policy issuance **and again** in SQLite financial dispatch claim. Domain dispatcher revalidates exact 402 and payment amount before calling optional trusted host payer. Observed unsigned 402 remains no paid dispatch; 202/timeout remains UNKNOWN and never replayed blindly.
+- **AUTONOMOUS BUT RECONCILABLE:** A previously observed no-payment 402 can be re-quoted after the local 120s review window with archived prior evidence; UNKNOWN quote and pending/completed acquisition cannot be re-POSTed. The 120s interval is not a provider contractual validity guarantee.
+- **TESTS SOURCE ONLY:** added quote bootstrap/foreign wallet/atomic amount/expiry/requote/SQLite restart/entire agent→P010→P030→supplier synthetic journey; the unified `p031-lifecycle-acceptance` now has **36** files. **NOT YET EXECUTED** for this source. Prior `71227b30` 161/161 E3 is historical; no LIVE/Actions, main unmerged. Audit `ProjectOps/evidence/P-031/audits/p031-preauthorization-quote-source-20261019.md`; P-031 EN_EJECUCIÓN, P-032 PARCIAL, E5/E6 P-005. Continue source discrimination then ONE grouped Codex acceptance.
+
 ## P-031 — authenticated claimed Domains 402 + canonical P-030 request CAS (2026-10-19)
 
 - **MACRO SOURCE ADVANCED / PHYSICAL PENDING:** The existing P-030/policy scope now records exact x402 recipient `paymentRecipient` and `requestBodySha256` and rejects replay if either differs. The new `src/conway/domains-claimed-registration.ts` adapts a trusted host-owned SIWE login + `/auth/me` to one unsigned provider `POST /domains/register` under an already claimed P-010/P-030 operation; a documented 402 must match account, body, exact approved amount and payee before the OPTIONAL trusted host paid callback can be invoked. No model-supplied JWT/payment signature and no default purchase.
