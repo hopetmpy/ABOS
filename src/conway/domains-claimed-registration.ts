@@ -140,7 +140,13 @@ export function createConwayDomainsRegistrationDependencies(
           scope.unit !== "usdc_cent" ||
           !isAddress(source.wallet?.address ?? "") ||
           !hasClaimedExactIntent(db, scope, authorized)) {
-        // The host has not sent any registration request yet.
+        const prior = getFinancialEffectByOperationKey(db, scope.operationKey);
+        if (prior && !["prepared", "dispatching"].includes(prior.state)) {
+          // The canonical financial journal already records an externally
+          // unresolved or finalized attempt. Never convert it to a fresh
+          // "no dispatch" outcome just because a new adapter instance exists.
+          throw new Error("Prior supplier effect requires reconciliation; no registration replay.");
+        }
         throw new RegistrationNoPaidDispatchError();
       }
       if (attempted.has(scope.operationKey)) {
