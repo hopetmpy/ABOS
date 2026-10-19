@@ -49,15 +49,10 @@ export function requireSourceOwnedConwayPrequote(
   quotedPurchaseCents: number,
   now: Date,
 ): string[] {
-  const fields = [scope.quoteCandidateFingerprint, scope.paymentAmountMicroUsdc,
-    scope.controlledWalletAddress];
   // Every Conway Domains provision can cause an irreversible x402 payment;
-  // missing prequote fields are NOT an opt-out. Other provider operations
-  // retain their own source-specific procurement contracts.
+  // missing prequote fields are NOT an opt-out. Do not prescribe Conway's
+  // exact USDC/402 format to unrelated trusted supplier adapters.
   if (scope.provider !== "conway-domains" || scope.operation !== "provision") {
-    if (fields.some(x => x != null)) {
-      throw new Error("P-031 supplier quote belongs to a different provider or operation.");
-    }
     return [];
   }
   if (scope.unit !== "usdc_cent" ||
