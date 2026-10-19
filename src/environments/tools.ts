@@ -284,6 +284,9 @@ export function createEnvironmentTools(
         contract_id: { type: "string", description: "Exact supplier contract ID required for renew/cancel; host must independently verify the contract." },
         payment_recipient: { type: "string", description: "Exact provider payee/recipient already reviewed by P-010, NOT a wallet-signing permission." },
         request_body_sha256: { type: "string", description: "SHA-256 of the exact provider operation body already reviewed by P-010; model value alone proves nothing." },
+        quote_candidate_fingerprint: { type: "string", description: "P-030 observed exact 402 candidate fingerprint; not purchase authority." },
+        payment_amount_micro_usdc: { type: "string", description: "Exact atomic USDC amount from signed-host 402 observation; no rounding." },
+        controlled_wallet_address: { type: "string", description: "Existing host-controlled EVM wallet matching the quote; model input alone proves no control." },
         policy_decision_id: { type: "string", description: "Optional existing exact P-010 receipt; otherwise a trusted host P-010 issuer must produce the decision after the verified quote." },
       },
       required: [
@@ -336,6 +339,22 @@ export function createEnvironmentTools(
             !/^[a-f0-9]{64}$/.test(args.request_body_sha256))) {
         return "BLOCKED: malformed exact supplier request hash.";
       }
+      if (args.quote_candidate_fingerprint !== undefined &&
+          (typeof args.quote_candidate_fingerprint !== "string" ||
+            !/^[a-f0-9]{64}$/.test(args.quote_candidate_fingerprint))) {
+        return "BLOCKED: malformed supplier quote fingerprint.";
+      }
+      if (args.payment_amount_micro_usdc !== undefined &&
+          (typeof args.payment_amount_micro_usdc !== "string" ||
+            !/^[1-9][0-9]{0,40}$/.test(args.payment_amount_micro_usdc))) {
+        return "BLOCKED: malformed atomic USDC quote amount.";
+      }
+      if (args.controlled_wallet_address !== undefined &&
+          (typeof args.controlled_wallet_address !== "string" ||
+            !args.controlled_wallet_address.trim() ||
+            args.controlled_wallet_address.length > 128)) {
+        return "BLOCKED: malformed controlled wallet identity.";
+      }
       let dependencies: ProviderProcurementExecutionDependencies | null = null;
       try {
         dependencies = options.getTrustedProcurementDependencies?.(provider, operation) ?? null;
@@ -370,6 +389,12 @@ export function createEnvironmentTools(
           { paymentRecipient: args.payment_recipient.trim() } : {}),
         ...(typeof args.request_body_sha256 === "string" ?
           { requestBodySha256: args.request_body_sha256 } : {}),
+        ...(typeof args.quote_candidate_fingerprint === "string" ?
+          { quoteCandidateFingerprint: args.quote_candidate_fingerprint } : {}),
+        ...(typeof args.payment_amount_micro_usdc === "string" ?
+          { paymentAmountMicroUsdc: args.payment_amount_micro_usdc } : {}),
+        ...(typeof args.controlled_wallet_address === "string" ?
+          { controlledWalletAddress: args.controlled_wallet_address.trim() } : {}),
       };
       try {
         const result = await executeReviewedProviderProcurement(context.db.raw, {
