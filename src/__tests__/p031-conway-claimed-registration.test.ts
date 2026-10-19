@@ -166,7 +166,7 @@ describe("P-031 registered-domain quote from claimed canonical financial dispatc
       .rejects.toMatchObject({ externalEffectNotDispatched: true });
     expect(provider.calls).toHaveLength(4);
     expect(provider.calls.filter(x => x.endsWith("/domains/register"))).toHaveLength(1);
-    await expect(deps.dispatch(scope, authorized)).rejects.toThrow(/already attempted/);
+    await expect(deps.dispatch(scope, authorized)).rejects.toThrow(/requires reconciliation/);
     expect(provider.calls).toHaveLength(4);
     expect(getFinancialEffectByOperationKey(db.raw, scope.operationKey)?.state)
       .toBe("unknown");
