@@ -37,6 +37,12 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
 
+## P-031 — payTo order binding physically verified, exact SHA (2026-10-18)
+
+- **INDEPENDENT GIT AUDIT / E3_SYNTHETIC_PASS:** Codex physical batch source `4aecb3fd78f83c0d5be500eeedb8b21da72bb391` → remote evidence `1665484349e61b8712f6eb48feec22adc66c0ae8` (one evidence-only commit adding 8 files), 7/7 independently recalculated SHA-256. ProjectOps integrity, evidence protocol **6/6**, typecheck, build and Vitest **155/155 in 13 files** PASS. Coverage: changed x402 `payTo` alters order fingerprint without changing amount or request-body SHA, as desired. Recorded in `ProjectOps/evidence/P-031/audits/4aecb3fd-order-recipient.md` and `ProjectOps/EVIDENCE.md`.
+- **BOUNDARY:** E3 simulation only; token/provider-native authenticated 402 provenance and ordered provider-side effect remain UNKNOWN. No purchases, LIVE or Actions. Older `0202f6de` PASS and `af5c6500` FAIL stay historical. No current evidence for P-031 DoD close or promotion to main.
+- **NEXT_ELIGIBLE_WORK:** discriminate trusted provider/host authenticated order-quote provenance versus a raw 402 supplied by caller, P-010/P-030 idempotent economic claim and P-018 usability/recurring contract. Avoid second ledger or hidden registration POST. P-031 EN_EJECUCIÓN, P-032 PARCIAL; E5/E6 belong P-005.
+
 ## P-031 — exact-order x402 candidate E3 verified; payTo regression expanded (2026-10-18)
 
 - **GIT_AUDITED / E3_SYNTHETIC_PASS:** Codex physical runner tested exact source `0202f6de9e19ab3388e7b0211eb27793d74ea579`, evidence `fd39843247ecd914291881b97689fc75fc9d86b2` in a single evidence-only commit (8 files); independent content SHA-256 **7/7**. ProjectOps integrity, evidence gate **6/6**, typecheck, build, and Vitest **155/155 in 13/13 files** PASS, no LIVE/Actions. Independent audit `ProjectOps/evidence/P-031/audits/0202f6de-order-candidate.md` indexed in `ProjectOps/EVIDENCE.md`.
