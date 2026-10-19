@@ -369,8 +369,26 @@ export class EnvironmentRetentionCoordinator {
         if (!effect || effect.effectKind !== "provider_resource_procurement" ||
             effect.provider !== resource.provider ||
             effect.request.resourceId !== resource.id ||
+            // A retained quote is a snapshot, not a second authority for
+            // supplier identity. Cross-check the durable P-030 operation with
+            // the exact resource that actually left P-018 before any read.
+            effect.request.externalId !== resource.externalId ||
             !["dispatching", "pending", "unknown", "reconciliation_required", "completed"]
               .includes(effect.state)) continue;
+        const canonicalContract = typeof effect.request.contractId === "string" &&
+          effect.request.contractId.trim() ? effect.request.contractId : null;
+        const retainedContract = typeof item.contractId === "string" &&
+          item.contractId.trim() ? item.contractId : null;
+        const isContractAction = effect.request.operation === "renew" ||
+          effect.request.operation === "cancel";
+        if ((isContractAction && (!canonicalContract ||
+              retainedContract !== canonicalContract)) ||
+            (retainedContract && retainedContract !== canonicalContract)) {
+          result.evidence.push(
+            "Retained supplier contract identity conflicts with P-030; no supplier read or financial change.",
+          );
+          continue;
+        }
         const account = effect.request.providerAccountId;
         if (typeof account !== "string" || !account.trim()) continue;
         const scope: TrustedSupplierContractScope = {
@@ -379,8 +397,8 @@ export class EnvironmentRetentionCoordinator {
           resourceId: resource.id,
           externalResourceId: resource.externalId,
           operationKey: effect.operationKey,
-          ...(typeof item.contractId === "string" && item.contractId.trim()
-            ? { contractId: item.contractId } : {}),
+          // Only the canonical P-030 request may name an exact contract.
+          ...(canonicalContract ? { contractId: canonicalContract } : {}),
         };
         let receipt: TrustedSupplierContractReceipt | null;
         try { receipt = await observer(scope); }
@@ -418,7 +436,20 @@ export class EnvironmentRetentionCoordinator {
         if (!current || current.status !== "terminated" ||
             current.metadata.retentionReleaseState !== "released" ||
             current.externalId !== scope.externalResourceId ||
+            current.provider !== scope.provider ||
             !Array.isArray(oldQuotes)) continue;
+        // A callback can take time; ensure it still matches the canonical
+        // operation, not merely an obsolete metadata copy.
+        const latestEffect = getFinancialEffectByOperationKey(this.db, scope.operationKey);
+        if (!latestEffect || latestEffect.effectKind !== "provider_resource_procurement" ||
+            latestEffect.provider !== scope.provider ||
+            latestEffect.request.resourceId !== scope.resourceId ||
+            latestEffect.request.externalId !== scope.externalResourceId ||
+            latestEffect.request.providerAccountId !== scope.providerAccountId ||
+            ((typeof latestEffect.request.contractId === "string" &&
+              latestEffect.request.contractId.trim()) || null) !== canonicalContract ||
+            !["dispatching", "pending", "unknown", "reconciliation_required", "completed"]
+              .includes(latestEffect.state)) continue;
         const prior = oldQuotes.find(x => x && typeof x === "object" &&
           x.operationKey === scope.operationKey);
         if (!prior) continue;
@@ -649,8 +680,8 @@ export class EnvironmentRetentionCoordinator {
           ? value : null;
       return {
         operationKey: effect.operationKey,
-        ...((effect.request.operation === "renew" || effect.request.operation === "cancel") &&
-          typeof effect.request.contractId === "string" && effect.request.contractId.trim()
+        ...(typeof effect.request.contractId === "string" &&
+          effect.request.contractId.trim()
           ? { contractId: effect.request.contractId } : {}),
         financialEffectState: effect.state,
         renewalQuoted: renewal,
