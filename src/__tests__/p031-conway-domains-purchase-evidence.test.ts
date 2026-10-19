@@ -360,16 +360,30 @@ describe("P-031 exact registration body/402 candidate binding (pure)", () => {
       ...validConwayDomains402,
       accepts: [{ ...validConwayDomains402.accepts[0], amount: "43760000" }],
     } });
+    const recipient = bindFixture({ payload: {
+      ...validConwayDomains402,
+      accepts: [{
+        ...validConwayDomains402.accepts[0],
+        payTo: "0x2222222222222222222222222222222222222222",
+      }],
+    } });
     const account = bindFixture({ account: {
       ...scopedEvmAccount, providerAccountId: "usr_owned_2",
     } });
     const spaced = bindFixture({
       submittedBody: JSON.stringify(proposedRegistration, null, 2),
     });
-    for (const candidate of [amount, account, spaced]) {
+    for (const candidate of [amount, recipient, account, spaced]) {
       expect(candidate.status).toBe("scoped_candidate");
       expect(candidate.candidateFingerprint).not.toBe(baseline.candidateFingerprint);
     }
+    // Changing only payTo must affect payment identity without changing
+    // the domain order, quoted amount or request-body hash.
+    expect(recipient.requirement?.amountMicroUsdc)
+      .toBe(baseline.requirement?.amountMicroUsdc);
+    expect(recipient.requestBodySha256).toBe(baseline.requestBodySha256);
+    expect(recipient.requirement?.payToAddress)
+      .not.toBe(baseline.requirement?.payToAddress);
     expect(spaced.request).toEqual(baseline.request);
     expect(spaced.requestBodySha256).not.toBe(baseline.requestBodySha256);
     expect(bindFixture().candidateFingerprint).toBe(baseline.candidateFingerprint);
