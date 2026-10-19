@@ -46,6 +46,7 @@ const PROFILES = Object.freeze({
         "src/__tests__/p031-conway-domains-siwe-session.test.ts",
         "src/__tests__/p031-conway-domains-purchase-evidence.test.ts",
         "src/__tests__/p031-conway-claimed-registration.test.ts",
+        "src/__tests__/p031-conway-preauthorization-quote.test.ts",
         "src/__tests__/p031-conway-secondary-procurement-gate.test.ts",
         "src/__tests__/p031-conway-billable-post-no-retry.test.ts",
         "src/__tests__/p031-conway-credit-history.test.ts",
