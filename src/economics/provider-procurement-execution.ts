@@ -43,7 +43,7 @@ import { isAddress } from "viem";
  * statement. Two-minute age is a conservative LOCAL review window, not a
  * claim that Conway contractually guarantees the quoted price.
  */
-function requireSourceOwnedConwayPrequote(
+export function requireSourceOwnedConwayPrequote(
   db: Database.Database,
   scope: ProviderProcurementScope,
   quotedPurchaseCents: number,
