@@ -18,6 +18,7 @@ import {
   claimFinancialEffectExternalRequest,
   getFinancialEffectByOperationKey,
 } from "../economics/financial-effects.js";
+import { getProviderQuoteObservation } from "../economics/provider-quote-observations.js";
 import type {
   ProviderProcurementExecutionDependencies,
   ProviderProcurementDispatchOutcome,
@@ -105,6 +106,9 @@ function hasClaimedExactIntent(
       effect.request.resourceShape !== scope.resourceShape ||
       effect.request.paymentRecipient !== scope.paymentRecipient ||
       effect.request.requestBodySha256 !== scope.requestBodySha256 ||
+      (effect.request.quoteCandidateFingerprint ?? null) !== (scope.quoteCandidateFingerprint ?? null) ||
+      (effect.request.paymentAmountMicroUsdc ?? null) !== (scope.paymentAmountMicroUsdc ?? null) ||
+      (effect.request.controlledWalletAddress ?? null) !== (scope.controlledWalletAddress ?? null) ||
       typeof scope.requestBodySha256 !== "string" ||
       !/^[a-f0-9]{64}$/.test(scope.requestBodySha256) ||
       typeof scope.paymentRecipient !== "string" ||
@@ -158,6 +162,22 @@ export function createConwayDomainsRegistrationDependencies(
       if (!planned) throw new RegistrationNoPaidDispatchError();
       const requestBody = JSON.stringify(planned);
       const bodySha = createHash("sha256").update(requestBody, "utf8").digest("hex");
+      if (scope.quoteCandidateFingerprint != null) {
+        const prequote = getProviderQuoteObservation(db, {
+          provider:"conway-domains", accountId:scope.providerAccountId,
+          walletAddress:source.wallet.address, requestBodySha256:bodySha,
+        });
+        if (!prequote || prequote.status !== "observed" ||
+            prequote.candidateFingerprint !== scope.quoteCandidateFingerprint ||
+            prequote.amountMicroUsdc !== scope.paymentAmountMicroUsdc ||
+            prequote.amountCents !== authorized.amountCents ||
+            prequote.paymentRecipient?.toLowerCase() !==
+              scope.paymentRecipient?.toLowerCase() ||
+            scope.controlledWalletAddress?.toLowerCase() !==
+              source.wallet.address.toLowerCase()) {
+          throw new RegistrationNoPaidDispatchError();
+        }
+      }
       if (bodySha !== scope.requestBodySha256) {
         throw new RegistrationNoPaidDispatchError();
       }
@@ -221,6 +241,10 @@ export function createConwayDomainsRegistrationDependencies(
               candidate.requestBodySha256 !== bodySha ||
               !candidate.requirement ||
               candidate.requirement.policyAmountCents !== authorized.amountCents ||
+              (scope.paymentAmountMicroUsdc != null &&
+                candidate.requirement.amountMicroUsdc !== scope.paymentAmountMicroUsdc) ||
+              (scope.quoteCandidateFingerprint != null &&
+                candidate.candidateFingerprint !== scope.quoteCandidateFingerprint) ||
               candidate.requirement.payToAddress.toLowerCase() !==
                 scope.paymentRecipient!.toLowerCase()) {
             // Supplier definitely asked for payment; no X-PAYMENT was sent.
