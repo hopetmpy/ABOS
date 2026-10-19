@@ -230,9 +230,8 @@ describe("P-031 registered-domain quote from claimed canonical financial dispatc
             } }
           : {}),
       });
-      await expect(deps.dispatch(scope, authorized)).rejects.toMatchObject({
-        externalEffectNotDispatched: undefined,
-      });
+      await expect(deps.dispatch(scope, authorized))
+        .rejects.toThrow(/outcome UNKNOWN|external effect UNKNOWN|do not replay/);
       expect(provider.calls).toHaveLength(4);
       vi.unstubAllGlobals();
     }
