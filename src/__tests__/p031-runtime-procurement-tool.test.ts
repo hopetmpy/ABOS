@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
+import { createConwayDomainsRegistrationDependencies } from "../conway/domains-claimed-registration.js";
+import { getFinancialEffectByOperationKey } from "../economics/financial-effects.js";
 import { AdaptiveStore } from "../intelligence/store.js";
 import { EnvironmentRegistry } from "../environments/registry.js";
 import { createEnvironmentTools } from "../environments/tools.js";
@@ -197,6 +200,95 @@ describe("P-031 agent environment_procurement_execute runtime route", () => {
       }, { db } as any);
       expect(malformed).toContain("malformed exact supplier request hash");
     } finally { db.close(); }
+  });
+
+  it("carries a quote-only Conway 402 through P-025/P-010/P-030 without sending a paid registration or replaying", async () => {
+    const { db, registry, scope: original, args } = setup();
+    const domainOrder = { domain: "mysite.io", years: 2, privacy: true };
+    const payTo = "0x2222222222222222222222222222222222222222";
+    const wallet = "0x1111111111111111111111111111111111111111";
+    try {
+      const scope: ProviderProcurementScope = {
+        ...original, provider: "conway-domains",
+        providerAccountId: "account-controlled",
+        unit: "usdc_cent", resourceShape: "registered-domain",
+        paymentRecipient: payTo,
+        requestBodySha256: createHash("sha256")
+          .update(JSON.stringify(domainOrder), "utf8").digest("hex"),
+      };
+      const economic = createScenario();
+      economic.provider = scope.provider;
+      economic.accountId = scope.providerAccountId;
+      economic.unit = scope.unit;
+      economic.cost.oneTimeCents = 4375;
+      economic.cost.recurringCentsPerPeriod = 0;
+      economic.cost.periods = 1;
+      economic.cost.otherChargesCents = 0;
+      economic.financing.accountId = scope.providerAccountId;
+      economic.financing.unit = scope.unit;
+      economic.financing.observedAvailableCents = 20_000;
+      const decision = exactP010Decision(db, scope, economic);
+      const calls: string[] = [];
+      const fetcher = vi.fn(async (url: string, request: RequestInit) => {
+        calls.push(url);
+        expect(new URL(url).origin).toBe("https://api.conway.domains");
+        expect(new Headers(request.headers).has("X-PAYMENT")).toBe(false);
+        const respond = (payload: unknown, status = 200) =>
+          new Response(JSON.stringify(payload), { status,
+            headers: { "Content-Type": "application/json" } });
+        if (url.endsWith("/auth/nonce")) return respond({ nonce: "nonce1234ABCD" });
+        if (url.endsWith("/auth/verify")) return respond({
+          access_token: "synthetic.jwt.provider",
+        });
+        if (url.endsWith("/auth/me")) return respond({
+          id: scope.providerAccountId,
+          wallet_address: wallet, wallet_type: "evm",
+        });
+        expect(url).toBe("https://api.conway.domains/domains/register");
+        expect(request.body).toBe(JSON.stringify(domainOrder));
+        return respond({ x402Version: 2, accepts: [{
+          scheme: "exact", network: "eip155:8453",
+          asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          amount: "43750000", payTo, maxTimeoutSeconds: 300,
+        }] }, 402);
+      });
+      vi.stubGlobal("fetch", fetcher);
+      const deps = createConwayDomainsRegistrationDependencies(db.raw, {
+        wallet: {
+          address: wallet,
+          signMessage: async () => "0x" + "aa".repeat(65),
+        },
+        observeAuthenticatedEconomics: async () => economic,
+        resolveRegistrationRequest: async () => domainOrder,
+      });
+      const tool = createEnvironmentTools(registry, {
+        getTrustedProcurementDependencies: id =>
+          id === "conway-domains" ? deps : null,
+      }).find(t => t.name === "environment_procurement_execute")!;
+      const input = {
+        ...args, provider: scope.provider,
+        provider_account_id: scope.providerAccountId,
+        unit: scope.unit, resource_shape: scope.resourceShape,
+        payment_recipient: payTo,
+        request_body_sha256: scope.requestBodySha256,
+        policy_decision_id: decision,
+      };
+      const observed = JSON.parse(await tool.execute(input, { db } as any));
+      expect(observed).toMatchObject({
+        status: "rejected", dispatched: false,
+        financialEffectState: "rejected", supplierSettlement: "UNKNOWN",
+      });
+      expect(calls).toHaveLength(4);
+      expect(calls.filter(url => url.endsWith("/domains/register"))).toHaveLength(1);
+      const recorded = getFinancialEffectByOperationKey(db.raw, scope.operationKey)!;
+      expect(recorded.recipient).toBe(payTo);
+      expect(recorded.request.requestBodySha256).toBe(scope.requestBodySha256);
+      expect(recorded.evidence.join(" ")).toMatch(/402 candidate fingerprint:/);
+      expect(recorded.evidence.join(" ")).not.toContain("synthetic.jwt.provider");
+      const replay = JSON.parse(await tool.execute(input, { db } as any));
+      expect(replay.status).toBe("not_dispatched");
+      expect(calls).toHaveLength(4);
+    } finally { vi.unstubAllGlobals(); db.close(); }
   });
 
   it("runs the real P-025/P-010/P-030 economic engine through agent tool with a trusted synthetic adapter, then refuses duplicate effects", async () => {
