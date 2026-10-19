@@ -11,6 +11,7 @@
  * The actual paid x402 step is supplied ONLY by a trusted host callback. When
  * absent, even an exact 402 will not charge or register a domain.
  */
+import { createHash } from "node:crypto";
 import type Database from "better-sqlite3";
 import { isAddress } from "viem";
 import {
@@ -97,6 +98,9 @@ function hasClaimedExactIntent(
       effect.request.region !== scope.region ||
       effect.request.resourceShape !== scope.resourceShape ||
       effect.request.paymentRecipient !== scope.paymentRecipient ||
+      effect.request.requestBodySha256 !== scope.requestBodySha256 ||
+      typeof scope.requestBodySha256 !== "string" ||
+      !/^[a-f0-9]{64}$/.test(scope.requestBodySha256) ||
       typeof scope.paymentRecipient !== "string" ||
       !isAddress(scope.paymentRecipient) ||
       effect.recipient?.toLowerCase() !== scope.paymentRecipient.toLowerCase()) {
@@ -148,6 +152,10 @@ export function createConwayDomainsRegistrationDependencies(
       }
       if (!planned) throw new RegistrationNoPaidDispatchError();
       const requestBody = JSON.stringify(planned);
+      const bodySha = createHash("sha256").update(requestBody, "utf8").digest("hex");
+      if (bodySha !== scope.requestBodySha256) {
+        throw new RegistrationNoPaidDispatchError();
+      }
       let observed = false;
       const session = await withVerifiedConwayDomainsEvmSession(
         source.wallet,
@@ -196,6 +204,7 @@ export function createConwayDomainsRegistrationDependencies(
             payload: parsed,
           });
           if (candidate.status !== "scoped_candidate" ||
+              candidate.requestBodySha256 !== bodySha ||
               !candidate.requirement ||
               candidate.requirement.policyAmountCents !== authorized.amountCents ||
               candidate.requirement.payToAddress.toLowerCase() !==
