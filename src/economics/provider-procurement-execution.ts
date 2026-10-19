@@ -54,6 +54,12 @@ export interface ProviderProcurementScope {
   paymentRecipient?: string | null;
   /** Exact UTF-8 supplier request payload digest, approved by P-010. */
   requestBodySha256?: string | null;
+  /** P-030 quote observation fingerprint, not an approval. */
+  quoteCandidateFingerprint?: string | null;
+  /** Exact atomic USDC amount; cents alone lose up to 9,999 units. */
+  paymentAmountMicroUsdc?: string | null;
+  /** Host EVM wallet used to observe quote; verified again by supplier adapter. */
+  controlledWalletAddress?: string | null;
 }
 
 export interface ProviderProcurementDispatchOutcome {
@@ -293,6 +299,9 @@ export async function executeReviewedProviderProcurement(
       (stored.contractId ?? null) === (scope.contractId ?? null) &&
       (stored.paymentRecipient ?? null) === (scope.paymentRecipient ?? null) &&
       (stored.requestBodySha256 ?? null) === (scope.requestBodySha256 ?? null) &&
+      (stored.quoteCandidateFingerprint ?? null) === (scope.quoteCandidateFingerprint ?? null) &&
+      (stored.paymentAmountMicroUsdc ?? null) === (scope.paymentAmountMicroUsdc ?? null) &&
+      (stored.controlledWalletAddress ?? null) === (scope.controlledWalletAddress ?? null) &&
       (previous.recipient ?? null) === (scope.paymentRecipient ?? null);
     if (!matches) {
       throw new Error("P-030 idempotency conflict: operation key already belongs to different provider/account/resource/policy economics.");
