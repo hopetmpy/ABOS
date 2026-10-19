@@ -278,6 +278,27 @@ describe("P-031 pre-policy authentic quote bootstrap and durable P-030 observati
     }finally {vi.useRealTimers();}
   });
 
+  it("does not refresh an unsigned quote over a legacy unscoped UNKNOWN financial effect",async()=>{
+    vi.useFakeTimers();
+    try{
+      vi.setSystemTime(new Date("2026-10-19T11:00:00Z"));
+      const db=database(),fixture=supplier();
+      vi.stubGlobal("fetch",fixture.fetcher);
+      expect((await observeConwayDomainsPreauthorizationQuote(
+        db.raw,signer,"account-a",registration)).status).toBe("observed");
+      prepareFinancialEffect(db.raw,{
+        operationKey:"legacy-unscoped-supplier",provider:"conway-domains",
+        effectKind:"provider_resource_procurement",unit:"usdc_cent",
+        amountCents:4375,request:{operation:"provision",resourceId:"legacy"},
+      });
+      vi.setSystemTime(new Date("2026-10-19T11:03:00Z"));
+      const retained=await observeConwayDomainsPreauthorizationQuote(
+        db.raw,signer,"account-a",registration);
+      expect(retained.status).toBe("already_claimed");
+      expect(fixture.registerCalls()).toBe(1);
+    }finally{vi.useRealTimers();}
+  });
+
   it("never re-quotes an uncertain claim even after an arbitrary time interval",async()=>{
     vi.useFakeTimers();
     try {
