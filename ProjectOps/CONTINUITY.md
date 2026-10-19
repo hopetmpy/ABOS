@@ -37,6 +37,13 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
 
+## P-031 — static macro audit: close prequote omission and UNKNOWN alternate-order bypass (2026-10-19)
+
+- **SOURCE AUDIT / HARD-FAMILY CORRECTION:** `requireSourceOwnedConwayPrequote` previously treated *all three quote identifiers omitted* as opt-out even on `conway-domains/provision`; this contradicted P-010/P-030's authenticated exact quote requirement. It now requires verified supplier prequote for every Conway registration. `domains-claimed-registration` cannot call a provider or paid callback with omitted quote identity. Other provider protocols are not restricted to Conway x402 format.
+- **SOURCE AUDIT / CROSS-IDENTITY RECOVERY:** a `request_claimed` uncertain quote could be bypassed by changing years/privacy/nameservers (different body digest) or wallet (different key) for the same supplier account/domain. `provider-quote-observations` adds optional source-owned `resourceIdentity` (normalized domain for Conway) and an atomic cross-key UNKNOWN collision check; independent resources remain possible and a documented 402 no-payment observation remains eligible for a safe fresh quote. Added matching fixtures and adversarial regressions. **NO material PASS** on these changes.
+- **STRUCTURAL TEST CHECK:** inspected Git `src/__tests__` against macro runner: `p031-lifecycle-acceptance` names **36 existing, unique** Vitest files; profile also retains integrity, evidence protocol, typecheck and build stages. This verifies composition only. Latest E3 161/161 remains on old SHA `71227b30`; no pnpm physical run in this turn. Full audit: `ProjectOps/evidence/P-031/audits/p031-static-supplier-quote-sweep-20261019.md`.
+- **NEXT_ELIGIBLE_WORK:** execute ONE exact-source Codex Cloud acceptance `p031-lifecycle-acceptance`, independently audit evidence, address failing families if any. No GitHub Actions, no LIVE, no main merge. P-031 EN_EJECUCIÓN, P-032 PARCIAL; P-005 E5/E6 external.
+
 ## P-031 — real-order x402 quote BEFORE purchase policy, source macro (2026-10-19)
 
 - **SOURCE IMPLEMENTED / E3 PHYSICAL PENDING:** New `conway_domain_preauthorization_quote` agent tool uses only matching host-owned EVM signer, verified provider `/auth/me`, and a durable P-030 `kv` quote-observation claim to obtain the exact `POST /domains/register` **unsigned 402 before** any P-010 approval or P-030 financial effect. Provider quote records store atomic micro-USDC, cents, payee, asset, account/wallet/body hash and candidate fingerprint; no keys/JWT, money, signed X-PAYMENT or automatic purchase.
