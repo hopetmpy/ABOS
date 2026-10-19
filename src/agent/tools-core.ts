@@ -2668,7 +2668,7 @@ Model: ${ctx.inference.getDefaultModel()}
         "durably claim this one observation before network I/O. This is not " +
         "a purchase, wallet balance, contract or x402 signing tool.",
       category: "conway",
-      riskLevel: "dangerous",
+      riskLevel: "caution",
       parameters: {
         type: "object",
         properties: {
