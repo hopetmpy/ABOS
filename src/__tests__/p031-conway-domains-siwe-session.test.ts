@@ -453,7 +453,7 @@ describe("P-031 owned-domain DNS observation remains distinct from usable resour
       identity:{chainType:"evm",address:controlled,
         account:{address:controlled,signMessage:signer.signMessage}},
     } as any));
-    expect(fetcher).toHaveBeenCalledTimes(7);
+    expect(fetcher).toHaveBeenCalledTimes(6);
     expect(output).toMatchObject({
       status:"observed",domain:"mysite.io",dnsSource:"live",
       inventoryStatus:"Active",
@@ -477,7 +477,7 @@ describe("P-031 owned-domain DNS observation remains distinct from usable resour
       independentDnsPropagationVerified:false,
     });
     expect(output.evidence.join(" ")).toContain("stale");
-    expect(fetcher).toHaveBeenCalledTimes(7);
+    expect(fetcher).toHaveBeenCalledTimes(6);
   });
 
   it("does not read any DNS if provider identity belongs to another wallet", async () => {
@@ -506,7 +506,7 @@ describe("P-031 owned-domain DNS observation remains distinct from usable resour
     expect(output).toMatchObject({
       status:"not_in_inventory",records:null,resourceUsable:false,
     });
-    expect(fetcher).toHaveBeenCalledTimes(6);
+    expect(fetcher).toHaveBeenCalledTimes(5);
   });
 
   it("returns unavailable for malformed target without DNS HTTP and wrong-chain signer without login", async () => {
@@ -551,6 +551,6 @@ describe("P-031 owned-domain DNS observation remains distinct from usable resour
       status:"observed",dnsSource:"live",resourceUsable:false,
       providerAccountId:"solana-provider-account",
     });
-    expect(fetcher).toHaveBeenCalledTimes(7);
+    expect(fetcher).toHaveBeenCalledTimes(6);
   });
 });
