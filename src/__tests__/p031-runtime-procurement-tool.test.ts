@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import { createConwayDomainsRegistrationDependencies } from "../conway/domains-claimed-registration.js";
+import { observeConwayDomainsPreauthorizationQuote } from "../conway/domains-preauthorization-quote.js";
 import { getFinancialEffectByOperationKey } from "../economics/financial-effects.js";
 import { AdaptiveStore } from "../intelligence/store.js";
 import { EnvironmentRegistry } from "../environments/registry.js";
@@ -227,7 +228,7 @@ describe("P-031 agent environment_procurement_execute runtime route", () => {
       economic.financing.accountId = scope.providerAccountId;
       economic.financing.unit = scope.unit;
       economic.financing.observedAvailableCents = 20_000;
-      const decision = exactP010Decision(db, scope, economic);
+      // Price discovery must precede the P-010 purchase authorization.
       const calls: string[] = [];
       const fetcher = vi.fn(async (url: string, request: RequestInit) => {
         calls.push(url);
@@ -253,11 +254,23 @@ describe("P-031 agent environment_procurement_execute runtime route", () => {
         }] }, 402);
       });
       vi.stubGlobal("fetch", fetcher);
+      const hostWallet = {
+        address: wallet,
+        signMessage: async () => "0x" + "aa".repeat(65),
+      };
+      const prequote = await observeConwayDomainsPreauthorizationQuote(
+        db.raw,hostWallet,scope.providerAccountId,domainOrder,
+      );
+      expect(prequote.status).toBe("observed");
+      expect(prequote.quote?.amountMicroUsdc).toBe("43750000");
+      expect((db.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects")
+        .get() as { n: number }).n).toBe(0);
+      scope.quoteCandidateFingerprint=prequote.quote?.candidateFingerprint;
+      scope.paymentAmountMicroUsdc=prequote.quote?.amountMicroUsdc;
+      scope.controlledWalletAddress=wallet;
+      const decision = exactP010Decision(db, scope, economic);
       const deps = createConwayDomainsRegistrationDependencies(db.raw, {
-        wallet: {
-          address: wallet,
-          signMessage: async () => "0x" + "aa".repeat(65),
-        },
+        wallet: hostWallet,
         observeAuthenticatedEconomics: async () => economic,
         resolveRegistrationRequest: async () => domainOrder,
       });
@@ -271,6 +284,9 @@ describe("P-031 agent environment_procurement_execute runtime route", () => {
         unit: scope.unit, resource_shape: scope.resourceShape,
         payment_recipient: payTo,
         request_body_sha256: scope.requestBodySha256,
+        quote_candidate_fingerprint: scope.quoteCandidateFingerprint,
+        payment_amount_micro_usdc: scope.paymentAmountMicroUsdc,
+        controlled_wallet_address: scope.controlledWalletAddress,
         policy_decision_id: decision,
       };
       const observed = JSON.parse(await tool.execute(input, { db } as any));
@@ -278,16 +294,18 @@ describe("P-031 agent environment_procurement_execute runtime route", () => {
         status: "rejected", dispatched: false,
         financialEffectState: "rejected", supplierSettlement: "UNKNOWN",
       });
-      expect(calls).toHaveLength(4);
-      expect(calls.filter(url => url.endsWith("/domains/register"))).toHaveLength(1);
+      expect(calls).toHaveLength(8);
+      expect(calls.filter(url => url.endsWith("/domains/register"))).toHaveLength(2);
       const recorded = getFinancialEffectByOperationKey(db.raw, scope.operationKey)!;
       expect(recorded.recipient).toBe(payTo);
       expect(recorded.request.requestBodySha256).toBe(scope.requestBodySha256);
+      expect(recorded.request.quoteCandidateFingerprint).toBe(prequote.quote?.candidateFingerprint);
+      expect(recorded.request.paymentAmountMicroUsdc).toBe("43750000");
       expect(recorded.evidence.join(" ")).toMatch(/402 candidate fingerprint:/);
       expect(recorded.evidence.join(" ")).not.toContain("synthetic.jwt.provider");
       const replay = JSON.parse(await tool.execute(input, { db } as any));
       expect(replay.status).toBe("not_dispatched");
-      expect(calls).toHaveLength(4);
+      expect(calls).toHaveLength(8);
     } finally { vi.unstubAllGlobals(); db.close(); }
   });
 
