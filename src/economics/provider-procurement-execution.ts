@@ -52,6 +52,8 @@ export interface ProviderProcurementScope {
   contractId?: string | null;
   /** Optional exact recipient observed before P-010 policy issuance. */
   paymentRecipient?: string | null;
+  /** Exact UTF-8 supplier request payload digest, approved by P-010. */
+  requestBodySha256?: string | null;
 }
 
 export interface ProviderProcurementDispatchOutcome {
@@ -290,6 +292,7 @@ export async function executeReviewedProviderProcurement(
       stored.externalId === (scope.externalId ?? null) &&
       (stored.contractId ?? null) === (scope.contractId ?? null) &&
       (stored.paymentRecipient ?? null) === (scope.paymentRecipient ?? null) &&
+      (stored.requestBodySha256 ?? null) === (scope.requestBodySha256 ?? null) &&
       (previous.recipient ?? null) === (scope.paymentRecipient ?? null);
     if (!matches) {
       throw new Error("P-030 idempotency conflict: operation key already belongs to different provider/account/resource/policy economics.");
