@@ -51,9 +51,16 @@ export function requireSourceOwnedConwayPrequote(
 ): string[] {
   const fields = [scope.quoteCandidateFingerprint, scope.paymentAmountMicroUsdc,
     scope.controlledWalletAddress];
-  if (fields.every(x => x == null)) return [];
-  if (scope.provider !== "conway-domains" || scope.operation !== "provision" ||
-      scope.unit !== "usdc_cent" ||
+  // Every Conway Domains provision can cause an irreversible x402 payment;
+  // missing prequote fields are NOT an opt-out. Other provider operations
+  // retain their own source-specific procurement contracts.
+  if (scope.provider !== "conway-domains" || scope.operation !== "provision") {
+    if (fields.some(x => x != null)) {
+      throw new Error("P-031 supplier quote belongs to a different provider or operation.");
+    }
+    return [];
+  }
+  if (scope.unit !== "usdc_cent" ||
       typeof scope.quoteCandidateFingerprint !== "string" ||
       !/^[a-f0-9]{64}$/.test(scope.quoteCandidateFingerprint) ||
       typeof scope.paymentAmountMicroUsdc !== "string" ||
