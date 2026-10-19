@@ -127,6 +127,7 @@ export async function observeConwayDomainsOwnedResources(
   getTrustedSessionToken: () => Promise<string | null>,
   expectedWalletAddress: string,
   expectedWalletType: "evm" | "solana" = "evm",
+  includeTransactions = true,
 ): Promise<ConwayDomainsOwnedResourceSnapshot> {
   const unknownProof: ConwayDomainsAccountProof = {
     provider: "conway-domains",
@@ -169,18 +170,21 @@ export async function observeConwayDomainsOwnedResources(
     let domains: ConwayDomainsOwnedResourceSnapshot["domains"] = null;
     let transactions: ConwayDomainsOwnedResourceSnapshot["transactions"] = null;
     try { domains = parseDomains(await readOnly("/domains", token!)); } catch {}
-    try { transactions = parseTransactions(await readOnly("/transactions", token!)); } catch {}
+    if (includeTransactions) {
+      try { transactions = parseTransactions(await readOnly("/transactions", token!)); } catch {}
+    }
     return {
       ...base,
       account,
       domains,
       transactions,
-      status: domains && transactions ? "observed" :
+      status: domains && (!includeTransactions || transactions) ? "observed" :
         domains || transactions ? "partial" : "unavailable",
       evidence: [
         ...base.evidence,
         domains === null ? "Owned-domain list unavailable or malformed." : "Owned-domain list observed.",
-        transactions === null ? "Transaction list unavailable or malformed." : "Supplier USD-denominated transaction list observed; do not book ledger settlement on its own.",
+        !includeTransactions ? "Transaction list intentionally not requested." :
+          transactions === null ? "Transaction list unavailable or malformed." : "Supplier USD-denominated transaction list observed; do not book ledger settlement on its own.",
       ],
     };
   } catch {
