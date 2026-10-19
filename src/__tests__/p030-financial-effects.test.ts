@@ -6,6 +6,7 @@ import type { AbosDatabase } from "../types.js";
 import { createDatabase } from "../state/database.js";
 import { SCHEMA_VERSION } from "../state/schema.js";
 import { createTestDb } from "./mocks.js";
+import { claimProviderQuoteObservation, confirmProviderQuoteObservation, getProviderQuoteObservation } from "../economics/provider-quote-observations.js";
 import {
   FinancialEffectIdempotencyConflictError,
   FinancialEffectIntentPendingError,
@@ -119,6 +120,32 @@ describe("P-030 financial effect authority", () => {
     expect(claimFinancialEffectDispatch(
       reopened.raw, "restart-claimed-quote",
     ).dispatchAllowed).toBe(false);
+  });
+
+  it("preserves the preauthorization 402 quote observation after SQLite restart without creating money effects",()=>{
+    const {database,dbPath}=createRestartableDb();
+    const scope={provider:"conway-domains",accountId:"verified-account",
+      walletAddress:"0x1111111111111111111111111111111111111111",
+      requestBodySha256:"a".repeat(64)};
+    expect(claimProviderQuoteObservation(database.raw,scope).claimed).toBe(true);
+    const recorded=confirmProviderQuoteObservation(database.raw,scope,{
+      candidateFingerprint:"b".repeat(64),
+      amountCents:4375,amountMicroUsdc:"43749999",
+      paymentRecipient:"0x2222222222222222222222222222222222222222",
+      asset:"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      network:"eip155:8453",
+    });
+    expect(recorded?.status).toBe("observed");
+    database.close();
+    const reopened=createDatabase(dbPath);openDatabases.push(reopened);
+    expect(getProviderQuoteObservation(reopened.raw,scope)).toMatchObject({
+      status:"observed",amountCents:4375,
+      amountMicroUsdc:"43749999",financialEffectEstablished:false,
+      paymentDispatched:false,
+    });
+    expect(claimProviderQuoteObservation(reopened.raw,scope).claimed).toBe(false);
+    expect((reopened.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects")
+      .get() as {n:number}).n).toBe(0);
   });
 
   it("reports mixed unsettled credit, USDC topup/service and unknown units without a fake balance", () => {
