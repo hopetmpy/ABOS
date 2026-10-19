@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import { createTestDb } from "./mocks.js";
 import {
   claimFinancialEffectDispatch,
@@ -44,6 +45,8 @@ function setup(claim = true) {
     goalId: "goal-1", taskId: "task-1", pathId: "path-1",
     resourceId: "domain-resource-1", region: "global",
     resourceShape: "registered-domain", paymentRecipient: recipient,
+    requestBodySha256: createHash("sha256")
+      .update(JSON.stringify(body), "utf8").digest("hex"),
   };
   const authorized = {
     policyDecisionId: "persisted-policy-fixture",
@@ -126,6 +129,7 @@ describe("P-031 registered-domain quote from claimed canonical financial dispatc
       [{ ...scope, paymentRecipient: wallet }, authorized],
       [scope, { ...authorized, amountCents: 5000 }],
       [scope, { ...authorized, policyDecisionId: "foreign-policy" }],
+      [{ ...scope, requestBodySha256: "0".repeat(64) }, authorized],
     ] as const) {
       const deps = createConwayDomainsRegistrationDependencies(db.raw, {
         wallet: signer, observeAuthenticatedEconomics: vi.fn(),
@@ -134,6 +138,19 @@ describe("P-031 registered-domain quote from claimed canonical financial dispatc
       await expect(deps.dispatch(changed[0], changed[1]))
         .rejects.toMatchObject({ externalEffectNotDispatched: true });
     }
+    expect(provider.fetcher).not.toHaveBeenCalled();
+  });
+
+  it("refuses an exact supplier body change even when the quote, payTo and price would match", async () => {
+    const { db, scope, authorized, signer } = setup();
+    const provider = fixtureProvider();
+    vi.stubGlobal("fetch", provider.fetcher);
+    const deps = createConwayDomainsRegistrationDependencies(db.raw, {
+      wallet: signer, observeAuthenticatedEconomics: vi.fn(),
+      resolveRegistrationRequest: async () => ({ ...body, domain: "other.io" }),
+    });
+    await expect(deps.dispatch(scope, authorized))
+      .rejects.toMatchObject({ externalEffectNotDispatched: true });
     expect(provider.fetcher).not.toHaveBeenCalled();
   });
 
