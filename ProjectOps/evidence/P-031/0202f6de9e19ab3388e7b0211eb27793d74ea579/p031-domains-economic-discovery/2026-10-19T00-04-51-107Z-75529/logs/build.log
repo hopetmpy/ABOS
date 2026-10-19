@@ -1,0 +1,21 @@
+Command: pnpm build
+Started: 2026-10-19T00:04:58.398Z
+Exit code: 0
+Signal: none
+Execution error: none
+--- STDOUT ---
+
+> @abos/runtime@0.3.0 build /workspace/ABOS
+> tsc && pnpm -r build
+
+
+> @abos/cli@0.3.0 build /workspace/ABOS/packages/cli
+> tsc
+
+
+--- STDERR ---
+(node:75607) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:75667) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
