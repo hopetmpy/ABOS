@@ -190,6 +190,29 @@ describe("P-031 pre-policy authentic quote bootstrap and durable P-030 observati
     expect(fixture.registerCalls()).toBe(0);
   });
 
+  it("blocks Conway paid-provision policy when all quote fields are simply omitted", () => {
+    const db=database();
+    const scope:ProviderProcurementScope={
+      operationKey:"domain:missing-prequote",operation:"provision",
+      provider:"conway-domains",providerAccountId:"account-a",
+      unit:"usdc_cent",goalId:"goal",taskId:"task",pathId:"path",
+      resourceId:"domain-resource",region:"global",resourceShape:"registered-domain",
+      requestBodySha256:"a".repeat(64),
+      paymentRecipient:payTo,
+      // Omission MUST NOT be a bypass of the authenticated 402 requirement.
+    };
+    expect(()=>requireSourceOwnedConwayPrequote(
+      db.raw,scope,4375,new Date())).toThrow(/quote identity incomplete/);
+    expect(()=>requireSourceOwnedConwayPrequote(
+      db.raw,{...scope,quoteCandidateFingerprint:"b".repeat(64)},
+      4375,new Date())).toThrow(/quote identity incomplete/);
+    // Independent vendors not advertising a prequote keep their own source
+    // contracts; Conway registration is the sensitive payable exception.
+    expect(requireSourceOwnedConwayPrequote(
+      db.raw,{...scope,provider:"other-supplier"},4375,new Date(),
+    )).toEqual([]);
+  });
+
   it("refuses same-cent atomic amount changes and stale quote after the purchase-review window",async()=>{
     const db=database(),fixture=supplier({amount:"43749999"});
     vi.stubGlobal("fetch",fixture.fetcher);
