@@ -17,6 +17,57 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const evidenceRoot = join(root, "ProjectOps", "evidence");
 const SHA = /^[0-9a-f]{40}$/;
 const PROFILES = Object.freeze({
+  // One P-031 macro acceptance: legacy and current child acquisition, money,
+  // supplier contract lifecycle, retention/restart and Domains tools. Keep the
+  // existing narrower diagnostic profiles for targeted failures, but never
+  // require a separate user handoff after each small source change.
+  "p031-lifecycle-acceptance": {
+    module: "P-031",
+    fixture: "SYNTHETIC_NO_EXTERNAL_SPEND",
+    steps: [
+      ["projectops-integrity", "node", ["scripts/projectops-integrity-verify.mjs"], 120000],
+      ["evidence-gate-tests", "node", ["--test", "scripts/codex-evidence-gate.test.mjs"], 120000],
+      ["typecheck", "pnpm", ["typecheck"], 300000],
+      ["build", "pnpm", ["build"], 300000],
+      ["p031-lifecycle-integration", "pnpm", [
+        "exec", "vitest", "run",
+        "src/__tests__/environment-retention.test.ts",
+        "src/__tests__/p031-authorized-procurement-execution.test.ts",
+        "src/__tests__/p031-resource-decision-journey.test.ts",
+        "src/__tests__/p031-goal-resource-lifecycle-journey.test.ts",
+        "src/__tests__/p031-resource-outcome-learning.test.ts",
+        "src/__tests__/p031-billable-mutation-reconciliation.test.ts",
+        "src/__tests__/p031-worker-attempt-restart.test.ts",
+        "src/__tests__/p031-ec2-mutation-economic-boundary.test.ts",
+        "src/__tests__/p031-standalone-task-receipt.test.ts",
+        "src/__tests__/p031-reviewed-path-provenance.test.ts",
+        "src/__tests__/p031-runtime-procurement-tool.test.ts",
+        "src/__tests__/p031-conway-domains-account-proof.test.ts",
+        "src/__tests__/p031-conway-domains-siwe-session.test.ts",
+        "src/__tests__/p031-conway-domains-purchase-evidence.test.ts",
+        "src/__tests__/p031-conway-secondary-procurement-gate.test.ts",
+        "src/__tests__/p031-conway-billable-post-no-retry.test.ts",
+        "src/__tests__/p031-conway-credit-history.test.ts",
+        "src/__tests__/p031-provider-account-exposure.test.ts",
+        "src/__tests__/p031-provider-usd-exposure.test.ts",
+        "src/__tests__/p031-conway-account-read-probe.test.ts",
+        "src/__tests__/p031-x402-readonly-preflight.test.ts",
+        "src/__tests__/p030-financial-effects.test.ts",
+        "src/__tests__/p030-x402-service-purchase.test.ts",
+        "src/__tests__/p030-topup-http-claims.test.ts",
+        "src/__tests__/p030-credit-topup.test.ts",
+        "src/__tests__/p030-credit-visibility.test.ts",
+        "src/__tests__/p030-conway-balance.test.ts",
+        "src/__tests__/replication.test.ts",
+        "src/__tests__/p029-child-bootstrap.test.ts",
+        "src/__tests__/p029-bootstrap-recovery.test.ts",
+        "src/__tests__/child-capital-integration.test.ts",
+        "src/__tests__/child-economics.test.ts",
+        "src/__tests__/provider-procurement-scenario.test.ts",
+        "src/__tests__/policy-engine.test.ts",
+      ], 900000],
+    ],
+  },
   "p031-domains-economic-discovery": {
     module: "P-031",
     fixture: "SYNTHETIC_NO_EXTERNAL_SPEND",
