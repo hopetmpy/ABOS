@@ -32,6 +32,63 @@ import { getReviewedTaskPathReceipt } from "../orchestration/orchestrator.js";
 import { getTaskById } from "../state/database.js";
 import type { TaskResourceNeed } from "../environments/types.js";
 import { isExplicitInstant } from "../environments/time-evidence.js";
+import { getProviderQuoteObservation } from "./provider-quote-observations.js";
+import { isAddress } from "viem";
+
+
+/**
+ * A prior supplier 402 can inform a monetary decision ONLY when the
+ * account/wallet/body/atomic amount/recipient/quote fingerprint exactly
+ * match this proposal. This checks P-030-owned quote evidence, not a model
+ * statement. Two-minute age is a conservative LOCAL review window, not a
+ * claim that Conway contractually guarantees the quoted price.
+ */
+function requireSourceOwnedConwayPrequote(
+  db: Database.Database,
+  scope: ProviderProcurementScope,
+  quotedPurchaseCents: number,
+  now: Date,
+): string[] {
+  const fields = [scope.quoteCandidateFingerprint, scope.paymentAmountMicroUsdc,
+    scope.controlledWalletAddress];
+  if (fields.every(x => x == null)) return [];
+  if (scope.provider !== "conway-domains" || scope.operation !== "provision" ||
+      scope.unit !== "usdc_cent" ||
+      typeof scope.quoteCandidateFingerprint !== "string" ||
+      !/^[a-f0-9]{64}$/.test(scope.quoteCandidateFingerprint) ||
+      typeof scope.paymentAmountMicroUsdc !== "string" ||
+      !/^[1-9][0-9]{0,40}$/.test(scope.paymentAmountMicroUsdc) ||
+      typeof scope.controlledWalletAddress !== "string" ||
+      !isAddress(scope.controlledWalletAddress) ||
+      typeof scope.requestBodySha256 !== "string" ||
+      !/^[a-f0-9]{64}$/.test(scope.requestBodySha256) ||
+      typeof scope.paymentRecipient !== "string" ||
+      !isAddress(scope.paymentRecipient)) {
+    throw new Error("P-031 exact supplier quote identity incomplete or malformed.");
+  }
+  const quote = getProviderQuoteObservation(db, {
+    provider:"conway-domains", accountId:scope.providerAccountId,
+    walletAddress:scope.controlledWalletAddress,
+    requestBodySha256:scope.requestBodySha256,
+  });
+  const observedMs = quote?.observedAt ? Date.parse(quote.observedAt) : NaN;
+  if (!quote || quote.status !== "observed" ||
+      !Number.isFinite(observedMs) || observedMs > now.getTime()+1000 ||
+      now.getTime()-observedMs > 120_000 ||
+      quote.candidateFingerprint !== scope.quoteCandidateFingerprint ||
+      quote.amountMicroUsdc !== scope.paymentAmountMicroUsdc ||
+      quote.amountCents !== quotedPurchaseCents ||
+      !quote.paymentRecipient ||
+      quote.paymentRecipient.toLowerCase() !== scope.paymentRecipient.toLowerCase() ||
+      quote.network !== "eip155:8453" ||
+      quote.asset?.toLowerCase() !==
+        "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913".toLowerCase()) {
+    throw new Error("P-031 source-owned exact supplier 402 quote is missing, changed or too old for this purchase review.");
+  }
+  return [
+    "P-030 observed exact supplier 402 preauthorization candidate under this account/wallet/body/atomic amount/recipient; no payment or price-guarantee inferred.",
+  ];
+}
 
 export const PROVIDER_PROCUREMENT_POLICY_TOOL = "p031_provider_procurement";
 
@@ -364,6 +421,9 @@ export async function executeReviewedProviderProcurement(
     }
     usageEvidence = usage.evidence;
   }
+  const quoteEvidence = requireSourceOwnedConwayPrequote(
+    db, scope, scenario.cost.oneTimeCents ?? -1, now,
+  );
   const review = assessProviderProcurementScenario(scenario, now);
   if (review.status !== "review_ready" ||
       review.totalProposedCommitmentCents === null ||
@@ -438,6 +498,9 @@ export async function executeReviewedProviderProcurement(
         );
       }
     }
+    requireSourceOwnedConwayPrequote(
+      db, scope, scenario.cost.oneTimeCents ?? -1, claimNow,
+    );
     const freshReview = assessProviderProcurementScenario(scenario, claimNow);
     if (freshReview.status !== "review_ready" ||
         freshReview.totalProposedCommitmentCents !== amount ||
@@ -533,6 +596,7 @@ export async function executeReviewedProviderProcurement(
         ...activeReviewedPath.evidence,
         ...fitEvidence,
         ...usageEvidence,
+        ...quoteEvidence,
         ...netReview.evidence,
         ...exposure.evidence,
         `P-030 local funds held=${exposure.additionalHeldCents} ${scope.unit} since observed snapshot ${exposure.fundingObservedAt}.`,
