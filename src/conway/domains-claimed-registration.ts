@@ -106,6 +106,14 @@ function hasClaimedExactIntent(
       effect.request.resourceShape !== scope.resourceShape ||
       effect.request.paymentRecipient !== scope.paymentRecipient ||
       effect.request.requestBodySha256 !== scope.requestBodySha256 ||
+      // A claimed financial effect is not enough when the corresponding
+      // host-authenticated quote is absent. All new Conway registrations
+      // need the exact pre-P-010 source observation and atomic amount.
+      typeof scope.quoteCandidateFingerprint !== "string" ||
+      !/^[a-f0-9]{64}$/.test(scope.quoteCandidateFingerprint) ||
+      typeof scope.paymentAmountMicroUsdc !== "string" ||
+      !/^[1-9][0-9]{0,40}$/.test(scope.paymentAmountMicroUsdc) ||
+      typeof scope.controlledWalletAddress !== "string" ||
       (effect.request.quoteCandidateFingerprint ?? null) !== (scope.quoteCandidateFingerprint ?? null) ||
       (effect.request.paymentAmountMicroUsdc ?? null) !== (scope.paymentAmountMicroUsdc ?? null) ||
       (effect.request.controlledWalletAddress ?? null) !== (scope.controlledWalletAddress ?? null) ||
@@ -162,7 +170,7 @@ export function createConwayDomainsRegistrationDependencies(
       if (!planned) throw new RegistrationNoPaidDispatchError();
       const requestBody = JSON.stringify(planned);
       const bodySha = createHash("sha256").update(requestBody, "utf8").digest("hex");
-      if (scope.quoteCandidateFingerprint != null) {
+      {
         const prequote = getProviderQuoteObservation(db, {
           provider:"conway-domains", accountId:scope.providerAccountId,
           walletAddress:source.wallet.address, requestBodySha256:bodySha,
