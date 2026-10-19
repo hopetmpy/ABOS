@@ -32,7 +32,8 @@ export interface ProviderQuoteRecord extends ProviderQuoteScope {
 const PREFIX = "p030.supplier_quote_observation.";
 const HASH = /^[a-f0-9]{64}$/;
 function normalized(s: ProviderQuoteScope): ProviderQuoteScope {
-  if (!s || s.provider !== "conway-domains" ||
+  if (!s || typeof s.provider !== "string" ||
+      !s.provider.trim() || s.provider.length > 128 ||
       typeof s.accountId !== "string" || !s.accountId.trim() ||
       typeof s.walletAddress !== "string" || !s.walletAddress.trim() ||
       typeof s.requestBodySha256 !== "string" ||
