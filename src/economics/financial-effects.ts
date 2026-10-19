@@ -464,6 +464,48 @@ export function claimFinancialEffectDispatch(
   return { effect, dispatchAllowed };
 }
 
+/**
+ * Claim the start of one non-idempotent supplier HTTP request INSIDE an
+ * already claimed P-030 dispatch. This is a durable compare-and-set from
+ * dispatching -> unknown BEFORE the wire call, so a process crash, two
+ * workers or a new adapter instance cannot interpret a missing response as
+ * permission to send the same POST again. No settlement is inferred.
+ */
+export function claimFinancialEffectExternalRequest(
+  db: Database.Database,
+  operationKey: string,
+  source: string,
+): DispatchClaim {
+  const key = requireText(operationKey, "operationKey");
+  const label = requireText(source, "external request source");
+  let dispatchAllowed = false;
+  db.transaction(() => {
+    const previous = getFinancialEffectByOperationKey(db, key);
+    if (!previous) throw new Error(`Financial effect not found for operation key ${key}`);
+    const now = new Date().toISOString();
+    const evidence = uniqueEvidence([
+      ...previous.evidence,
+      `Supplier HTTP request claimed from ${label}; result UNKNOWN until observed; no payment or settlement presumed.`,
+    ]);
+    const result = db.prepare(
+      `UPDATE financial_effects
+       SET state = 'unknown', updated_at = ?, evidence_json = ?,
+           provider_status = 'external_request_pending_observation'
+       WHERE operation_key = ? AND state = 'dispatching'`,
+    ).run(now, JSON.stringify(evidence), key);
+    dispatchAllowed = result.changes === 1;
+    if (dispatchAllowed) {
+      const updated = getFinancialEffectByOperationKey(db, key)!;
+      appendFinancialEffectEvidence(db, updated,
+        "economic.financial_effect_external_request_claimed", {
+          source: label, observed: false, settled: false,
+        }, "unknown");
+    }
+  })();
+  const effect = getFinancialEffectByOperationKey(db, key)!;
+  return { effect, dispatchAllowed };
+}
+
 export function recordFinancialEffectObservation(
   db: Database.Database,
   operationKey: string,
