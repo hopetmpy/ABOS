@@ -157,7 +157,15 @@ describe("P-031 registered-domain quote from claimed canonical financial dispatc
   it("observes an authenticated unsigned 402 once, never paying without a trusted host payment callback", async () => {
     const { db, scope, authorized, signer } = setup();
     const provider = fixtureProvider();
-    vi.stubGlobal("fetch", provider.fetcher);
+    vi.stubGlobal("fetch", vi.fn(async (url: string, request: RequestInit) => {
+      if (url.endsWith("/domains/register")) {
+        // The financial UNKNOWN/CAS must be durably visible BEFORE HTTP,
+        // not retroactively recorded after receiving provider 402.
+        expect(getFinancialEffectByOperationKey(db.raw, scope.operationKey)?.state)
+          .toBe("unknown");
+      }
+      return provider.fetcher(url, request);
+    }));
     const deps = createConwayDomainsRegistrationDependencies(db.raw, {
       wallet: signer, observeAuthenticatedEconomics: vi.fn(),
       resolveRegistrationRequest: async () => body,
