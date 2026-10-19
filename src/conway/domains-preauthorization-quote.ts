@@ -65,6 +65,7 @@ export async function observeConwayDomainsPreauthorizationQuote(
     accountId:expectedProviderAccountId,
     walletAddress:wallet.address,
     requestBodySha256,
+    resourceIdentity:validated.domain,
   };
   let attempted = false;
   try {
