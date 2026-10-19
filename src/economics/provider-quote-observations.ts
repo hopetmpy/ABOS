@@ -15,6 +15,8 @@ export interface ProviderQuoteScope {
   accountId: string;
   walletAddress: string;
   requestBodySha256: string;
+  /** Optional supplier-specific resource identity for cross-body UNKNOWN fencing. */
+  resourceIdentity?: string;
 }
 export interface ProviderQuoteRecord extends ProviderQuoteScope {
   status: "request_claimed" | "observed";
@@ -37,16 +39,27 @@ function normalized(s: ProviderQuoteScope): ProviderQuoteScope {
       typeof s.accountId !== "string" || !s.accountId.trim() ||
       typeof s.walletAddress !== "string" || !s.walletAddress.trim() ||
       typeof s.requestBodySha256 !== "string" ||
-      !HASH.test(s.requestBodySha256)) {
+      !HASH.test(s.requestBodySha256) ||
+      (s.resourceIdentity !== undefined &&
+        (typeof s.resourceIdentity !== "string" ||
+          !s.resourceIdentity.trim() || s.resourceIdentity.length > 512))) {
     throw new Error("Supplier quote requires exact trusted provider/account/wallet/body identity");
   }
   return { provider: s.provider, accountId: s.accountId,
     walletAddress: s.walletAddress.toLowerCase(),
-    requestBodySha256: s.requestBodySha256 };
+    requestBodySha256: s.requestBodySha256,
+    ...(s.resourceIdentity !== undefined
+      ? {resourceIdentity:s.resourceIdentity} : {}) };
 }
 function key(s: ProviderQuoteScope): string {
+  const n=normalized(s);
+  // Preserve the original exact request-body key when adding a resource
+  // collision guard. Resource identity is supplemental, not a second key.
   return PREFIX + createHash("sha256")
-    .update(JSON.stringify(normalized(s)), "utf8").digest("hex");
+    .update(JSON.stringify({
+      provider:n.provider,accountId:n.accountId,
+      walletAddress:n.walletAddress,requestBodySha256:n.requestBodySha256,
+    }), "utf8").digest("hex");
 }
 function decode(s: string, value: string): ProviderQuoteRecord | null {
   try {
@@ -55,6 +68,8 @@ function decode(s: string, value: string): ProviderQuoteRecord | null {
     if (!o || o.provider !== n.provider || o.accountId !== n.accountId ||
         o.walletAddress !== n.walletAddress ||
         o.requestBodySha256 !== n.requestBodySha256 ||
+        (n.resourceIdentity !== undefined &&
+          o.resourceIdentity !== n.resourceIdentity) ||
         !["request_claimed","observed"].includes(o.status) ||
         o.noPaymentHeader !== true || o.financialEffectEstablished !== false ||
         o.paymentDispatched !== false) return null;
@@ -84,6 +99,26 @@ export function claimProviderQuoteObservation(
   db.transaction(() => {
     const now = new Date().toISOString();
     const previous = getProviderQuoteObservation(db,n);
+    if (!previous && n.resourceIdentity) {
+      // A lost/202 quote POST might have created the resource even without
+      // X-PAYMENT. No other wire body for the SAME provider/account/resource
+      // may be sent until that uncertainty is independently reconciled.
+      const possible = db.prepare(
+        "SELECT value FROM kv WHERE key LIKE ?",
+      ).all(PREFIX+"%") as Array<{value:string}>;
+      for(const row of possible){
+        let quote:Partial<ProviderQuoteRecord>;
+        try {quote=JSON.parse(row.value);} catch{continue;}
+        if (quote.status==="request_claimed" &&
+            quote.provider===n.provider &&
+            quote.accountId===n.accountId &&
+            quote.requestBodySha256!==n.requestBodySha256 &&
+            (!quote.resourceIdentity ||
+              quote.resourceIdentity===n.resourceIdentity)) {
+          return;
+        }
+      }
+    }
     if (!previous) {
       claimed = db.prepare(
         "INSERT OR IGNORE INTO kv (key, value, updated_at) VALUES (?, ?, ?)",
