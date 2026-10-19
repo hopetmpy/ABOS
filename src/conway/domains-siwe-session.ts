@@ -103,10 +103,15 @@ async function signInEvm(
       await onVerifiedSession(access, account);
     }
     return account;
-  } catch {
-    // Do not suppress an uncertain provider effect raised by the trusted
-    // session consumer. The ordinary read-only callers still return UNKNOWN.
+  } catch (error) {
+    // An exact observed 402 with no payment header may establish that the
+    // trusted callback DID NOT submit a paid registration. Preserve only the
+    // locally constructed marker; all other post-callback errors remain
+    // outcome UNKNOWN, never an automatic safe retry.
     if (rethrowConsumerError && consumerStarted) {
+      if (typeof error === "object" && error !== null &&
+          (error as { externalEffectNotDispatched?: unknown })
+            .externalEffectNotDispatched === true) throw error;
       throw new Error("Conway Domains verified-session external outcome UNKNOWN; do not replay.");
     }
     // Do not expose nonce/JWT, SIWE signature or supplier error payloads.
