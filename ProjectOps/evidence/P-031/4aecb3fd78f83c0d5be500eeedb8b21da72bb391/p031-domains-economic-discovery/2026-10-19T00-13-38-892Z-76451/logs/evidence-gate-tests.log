@@ -1,0 +1,59 @@
+Command: node --test scripts/codex-evidence-gate.test.mjs
+Started: 2026-10-19T00:13:39.223Z
+Exit code: 0
+Signal: none
+Execution error: none
+--- STDOUT ---
+TAP version 13
+# (node:76488) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: ABOS evidence bundle verifies matching exact source SHA and file hashes
+ok 1 - ABOS evidence bundle verifies matching exact source SHA and file hashes
+  ---
+  duration_ms: 4.640745
+  type: 'test'
+  ...
+# Subtest: ABOS evidence rejects tampered physical log
+ok 2 - ABOS evidence rejects tampered physical log
+  ---
+  duration_ms: 1.938923
+  type: 'test'
+  ...
+# Subtest: ABOS evidence rejects fabricated PASS with failing step
+ok 3 - ABOS evidence rejects fabricated PASS with failing step
+  ---
+  duration_ms: 0.877808
+  type: 'test'
+  ...
+# Subtest: ABOS evidence rejects incomplete SHA-256 listing
+ok 4 - ABOS evidence rejects incomplete SHA-256 listing
+  ---
+  duration_ms: 1.01165
+  type: 'test'
+  ...
+# Subtest: ABOS evidence rejects directories outside its exact root
+ok 5 - ABOS evidence rejects directories outside its exact root
+  ---
+  duration_ms: 0.2905
+  type: 'test'
+  ...
+# Subtest: ABOS publication explicitly stages ignored logs and excludes unexecuted commands
+ok 6 - ABOS publication explicitly stages ignored logs and excludes unexecuted commands
+  ---
+  duration_ms: 0.771527
+  type: 'test'
+  ...
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 93.581156
+
+--- STDERR ---
+(node:76481) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
