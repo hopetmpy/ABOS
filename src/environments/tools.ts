@@ -282,6 +282,8 @@ export function createEnvironmentTools(
         resource_shape: { type: "string" },
         external_id: { type: "string", description: "Exact known external resource identity (required for contract operations)." },
         contract_id: { type: "string", description: "Exact supplier contract ID required for renew/cancel; host must independently verify the contract." },
+        payment_recipient: { type: "string", description: "Exact provider payee/recipient already reviewed by P-010, NOT a wallet-signing permission." },
+        request_body_sha256: { type: "string", description: "SHA-256 of the exact provider operation body already reviewed by P-010; model value alone proves nothing." },
         policy_decision_id: { type: "string", description: "Optional existing exact P-010 receipt; otherwise a trusted host P-010 issuer must produce the decision after the verified quote." },
       },
       required: [
@@ -303,7 +305,10 @@ export function createEnvironmentTools(
         return "BLOCKED: incomplete procurement scope or policy decision.";
       }
       const provider = (args.provider as string).trim();
-      if (!registry.get(provider)) return "UNAVAILABLE: provider is not registered.";
+      // External supplier-native procurement need not impersonate an
+      // EnvironmentRegistry compute provider. A trusted host source can
+      // execute under the same P-025/P-010/P-030 authority instead.
+      const registeredProvider = registry.get(provider);
       const operation = (args.operation as string).trim();
       if (!["provision", "resize", "resume", "recover", "renew", "cancel", "other"]
         .includes(operation)) {
@@ -321,11 +326,24 @@ export function createEnvironmentTools(
           (typeof args.policy_decision_id !== "string" || !args.policy_decision_id.trim())) {
         return "BLOCKED: malformed existing P-010 policy decision ID.";
       }
+      if (args.payment_recipient !== undefined &&
+          (typeof args.payment_recipient !== "string" ||
+            !args.payment_recipient.trim() || args.payment_recipient.length > 256)) {
+        return "BLOCKED: malformed provider payment recipient.";
+      }
+      if (args.request_body_sha256 !== undefined &&
+          (typeof args.request_body_sha256 !== "string" ||
+            !/^[a-f0-9]{64}$/.test(args.request_body_sha256))) {
+        return "BLOCKED: malformed exact supplier request hash.";
+      }
       let dependencies: ProviderProcurementExecutionDependencies | null = null;
       try {
         dependencies = options.getTrustedProcurementDependencies?.(provider, operation) ?? null;
       } catch {
         return "UNAVAILABLE: trusted provider procurement adapter failed before dispatch; no financial intent was claimed.";
+      }
+      if (!registeredProvider && !dependencies) {
+        return "UNAVAILABLE: neither registered provider nor trusted external supplier adapter was found.";
       }
       if (!dependencies ||
           typeof dependencies.observeAuthenticatedEconomics !== "function" ||
@@ -348,6 +366,10 @@ export function createEnvironmentTools(
           { externalId: args.external_id.trim() } : {}),
         ...(typeof args.contract_id === "string" ?
           { contractId: args.contract_id.trim() } : {}),
+        ...(typeof args.payment_recipient === "string" ?
+          { paymentRecipient: args.payment_recipient.trim() } : {}),
+        ...(typeof args.request_body_sha256 === "string" ?
+          { requestBodySha256: args.request_body_sha256 } : {}),
       };
       try {
         const result = await executeReviewedProviderProcurement(context.db.raw, {
