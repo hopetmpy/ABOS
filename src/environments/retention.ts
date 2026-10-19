@@ -313,10 +313,7 @@ export class EnvironmentRetentionCoordinator {
       // provider cancellation or mark an invoice paid.
       const savedQuotes = Array.isArray(resource.metadata.retentionBillingLifecycleQuotes)
         ? resource.metadata.retentionBillingLifecycleQuotes : [];
-      const recordedKeys = new Set(savedQuotes
-        .filter(item => item && typeof item === "object" && typeof item.operationKey === "string")
-        .map(item => item.operationKey));
-      const contractActions = listFinancialEffectsByStates(this.db, [
+      const canonicalActions = listFinancialEffectsByStates(this.db, [
         "dispatching", "pending", "unknown", "reconciliation_required", "completed",
       ]).filter(effect =>
         effect.effectKind === "provider_resource_procurement" &&
@@ -325,7 +322,27 @@ export class EnvironmentRetentionCoordinator {
         effect.request.externalId === resource.externalId &&
         (effect.request.operation === "renew" || effect.request.operation === "cancel") &&
         typeof effect.request.contractId === "string" &&
-        effect.request.contractId.trim() &&
+        effect.request.contractId.trim(),
+      );
+      // Persisted P-018 snapshots can be old, duplicated or altered independently
+      // of the durable P-030 operation. Reconstruct an invalid contract action
+      // ONLY from canonical claimed effects; never trust a conflicting
+      // metadata contract or use it to query an unrelated provider account.
+      const repairKeys = new Set(canonicalActions.filter(effect => {
+        const copies = savedQuotes.filter(item =>
+          item && typeof item === "object" && !Array.isArray(item) &&
+          item.operationKey === effect.operationKey);
+        return copies.length > 1 || (copies.length === 1 &&
+          copies[0].contractId !== effect.request.contractId);
+      }).map(effect => effect.operationKey));
+      const retainedQuotes = savedQuotes.filter(item =>
+        !item || typeof item !== "object" || Array.isArray(item) ||
+        !repairKeys.has(item.operationKey));
+      const recordedKeys = new Set(retainedQuotes
+        .filter(item => item && typeof item === "object" &&
+          typeof item.operationKey === "string")
+        .map(item => item.operationKey));
+      const contractActions = canonicalActions.filter(effect =>
         !recordedKeys.has(effect.operationKey),
       ).map(effect => ({
         operationKey: effect.operationKey,
@@ -338,17 +355,17 @@ export class EnvironmentRetentionCoordinator {
         supplierCancellationStatus: "UNKNOWN",
       }));
       let quotes = savedQuotes;
-      if (contractActions.length > 0) {
+      if (contractActions.length > 0 || repairKeys.size > 0) {
         const registered = this.lifecycle.resources.applyMutation(resource.id, {
           metadata: {
-            retentionBillingLifecycleQuotes: [...savedQuotes, ...contractActions],
+            retentionBillingLifecycleQuotes: [...retainedQuotes, ...contractActions],
             retentionBillingReconciliation: "unverified_after_resource_release",
           },
           evidence: [
-            "P-031 appended source-authenticated P-030 contract operation intent(s) after physical release. Supplier execution and billing settlement remain independently UNKNOWN.",
+            "P-031 reconciled a post-retirement contract snapshot from exact canonical P-030 operations. Any conflicting/duplicate quote was reset to UNKNOWN, never to cancelled or settled.",
           ],
         }, "retention_supplier_contract_intent",
-        "New canonical P-030 contract operations require post-retirement supplier observation.");
+        "Canonical contract identity recovered; independent provider observation remains necessary.");
         quotes = registered.metadata.retentionBillingLifecycleQuotes as typeof savedQuotes;
       }
       if (quotes.length === 0) continue;
@@ -362,6 +379,10 @@ export class EnvironmentRetentionCoordinator {
       for (const item of quotes) {
         if (!item || typeof item !== "object" || Array.isArray(item) ||
             typeof item.operationKey !== "string") continue;
+        // Two-phase recovery: do not query supplier on the same sweep that
+        // repaired a conflicting contract identity. A following sweep can
+        // independently observe the now-canonical operation without replay.
+        if (repairKeys.has(item.operationKey)) continue;
         const until = isExplicitInstant(item.supplierStatusValidUntil)
           ? Date.parse(item.supplierStatusValidUntil) : NaN;
         if (Number.isFinite(until) && until > now) continue;
