@@ -37,6 +37,13 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
 
+## P-031 — owned-domain DNS observation added, physical pending (2026-10-18)
+
+- **SOURCE IMPLEMENTED / E3 PHYSICAL PENDING:** Provider documentation for Conway Domains supports authenticated GET `/domains/:domain/dns` with `source:live|cache|stale`. Added `src/conway/domains-dns-observation.ts`, reusing the existing verified-wallet owned-inventory check before any domain-specific read. Extended the same ephemeral SIWE/SIWS session callbacks and exposed read-only tool `conway_domain_dns_observation` (lowercase domain input only; host supplies wallet/JWT). It returns sanitized provider DNS records and provenance, never independent public DNS propagation, resource usability, payment settlement or purchase authorization. No registration/payment/DNS-mutating call.
+- **COST CONTROL / TRUST SCOPE:** DNS lookup now requests the known-owned inventory without also fetching unrelated `GET /transactions` through the optional `includeTransactions=false` argument; the default inventory-tool behavior is unchanged. Six adverse tests appended to the existing grouped SIWE/SIWS suite: EVM ownership/JWT scope, stale response partial, foreign account no DNS, unowned domain, malformed input/wrong chain, Solana-owned login. New source requires exact-SHA Codex build/typecheck/Vitest before any PASS claim.
+- **NEXT_ELIGIBLE_WORK:** physical grouped `p031-domains-economic-discovery` on final branch SHA; reconcile remote E3 evidence before claim. Provenance of a real supplier 402 and P-030 policy-bound purchase stays separate, as does independent DNS reachability E5/E6 under P-005. P-031 EN_EJECUCIÓN, P-032 PARCIAL, `main` unmerged.
+
+
 ## P-031 — payTo order binding physically verified, exact SHA (2026-10-18)
 
 - **INDEPENDENT GIT AUDIT / E3_SYNTHETIC_PASS:** Codex physical batch source `4aecb3fd78f83c0d5be500eeedb8b21da72bb391` → remote evidence `1665484349e61b8712f6eb48feec22adc66c0ae8` (one evidence-only commit adding 8 files), 7/7 independently recalculated SHA-256. ProjectOps integrity, evidence protocol **6/6**, typecheck, build and Vitest **155/155 in 13 files** PASS. Coverage: changed x402 `payTo` alters order fingerprint without changing amount or request-body SHA, as desired. Recorded in `ProjectOps/evidence/P-031/audits/4aecb3fd-order-recipient.md` and `ProjectOps/EVIDENCE.md`.
