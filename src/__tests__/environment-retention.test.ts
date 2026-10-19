@@ -491,6 +491,76 @@ describe("EnvironmentRetentionCoordinator", () => {
     }
   });
 
+  it("discards an otherwise valid supplier receipt if the retained contract changes during the async read", async () => {
+    const db = createDb();
+    try {
+      insertGoal(db, "goal-retention-race", "completed");
+      const registry = new EnvironmentRegistry();
+      registry.register(provider());
+      const lifecycle = new EnvironmentLifecycleManager(
+        registry, new EnvironmentResourceStore(db),
+      );
+      const resource = lifecycle.adopt({
+        provider: "cloud", externalId: "remote-retention-race",
+        type: "compute", goalId: "goal-retention-race",
+        status: "running", retentionPolicy: "until_goal_complete",
+      });
+      await new EnvironmentRetentionCoordinator(db, registry, lifecycle).sweep();
+      const key = "retired-contract-callback-race";
+      prepareFinancialEffect(db, {
+        operationKey: key, effectKind: "provider_resource_procurement",
+        provider: "cloud", amountCents: 0, unit: "usd_cent",
+        request: {
+          resourceId: resource.id, externalId: resource.externalId,
+          operation: "cancel", contractId: "contract-original",
+          providerAccountId: "supplier-account",
+        },
+        evidence: ["Canonical contract operation fixture."],
+      });
+      claimFinancialEffectDispatch(db, key);
+      let reads = 0;
+      const sweep = await new EnvironmentRetentionCoordinator(
+        db, registry, lifecycle, () => async scope => {
+          reads++;
+          // Simulate another host updating a resource snapshot while an
+          // already-authorized supplier read is in flight.
+          const current = lifecycle.resources.get(resource.id)!;
+          const quotes = current.metadata.retentionBillingLifecycleQuotes as
+            Array<Record<string, unknown>>;
+          lifecycle.resources.applyMutation(resource.id, {
+            metadata: {
+              retentionBillingLifecycleQuotes: quotes.map(x =>
+                x.operationKey === key
+                  ? { ...x, contractId: "foreign-contract" }
+                  : x),
+            },
+          }, "test", "race supplier contract metadata");
+          return {
+            ...scope,
+            source: "trusted synthetic provider receipt",
+            observedAt: new Date(Date.now() - 1000).toISOString(),
+            validUntil: new Date(Date.now() + 120_000).toISOString(),
+            evidence: ["A supplier receipt cannot repair a changed local binding."],
+            cancellation: "cancelled" as const,
+            autoRenewal: "disabled" as const,
+            finalInvoice: "finalized" as const,
+          };
+        },
+      ).sweep();
+      expect(reads).toBe(1);
+      expect(sweep.supplierObservations).toBe(0);
+      expect(sweep.evidence.join(" ")).toContain("changed during observation");
+      const current = lifecycle.resources.get(resource.id)!;
+      const quotes = current.metadata.retentionBillingLifecycleQuotes as
+        Array<Record<string, unknown>>;
+      expect(quotes.find(x => x.operationKey === key)?.contractId)
+        .toBe("foreign-contract");
+      expect(quotes.find(x => x.operationKey === key)?.supplierCancellationStatus)
+        .toBe("UNKNOWN");
+      expect(getFinancialEffectByOperationKey(db, key)?.state).toBe("dispatching");
+    } finally { db.close(); }
+  });
+
   it("discovers a later cancellation intent for an already-retired resource and authenticates its exact supplier contract", async () => {
     const db = createDb();
     try {
