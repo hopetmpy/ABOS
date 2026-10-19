@@ -50,6 +50,8 @@ export interface ProviderProcurementScope {
   externalId?: string | null;
   /** Supplier contract identity, exact P-010 scope for renew/cancel. */
   contractId?: string | null;
+  /** Optional exact recipient observed before P-010 policy issuance. */
+  paymentRecipient?: string | null;
 }
 
 export interface ProviderProcurementDispatchOutcome {
@@ -286,7 +288,9 @@ export async function executeReviewedProviderProcurement(
       stored.region === scope.region &&
       stored.resourceShape === scope.resourceShape &&
       stored.externalId === (scope.externalId ?? null) &&
-      (stored.contractId ?? null) === (scope.contractId ?? null);
+      (stored.contractId ?? null) === (scope.contractId ?? null) &&
+      (stored.paymentRecipient ?? null) === (scope.paymentRecipient ?? null) &&
+      (previous.recipient ?? null) === (scope.paymentRecipient ?? null);
     if (!matches) {
       throw new Error("P-030 idempotency conflict: operation key already belongs to different provider/account/resource/policy economics.");
     }
@@ -510,6 +514,7 @@ export async function executeReviewedProviderProcurement(
       amountCents: amount,
       unit: scope.unit,
       provider: scope.provider,
+      recipient: scope.paymentRecipient ?? null,
       policyDecisionId,
       request,
       evidence: [
