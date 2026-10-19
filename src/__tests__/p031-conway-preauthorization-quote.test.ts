@@ -97,6 +97,30 @@ describe("P-031 pre-policy authentic quote bootstrap and durable P-030 observati
       .get() as {n:number}).n).toBe(0);
   });
 
+  it("blocks an alternate registration term after a 202 UNKNOWN for the same account/domain",async()=>{
+    const db=database(),fixture=supplier({status:202});
+    vi.stubGlobal("fetch",fixture.fetcher);
+    const first=await observeConwayDomainsPreauthorizationQuote(
+      db.raw,signer,"account-a",registration);
+    expect(first.status).toBe("outcome_unknown");
+    const altered=await observeConwayDomainsPreauthorizationQuote(
+      db.raw,signer,"account-a",{...registration,years:3});
+    expect(altered.status).toBe("outcome_unknown");
+    expect(fixture.registerCalls()).toBe(1);
+    // Other truly independent resources remain eligible for consideration,
+    // rather than globally disabling a provider account after one failure.
+    expect(claimProviderQuoteObservation(db.raw,{
+      provider:"conway-domains",accountId:"account-a",
+      walletAddress:address,requestBodySha256:"f".repeat(64),
+      resourceIdentity:"another.io",
+    }).claimed).toBe(true);
+    expect(claimProviderQuoteObservation(db.raw,{
+      provider:"conway-domains",accountId:"account-a",
+      walletAddress:address,requestBodySha256:"e".repeat(64),
+      resourceIdentity:"mysite.io",
+    }).claimed).toBe(false);
+  });
+
   it("marks a lost HTTP response UNKNOWN, never logging or disclosing supplier secrets",async()=>{
     const db=database(),fixture=supplier({timeout:true});
     vi.stubGlobal("fetch",fixture.fetcher);
