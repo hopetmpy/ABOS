@@ -45,7 +45,7 @@ export interface ConwayDomainsScopedRequirement {
  * Preserve nameserver array order; exact raw request bytes are separately
  * hashed to discriminate same-value requests with different wire bodies.
  */
-function normalizeRegistrationBody(value: unknown): ConwayDomainsRegistrationBody | null {
+export function normalizeConwayDomainsRegistrationBody(value: unknown): ConwayDomainsRegistrationBody | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const v = value as Record<string, unknown>;
   if (Object.keys(v).some(k =>
@@ -130,14 +130,14 @@ export function bindConwayDomainsRegistration402(input: {
         ? a.walletAddress.toLowerCase() !== input.expectedControlledWalletAddress.toLowerCase()
         : a.walletAddress !== input.expectedControlledWalletAddress)) return base;
   const account = { accountId: a.providerAccountId, walletType: a.walletType };
-  const planned = normalizeRegistrationBody(input.plannedRequest);
+  const planned = normalizeConwayDomainsRegistrationBody(input.plannedRequest);
   let submitted: ConwayDomainsRegistrationBody | null = null;
   if (typeof input.submittedBody !== "string" ||
       input.submittedBody.length < 2 || input.submittedBody.length > 8192) {
     return { ...base, ...account, reason: "body_invalid" };
   }
   try {
-    submitted = normalizeRegistrationBody(JSON.parse(input.submittedBody));
+    submitted = normalizeConwayDomainsRegistrationBody(JSON.parse(input.submittedBody));
   } catch {
     return { ...base, ...account, reason: "body_invalid" };
   }
