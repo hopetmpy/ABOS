@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestDb } from "./mocks.js";
 import { createBuiltinTools } from "../agent/tools.js";
+import { prepareFinancialEffect } from "../economics/financial-effects.js";
 import { requireSourceOwnedConwayPrequote, type ProviderProcurementScope } from "../economics/provider-procurement-execution.js";
 import { observeConwayDomainsPreauthorizationQuote } from
   "../conway/domains-preauthorization-quote.js";
@@ -222,6 +223,74 @@ describe("P-031 pre-policy authentic quote bootstrap and durable P-030 observati
       db.raw,scope,q.amountCents!,
       new Date(observedAt.getTime()+120_001))).toThrow(/too old/);
     expect(fixture.registerCalls()).toBe(1);
+  });
+
+  it("requotes an aged confirmed unsigned 402 while archiving the previous exact supplier observation",async()=>{
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-10-19T08:00:00Z"));
+      const db=database(),fixture=supplier();
+      vi.stubGlobal("fetch",fixture.fetcher);
+      const first=await observeConwayDomainsPreauthorizationQuote(
+        db.raw,signer,"account-a",registration);
+      expect(first.status).toBe("observed");
+      vi.setSystemTime(new Date("2026-10-19T08:02:01Z"));
+      const second=await observeConwayDomainsPreauthorizationQuote(
+        db.raw,signer,"account-a",registration);
+      expect(second.status).toBe("observed");
+      expect(fixture.registerCalls()).toBe(2);
+      const archives=db.raw.prepare(
+        "SELECT key,value FROM kv WHERE key LIKE 'p030.supplier_quote_observation.history.%'",
+      ).all() as Array<{key:string;value:string}>;
+      expect(archives).toHaveLength(1);
+      expect(JSON.parse(archives[0]!.value)).toMatchObject({
+        status:"observed",candidateFingerprint:first.quote?.candidateFingerprint,
+        noPaymentHeader:true,paymentDispatched:false,
+      });
+      expect((db.raw.prepare("SELECT COUNT(*) AS n FROM financial_effects")
+        .get() as {n:number}).n).toBe(0);
+    }finally {vi.useRealTimers();}
+  });
+
+  it("does not re-POST an aged quote when its exact-domain paid procurement remains unresolved",async()=>{
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-10-19T09:00:00Z"));
+      const db=database(),fixture=supplier();
+      vi.stubGlobal("fetch",fixture.fetcher);
+      const first=await observeConwayDomainsPreauthorizationQuote(
+        db.raw,signer,"account-a",registration);
+      expect(first.status).toBe("observed");
+      prepareFinancialEffect(db.raw,{
+        operationKey:"active-domain-order",provider:"conway-domains",
+        effectKind:"provider_resource_procurement",unit:"usdc_cent",
+        amountCents:4375,recipient:payTo,
+        request:{providerAccountId:"account-a",
+          requestBodySha256:first.quote!.requestBodySha256,
+          operation:"provision",resourceId:"domain-1"},
+      });
+      vi.setSystemTime(new Date("2026-10-19T09:02:01Z"));
+      const blocked=await observeConwayDomainsPreauthorizationQuote(
+        db.raw,signer,"account-a",registration);
+      expect(blocked.status).toBe("already_claimed");
+      expect(fixture.registerCalls()).toBe(1);
+      expect(blocked.quote?.status).toBe("observed");
+    }finally {vi.useRealTimers();}
+  });
+
+  it("never re-quotes an uncertain claim even after an arbitrary time interval",async()=>{
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-10-19T10:00:00Z"));
+      const db=database(),fixture=supplier({timeout:true});
+      vi.stubGlobal("fetch",fixture.fetcher);
+      expect((await observeConwayDomainsPreauthorizationQuote(
+        db.raw,signer,"account-a",registration)).status).toBe("outcome_unknown");
+      vi.setSystemTime(new Date("2026-10-29T10:00:00Z"));
+      expect((await observeConwayDomainsPreauthorizationQuote(
+        db.raw,signer,"account-a",registration)).status).toBe("outcome_unknown");
+      expect(fixture.registerCalls()).toBe(1);
+    }finally {vi.useRealTimers();}
   });
 
 });
