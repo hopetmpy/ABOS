@@ -94,6 +94,33 @@ describe("P-030 financial effect authority", () => {
     ).dispatchAllowed).toBe(false);
   });
 
+  it("preserves the supplier HTTP claim after SQLite restart, not just inside one adapter instance", () => {
+    const { database, dbPath } = createRestartableDb();
+    prepareFinancialEffect(database.raw, {
+      operationKey: "restart-claimed-quote",
+      effectKind: "provider_resource_procurement",
+      provider: "conway-domains", amountCents: 2500, unit: "usdc_cent",
+      recipient: "0x2222222222222222222222222222222222222222",
+      request: { requestBodySha256: "c".repeat(64) },
+    });
+    claimFinancialEffectDispatch(database.raw, "restart-claimed-quote");
+    expect(claimFinancialEffectExternalRequest(
+      database.raw, "restart-claimed-quote", "conway-domains-register-unsigned-402",
+    ).dispatchAllowed).toBe(true);
+    database.close();
+    const reopened = createDatabase(dbPath);
+    openDatabases.push(reopened);
+    expect(getFinancialEffectByOperationKey(
+      reopened.raw, "restart-claimed-quote",
+    )?.state).toBe("unknown");
+    expect(claimFinancialEffectExternalRequest(
+      reopened.raw, "restart-claimed-quote", "conway-domains-register-unsigned-402",
+    ).dispatchAllowed).toBe(false);
+    expect(claimFinancialEffectDispatch(
+      reopened.raw, "restart-claimed-quote",
+    ).dispatchAllowed).toBe(false);
+  });
+
   it("reports mixed unsettled credit, USDC topup/service and unknown units without a fake balance", () => {
     const database = db();
     for (const [operationKey, effectKind, amountCents, unit] of [
