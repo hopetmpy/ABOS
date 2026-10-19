@@ -37,6 +37,12 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
 
+## P-031 — exact-order x402 candidate E3 verified; payTo regression expanded (2026-10-18)
+
+- **GIT_AUDITED / E3_SYNTHETIC_PASS:** Codex physical runner tested exact source `0202f6de9e19ab3388e7b0211eb27793d74ea579`, evidence `fd39843247ecd914291881b97689fc75fc9d86b2` in a single evidence-only commit (8 files); independent content SHA-256 **7/7**. ProjectOps integrity, evidence gate **6/6**, typecheck, build, and Vitest **155/155 in 13/13 files** PASS, no LIVE/Actions. Independent audit `ProjectOps/evidence/P-031/audits/0202f6de-order-candidate.md` indexed in `ProjectOps/EVIDENCE.md`.
+- **COVERAGE GAP FIXED IN SOURCE / PHYSICAL PENDING:** test labeled "distinguishes amount, recipient..." had no variation of x402 `payTo`; the tested source fingerprint already included `requirement.payToAddress`. Expanded existing fixture to change only recipient and assert fingerprint diverges while body SHA-256 and amount remain fixed. No runtime code changed by this fix; updated test source not physically executed yet. Do not count former 155/155 as a PASS on subsequent SHA.
+- **NEXT_ELIGIBLE_WORK:** continue source-first discrimination of trusted supplier POST 402 provenance and P-010/P-030 intent before implementing a real authenticated contract/cash effect. Run grouped Codex exact new SHA when integration boundary requires it, avoiding needless single-case reruns. P-031 EN_EJECUCIÓN, P-032 PARCIAL, P-005 E5/E6; `main` unmerged.
+
 ## P-031 — passive exact-order x402 candidate binding, physical pending (2026-10-18)
 
 - **SOURCE IMPLEMENTED / PHYSICAL PENDING:** `src/conway/domains-order-binding.ts` adds a pure `bindConwayDomainsRegistration402` to relate an already-captured Conway Domains HTTP 402 x402 v2 requirement to an explicit EVM host-owned wallet/account and the byte-exact submitted `POST /domains/register` body (domain, years, privacy, nameservers). It validates supplier account proof, host address/type, request normalization, strict submitted/planned body equivalence and the existing Base-USDC parser; hashes exact body + payment requirement/account into a reproducible candidate fingerprint. Six negative/positive tests appended to `p031-conway-domains-purchase-evidence.test.ts` in existing grouped profile. No fetch, signature, registration, P-030 intent or paid dispatch. All outputs keep `authenticatedOrderQuoteEstablished:false`, `financialIntentPrepared:false`, `paymentAuthorized:false`. A local candidate is **not** supplier authentication, contract or quote in force.
