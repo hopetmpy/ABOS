@@ -102,12 +102,12 @@ export function claimProviderQuoteObservation(
     // unknown or completed for the same supplier account and exact wire body.
     // A rejected/no-paid attempt is not a new active purchase.
     const pending=db.prepare(
-      `SELECT request_json FROM financial_effects
+      `SELECT state,request_json FROM financial_effects
        WHERE provider = 'conway-domains'
          AND effect_kind = 'provider_resource_procurement'
          AND state IN ('prepared','dispatching','pending','unknown',
                        'reconciliation_required','completed')`,
-    ).all() as Array<{request_json:string}>;
+    ).all() as Array<{state:string;request_json:string}>;
     for(const row of pending) {
       let request:Record<string,unknown>;
       try {request=JSON.parse(row.request_json);} catch{return;}
@@ -118,6 +118,12 @@ export function claimProviderQuoteObservation(
         ? request.providerAccountId : "";
       const body = typeof request.requestBodySha256==="string"
         ? request.requestBodySha256 : "";
+      if (row.state==="completed" && (!account || !body)) {
+        // Unscoped historical completed operations can be unrelated to this
+        // order. Preserve source discovery; only matching exact completed
+        // acquisitions rule out refreshing the same purchased domain.
+        continue;
+      }
       if ((!account || account===n.accountId) &&
           (!body || body===n.requestBodySha256) &&
           (!request.operation || request.operation==="provision")) return;
