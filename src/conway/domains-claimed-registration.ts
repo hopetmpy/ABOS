@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import type Database from "better-sqlite3";
 import { isAddress } from "viem";
 import {
+  claimFinancialEffectExternalRequest,
   getFinancialEffectByOperationKey,
 } from "../economics/financial-effects.js";
 import type {
@@ -175,7 +176,16 @@ export function createConwayDomainsRegistrationDependencies(
           if (!hasClaimedExactIntent(db, scope, authorized)) {
             throw new RegistrationNoPaidDispatchError();
           }
-          observed = true; // once HTTP begins, outcome may be unknown
+          // Durable P-030 CAS is the source of truth across restarts AND
+          // concurrent trusted adapter instances. Claim before the first
+          // non-idempotent provider HTTP request. Never "recover" by re-POST.
+          const started = claimFinancialEffectExternalRequest(
+            db, scope.operationKey, "conway-domains-register-unsigned-402",
+          );
+          if (!started.dispatchAllowed) {
+            throw new Error("A supplier request already exists; reconcile the recorded attempt.");
+          }
+          observed = true; // the operation is now durably UNKNOWN until reply
           const response = await fetch(REGISTER_URL, {
             method: "POST", redirect: "error", cache: "no-store",
             headers: {
