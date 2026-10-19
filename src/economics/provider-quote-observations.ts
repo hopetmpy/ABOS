@@ -111,9 +111,16 @@ export function claimProviderQuoteObservation(
     for(const row of pending) {
       let request:Record<string,unknown>;
       try {request=JSON.parse(row.request_json);} catch{return;}
-      if(request.providerAccountId===n.accountId &&
-          request.requestBodySha256===n.requestBodySha256 &&
-          request.operation==="provision")return;
+      // Legacy/unknown supplier obligations without an exact account/body
+      // cannot be presumed unrelated. Do not re-send a registration POST
+      // while such an operation might already affect this wallet.
+      const account = typeof request.providerAccountId==="string"
+        ? request.providerAccountId : "";
+      const body = typeof request.requestBodySha256==="string"
+        ? request.requestBodySha256 : "";
+      if ((!account || account===n.accountId) &&
+          (!body || body===n.requestBodySha256) &&
+          (!request.operation || request.operation==="provision")) return;
     }
     const archiveKey=PREFIX+"history."+
       createHash("sha256")
