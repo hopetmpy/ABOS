@@ -79,11 +79,54 @@ export function claimProviderQuoteObservation(
     financialEffectEstablished:false, paymentDispatched:false,
   };
   const id = key(n);
-  const result = db.prepare(
-    "INSERT OR IGNORE INTO kv (key, value, updated_at) VALUES (?, ?, ?)",
-  ).run(id, JSON.stringify(initial), new Date().toISOString());
-  return { claimed: result.changes === 1,
-    record: getProviderQuoteObservation(db,n) };
+  let claimed = false;
+  db.transaction(() => {
+    const now = new Date().toISOString();
+    const previous = getProviderQuoteObservation(db,n);
+    if (!previous) {
+      claimed = db.prepare(
+        "INSERT OR IGNORE INTO kv (key, value, updated_at) VALUES (?, ?, ?)",
+      ).run(id, JSON.stringify(initial), now).changes === 1;
+      return;
+    }
+    // A confirmed no-payment 402 is materially different from a lost
+    // response. Its price may age out without creating a supplier charge.
+    // At most one fresh attempt per observed quote window; persist the
+    // previous result before invalidating it. An ambiguous request_claimed
+    // record is NEVER eligible for refresh, including after a restart.
+    const observedMs=previous.observedAt ? Date.parse(previous.observedAt) : NaN;
+    if (previous.status!=="observed" || !previous.candidateFingerprint ||
+        !Number.isFinite(observedMs) || Date.now()-observedMs<=120_000 ||
+        observedMs>Date.now()+1000) return;
+    // Do not refresh if a canonical P-030 billable registration is pending,
+    // unknown or completed for the same supplier account and exact wire body.
+    // A rejected/no-paid attempt is not a new active purchase.
+    const pending=db.prepare(
+      `SELECT request_json FROM financial_effects
+       WHERE provider = 'conway-domains'
+         AND effect_kind = 'provider_resource_procurement'
+         AND state IN ('prepared','dispatching','pending','unknown',
+                       'reconciliation_required','completed')`,
+    ).all() as Array<{request_json:string}>;
+    for(const row of pending) {
+      let request:Record<string,unknown>;
+      try {request=JSON.parse(row.request_json);} catch{return;}
+      if(request.providerAccountId===n.accountId &&
+          request.requestBodySha256===n.requestBodySha256 &&
+          request.operation==="provision")return;
+    }
+    const archiveKey=PREFIX+"history."+
+      createHash("sha256")
+        .update(id+"|"+previous.candidateFingerprint+"|"+previous.observedAt)
+        .digest("hex");
+    db.prepare(
+      "INSERT OR IGNORE INTO kv (key,value,updated_at) VALUES (?,?,?)",
+    ).run(archiveKey,JSON.stringify(previous),now);
+    claimed=db.prepare(
+      "UPDATE kv SET value=?, updated_at=? WHERE key=? AND value=?",
+    ).run(JSON.stringify(initial),now,id,JSON.stringify(previous)).changes===1;
+  })();
+  return { claimed, record: getProviderQuoteObservation(db,n) };
 }
 export function confirmProviderQuoteObservation(
   db: Database.Database, scope: ProviderQuoteScope,
