@@ -1,0 +1,62 @@
+Command: pnpm exec vitest run src/__tests__/p031-conway-domains-purchase-evidence.test.ts src/__tests__/p031-conway-domains-account-proof.test.ts src/__tests__/p031-conway-domains-siwe-session.test.ts src/__tests__/p031-authorized-procurement-execution.test.ts src/__tests__/p031-conway-secondary-procurement-gate.test.ts src/__tests__/p031-conway-credit-history.test.ts src/__tests__/p031-conway-account-read-probe.test.ts src/__tests__/p031-runtime-procurement-tool.test.ts src/__tests__/p030-x402-service-purchase.test.ts src/__tests__/p030-topup-http-claims.test.ts src/__tests__/p030-financial-effects.test.ts src/__tests__/p031-provider-account-exposure.test.ts src/__tests__/p031-goal-resource-lifecycle-journey.test.ts
+Started: 2026-10-19T00:31:10.003Z
+Exit code: 0
+Signal: none
+Execution error: none
+--- STDOUT ---
+
+ RUN  v4.1.11 /workspace/ABOS
+
+{"timestamp":"2026-10-19T00:31:15.114Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-19T00:31:15.115Z","level":"info","module":"topup","message":"Credit topup HTTP accepted: 5 USD tier; credits reported=UNKNOWN (not verified settlement)"}
+{"timestamp":"2026-10-19T00:31:15.116Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-19T00:31:15.116Z","level":"info","module":"topup","message":"Credit topup HTTP accepted: 5 USD tier; credits reported=UNKNOWN (not verified settlement)"}
+{"timestamp":"2026-10-19T00:31:15.116Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-19T00:31:15.116Z","level":"info","module":"topup","message":"Credit topup HTTP accepted: 5 USD tier; credits reported=UNKNOWN (not verified settlement)"}
+{"timestamp":"2026-10-19T00:31:15.117Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-19T00:31:15.117Z","level":"info","module":"topup","message":"Credit topup HTTP accepted: 5 USD tier; credits reported=UNKNOWN (not verified settlement)"}
+{"timestamp":"2026-10-19T00:31:15.117Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-19T00:31:15.117Z","level":"info","module":"topup","message":"Credit topup HTTP accepted: 5 USD tier; credits reported=0 (not verified settlement)"}
+{"timestamp":"2026-10-19T00:31:15.117Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-19T00:31:15.118Z","level":"info","module":"topup","message":"Credit topup HTTP accepted: 5 USD tier; credits reported=500 (not verified settlement)"}
+{"timestamp":"2026-10-19T00:31:15.119Z","level":"info","module":"topup","message":"Attempting credit topup: $5 USD for 0xwallet"}
+{"timestamp":"2026-10-19T00:31:15.120Z","level":"error","module":"topup","message":"Credit topup failed: HTTP transport dropped"}
+
+ Test Files  13 passed (13)
+      Tests  161 passed (161)
+   Start at  00:31:10
+   Duration  8.64s (transform 2.22s, setup 0ms, import 4.82s, tests 11.08s, environment 1ms)
+
+
+--- STDERR ---
+(node:78213) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:78225) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:78255) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:78254) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:78256) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:78278) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:78286) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:78294) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:78301) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:78310) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:78318) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:78326) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:78334) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:78342) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:78350) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
