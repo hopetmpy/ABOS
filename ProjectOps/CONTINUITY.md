@@ -37,6 +37,12 @@ Master-Plan-Merge: e33a507164b2ab6490aa43a9d2aefb0cd80ec77a
 
 
 
+## P-031 — macro lifecycle source recovery and one grouped acceptance (2026-10-19)
+
+- Independently audited last Codex source `71227b30f745c01ba62821672b7611c799958f7b`: **161/161 E3 PASS**, 6/6 evidence protocol, build/typecheck/integrity PASS, 7/7 hashes of `ba9f266d1b7cd25656fbce84d5072b759a93852c`; indexed in `ProjectOps/EVIDENCE.md`. No LIVE or GitHub Actions.
+- **CURRENT SOURCE CHANGED / PHYSICAL PENDING:** P-031 retention now rejects wrong/changed provider contract identities before and after async receipts, reconstructs duplicate/stale contract entries from canonical P-030 as UNKNOWN, preserves legacy provision observations and supports restart reconciliation. Adversarial regression scenarios added. No financial settlement or contractual cancellation is inferred, no paid dispatch change.
+- **NEXT_ELIGIBLE_WORK:** continue macro-wide P-031 source review; a single `p031-lifecycle-acceptance` grouped profile covers 34 suites and must be executed at a material acceptance boundary, **not per small edit**. Refer to `ProjectOps/evidence/P-031/audits/p031-macro-reconciliation-20261019.md` and `continuity/C0030.md`. P-031 EN_EJECUCIÓN, P-032 PARCIAL, P-005 retains E5/E6. Branch unmerged.
+
 ## P-031 — owned-domain DNS observation added, physical pending (2026-10-18)
 
 - **SOURCE IMPLEMENTED / E3 PHYSICAL PENDING:** Provider documentation for Conway Domains supports authenticated GET `/domains/:domain/dns` with `source:live|cache|stale`. Added `src/conway/domains-dns-observation.ts`, reusing the existing verified-wallet owned-inventory check before any domain-specific read. Extended the same ephemeral SIWE/SIWS session callbacks and exposed read-only tool `conway_domain_dns_observation` (lowercase domain input only; host supplies wallet/JWT). It returns sanitized provider DNS records and provenance, never independent public DNS propagation, resource usability, payment settlement or purchase authorization. No registration/payment/DNS-mutating call.
