@@ -1099,6 +1099,30 @@ describe("P-031 P-025 + P-030 + P-010 exact procurement execution chain", () => 
         .toBe(0);
     } finally { db.close(); }
   });
+  it("binds the P-010 approved payment recipient to P-030 and rejects a same-key payTo change", async () => {
+    const { db, scope } = setup();
+    try {
+      scope.paymentRecipient = "0x1111111111111111111111111111111111111111";
+      const quote = scenario();
+      const calls: string[] = [];
+      const decisionId = policy(db, scope, quote);
+      const deps = adapters(quote, calls, "pending");
+      const first = await executeReviewedProviderProcurement(db.raw, {
+        scope, policyDecisionId: decisionId, dependencies: deps,
+      });
+      expect(first.dispatched).toBe(true);
+      expect(first.financialEffect?.recipient).toBe(scope.paymentRecipient);
+      expect(first.financialEffect?.request.paymentRecipient).toBe(scope.paymentRecipient);
+      const changed: ProviderProcurementScope = {
+        ...scope, paymentRecipient: "0x2222222222222222222222222222222222222222",
+      };
+      await expect(executeReviewedProviderProcurement(db.raw, {
+        scope: changed, policyDecisionId: decisionId, dependencies: deps,
+      })).rejects.toThrow(/idempotency conflict/i);
+      expect(calls).toHaveLength(1);
+    } finally { db.close(); }
+  });
+
 });
 
 describe("P-031 supplier contract lifecycle under the existing P-010/P-030 claim", () => {
