@@ -119,6 +119,12 @@ describe("P-031 pre-policy authentic quote bootstrap and durable P-030 observati
       walletAddress:address,requestBodySha256:"e".repeat(64),
       resourceIdentity:"mysite.io",
     }).claimed).toBe(false);
+    expect(claimProviderQuoteObservation(db.raw,{
+      provider:"conway-domains",accountId:"account-a",
+      walletAddress:"0x3333333333333333333333333333333333333333",
+      requestBodySha256:first.quote!.requestBodySha256,
+      resourceIdentity:"mysite.io",
+    }).claimed).toBe(false);
   });
 
   it("marks a lost HTTP response UNKNOWN, never logging or disclosing supplier secrets",async()=>{
