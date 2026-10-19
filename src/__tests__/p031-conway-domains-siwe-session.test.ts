@@ -414,3 +414,143 @@ describe("P-031 host-owned Conway Domains inventory tool and JWT scope", () => {
     expect(fetcher).toHaveBeenCalledTimes(6);
   });
 });
+
+function dnsFixture(url: string, source: "live" | "cache" | "stale" = "live") {
+  if (url.endsWith("/domains/mysite.io/dns")) return json({
+    source,
+    records: [{ recordId: "rec_a", type: "A", host: "@",
+      value: "192.0.2.1", ttl: 3600 }],
+  });
+  return fixtureOwnedResponse(url);
+}
+function dnsTestProvider(account = controlled, source: "live" | "cache" | "stale" = "live") {
+  const login = provider();
+  return vi.fn(async (url: string, opts: RequestInit) => {
+    expect(new URL(url).origin).toBe("https://api.conway.domains");
+    expect(new Headers(opts.headers).has("X-PAYMENT")).toBe(false);
+    if (url.endsWith("/auth/me")) return json({
+      id:"supplier-account-fixture",wallet_address:account,wallet_type:"evm",
+    });
+    if (url.endsWith("/domains") || url.endsWith("/transactions") ||
+        url.endsWith("/domains/mysite.io/dns")) {
+      expect(opts.method).toBe("GET");
+      expect(opts.redirect).toBe("error");
+      expect(new Headers(opts.headers).get("Authorization"))
+        .toBe("Bearer synthetic.JWT.signature");
+      return dnsFixture(url,source);
+    }
+    return login(url,opts);
+  });
+}
+
+describe("P-031 owned-domain DNS observation remains distinct from usable resource", () => {
+  it("reads only owned domain DNS using EVM's verified host JWT, without purchase or propagation claim", async () => {
+    const fetcher=dnsTestProvider();
+    vi.stubGlobal("fetch",fetcher);
+    const tool=createBuiltinTools("fixture").find(t=>t.name==="conway_domain_dns_observation")!;
+    expect(tool.riskLevel).toBe("caution");
+    const output=JSON.parse(await tool.execute({domain:"mysite.io"},{
+      identity:{chainType:"evm",address:controlled,
+        account:{address:controlled,signMessage:signer.signMessage}},
+    } as any));
+    expect(fetcher).toHaveBeenCalledTimes(7);
+    expect(output).toMatchObject({
+      status:"observed",domain:"mysite.io",dnsSource:"live",
+      inventoryStatus:"Active",
+      records:[{id:"rec_a",type:"A",host:"@",value:"192.0.2.1",ttl:3600}],
+      independentDnsPropagationVerified:false,resourceUsable:false,
+      financialSettlementEstablished:false,purchaseAuthority:"not_established",
+    });
+    expect(JSON.stringify(output)).not.toContain("synthetic.JWT.signature");
+  });
+
+  it("classifies supplier stale DNS as partial, not independently usable", async () => {
+    const fetcher=dnsTestProvider(controlled,"stale");
+    vi.stubGlobal("fetch",fetcher);
+    const tool=createBuiltinTools("fixture").find(t=>t.name==="conway_domain_dns_observation")!;
+    const output=JSON.parse(await tool.execute({domain:"mysite.io"},{
+      identity:{chainType:"evm",address:controlled,
+        account:{address:controlled,signMessage:signer.signMessage}},
+    } as any));
+    expect(output).toMatchObject({
+      status:"partial",dnsSource:"stale",resourceUsable:false,
+      independentDnsPropagationVerified:false,
+    });
+    expect(output.evidence.join(" ")).toContain("stale");
+    expect(fetcher).toHaveBeenCalledTimes(7);
+  });
+
+  it("does not read any DNS if provider identity belongs to another wallet", async () => {
+    const fetcher=dnsTestProvider(unrelated);
+    vi.stubGlobal("fetch",fetcher);
+    const tool=createBuiltinTools("fixture").find(t=>t.name==="conway_domain_dns_observation")!;
+    const output=JSON.parse(await tool.execute({domain:"mysite.io"},{
+      identity:{chainType:"evm",address:controlled,
+        account:{address:controlled,signMessage:signer.signMessage}},
+    } as any));
+    expect(output).toMatchObject({
+      status:"unavailable",records:null,resourceUsable:false,
+    });
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(JSON.stringify(output)).not.toContain("private");
+  });
+
+  it("does not query a domain not present in verified account inventory", async () => {
+    const fetcher=dnsTestProvider();
+    vi.stubGlobal("fetch",fetcher);
+    const tool=createBuiltinTools("fixture").find(t=>t.name==="conway_domain_dns_observation")!;
+    const output=JSON.parse(await tool.execute({domain:"other.io"},{
+      identity:{chainType:"evm",address:controlled,
+        account:{address:controlled,signMessage:signer.signMessage}},
+    } as any));
+    expect(output).toMatchObject({
+      status:"not_in_inventory",records:null,resourceUsable:false,
+    });
+    expect(fetcher).toHaveBeenCalledTimes(6);
+  });
+
+  it("returns unavailable for malformed target without DNS HTTP and wrong-chain signer without login", async () => {
+    const fetcher=dnsTestProvider();
+    vi.stubGlobal("fetch",fetcher);
+    const tool=createBuiltinTools("fixture").find(t=>t.name==="conway_domain_dns_observation")!;
+    const invalid=JSON.parse(await tool.execute({domain:"https://mysite.io/../secrets"},{
+      identity:{chainType:"evm",address:controlled,
+        account:{address:controlled,signMessage:signer.signMessage}},
+    } as any));
+    expect(invalid).toMatchObject({status:"unavailable",records:null,resourceUsable:false});
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    const other=JSON.parse(await tool.execute({domain:"mysite.io"},{
+      identity:{chainType:"solana",address:otherSolanaWallet.address,
+        chainIdentity:solanaWallet},
+    } as any));
+    expect(other.status).toBe("unavailable");
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+
+  it("uses the existing Solana SIWS wallet for DNS observation without EVM signer", async () => {
+    const login=solanaProvider();
+    const fetcher=vi.fn(async(url:string, opts:RequestInit)=>{
+      if(url.endsWith("/domains")||url.endsWith("/transactions")||
+         url.endsWith("/domains/mysite.io/dns")){
+        expect(new Headers(opts.headers).get("Authorization"))
+          .toBe("Bearer synthetic.solana.JWT");
+        return dnsFixture(url);
+      }
+      return login(url,opts);
+    });
+    vi.stubGlobal("fetch",fetcher);
+    const tool=createBuiltinTools("fixture").find(t=>t.name==="conway_domain_dns_observation")!;
+    const output=JSON.parse(await tool.execute({domain:"mysite.io"},{
+      identity:{chainType:"solana",address:solanaWallet.address,
+        chainIdentity:solanaWallet,
+        account:{address:solanaWallet.address,signMessage:vi.fn(()=>{
+          throw new Error("EVM must not sign");
+        })}},
+    } as any));
+    expect(output).toMatchObject({
+      status:"observed",dnsSource:"live",resourceUsable:false,
+      providerAccountId:"solana-provider-account",
+    });
+    expect(fetcher).toHaveBeenCalledTimes(7);
+  });
+});
